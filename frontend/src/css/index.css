@@ -2166,69 +2166,23 @@ body.modal-open {
 /* GLOBAL RESPONSIVE TYPOGRAPHY OVERRIDES */
 @media (max-width: 1024px) {
   :root {
-    --f-h1: clamp(16px, 3vw, 20px) !important;
-    --f-h2: clamp(14px, 2.5vw, 17px) !important;
-    --f-body: clamp(11px, 1.1vw, 12.5px) !important;
+    --f-h1: clamp(18px, 3vw, 22px);
+    --f-h2: clamp(15px, 2.5vw, 18px);
+    --f-body: clamp(13px, 1.2vw, 14px);
   }
-  body, p, label, input, select, textarea, button {
-    font-size: var(--f-body) !important;
-  }
-  h1 {
-    font-size: 20px !important;
-  }
-  h2 {
-    font-size: 17px !important;
-  }
-  h3 {
-    font-size: 15px !important;
-  }
-  .modern-kpi-val, .kpi-value-custom {
-    font-size: 18px !important;
-  }
-  .modern-kpi-lbl, .kpi-title-custom {
-    font-size: 10.5px !important;
-  }
-  .premium-table th, .elite-table th, .elite-table-custom th {
-    font-size: 10px !important;
-    padding: 10px 12px !important;
-  }
-  .premium-table td, .elite-table td, .elite-table-custom td {
-    font-size: 12px !important;
-    padding: 10px 12px !important;
+  body {
+    font-size: var(--f-body);
   }
 }
 
 @media (max-width: 640px) {
   :root {
-    --f-h1: clamp(14px, 2.5vw, 17px) !important;
-    --f-h2: clamp(13px, 2.2vw, 15px) !important;
-    --f-body: clamp(10px, 1vw, 11.5px) !important;
+    --f-h1: clamp(18px, 4vw, 24px);
+    --f-h2: clamp(15px, 3vw, 18px);
+    --f-body: 14px;
   }
-  body, p, label, input, select, textarea, button {
-    font-size: var(--f-body) !important;
-  }
-  h1 {
-    font-size: 17px !important;
-  }
-  h2 {
-    font-size: 14.5px !important;
-  }
-  h3 {
-    font-size: 13px !important;
-  }
-  .modern-kpi-val, .kpi-value-custom {
-    font-size: 16px !important;
-  }
-  .modern-kpi-lbl, .kpi-title-custom {
-    font-size: 9.5px !important;
-  }
-  .premium-table th, .elite-table th, .elite-table-custom th {
-    font-size: 9px !important;
-    padding: 8px 10px !important;
-  }
-  .premium-table td, .elite-table td, .elite-table-custom td {
-    font-size: 11px !important;
-    padding: 8px 10px !important;
+  body {
+    font-size: var(--f-body);
   }
 }
 
