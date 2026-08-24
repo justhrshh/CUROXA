@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
-import { Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, CheckCircle, User, Lock, ArrowRight, ShieldCheck, Activity, Share2, Mail, KeyRound } from 'lucide-react';
+import loginBg from '../assets/curoxa_bg_enhanced.png';
+import curoxaLogo from '../assets/curoxa_logo_transparent.png';
 
 const Login = () => {
   // Mode toggling (SignUp disabled)
@@ -115,20 +117,6 @@ const Login = () => {
     }
   }, [isSignUp, showPassword, showConfirmPassword, showGoogleModal, showForgotModal]);
 
-  // Dynamic Password Strength Calculator
-  const getPasswordStrength = (pwd) => {
-    if (!pwd) return { score: 0, text: 'No Password', color: '#CBD5E1', width: '0%' };
-    let score = 0;
-    if (pwd.length >= 6) score++;
-    if (/[A-Z]/.test(pwd) && /[0-9]/.test(pwd)) score++;
-    if (/[^A-Za-z0-9]/.test(pwd) && pwd.length >= 8) score++;
-
-    if (score === 0 || score === 1) return { score: 1, text: 'Weak', color: '#EF4444', width: '33%' };
-    if (score === 2) return { score: 2, text: 'Medium', color: '#F59E0B', width: '66%' };
-    if (score === 3) return { score: 3, text: 'Strong', color: '#10B981', width: '100%' };
-    return { score: 1, text: 'Weak', color: '#EF4444', width: '33%' };
-  };
-
   const handleGoogleCredentialResponse = async (response) => {
     setError('');
     setLoading(true);
@@ -179,7 +167,6 @@ const Login = () => {
               cancel_on_tap_outside: false
             });
 
-            // Measure parent container to render button with exact pixel width (responsive matching)
             const containerWidth = btnContainer.offsetWidth || 320;
             const viewportLimit = window.innerWidth - 80;
             const clampedWidth = Math.max(200, Math.min(400, Math.min(containerWidth, viewportLimit)));
@@ -288,7 +275,6 @@ const Login = () => {
 
       setSuccess('Verification successful!');
       setTimeout(() => {
-        // Redirect based on role
         switch (user.role) {
           case 'admin': navigate('/admin'); break;
           case 'superadmin':
@@ -319,7 +305,7 @@ const Login = () => {
       const response = await api.post('/auth/forgot-password', {
         email: forgotEmail
       });
-      setForgotSuccess(response.data.message ? `${response.data.message} (Please check your Spam/Junk folder if not received.)` : 'OTP sent successfully! Please check your inbox (and your Spam/Junk folder if not received).');
+      setForgotSuccess(response.data.message ? `${response.data.message} (Please check your Spam/Junk folder if not received.)` : 'OTP sent successfully! Please check your inbox.');
       setForgotStep(2);
     } catch (err) {
       setForgotError(err.response?.data?.error || 'Failed to request OTP. Please try again.');
@@ -356,707 +342,350 @@ const Login = () => {
     }
   };
 
-
-
   return (
-    <div className="login-container">
-      {/* Scoped CSS Injector for Layout and Media Queries */}
-      <style>{`
-        html {
-          overflow-y: auto !important;
-        }
-        .login-container {
-          display: flex;
-          width: 100%;
-          height: calc(100vh / 0.9);
-          background: #F8FAFC;
-          color: #0F172A;
-          font-family: 'Urbanist', sans-serif;
-          overflow: hidden;
-        }
+    <div 
+      className="min-h-screen w-full flex flex-col lg:flex-row bg-[#F4F8FC] text-slate-900 font-sans selection:bg-blue-100 selection:text-blue-900 overflow-x-hidden relative bg-no-repeat"
+      style={{ 
+        backgroundImage: `url(${loginBg})`,
+        backgroundSize: '100% auto',
+        backgroundPosition: 'center -270px',
+        imageRendering: '-webkit-optimize-contrast'
+      }}
+    >
+      
+      {/* LEFT SIDE: Brand & Promotional Area (Desktop ~55% / Transparent over full-viewport background) */}
+      <div className="relative w-full lg:w-[55%] min-h-[440px] lg:min-h-screen flex flex-col justify-between p-6 sm:p-10 lg:p-14 xl:p-16 lg:pl-20 xl:pl-28 bg-transparent">
         
-        .left-pane {
-          width: 55%;
-          background: radial-gradient(circle at 30% 30%, #FFFFFF 0%, #DBEAFE 100%);
-          border-right: 1px solid #BFDBFE;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          padding: 60px;
-          position: relative;
-          overflow: hidden;
-        }
-        
-        .right-pane {
-          width: 45%;
-          background: #F8FAFC;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
-          padding: 40px;
-          position: relative;
-          box-sizing: border-box;
-        }
-        
-        @media (max-width: 1024px) {
-          .login-container {
-            height: auto !important;
-            min-height: 100vh !important;
-            min-height: 100dvh !important;
-            overflow: auto !important;
-          }
-          .left-pane {
-            display: none !important;
-          }
-          .right-pane {
-            width: 100% !important;
-            padding: 24px 16px !important;
-            background: #F8FAFC;
-            box-sizing: border-box !important;
-          }
-          .instagram-card {
-            padding: 24px 20px !important;
-            max-width: 100% !important;
-            width: 100% !important;
-          }
-          .instagram-card-secondary {
-            max-width: 100% !important;
-            width: 100% !important;
-          }
-          .footer-links {
-            position: relative !important;
-            bottom: auto !important;
-            margin-top: 40px !important;
-            padding-bottom: 20px !important;
-          }
-          .responsive-modal {
-            padding: 20px 16px !important;
-            width: 95vw !important;
-            max-width: 440px !important;
-          }
-          .responsive-splash-card {
-            padding: 28px 20px !important;
-            width: 90vw !important;
-            max-width: 340px !important;
-          }
-        }
-        
-        .instagram-card {
-          width: 100%;
-          max-width: 380px;
-          background: #FFFFFF;
-          border: 1px solid #BFDBFE;
-          border-radius: 12px;
-          padding: 32px 28px;
-          box-shadow: 0 20px 25px -5px rgba(59, 113, 254, 0.05), 0 10px 10px -5px rgba(59, 113, 254, 0.03);
-          box-sizing: border-box;
-          transition: box-shadow 0.4s, border-color 0.4s, max-width 0.3s;
-        }
-
-        .instagram-card.signup-mode {
-          max-width: 520px;
-        }
-        
-        .instagram-card-secondary {
-          width: 100%;
-          max-width: 380px;
-          background: #FFFFFF;
-          border: 1px solid #BFDBFE;
-          border-radius: 12px;
-          padding: 20px;
-          margin-top: 12px;
-          text-align: center;
-          box-shadow: 0 4px 6px -1px rgba(59, 113, 254, 0.02);
-          box-sizing: border-box;
-          transition: box-shadow 0.4s, border-color 0.4s, max-width 0.3s;
-        }
-
-        .instagram-card-secondary.signup-mode {
-          max-width: 520px;
-        }
-
-        .ig-input-group {
-          position: relative;
-          margin-bottom: 12px;
-        }
-
-        .ig-input {
-          width: 100%;
-          height: 42px;
-          background: #FFFFFF !important;
-          border: 1px solid #CBD5E1;
-          border-radius: 6px;
-          padding: 9px 12px;
-          font-size: 13px;
-          color: #0F172A !important;
-          outline: none;
-          transition: border-color 0.2s, box-shadow 0.2s;
-          box-sizing: border-box;
-        }
-        
-        .ig-input:focus {
-          border-color: #3B71FE;
-          box-shadow: 0 0 0 3px rgba(59, 113, 254, 0.15);
-        }
-
-        .ig-input::placeholder {
-          color: #94A3B8;
-          font-size: 12px;
-        }
-
-        .ig-btn-primary {
-          width: 100%;
-          height: 40px;
-          background: linear-gradient(135deg, #3B71FE 0%, #2563EB 100%);
-          color: white;
-          border: none;
-          border-radius: 6px;
-          font-size: 13px;
-          font-weight: 700;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: background-color 0.2s, transform 0.1s;
-        }
-
-        .ig-btn-primary:hover:not(:disabled) {
-          background: #1D4ED8;
-        }
-
-        .ig-btn-primary:active:not(:disabled) {
-          transform: scale(0.98);
-        }
-
-        .ig-btn-primary:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .ig-btn-google {
-          width: 100%;
-          height: 40px;
-          background: #FFFFFF;
-          border: 1px solid #CBD5E1;
-          border-radius: 6px;
-          color: #1E293B;
-          font-size: 13px;
-          font-weight: 600;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          cursor: pointer;
-          transition: background-color 0.2s;
-        }
-
-        .ig-btn-google:hover {
-          background: #F8FAFC;
-        }
-
-        .neon-gradient-text {
-          background: linear-gradient(135deg, #2563EB 0%, #93C5FD 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          font-weight: 800;
-        }
-
-        .mockup-image-container {
-          position: relative;
-          margin: 0 auto;
-          width: 100%;
-          max-width: 440px;
-          height: auto;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-        }
-
-        .mockup-img {
-          width: 100%;
-          height: auto;
-          max-height: 42vh;
-          object-fit: contain;
-          filter: drop-shadow(0 20px 25px rgba(59, 113, 254, 0.15));
-          animation: float 6s ease-in-out infinite;
-        }
-
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-10px); }
-        }
-
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); boxShadow: '0 0 30px rgba(59, 113, 254, 0.3)'; }
-          50% { transform: scale(1.05); boxShadow: '0 0 40px rgba(59, 113, 254, 0.5)'; }
-        }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-
-        .footer-links {
-          position: absolute;
-          bottom: 24px;
-          left: 0;
-          right: 0;
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
-          gap: 12px;
-          font-size: 11px;
-          color: #94A3B8;
-        }
-
-        .footer-links a {
-          color: #94A3B8;
-          text-decoration: none;
-          transition: color 0.2s;
-        }
-
-        .footer-links a:hover {
-          color: #64748B;
-        }
-
-        /* Custom Scrollbar for signup form */
-        .signup-scroll-area {
-          overscroll-behavior: contain !important;
-        }
-
-        .signup-scroll-area::-webkit-scrollbar {
-          width: 6px;
-        }
-        
-        .signup-scroll-area::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        
-        .signup-scroll-area::-webkit-scrollbar-thumb {
-          background: #E2E8F0;
-          border-radius: 4px;
-        }
-        
-        .signup-scroll-area::-webkit-scrollbar-thumb:hover {
-          background: #CBD5E1;
-        }
-
-        /* Grid layout for signup */
-        .signup-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 10px;
-        }
-        
-        .signup-full {
-          grid-column: span 2;
-        }
-
-        /* Lucide icons adjustment */
-        .ig-icon-btn {
-          position: absolute;
-          right: 12px;
-          top: 50%;
-          transform: translateY(-50%) !important;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          color: #94A3B8;
-          padding: 0;
-          display: flex;
-          align-items: center;
-          box-shadow: none !important;
-          filter: none !important;
-          transition: color 0.2s ease !important;
-        }
-
-        .ig-icon-btn:hover {
-          color: #64748B;
-          transform: translateY(-50%) !important;
-          box-shadow: none !important;
-          filter: none !important;
-        }
-
-        .ig-icon-btn:active {
-          transform: translateY(-50%) !important;
-          box-shadow: none !important;
-          filter: none !important;
-        }
-      `}</style>
-
-      {/* Left Column: Media Presentation */}
-      <div className="left-pane">
-        {/* Brand Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '10px', background: '#2563EB', color: '#FFFFFF', fontWeight: 900, fontSize: '20px', boxShadow: '0 0 20px rgba(59, 113, 254, 0.2)' }}>
-            C
-          </div>
-          <span style={{ fontSize: '20px', fontWeight: 900, color: '#2563EB', letterSpacing: '-0.02em', fontFamily: "'Outfit', sans-serif" }}>Curoxa</span>
+        {/* Top Header / Curoxa Logo */}
+        <div className="relative z-10 lg:ml-4 xl:ml-6">
+          <img 
+            src={curoxaLogo} 
+            alt="Curoxa Healthcare" 
+            className="h-16 sm:h-20 lg:h-24 w-auto object-contain drop-shadow-sm" 
+            onError={(e) => {
+              e.target.src = '/curoxa_logo_transparent.png';
+            }}
+          />
         </div>
 
-        {/* Visual Content Block */}
-        <div style={{ margin: 'auto 0' }}>
-          <h1 style={{ fontSize: 'clamp(26px, 3.5vw, 38px)', fontWeight: 900, color: '#0F172A', lineHeight: '1.2', margin: '0 0 16px 0', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em' }}>
-            Track and manage <span className="neon-gradient-text">everyday clinical moments</span> for your patients.
-          </h1>
-          <p style={{ fontSize: '14px', color: '#475569', fontWeight: 500, margin: '0 0 40px 0', lineHeight: '1.5', maxWidth: '440px' }}>
-            Empower your healthcare operations with structured laboratory management, real-time analytics, and secure client communication workflows.
+        {/* Main Promotional Copy positioned comfortably above the 3D dashboard illustration */}
+        <div className="relative z-10 mt-2 lg:mt-3 mb-auto max-w-lg lg:ml-4 xl:ml-6">
+          <div className="space-y-0.5">
+            <h1 className="text-3xl sm:text-4xl lg:text-[44px] font-black tracking-tight text-slate-900 leading-[1.12]">
+              Smarter Care.
+            </h1>
+            <h1 className="text-3xl sm:text-4xl lg:text-[44px] font-black tracking-tight bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 bg-clip-text text-transparent leading-[1.12]">
+              Better Outcomes.
+            </h1>
+          </div>
+
+          <p className="mt-2 sm:mt-2.5 text-xs sm:text-sm lg:text-[15px] text-slate-600 font-normal leading-relaxed max-w-md">
+            Track, manage, and optimize every clinical moment with <span className="font-semibold text-slate-800">Curoxa</span> — your complete hospital management solution.
           </p>
-
-          <div className="mockup-image-container">
-            <img 
-              src="/curoxa_login_promo.jpg" 
-              alt="Curoxa App Mockup" 
-              className="mockup-img"
-              onError={(e) => {
-                e.target.style.display = 'none';
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Footer Brand copyright */}
-        <div>
-          <p style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 600 }}>© 2026 Curoxa Healthcare Systems. All rights reserved.</p>
         </div>
       </div>
 
-      {/* Server Wake-Up Splash Overlay */}
-      {showServerSplash && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(15, 23, 42, 0.6)',
-          backdropFilter: 'blur(8px)',
-          zIndex: 99999,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          animation: 'fadeIn 0.2s ease-out'
-        }}>
-          <div className="responsive-splash-card" style={{
-            background: 'white',
-            borderRadius: '20px',
-            padding: '40px 48px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '20px',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            border: '1px solid #E2E8F0',
-            maxWidth: '360px',
-            width: '90%'
-          }}>
-            <div style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '14px',
-              background: 'linear-gradient(135deg, #3B71FE 0%, #2563EB 100%)',
-              color: 'white',
-              fontWeight: 900,
-              fontSize: '24px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 0 30px rgba(59, 113, 254, 0.3)',
-              animation: 'pulse 1.5s ease-in-out infinite'
-            }}>M</div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', marginBottom: '6px', fontFamily: "'Outfit', sans-serif" }}>Logging in…</div>
-              <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600, lineHeight: '1.5' }}>Authenticating your credentials and securing your session…</div>
-            </div>
-            <div style={{ width: '32px', height: '32px', border: '3px solid #E2E8F0', borderTopColor: '#2563EB', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-          </div>
-        </div>
-      )}
+      {/* MIDDLE FLOATING PILLS & CONNECTION LINE: Exact Match to Reference Mockup */}
+      <div className="hidden xl:block absolute left-[51%] top-[53%] -translate-x-1/2 -translate-y-1/2 w-[460px] h-[380px] pointer-events-none select-none z-10">
+        {/* Continuous S-Curve Dashed Path matching reference */}
+        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 460 380" fill="none">
+          {/* Main dashed connecting spline */}
+          <path 
+            d="M 10,75 C 65,60 120,48 185,55 C 245,62 295,40 335,48 C 365,55 375,105 325,145 C 285,175 235,172 225,205 C 215,240 175,265 205,290 C 235,315 305,305 355,270 C 375,255 395,245 425,250" 
+            stroke="#93C5FD" 
+            strokeWidth="1.5" 
+            strokeDasharray="4 4" 
+          />
 
-      {showPasswordChangedModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(15, 23, 42, 0.6)',
-          backdropFilter: 'blur(8px)',
-          zIndex: 99999,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          animation: 'fadeIn 0.2s ease-out'
-        }}>
-          <div className="responsive-splash-card" style={{
-            background: 'white',
-            borderRadius: '20px',
-            padding: '32px 32px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '20px',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            border: '1px solid #E2E8F0',
-            maxWidth: '400px',
-            width: '90%',
-            position: 'relative'
-          }}>
-            <div style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '50%',
-              background: '#FEF2F2',
-              color: '#EF4444',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 0 20px rgba(239, 68, 68, 0.1)',
-            }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', marginBottom: '8px', fontFamily: "'Outfit', sans-serif" }}>Password Changed</h3>
-              <p style={{ fontSize: '13px', color: '#64748B', fontWeight: 500, lineHeight: '1.6', margin: 0 }}>
-                Your account password has been updated. You have been logged out for security. Please log in again using your new password.
-              </p>
-            </div>
-            <button 
-              onClick={() => setShowPasswordChangedModal(false)}
-              style={{
-                width: '100%',
-                height: '44px',
-                background: '#2563EB',
-                color: 'white',
-                border: 'none',
-                borderRadius: '10px',
-                fontSize: '13px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'background-color 0.2s',
-                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
+          {/* Node 1: Left connector */}
+          <circle cx="65" cy="62" r="5" fill="#93C5FD" fillOpacity="0.4" />
+          <circle cx="65" cy="62" r="3" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="1.5" />
+
+          {/* Node 2: Top-right curve */}
+          <circle cx="335" cy="48" r="5" fill="#93C5FD" fillOpacity="0.4" />
+          <circle cx="335" cy="48" r="3" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="1.5" />
+
+          {/* Node 3: Center-left inflection */}
+          <circle cx="195" cy="235" r="5" fill="#93C5FD" fillOpacity="0.4" />
+          <circle cx="195" cy="235" r="3" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="1.5" />
+
+          {/* Node 4: Right exit towards Login Card */}
+          <circle cx="355" cy="270" r="5" fill="#93C5FD" fillOpacity="0.4" />
+          <circle cx="355" cy="270" r="3" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="1.5" />
+        </svg>
+
+        {/* Badge 1: Secure */}
+        <div className="absolute top-[55px] left-[185px] -translate-x-1/2 -translate-y-1/2 bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_8px_30px_rgba(30,58,138,0.08)] border border-slate-100/90 px-4 py-2 flex items-center gap-2.5">
+          <ShieldCheck className="w-4 h-4 text-blue-500 flex-shrink-0" />
+          <span className="text-[13px] font-semibold text-slate-800 tracking-tight">Secure</span>
+        </div>
+
+        {/* Badge 2: Real-time */}
+        <div className="absolute top-[165px] left-[285px] -translate-x-1/2 -translate-y-1/2 bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_8px_30px_rgba(30,58,138,0.08)] border border-slate-100/90 px-4 py-2 flex items-center gap-2.5">
+          <Activity className="w-4 h-4 text-blue-500 flex-shrink-0" />
+          <span className="text-[13px] font-semibold text-slate-800 tracking-tight">Real-time</span>
+        </div>
+
+        {/* Badge 3: Connected */}
+        <div className="absolute top-[290px] left-[215px] -translate-x-1/2 -translate-y-1/2 bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_8px_30px_rgba(30,58,138,0.08)] border border-slate-100/90 px-4 py-2 flex items-center gap-2.5">
+          <svg className="w-4 h-4 text-blue-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="5" r="2.5"/>
+            <circle cx="6" cy="18" r="2.5"/>
+            <circle cx="18" cy="18" r="2.5"/>
+            <path d="m7.8 16 2.4-8.8"/>
+            <path d="m16.2 16-2.4-8.8"/>
+            <path d="M8.5 18h7"/>
+          </svg>
+          <span className="text-[13px] font-semibold text-slate-800 tracking-tight">Connected</span>
+        </div>
+      </div>
+
+      {/* RIGHT SIDE: Floating Login Card Area (Desktop ~45% / Transparent over full-viewport background) */}
+      <div className="w-full lg:w-[45%] flex flex-col justify-center items-center p-4 sm:p-8 lg:p-12 xl:p-16 bg-transparent">
+        
+        {/* Main Authentication Card */}
+        <div className="w-full max-w-[440px] bg-white rounded-3xl border border-slate-200/80 shadow-[0_16px_48px_rgba(15,23,42,0.06)] p-6 sm:p-9 transition-all relative z-10">
+          
+          {/* Card Top Branding & Header */}
+          <div className="text-center mb-6">
+            <img 
+              src={curoxaLogo} 
+              alt="Curoxa" 
+              className="h-14 sm:h-16 w-auto mx-auto object-contain mb-4 drop-shadow-sm" 
+              onError={(e) => {
+                e.target.src = '/curoxa_logo_transparent.png';
               }}
-            >
-              Understand & Sign In
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Right Column: Authentication Panel */}
-      <div className="right-pane">
-        {/* Main Instagram Auth Card */}
-        <div className="instagram-card">
-          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '10px', background: '#2563EB', color: '#FFFFFF', fontWeight: 900, fontSize: '20px', marginBottom: '12px', boxShadow: '0 0 20px rgba(59, 113, 254, 0.2)' }}>
-              C
-            </div>
-            <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em' }}>
-              Log in to Curoxa
+            />
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              Welcome back
             </h2>
+            <p className="text-xs sm:text-sm text-slate-500 font-normal mt-1">
+              Sign in to continue to Curoxa
+            </p>
           </div>
 
+          {/* Feedback Alerts */}
           {error && (
-            <div style={{ background: 'rgba(239, 68, 68, 0.06)', color: '#EF4444', padding: '10px 12px', borderRadius: '6px', marginBottom: '16px', fontSize: '12px', border: '1px solid rgba(239, 68, 68, 0.15)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AlertCircle size={14} style={{ flexShrink: 0 }} />
-              <span style={{ flexGrow: 1 }}>{error}</span>
+            <div className="mb-5 p-3 sm:p-3.5 rounded-xl bg-red-50/80 border border-red-200/80 text-red-700 text-xs font-medium flex items-start gap-2.5 animate-fadeIn">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <span className="flex-1 leading-snug">{error}</span>
             </div>
           )}
 
           {success && (
-            <div style={{ background: 'rgba(16, 185, 129, 0.06)', color: '#10B981', padding: '10px 12px', borderRadius: '6px', marginBottom: '16px', fontSize: '12px', border: '1px solid rgba(16, 185, 129, 0.15)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <CheckCircle size={14} style={{ flexShrink: 0 }} />
-              <span style={{ flexGrow: 1 }}>{success}</span>
+            <div className="mb-5 p-3 sm:p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200/80 text-emerald-700 text-xs font-medium flex items-start gap-2.5 animate-fadeIn">
+              <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <span className="flex-1 leading-snug">{success}</span>
             </div>
           )}
 
+          {/* Form Switch: Password Mode vs OTP Mode */}
           {loginMethod === 'password' ? (
-            /* PASSWORD SIGN IN FORM */
-            <form onSubmit={handleLogin}>
-              <div className="ig-input-group">
-                <input 
-                  type="text" 
-                  className="ig-input" 
-                  placeholder="Staff ID / Contact Number"
-                  value={staffId}
-                  onChange={(e) => setStaffId(e.target.value.toLowerCase())}
-                  required
-                />
-              </div>
+            /* PASSWORD LOGIN FORM */
+            <form onSubmit={handleLogin} className="space-y-4">
               
-              <div className="ig-input-group" style={{ marginBottom: '16px' }}>
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  className="ig-input" 
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-                <button 
-                  type="button" 
-                  className="ig-icon-btn"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+              {/* Staff ID / Contact Input */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Staff ID / Contact Number
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={staffId}
+                    onChange={(e) => setStaffId(e.target.value.toLowerCase())}
+                    placeholder="Enter your Staff ID or Contact Number"
+                    className="w-full h-11 pl-10 pr-3.5 bg-white rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+                  />
+                </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-                <button
-                  type="button"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    padding: 0,
-                    color: '#2563EB',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    textDecoration: 'none'
-                  }}
-                  onClick={() => {
-                    setShowForgotModal(true);
-                    setForgotEmail('');
-                    setForgotOtp('');
-                    setForgotNewPassword('');
-                    setForgotConfirmPassword('');
-                    setForgotStep(1);
-                    setForgotError('');
-                    setForgotSuccess('');
-                  }}
-                >
-                  Forgot Password?
-                </button>
+              {/* Password Input */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotModal(true);
+                      setForgotEmail('');
+                      setForgotOtp('');
+                      setForgotNewPassword('');
+                      setForgotConfirmPassword('');
+                      setForgotStep(1);
+                      setForgotError('');
+                      setForgotSuccess('');
+                    }}
+                    className="text-xs font-medium text-blue-600 hover:text-blue-700 transition"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full h-11 pl-10 pr-10 bg-white rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-              
-              <button 
-                type="submit" 
-                className="ig-btn-primary" 
+
+              {/* Primary Log In Button */}
+              <button
+                type="submit"
                 disabled={loading}
+                className="w-full h-11 mt-2 rounded-xl bg-gradient-to-r from-blue-600 via-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold text-sm shadow-md shadow-blue-500/15 hover:shadow-blue-500/25 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {loading ? 'Logging in...' : 'Log In'}
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Logging in...
+                  </span>
+                ) : (
+                  'Log In'
+                )}
               </button>
 
-              <div style={{ position: 'relative', margin: '20px 0 16px 0', textAlign: 'center' }}>
-                <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: '1px', background: '#E2E8F0', zIndex: 1 }}></div>
-                <span style={{ position: 'relative', background: '#FFFFFF', padding: '0 10px', fontSize: '11px', color: '#94A3B8', fontWeight: 700, zIndex: 2 }}>PATIENT PORTAL</span>
+              {/* Divider */}
+              <div className="relative my-4 text-center">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200" />
+                </div>
+                <span className="relative bg-white px-3 text-xs font-semibold text-slate-400">
+                  — OR —
+                </span>
               </div>
 
-              <button 
-                type="button" 
-                className="ig-btn-google"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  background: '#F0FDF4',
-                  borderColor: '#BBF7D0',
-                  color: '#166534',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  width: '100%',
-                  height: '42px',
-                  borderRadius: '8px',
-                  cursor: 'pointer'
-                }}
+              {/* Patient Portal Option (Subtle Green Tint) */}
+              <button
+                type="button"
                 onClick={() => navigate('/patient/login')}
+                className="w-full h-11 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200 text-emerald-800 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition duration-150 shadow-sm"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                Patient Portal (Login with Email / OTP)
+                <User className="w-4 h-4 text-emerald-600" />
+                Patient Portal Login (with Email / OTP)
               </button>
             </form>
           ) : (
-            /* OTP SIGN IN FORM */
-            <form onSubmit={!otpSent ? handleSendOtp : handleVerifyLoginOtp}>
+            /* OTP LOGIN FORM */
+            <form onSubmit={!otpSent ? handleSendOtp : handleVerifyLoginOtp} className="space-y-4">
               {!otpSent ? (
                 <>
-                  <div className="ig-input-group" style={{ marginBottom: '16px' }}>
-                    <input 
-                      type="text" 
-                      className="ig-input" 
-                      placeholder="Email or Mobile Number"
-                      value={emailOrPhone}
-                      onChange={(e) => setEmailOrPhone(e.target.value.toLowerCase())}
-                      required
-                    />
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Email or Mobile Number
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        value={emailOrPhone}
+                        onChange={(e) => setEmailOrPhone(e.target.value.toLowerCase())}
+                        placeholder="Enter registered email or phone"
+                        className="w-full h-11 pl-10 pr-3.5 bg-white rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+                      />
+                    </div>
                   </div>
-                  
-                  <button 
-                    type="submit" 
-                    className="ig-btn-primary" 
+
+                  <button
+                    type="submit"
                     disabled={loading}
+                    className="w-full h-11 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold text-sm shadow-md shadow-blue-500/15 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60"
                   >
-                    {loading ? 'Sending OTP...' : 'Send OTP'}
+                    {loading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Sending OTP...
+                      </span>
+                    ) : (
+                      'Send OTP'
+                    )}
                   </button>
                 </>
               ) : (
                 <>
-                  <div className="ig-input-group">
-                    <input 
-                      type="text" 
-                      className="ig-input" 
-                      value={emailOrPhone}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Contact Information
+                    </label>
+                    <input
+                      type="text"
                       disabled
-                      style={{ background: '#F1F5F9', color: '#64748B' }}
+                      value={emailOrPhone}
+                      className="w-full h-11 px-3.5 bg-slate-100 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-600 font-medium"
                     />
                   </div>
 
-                  <div className="ig-input-group" style={{ marginBottom: '16px' }}>
-                    <input 
-                      type="text" 
-                      className="ig-input" 
-                      placeholder="Enter 6-Digit OTP"
-                      value={loginOtp}
-                      onChange={(e) => setLoginOtp(e.target.value)}
-                      required
-                      maxLength="6"
-                    />
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      One-Time Password (OTP)
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <KeyRound className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        maxLength={6}
+                        value={loginOtp}
+                        onChange={(e) => setLoginOtp(e.target.value)}
+                        placeholder="Enter 6-digit OTP"
+                        className="w-full h-11 pl-10 pr-3.5 bg-white rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-900 tracking-widest placeholder:tracking-normal placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+                      />
+                    </div>
                   </div>
-                  
-                  <button 
-                    type="submit" 
-                    className="ig-btn-primary" 
+
+                  <button
+                    type="submit"
                     disabled={loading}
+                    className="w-full h-11 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold text-sm shadow-md shadow-blue-500/15 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60"
                   >
-                    {loading ? 'Verifying...' : 'Verify & Log In'}
+                    {loading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Verifying...
+                      </span>
+                    ) : (
+                      'Verify & Log In'
+                    )}
                   </button>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '14px' }}>
+                  <div className="flex items-center justify-between text-xs pt-1">
                     <button
                       type="button"
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        padding: 0,
-                        color: '#64748B',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        textDecoration: 'underline'
-                      }}
                       onClick={() => setOtpSent(false)}
+                      className="text-slate-500 hover:text-slate-700 font-medium hover:underline"
                     >
-                      Change Contact Info
+                      Change contact info
                     </button>
-
                     <button
                       type="button"
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        padding: 0,
-                        color: '#2563EB',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        textDecoration: 'underline'
-                      }}
                       onClick={handleSendOtp}
                       disabled={loading}
+                      className="text-blue-600 hover:text-blue-700 font-semibold hover:underline"
                     >
                       Resend OTP
                     </button>
@@ -1064,281 +693,109 @@ const Login = () => {
                 </>
               )}
 
-              <div style={{ position: 'relative', margin: '20px 0 16px 0', textAlign: 'center' }}>
-                <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: '1px', background: '#E2E8F0', zIndex: 1 }}></div>
-                <span style={{ position: 'relative', background: '#FFFFFF', padding: '0 10px', fontSize: '11px', color: '#94A3B8', fontWeight: 700, zIndex: 2 }}>PATIENT PORTAL</span>
+              {/* Divider */}
+              <div className="relative my-4 text-center">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200" />
+                </div>
+                <span className="relative bg-white px-3 text-xs font-semibold text-slate-400">
+                  — OR —
+                </span>
               </div>
 
-              <button 
-                type="button" 
-                className="ig-btn-google"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  background: '#F0FDF4',
-                  borderColor: '#BBF7D0',
-                  color: '#166534',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  width: '100%',
-                  height: '42px',
-                  borderRadius: '8px',
-                  cursor: 'pointer'
-                }}
+              {/* Patient Portal Option */}
+              <button
+                type="button"
                 onClick={() => navigate('/patient/login')}
+                className="w-full h-11 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200 text-emerald-800 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition duration-150 shadow-sm"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                Patient Portal (Login with Email / OTP)
+                <User className="w-4 h-4 text-emerald-600" />
+                Patient Portal Login (with Email / OTP)
               </button>
             </form>
           )}
+
+          {/* OTP Mode Toggle Option (Matching Reference UI) */}
+          <div className="mt-5 text-center pt-2">
+            <span className="text-xs text-slate-600 font-normal">
+              {loginMethod === 'password' ? (
+                <>
+                  Prefer login without password?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginMethod('otp');
+                      setError('');
+                      setSuccess('');
+                      setOtpSent(false);
+                    }}
+                    className="text-blue-600 font-bold hover:text-blue-700 hover:underline transition"
+                  >
+                    Use OTP Login
+                  </button>
+                </>
+              ) : (
+                <>
+                  Know your password?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginMethod('password');
+                      setError('');
+                      setSuccess('');
+                    }}
+                    className="text-blue-600 font-bold hover:text-blue-700 hover:underline transition"
+                  >
+                    Use Password Login
+                  </button>
+                </>
+              )}
+            </span>
+          </div>
+
         </div>
 
-        {/* Toggle secondary box */}
-        <div className="instagram-card-secondary">
-          <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>
-            {loginMethod === 'password' ? (
-              <>
-                Prefer login without password?{' '}
-                <button 
-                  type="button" 
-                  style={{ background: 'transparent', border: 'none', padding: 0, color: '#2563EB', fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}
-                  onClick={() => {
-                    setLoginMethod('otp');
-                    setError('');
-                    setSuccess('');
-                    setOtpSent(false);
-                  }}
-                >
-                  Use OTP Login
-                </button>
-              </>
-            ) : (
-              <>
-                Know your password?{' '}
-                <button 
-                  type="button" 
-                  style={{ background: 'transparent', border: 'none', padding: 0, color: '#2563EB', fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}
-                  onClick={() => {
-                    setLoginMethod('password');
-                    setError('');
-                    setSuccess('');
-                  }}
-                >
-                  Use Password Login
-                </button>
-              </>
-            )}
-          </span>
+        {/* Global Footer Copyright */}
+        <div className="mt-8 text-center relative z-10">
+          <p className="text-xs text-slate-400 font-medium">
+            © 2026 Curoxa Healthcare Systems. All rights reserved.
+          </p>
         </div>
 
-        {/* Support Links in Instagram footer format */}
-        <div className="footer-links">
-          <a href="#about" onClick={(e) => e.preventDefault()}>About</a>
-          <span>•</span>
-          <a href="#services" onClick={(e) => e.preventDefault()}>Services</a>
-          <span>•</span>
-          <a href="#careers" onClick={(e) => e.preventDefault()}>Careers</a>
-          <span>•</span>
-          <a href="#privacy" onClick={(e) => e.preventDefault()}>Privacy</a>
-          <span>•</span>
-          <a href="#terms" onClick={(e) => e.preventDefault()}>Terms</a>
-          <span>•</span>
-          <a href="#help" onClick={(e) => e.preventDefault()}>Help</a>
-          <span>•</span>
-          <a href="#status" onClick={(e) => e.preventDefault()}>System Status</a>
-        </div>
       </div>
 
-      {/* Google OAuth & Simulation Modal */}
-      {showGoogleModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.2s ease-out' }}>
-          <div className="responsive-modal" style={{ width: '460px', maxWidth: '95vw', padding: '24px', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
-            
-            {/* Header / Google Logo */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-              <svg style={{ width: '28px', height: '28px', flexShrink: 0 }} viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.62-.62-1.05-1.37-1.35-2.22z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-              </svg>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#1E293B' }}>Google Sign-In Options</h3>
-                <p style={{ margin: 0, fontSize: '11px', color: '#64748B', fontWeight: 500 }}>Configure real login or use developer simulation</p>
-              </div>
+      {/* Server Wake-Up Splash Overlay */}
+      {showServerSplash && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl border border-slate-100 flex flex-col items-center">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-cyan-500 text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-blue-500/30 mb-4">
+              C
             </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Logging in…</h3>
+            <p className="text-xs text-slate-500 leading-relaxed mb-5">
+              Authenticating your credentials and securing your clinical session…
+            </p>
+            <div className="w-8 h-8 border-3 border-slate-200 border-t-blue-600 rounded-full animate-spin" />
+          </div>
+        </div>
+      )}
 
-            {/* Tab navigation */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', marginBottom: '16px' }}>
-              <button
-                type="button"
-                style={{
-                  flex: 1,
-                  padding: '10px',
-                  border: 'none',
-                  background: 'transparent',
-                  borderBottom: googleModalTab === 'instructions' ? '2px solid #2563EB' : 'none',
-                  color: googleModalTab === 'instructions' ? '#2563EB' : '#64748B',
-                  fontWeight: 700,
-                  fontSize: '12px',
-                  cursor: 'pointer'
-                }}
-                onClick={() => setGoogleModalTab('instructions')}
-              >
-                Setup Instructions
-              </button>
-              <button
-                type="button"
-                style={{
-                  flex: 1,
-                  padding: '10px',
-                  border: 'none',
-                  background: 'transparent',
-                  borderBottom: googleModalTab === 'simulator' ? '2px solid #2563EB' : 'none',
-                  color: googleModalTab === 'simulator' ? '#2563EB' : '#64748B',
-                  fontWeight: 700,
-                  fontSize: '12px',
-                  cursor: 'pointer'
-                }}
-                onClick={() => setGoogleModalTab('simulator')}
-              >
-                Local Simulator
-              </button>
+      {/* Password Changed Notice Modal */}
+      {showPasswordChangedModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl border border-slate-100 flex flex-col items-center">
+            <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mb-4">
+              <Lock className="w-7 h-7" />
             </div>
-
-            {/* Content area */}
-            <div style={{ flexGrow: 1, overflowY: 'auto', maxHeight: '320px', paddingRight: '4px', marginBottom: '16px' }} className="signup-scroll-area" data-lenis-prevent>
-              {googleModalTab === 'instructions' ? (
-                /* INSTRUCTIONS TAB */
-                <div style={{ fontSize: '12px', color: '#334155', lineHeight: '1.6' }}>
-                  <div style={{ background: '#EFF6FF', color: '#1E40AF', padding: '10px 12px', borderRadius: '6px', marginBottom: '14px', fontSize: '11px', border: '1px solid #DBEAFE', fontWeight: 600 }}>
-                    💡 Set the Google Client ID in your environment config files to enable real user authentication.
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div>
-                      <strong style={{ color: '#0F172A', display: 'block', marginBottom: '2px' }}>Step 1: Go to Google Cloud Console</strong>
-                      <span>Open <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#2563EB', fontWeight: 700, textDecoration: 'underline' }}>Google Cloud Console</a> and create or select a project.</span>
-                    </div>
-
-                    <div>
-                      <strong style={{ color: '#0F172A', display: 'block', marginBottom: '2px' }}>Step 2: Configure OAuth Consent Screen</strong>
-                      <span>Go to APIs & Services &gt; OAuth Consent Screen, set User Type to External, enter application information, and publish the app.</span>
-                    </div>
-
-                    <div>
-                      <strong style={{ color: '#0F172A', display: 'block', marginBottom: '2px' }}>Step 3: Create OAuth Client ID Credentials</strong>
-                      <span>Go to Credentials &gt; Create Credentials &gt; OAuth client ID. Select "Web application". Add Authorized JavaScript origins: <code>http://localhost:5173</code> (or your deployment URL).</span>
-                    </div>
-
-                    <div>
-                      <strong style={{ color: '#0F172A', display: 'block', marginBottom: '2px' }}>Step 4: Update Environment variables (.env)</strong>
-                      <div style={{ background: '#F1F5F9', padding: '8px 10px', borderRadius: '6px', fontFamily: 'monospace', fontSize: '11px', border: '1px solid #E2E8F0', marginTop: '4px' }}>
-                        <div><strong>Frontend (.env)</strong></div>
-                        <div style={{ color: '#475569' }}>VITE_GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com</div>
-                        <div style={{ marginTop: '6px' }}><strong>Backend (.env)</strong></div>
-                        <div style={{ color: '#475569' }}>GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* SIMULATOR TAB */
-                <div>
-                  <p style={{ fontSize: '12px', color: '#64748B', fontWeight: 500, margin: '0 0 14px 0', textAlign: 'center' }}>
-                    Select a simulated account to test the system's OAuth behavior locally:
-                  </p>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {[
-                      { name: 'Super Admin (SaaS Portal)', email: 'super.admin@curoxa.com', avatar: 'SU' },
-                      { name: 'System Administrator (Admin)', email: 'admin', avatar: 'SA' },
-                      { name: 'Dr. Sarah Jenkins (Doctor)', email: 'sarah.jenkins@gmail.com', avatar: 'SJ' },
-                      { name: 'Receptionist Rita (Receptionist)', email: 'rita.receptionist@gmail.com', avatar: 'RR' },
-                      { name: 'John Doe (New Patient)', email: 'john.doe@gmail.com', avatar: 'JD' },
-                      { name: 'Jane Smith (Existing Patient)', email: 'jane.smith@gmail.com', avatar: 'JS' }
-                    ].map(account => (
-                      <div 
-                        key={account.email} 
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '12px', 
-                          padding: '10px 14px', 
-                          borderRadius: '8px', 
-                          border: '1px solid #E2E8F0', 
-                          cursor: 'pointer', 
-                          transition: '0.2s',
-                          background: '#F8FAFC'
-                        }}
-                        onClick={async () => {
-                          setShowGoogleModal(false);
-                          setLoading(true);
-                          try {
-                            const res = await api.post('/auth/google-login', {
-                              credential: `simulated_token_${account.email}`
-                            });
-                            
-                            const { token, user, tenantModules, plan } = res.data;
-                            localStorage.setItem('token', token);
-                            localStorage.setItem('user', JSON.stringify(user));
-                            localStorage.setItem('tenantId', user.tenantId || 'city_hospital');
-                            localStorage.setItem('tenantModules', JSON.stringify(tenantModules || {}));
-                            localStorage.setItem('plan', plan || '');
-                            
-                            window.dispatchEvent(new CustomEvent('curoxa_login_success'));
-                            setSuccess('Logged in via simulated Google Sign-In!');
-                            setTimeout(() => {
-                              switch (user.role) {
-                                case 'admin': navigate('/admin'); break;
-                                case 'superadmin':
-                                case 'super_admin': navigate('/super-admin'); break;
-                                case 'doctor': navigate('/doctor'); break;
-                                case 'receptionist': navigate('/receptionist'); break;
-                                case 'patient': navigate('/patient'); break;
-                                case 'lab': navigate('/lab'); break;
-                                case 'pharmacy': navigate('/pharmacy'); break;
-                                default: navigate('/'); break;
-                              }
-                            }, 1000);
-                          } catch (gErr) {
-                            setError(gErr.response?.data?.error || 'Simulated Google Authentication failed');
-                          } finally {
-                            setLoading(false);
-                          }
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = '#EFF6FF';
-                          e.currentTarget.style.borderColor = '#2563EB';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = '#F8FAFC';
-                          e.currentTarget.style.borderColor = '#E2E8F0';
-                        }}
-                      >
-                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '12px' }}>
-                          {account.avatar}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>{account.name}</div>
-                          <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>{account.email}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <button 
-              className="ig-btn-google" 
-              style={{ width: '100%', height: '38px', color: '#64748B', border: '1px solid #CBD5E1', fontSize: '12px', fontWeight: 700 }}
-              onClick={() => setShowGoogleModal(false)}
+            <h3 className="text-lg font-bold text-slate-900 mb-2">Password Changed</h3>
+            <p className="text-xs text-slate-600 leading-relaxed mb-6">
+              Your account password has been updated. You have been logged out for security. Please log in again using your new password.
+            </p>
+            <button
+              onClick={() => setShowPasswordChangedModal(false)}
+              className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-500/15 transition"
             >
-              Cancel
+              Understand & Sign In
             </button>
           </div>
         </div>
@@ -1346,129 +803,230 @@ const Login = () => {
 
       {/* Forgot Password Modal */}
       {showForgotModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.2s ease-out' }}>
-          <div className="responsive-modal" style={{ width: '400px', maxWidth: '95vw', padding: '28px', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
-            
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '10px', background: '#2563EB', color: '#FFFFFF', fontWeight: 900, fontSize: '20px', marginBottom: '12px', boxShadow: '0 0 20px rgba(59, 113, 254, 0.2)' }}>
-                M
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-7 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100">
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
+                <KeyRound className="w-6 h-6" />
               </div>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#1E293B', fontFamily: "'Outfit', sans-serif" }}>Reset Password</h3>
-              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B', fontWeight: 500 }}>
+              <h3 className="text-lg font-bold text-slate-900">Reset Password</h3>
+              <p className="text-xs text-slate-500 mt-1">
                 {forgotStep === 1 ? 'Enter your email to receive an OTP' : 'Enter the OTP and your new password'}
               </p>
             </div>
 
             {forgotError && (
-              <div style={{ background: 'rgba(239, 68, 68, 0.06)', color: '#EF4444', padding: '10px 12px', borderRadius: '6px', marginBottom: '16px', fontSize: '11px', border: '1px solid rgba(239, 68, 68, 0.15)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <AlertCircle size={14} style={{ flexShrink: 0 }} />
-                <span style={{ flexGrow: 1 }}>{forgotError}</span>
+              <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-700 text-xs font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <span>{forgotError}</span>
               </div>
             )}
 
             {forgotSuccess && (
-              <div style={{ background: 'rgba(16, 185, 129, 0.06)', color: '#10B981', padding: '10px 12px', borderRadius: '6px', marginBottom: '16px', fontSize: '11px', border: '1px solid rgba(16, 185, 129, 0.15)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle size={14} style={{ flexShrink: 0 }} />
-                <span style={{ flexGrow: 1 }}>{forgotSuccess}</span>
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-medium flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                <span>{forgotSuccess}</span>
               </div>
             )}
 
             {forgotStep === 1 ? (
-              <form onSubmit={handleRequestOtp}>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ fontSize: '10px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Email ID</label>
+              <form onSubmit={handleRequestOtp} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
                   <input
                     type="email"
-                    className="ig-input"
-                    placeholder="name@example.com"
+                    required
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
-                    required
+                    placeholder="name@example.com"
+                    className="w-full h-11 px-3.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
                   />
                 </div>
 
-                <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                  <button 
-                    type="button" 
-                    className="ig-btn-google" 
-                    style={{ flex: 1, height: '38px', color: '#64748B', border: '1px solid #CBD5E1', fontSize: '12px', fontWeight: 700 }}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
                     onClick={() => setShowForgotModal(false)}
+                    className="flex-1 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition"
                   >
                     Cancel
                   </button>
-                  <button 
-                    type="submit" 
-                    className="ig-btn-primary" 
-                    style={{ flex: 1.5, height: '38px', fontSize: '12px' }}
+                  <button
+                    type="submit"
                     disabled={loading}
+                    className="flex-[1.5] h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-500/15 transition disabled:opacity-60"
                   >
                     {loading ? 'Sending OTP...' : 'Send OTP'}
                   </button>
                 </div>
               </form>
             ) : (
-              <form onSubmit={handleVerifyOtpAndReset}>
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ fontSize: '10px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>One-Time Password (OTP)</label>
+              <form onSubmit={handleVerifyOtpAndReset} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">One-Time Password (OTP)</label>
                   <input
                     type="text"
-                    className="ig-input"
-                    placeholder="6-digit OTP code"
+                    required
+                    maxLength={6}
                     value={forgotOtp}
                     onChange={(e) => setForgotOtp(e.target.value)}
-                    required
-                    maxLength="6"
+                    placeholder="6-digit OTP code"
+                    className="w-full h-10 px-3.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
                   />
                 </div>
 
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ fontSize: '10px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>New Password</label>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">New Password</label>
                   <input
                     type="password"
-                    className="ig-input"
-                    placeholder="Enter new password"
+                    required
                     value={forgotNewPassword}
                     onChange={(e) => setForgotNewPassword(e.target.value)}
-                    pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,}"
-                    title="Must contain at least one number and one uppercase and lowercase letter, one special character, and at least 8 or more characters."
-                    required
+                    placeholder="Enter new password"
+                    className="w-full h-10 px-3.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
                   />
                 </div>
 
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ fontSize: '10px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Confirm New Password</label>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Confirm New Password</label>
                   <input
                     type="password"
-                    className="ig-input"
-                    placeholder="Confirm new password"
+                    required
                     value={forgotConfirmPassword}
                     onChange={(e) => setForgotConfirmPassword(e.target.value)}
-                    pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,}"
-                    title="Must contain at least one number and one uppercase and lowercase letter, one special character, and at least 8 or more characters."
-                    required
+                    placeholder="Confirm new password"
+                    className="w-full h-10 px-3.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
                   />
                 </div>
 
-                <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                  <button 
-                    type="button" 
-                    className="ig-btn-google" 
-                    style={{ flex: 1, height: '38px', color: '#64748B', border: '1px solid #CBD5E1', fontSize: '12px', fontWeight: 700 }}
+                <div className="flex gap-3 pt-3">
+                  <button
+                    type="button"
                     onClick={() => setForgotStep(1)}
+                    className="flex-1 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition"
                   >
                     Back
                   </button>
-                  <button 
-                    type="submit" 
-                    className="ig-btn-primary" 
-                    style={{ flex: 1.5, height: '38px', fontSize: '12px' }}
+                  <button
+                    type="submit"
                     disabled={loading}
+                    className="flex-[1.5] h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-500/15 transition disabled:opacity-60"
                   >
                     {loading ? 'Resetting...' : 'Reset Password'}
                   </button>
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Google OAuth Modal */}
+      {showGoogleModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-7 max-w-md w-full shadow-2xl border border-slate-100">
+            <div className="text-center mb-5">
+              <h3 className="text-base font-bold text-slate-900">Google Sign-In Options</h3>
+              <p className="text-xs text-slate-500 mt-1">Configure real login or use developer simulation</p>
+            </div>
+
+            <div className="flex border-b border-slate-200 mb-4">
+              <button
+                type="button"
+                onClick={() => setGoogleModalTab('instructions')}
+                className={`flex-1 py-2 text-xs font-semibold border-b-2 transition ${googleModalTab === 'instructions' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}
+              >
+                Setup Instructions
+              </button>
+              <button
+                type="button"
+                onClick={() => setGoogleModalTab('simulator')}
+                className={`flex-1 py-2 text-xs font-semibold border-b-2 transition ${googleModalTab === 'simulator' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}
+              >
+                Local Simulator
+              </button>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto pr-1 mb-5 text-xs text-slate-600">
+              {googleModalTab === 'instructions' ? (
+                <div className="space-y-3">
+                  <div className="p-3 bg-blue-50 text-blue-800 rounded-xl border border-blue-100 font-medium">
+                    💡 Set the Google Client ID in your .env files to enable real user authentication.
+                  </div>
+                  <div>
+                    <strong className="text-slate-900 block">Step 1: Google Cloud Console</strong>
+                    <span>Create a project in Google Cloud Console.</span>
+                  </div>
+                  <div>
+                    <strong className="text-slate-900 block">Step 2: Create OAuth Client ID</strong>
+                    <span>Select Web Application with your origin URL.</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {[
+                    { name: 'Super Admin', email: 'super.admin@curoxa.com', avatar: 'SU' },
+                    { name: 'Hospital Admin', email: 'admin', avatar: 'HA' },
+                    { name: 'Dr. Sarah Jenkins', email: 'sarah.jenkins@gmail.com', avatar: 'SJ' },
+                    { name: 'Receptionist Rita', email: 'rita.receptionist@gmail.com', avatar: 'RR' }
+                  ].map(account => (
+                    <div
+                      key={account.email}
+                      onClick={async () => {
+                        setShowGoogleModal(false);
+                        setLoading(true);
+                        try {
+                          const res = await api.post('/auth/google-login', {
+                            credential: `simulated_token_${account.email}`
+                          });
+                          const { token, user, tenantModules, plan } = res.data;
+                          localStorage.setItem('token', token);
+                          localStorage.setItem('user', JSON.stringify(user));
+                          localStorage.setItem('tenantId', user.tenantId || 'city_hospital');
+                          localStorage.setItem('tenantModules', JSON.stringify(tenantModules || {}));
+                          localStorage.setItem('plan', plan || '');
+                          window.dispatchEvent(new CustomEvent('curoxa_login_success'));
+                          setSuccess('Logged in via simulated Google Sign-In!');
+                          setTimeout(() => {
+                            switch (user.role) {
+                              case 'admin': navigate('/admin'); break;
+                              case 'superadmin':
+                              case 'super_admin': navigate('/super-admin'); break;
+                              case 'doctor': navigate('/doctor'); break;
+                              case 'receptionist': navigate('/receptionist'); break;
+                              case 'patient': navigate('/patient'); break;
+                              case 'lab': navigate('/lab'); break;
+                              case 'pharmacy': navigate('/pharmacy'); break;
+                              default: navigate('/'); break;
+                            }
+                          }, 1000);
+                        } catch (gErr) {
+                          setError(gErr.response?.data?.error || 'Simulated Google Authentication failed');
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 cursor-pointer transition"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+                        {account.avatar}
+                      </div>
+                      <div>
+                        <div className="font-semibold text-slate-800">{account.name}</div>
+                        <div className="text-[11px] text-slate-500">{account.email}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowGoogleModal(false)}
+              className="w-full h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
