@@ -38,7 +38,7 @@ const pmModules = [
   { id: 'rc-queue',      name: 'OPD token queue',            desc: 'Manage daily queue, call next',        group: 'Receptionist — core', coreFor: ['receptionist'] },
   { id: 'rc-upload',     name: 'Lab report upload',          desc: 'Upload external lab reports',          group: 'Receptionist — core', coreFor: ['receptionist'] },
   { id: 'rc-billing',    name: 'Billing & receipts',         desc: 'Generate consultation receipts',       group: 'Receptionist — ops', coreFor: [] },
-  { id: 'rc-reorder',    name: 'Pharmacy stock reorder',     desc: 'Raise reorder requests for medicines', group: 'Receptionist — ops', coreFor: [] },
+  { id: 'rc-reorder',    name: 'Utility Requests / Reorder', desc: 'Request consumables & medicines from Pharmacy inventory', group: 'Receptionist — ops', coreFor: [] },
   { id: 'rc-labprint',   name: 'Lab slip printing',          desc: 'Print / WhatsApp lab referral slips',  group: 'Receptionist — ops', coreFor: [] },
   /* ---- LAB TECH ---- */
   { id: 'lt-queue',      name: 'Test order queue',           desc: 'View & accept pending lab orders',     group: 'Lab tech — core', coreFor: ['lab'] },
@@ -478,10 +478,11 @@ const AdminDashboard = () => {
 
   // High-fidelity interactive Alerts lists
   const [criticalAlerts, setCriticalAlerts] = useState([]);
-
   const [warningAlerts, setWarningAlerts] = useState([]);
-
   const [resolvedCount, setResolvedCount] = useState(0);
+  const [resolvingAlertIds, setResolvingAlertIds] = useState({});
+  const [alertInlineFeedback, setAlertInlineFeedback] = useState({});
+  const [alertDisappearingIds, setAlertDisappearingIds] = useState({});
 
   // Enterprise-grade categorized alerts system — real data only
   const [alertCategoryFilter, setAlertCategoryFilter] = useState('all');
@@ -661,6 +662,19 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{}'));
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem('curoxa_sidebar_collapsed') === 'true');
+  const [sectionOpen, setSectionOpen] = useState({
+    clinic: true,
+    finance: true,
+    settings: false
+  });
+
+  const toggleSection = (sectionKey) => {
+    setSectionOpen(prev => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey]
+    }));
+  };
+
   const user = currentUser;
   const coverageState = pmState[currentUser?.name] || {};
 
@@ -1493,12 +1507,10 @@ const AdminDashboard = () => {
     let main = "";
     let sub = "";
 
-    const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const clinicName = currentUser?.tenantName || subscription?.name || 'Seghal Neo';
 
-    if (activeTab === 'dashboard') {
-      main = "Dashboard";
-      sub = `${dateStr} · ${currentUser?.tenantName || subscription?.name || 'Sunrise Multispeciality'}`;
-    }
+    if (activeTab === 'dashboard') { main = "Dashboard"; }
     else if (activeTab === 'supply') { main = "Alerts & Tasks"; sub = "Real-time enterprise alerts & system tracking"; }
     else if (activeTab === 'approvals') { main = "Approvals"; sub = "Pending hospital administrative decisions & requests"; }
     else if (activeTab === 'po-approvals') { main = "PO Approvals"; sub = "Pharmacy & medical supply purchase orders"; }
@@ -1507,20 +1519,31 @@ const AdminDashboard = () => {
     else if (activeTab === 'workforce') { main = "Workforce"; sub = "Staff directory & active employee accounts"; }
     else if (activeTab === 'financials') { main = "Revenue"; sub = "Hospital financial ledger & revenue analytics"; }
     else if (activeTab === 'audit') { main = "Audit Logs"; sub = "Security audit trail & administrative access logs"; }
-    else if (activeTab === 'services-catalog') { main = "Pricing & Procedures Catalog"; sub = "Configure procedure costs, chair slot durations & OPD fees for your hospital/clinic"; }
-    else if (activeTab === 'lab-catalog') { main = "Lab Tests Catalog"; sub = "Configure diagnostic test prices, codes, specimen types & turnaround times"; }
+    else if (activeTab === 'services-catalog') { main = "Pricing & Procedures Catalog"; sub = "Configure procedure costs & OPD fees"; }
+    else if (activeTab === 'lab-catalog') { main = "Lab Tests Catalog"; sub = "Configure diagnostic test prices & codes"; }
     else if (activeTab === 'subscription') { main = "Subscription"; sub = subscription ? `${subscription.plan.split(' (')[0]} — ${subscription.status.toLowerCase()}` : "Enterprise plan & license management"; }
     else if (activeTab === 'maintenance') { main = "Maintenance"; sub = "System diagnostic services & database health"; }
     else if (activeTab === 'letterhead') { main = "Letterhead Settings"; sub = "Upload and manage clinic letterhead for doctor prescriptions"; }
     else if (activeTab === 'updates') { main = "Updates"; sub = "Platform updates, patches & release hotfixes"; }
     else if (activeTab === 'permissions') { main = "Role Coverage"; sub = "Temporary role delegation & access control matrix"; }
     else if (activeTab === 'dpdp') { main = "DPO & DPDP Compliance"; sub = "Data privacy officer portal & compliance audits"; }
-    else { main = "Admin Console"; sub = `${currentUser?.tenantName || subscription?.name || 'Sunrise Multispeciality'} Hospital Management`; }
+    else { main = "Admin Console"; }
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <span className="header-title-main" style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '24px', color: '#0F172A', lineHeight: '1.2' }}>{main}</span>
-        {sub && <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginTop: '3px' }}>{sub}</span>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        <span className="header-title-main" style={{ fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif", fontWeight: 900, fontSize: '24px', color: '#0F172A', lineHeight: '1.2', letterSpacing: '-0.02em' }}>
+          {main}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>
+          {/* Calendar Icon */}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+          <span>{dateStr}</span>
+          <span style={{ color: '#CBD5E1', fontWeight: 400, margin: '0 2px' }}>|</span>
+          {/* User/Clinic Icon */}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span style={{ color: '#475569', fontWeight: 700 }}>{clinicName}</span>
+          {sub && <span style={{ color: '#94A3B8', fontSize: '12px', marginLeft: '4px' }}>({sub})</span>}
+        </div>
       </div>
     );
   };
@@ -2318,37 +2341,74 @@ const AdminDashboard = () => {
       }
     } else {
       setPendingApprovals(prev => prev.filter(x => x.id !== id));
-      setRejectedThisWeekCount(prev => prev + 1);
       setError(`Rejected: ${title}`);
     }
     setTimeout(() => { setSuccess(''); setError(''); }, 3000);
   };
 
   const resolveCriticalAlert = async (id, title, rawItem) => {
-    if (rawItem) {
-      await handleAdminRestock(rawItem);
+    setResolvingAlertIds(prev => ({ ...prev, [id]: true }));
+    try {
+      if (rawItem) {
+        await handleAdminRestock(rawItem);
+      }
+      setResolvedCount(prev => prev + 1);
+      // Show centered resolved state
+      setAlertInlineFeedback(prev => ({ ...prev, [id]: { message: 'Resolved', type: 'success' } }));
+      
+      // After 500ms, start slide-up / disappearing animation
+      setTimeout(() => {
+        setAlertDisappearingIds(prev => ({ ...prev, [id]: true }));
+        // After 400ms transition ends, remove from array
+        setTimeout(() => {
+          setCriticalAlerts(prev => prev.filter(item => item.id !== id));
+          setResolvingAlertIds(prev => { const n = { ...prev }; delete n[id]; return n; });
+          setAlertInlineFeedback(prev => { const n = { ...prev }; delete n[id]; return n; });
+          setAlertDisappearingIds(prev => { const n = { ...prev }; delete n[id]; return n; });
+        }, 400);
+      }, 500);
+    } catch (err) {
+      console.error('Failed to restock item', err);
+      setResolvingAlertIds(prev => { const n = { ...prev }; delete n[id]; return n; });
+      setAlertInlineFeedback(prev => ({ ...prev, [id]: { message: 'Failed', type: 'error' } }));
+      setTimeout(() => {
+        setAlertInlineFeedback(prev => { const n = { ...prev }; delete n[id]; return n; });
+      }, 3000);
     }
-    setCriticalAlerts(prev => prev.filter(item => item.id !== id));
-    setResolvedCount(prev => prev + 1);
-    setSuccess(`Resolved Critical Warning: ${title}`);
-    setTimeout(() => setSuccess(''), 3000);
   };
 
   const resolveWarningAlert = async (id, title, actionName, rawItem) => {
-    if (id.startsWith('db-warn-') && rawItem) {
-      try {
+    setResolvingAlertIds(prev => ({ ...prev, [id]: true }));
+    try {
+      if (id.startsWith('db-warn-') && rawItem) {
         await api.put(`/labs/${rawItem._id}`, { status: 'In Progress' });
-        setSuccess(`Updated lab request "${title}" to In Progress!`);
-        fetchWarningAlerts();
-      } catch (err) {
-        setError(`Failed to update lab request: ${err.message}`);
       }
-    } else {
-      setWarningAlerts(prev => prev.filter(item => item.id !== id));
       setResolvedCount(prev => prev + 1);
-      setSuccess(`Executed: ${actionName} for "${title}"`);
+      // Show centered resolved state
+      setAlertInlineFeedback(prev => ({ ...prev, [id]: { message: 'Resolved', type: 'success' } }));
+
+      // After 500ms, start slide-up / disappearing animation
+      setTimeout(() => {
+        setAlertDisappearingIds(prev => ({ ...prev, [id]: true }));
+        // After 400ms transition ends, remove from array
+        setTimeout(() => {
+          setWarningAlerts(prev => prev.filter(item => item.id !== id));
+          setResolvingAlertIds(prev => { const n = { ...prev }; delete n[id]; return n; });
+          setAlertInlineFeedback(prev => { const n = { ...prev }; delete n[id]; return n; });
+          setAlertDisappearingIds(prev => { const n = { ...prev }; delete n[id]; return n; });
+          if (id.startsWith('db-warn-')) {
+            fetchWarningAlerts();
+          }
+        }, 400);
+      }, 500);
+    } catch (err) {
+      console.error('Failed to update alert:', err);
+      setResolvingAlertIds(prev => { const n = { ...prev }; delete n[id]; return n; });
+      setAlertInlineFeedback(prev => ({ ...prev, [id]: { message: 'Failed', type: 'error' } }));
+      setTimeout(() => {
+        setAlertInlineFeedback(prev => { const n = { ...prev }; delete n[id]; return n; });
+      }, 3000);
     }
-    setTimeout(() => { setSuccess(''); setError(''); }, 3000);
   };
 
   // Counts for tabs & statistics — built from REAL data sources
@@ -2693,9 +2753,9 @@ const AdminDashboard = () => {
 
         /* 1. Light Theme Sidebar Navigation (Synchronized across all sub-pages) */
         .admin-sidebar {
-          width: 256px;
+          width: 260px;
           background-color: #FFFFFF;
-          color: #334155;
+          color: #0F172A;
           display: flex;
           flex-direction: column;
           position: fixed;
@@ -2703,157 +2763,351 @@ const AdminDashboard = () => {
           bottom: 0;
           left: 0;
           z-index: 1000;
-          border-right: 1px solid #E2E8F0;
-          box-shadow: none;
+          border-right: 1px solid rgba(226, 232, 240, 0.8);
+          border-top-right-radius: 28px;
+          border-bottom-right-radius: 28px;
+          box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.04);
           overscroll-behavior: contain;
+          transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .admin-sidebar.collapsed {
-          width: 70px;
+          width: 76px;
         }
-        .admin-sidebar.collapsed .sidebar-brand span,
+        .admin-sidebar.collapsed .sidebar-brand-text,
         .admin-sidebar.collapsed .sidebar-group-title,
+        .admin-sidebar.collapsed .sidebar-link-text,
         .admin-sidebar.collapsed .sidebar-link span,
-        .admin-sidebar.collapsed .profile-info {
-          display: none;
+        .admin-sidebar.collapsed .profile-info,
+        .admin-sidebar.collapsed .profile-chevron {
+          display: none !important;
         }
         .admin-sidebar.collapsed .sidebar-brand {
-          justify-content: center;
-          padding: 24px 16px;
-        }
-        .admin-sidebar.collapsed .sidebar-brand div:first-child {
-          margin-right: 0;
+          justify-content: center !important;
+          padding: 16px 8px 14px !important;
         }
         .admin-sidebar.collapsed .sidebar-nav-container {
-          padding: 24px 8px;
+          padding: 10px 6px !important;
         }
         .admin-sidebar.collapsed .sidebar-link {
-          justify-content: center;
-          padding: 12px;
+          justify-content: center !important;
+          padding: 6px !important;
         }
-        .admin-sidebar.collapsed .profile-avatar {
-          margin-right: 0;
+        .admin-sidebar.collapsed .sidebar-zone {
+          padding: 4px 2px !important;
+          background: transparent !important;
+        }
+        .admin-sidebar.collapsed .sidebar-profile {
+          margin: auto 6px 12px !important;
+          padding: 6px !important;
+          justify-content: center !important;
         }
         
         /* Mobile sidebar styles */
         .admin-sidebar.mobile-open {
           transform: translateX(0);
-          box-shadow: 4px 0 20px rgba(0, 0, 0, 0.05);
+          box-shadow: 4px 0 24px rgba(0, 0, 0, 0.08);
         }
         @media (max-width: 1024px) {
           .admin-sidebar {
             transform: translateX(-100%);
             transition: transform 0.3s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.05);
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.08);
           }
         }
 
-        .sidebar-brand {
-          padding: 24px 32px 16px;
-          display: flex;
-          align-items: center;
-          font-size: 22px;
-          font-weight: 800;
-          color: #2563EB;
-          border-bottom: 1px solid #F1F5F9;
+        .sidebar-brand-wrapper {
+          position: relative;
+          overflow: visible;
         }
 
-        .sidebar-brand-icon {
+        .sidebar-brand {
+          padding: 24px 20px 16px 20px;
           display: flex;
           align-items: center;
-          justify-content: center;
-          margin-right: 12px;
-          color: #2563EB;
+          gap: 14px;
+          position: relative;
+          z-index: 10;
         }
 
         .sidebar-nav-container {
           flex: 1;
           overflow-y: auto;
-          padding: 24px 16px;
+          padding: 8px 12px 14px 12px;
           overscroll-behavior: contain;
+          scrollbar-width: none; /* Firefox */
+          -ms-overflow-style: none; /* IE/Edge */
+        }
+        .sidebar-nav-container::-webkit-scrollbar {
+          display: none; /* Chrome/Safari/Brave */
+          width: 0;
+          height: 0;
         }
 
         .sidebar-group {
-          margin-bottom: 24px;
+          margin-bottom: 14px;
         }
 
         .sidebar-group-title {
-          font-size: 11px;
+          font-size: 12.5px;
           font-weight: 800;
           text-transform: uppercase;
-          letter-spacing: 1.5px;
-          color: #94A3B8;
+          letter-spacing: 0.07em;
+          line-height: 1.25;
           margin-bottom: 8px;
-          padding-left: 16px;
+          padding: 4px 8px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          cursor: pointer;
+          user-select: none;
+          transition: background-color 0.15s ease, margin-bottom 0.2s ease;
+        }
+        .sidebar-group-title:hover {
+          background-color: rgba(0, 0, 0, 0.035);
+        }
+        .sidebar-group-title.collapsed {
+          margin-bottom: 0px;
+        }
+        .sidebar-group-chevron {
+          margin-left: auto;
+          transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          opacity: 0.7;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .sidebar-group-title:hover .sidebar-group-chevron {
+          opacity: 1;
+        }
+
+        .sidebar-zone-clinic {
+          background: linear-gradient(180deg, rgba(240, 253, 250, 0.75) 0%, rgba(236, 254, 255, 0.45) 100%);
+          border-radius: 18px;
+          padding: 10px 8px;
+          margin-top: 14px;
+          margin-bottom: 14px;
+          transition: all 0.25s ease;
+        }
+        .sidebar-zone-clinic.collapsed {
+          padding: 6px 8px;
+          margin-top: 8px;
+          margin-bottom: 8px;
+        }
+
+        .sidebar-zone-finance {
+          background: linear-gradient(180deg, rgba(255, 247, 237, 0.8) 0%, rgba(254, 242, 242, 0.35) 100%);
+          border-radius: 18px;
+          padding: 10px 8px;
+          margin-top: 14px;
+          margin-bottom: 14px;
+          transition: all 0.25s ease;
+        }
+        .sidebar-zone-finance.collapsed {
+          padding: 6px 8px;
+          margin-top: 8px;
+          margin-bottom: 8px;
         }
 
         .sidebar-link {
+          position: relative;
           display: flex;
           align-items: center;
-          gap: 12px;
-          padding: 12px 16px;
-          color: #64748B;
-          text-decoration: none;
-          font-weight: 700;
-          font-size: 14px;
-          border-radius: 8px;
-          transition: all 0.2s ease-in-out;
-          margin-bottom: 4px;
-          cursor: pointer;
-        }
-
-        .sidebar-link:hover {
-          background-color: #F8FAFC;
+          gap: 10px;
+          padding: 5px 8px;
+          border-radius: 14px;
           color: #0F172A;
+          text-decoration: none;
+          font-weight: 600;
+          font-size: 14px;
+          line-height: 1.25;
+          transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+          margin-bottom: 3px;
+          cursor: pointer;
+          user-select: none;
+          border: 1px solid transparent;
         }
 
+        .sidebar-link-text {
+          line-height: 1.25;
+          font-size: 13.5px;
+          font-weight: 600;
+          color: #0F172A;
+          transition: all 0.2s ease;
+        }
+
+        .sidebar-link:hover:not(.active) {
+          background-color: rgba(241, 245, 249, 0.85);
+          transform: translateX(2px);
+        }
+
+        /* 3D POPPED-OUT ACTIVE STATE WITH RICH DEPTH & SHADOWS */
         .sidebar-link.active {
-          background-color: #EFF6FF;
-          color: #2563EB;
+          background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+          border: 1px solid rgba(219, 234, 254, 0.95) !important;
+          box-shadow: 
+            0 10px 24px -3px rgba(37, 99, 235, 0.18),
+            0 4px 10px -2px rgba(15, 23, 42, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.04),
+            inset 0 1px 0 #FFFFFF !important;
+          transform: translateY(-1.5px) !important;
+          z-index: 5 !important;
         }
 
-        .sidebar-link svg {
-          stroke: #94A3B8;
-          transition: stroke 0.2s;
+        .sidebar-link.active .sidebar-link-text {
+          color: #2563EB !important;
+          font-weight: 800 !important;
+          letter-spacing: -0.01em !important;
         }
 
-        .sidebar-link.active svg {
-          stroke: #2563EB;
+        .sidebar-link.active .sidebar-link-icon {
+          transform: scale(1.04) !important;
+          box-shadow: 0 5px 15px -1px rgba(37, 99, 235, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* Clinic zone active 3D pop */
+        .sidebar-zone-clinic .sidebar-link.active {
+          border-color: rgba(153, 246, 228, 0.95) !important;
+          box-shadow: 
+            0 10px 24px -3px rgba(13, 148, 136, 0.2),
+            0 4px 10px -2px rgba(15, 23, 42, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.04),
+            inset 0 1px 0 #FFFFFF !important;
+        }
+        .sidebar-zone-clinic .sidebar-link.active .sidebar-link-text {
+          color: #0D9488 !important;
+        }
+        .sidebar-zone-clinic .sidebar-link.active .sidebar-link-icon {
+          box-shadow: 0 5px 15px -1px rgba(13, 148, 136, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* Finance zone active 3D pop */
+        .sidebar-zone-finance .sidebar-link.active {
+          border-color: rgba(254, 215, 170, 0.95) !important;
+          box-shadow: 
+            0 10px 24px -3px rgba(234, 88, 12, 0.2),
+            0 4px 10px -2px rgba(15, 23, 42, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.04),
+            inset 0 1px 0 #FFFFFF !important;
+        }
+        .sidebar-zone-finance .sidebar-link.active .sidebar-link-text {
+          color: #EA580C !important;
+        }
+        .sidebar-zone-finance .sidebar-link.active .sidebar-link-icon {
+          box-shadow: 0 5px 15px -1px rgba(234, 88, 12, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+        }
+
+        .sidebar-link-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 11px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          transition: all 0.2s ease;
+        }
+
+        .sidebar-profile-footer {
+          position: relative;
+          padding: 8px 10px 12px 10px;
+          background: #FFFFFF;
+          border-bottom-right-radius: 28px;
+          flex-shrink: 0;
+          z-index: 20;
+        }
+        .admin-sidebar.collapsed .sidebar-profile-footer {
+          padding: 8px 6px 12px 6px;
+        }
+        .sidebar-profile-fade-top {
+          position: absolute;
+          top: -16px;
+          left: 0;
+          right: 0;
+          height: 16px;
+          background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.45) 50%, rgba(255, 255, 255, 0.9) 100%);
+          pointer-events: none;
+          backdrop-filter: blur(0.75px);
+          -webkit-backdrop-filter: blur(0.75px);
+          z-index: 15;
         }
 
         .sidebar-profile {
-          margin: auto 16px 16px !important;
-          padding: 12px !important;
-          border-radius: 16px !important;
-          background: #F8FAFC !important;
-          border: 1px solid #E2E8F0 !important;
+          margin: 0 !important;
+          padding: 7px 10px !important;
+          border-radius: 14px !important;
+          background: linear-gradient(135deg, #EEF4FF 0%, #F5F8FF 45%, #FFFFFF 100%) !important;
+          border: 1px solid rgba(219, 234, 254, 0.8) !important;
           display: flex !important;
           align-items: center !important;
-          gap: 12px !important;
+          gap: 10px !important;
           cursor: pointer !important;
           transition: all 0.2s ease !important;
           position: relative !important;
+          box-shadow: 0 4px 14px -2px rgba(30, 58, 138, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+          line-height: 1.2 !important;
+          user-select: none !important;
         }
         .sidebar-profile:hover {
-          background: #F1F5F9 !important;
+          background: linear-gradient(135deg, #E0E7FF 0%, #EEF2FF 50%, #FFFFFF 100%) !important;
+          border-color: #C7D2FE !important;
+          box-shadow: 0 6px 18px -2px rgba(30, 58, 138, 0.1) !important;
+        }
+        .admin-sidebar.collapsed .sidebar-profile {
+          margin: 0 auto !important;
+          padding: 6px !important;
+          justify-content: center !important;
+          width: 44px !important;
+          height: 44px !important;
+        }
+        .profile-avatar-wrap {
+          position: relative !important;
+          flex-shrink: 0 !important;
+          display: inline-flex !important;
+        }
+        .profile-avatar-status-dot {
+          position: absolute !important;
+          bottom: -1px !important;
+          right: -1px !important;
+          width: 9px !important;
+          height: 9px !important;
+          border-radius: 50% !important;
+          background: #22C55E !important;
+          border: 2px solid #FFFFFF !important;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+        }
+        .profile-avatar {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 50% !important;
+          object-fit: cover !important;
+          border: 1.5px solid #818CF8 !important;
+        }
+        .profile-avatar-initials {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 50% !important;
+          background: linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #8B5CF6 100%) !important;
+          color: #FFFFFF !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          font-weight: 800 !important;
+          font-size: 13.5px !important;
+          box-shadow: 0 3px 8px rgba(79, 70, 229, 0.3) !important;
         }
         .profile-info {
           display: flex !important;
           flex-direction: column !important;
           flex: 1 !important;
-        }
-        .profile-avatar {
-          width: 40px !important;
-          height: 40px !important;
-          border-radius: 50% !important;
-          object-fit: cover !important;
-          border: 2px solid #60A5FA !important;
+          min-width: 0 !important;
         }
         .profile-name {
           font-size: 13.5px !important;
           font-weight: 800 !important;
           color: #0F172A !important;
-          line-height: 1.3 !important;
+          line-height: 1.2 !important;
           white-space: nowrap !important;
           text-overflow: ellipsis !important;
           overflow: hidden !important;
@@ -2862,15 +3116,158 @@ const AdminDashboard = () => {
           font-size: 11px !important;
           color: #64748B !important;
           font-weight: 600 !important;
+          line-height: 1.2 !important;
+          margin-top: 1px !important;
           white-space: nowrap !important;
           text-overflow: ellipsis !important;
           overflow: hidden !important;
         }
         .profile-chevron {
-          color: #64748B !important;
+          color: #2563EB !important;
           display: flex !important;
           align-items: center !important;
-          transition: transform 0.3s ease !important;
+          transition: transform 0.25s ease !important;
+          flex-shrink: 0 !important;
+        }
+
+        /* Profile Floating Popover Menu */
+        .sidebar-profile-popover-card {
+          position: absolute !important;
+          bottom: 66px !important;
+          left: 8px !important;
+          width: 236px !important;
+          z-index: 3000 !important;
+          background: #FFFFFF !important;
+          border-radius: 16px !important;
+          border: 1px solid rgba(226, 232, 240, 0.9) !important;
+          box-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.18), 0 0 1px 1px rgba(0, 0, 0, 0.04) !important;
+          overflow: hidden !important;
+          animation: slideUpFade 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        .admin-sidebar.collapsed .sidebar-profile-popover-card {
+          left: 76px !important;
+          bottom: 10px !important;
+        }
+        @keyframes slideUpFade {
+          from {
+            opacity: 0;
+            transform: translateY(8px) scale(0.98);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        .profile-popover-header {
+          padding: 14px 14px 12px 14px !important;
+          background: linear-gradient(90deg, #FFFFFF 0%, #EEF4FF 35%, #93C5FD 75%, #3B82F6 100%) !important;
+          border-bottom: 1px solid #E2E8F0 !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 10px !important;
+          position: relative !important;
+          overflow: hidden !important;
+        }
+        .profile-popover-header-glow {
+          position: absolute !important;
+          top: -20px !important;
+          right: -20px !important;
+          width: 90px !important;
+          height: 90px !important;
+          background: radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 70%) !important;
+          pointer-events: none !important;
+        }
+        .profile-popover-header-name {
+          font-size: 13.5px !important;
+          font-weight: 800 !important;
+          color: #0F172A !important;
+          line-height: 1.2 !important;
+          white-space: nowrap !important;
+          text-overflow: ellipsis !important;
+          overflow: hidden !important;
+        }
+        .profile-popover-header-role {
+          font-size: 11px !important;
+          font-weight: 600 !important;
+          color: #475569 !important;
+          line-height: 1.2 !important;
+          margin-top: 2px !important;
+          white-space: nowrap !important;
+          text-overflow: ellipsis !important;
+          overflow: hidden !important;
+        }
+        .profile-popover-body {
+          padding: 6px 6px 8px 6px !important;
+          background: #FFFFFF !important;
+        }
+        .profile-popover-item {
+          padding: 7px 10px !important;
+          border-radius: 10px !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 10px !important;
+          cursor: pointer !important;
+          transition: background 0.15s ease !important;
+          user-select: none !important;
+        }
+        .profile-popover-item:hover {
+          background: #F4F7FF !important;
+        }
+        .profile-popover-item.logout-item:hover {
+          background: #FEF2F2 !important;
+        }
+        .profile-popover-item-icon {
+          width: 28px !important;
+          height: 28px !important;
+          border-radius: 8px !important;
+          background: #F8FAFC !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          flex-shrink: 0 !important;
+          color: #475569 !important;
+          transition: all 0.15s ease !important;
+        }
+        .profile-popover-item:hover .profile-popover-item-icon {
+          background: #EEF4FF !important;
+          color: #2563EB !important;
+        }
+        .profile-popover-item.logout-item .profile-popover-item-icon {
+          background: #FEF2F2 !important;
+          color: #EF4444 !important;
+        }
+        .profile-popover-item.logout-item:hover .profile-popover-item-icon {
+          background: #FEE2E2 !important;
+          color: #DC2626 !important;
+        }
+        .profile-popover-item-texts {
+          display: flex !important;
+          flex-direction: column !important;
+          min-width: 0 !important;
+          flex: 1 !important;
+        }
+        .profile-popover-item-title {
+          font-size: 12.5px !important;
+          font-weight: 700 !important;
+          color: #0F172A !important;
+          line-height: 1.2 !important;
+        }
+        .profile-popover-item.logout-item .profile-popover-item-title {
+          color: #DC2626 !important;
+        }
+        .profile-popover-item-sub {
+          font-size: 10.5px !important;
+          font-weight: 500 !important;
+          color: #94A3B8 !important;
+          line-height: 1.2 !important;
+          margin-top: 1px !important;
+        }
+        .profile-popover-item.logout-item .profile-popover-item-sub {
+          color: #F87171 !important;
+        }
+        .profile-popover-divider {
+          margin: 5px 8px !important;
+          border-top: 1px solid #F1F5F9 !important;
         }
 
         /* 2. Main content area */
@@ -2880,29 +3277,37 @@ const AdminDashboard = () => {
           display: flex;
           flex-direction: column;
           min-width: 0;
-          padding-bottom: 40px;
+          width: calc(100% - 256px);
+          max-width: calc(100% - 256px);
+          box-sizing: border-box;
+          padding-bottom: 10px;
           overflow-y: auto;
+          overflow-x: hidden;
         }
         .admin-main-canvas:has(.pm-container) {
           padding-bottom: 0;
         }
         .admin-main-canvas.collapsed {
           margin-left: 70px;
+          width: calc(100% - 70px);
+          max-width: calc(100% - 70px);
         }
 
-        /* 3. Top Navigation Header */
+        /* 3. Top Navigation Header (Futuristic Tech Card matching reference) */
         .admin-top-header {
-          height: 72px;
-          min-height: 72px;
+          min-height: 78px;
           background-color: #FFFFFF;
-          border-bottom: 1px solid #E2E8F0;
+          border: 1px solid rgba(226, 232, 240, 0.85);
+          border-radius: 20px;
+          margin: 14px 20px 6px 20px;
+          padding: 12px 24px 14px 24px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0 24px;
           position: sticky;
-          top: 0;
-          z-index: 99;
+          top: 14px;
+          z-index: 1000;
+          box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
         }
 
         .header-title-container {
@@ -2910,99 +3315,572 @@ const AdminDashboard = () => {
           flex-direction: column;
         }
 
-        .header-title {
-          font-size: 20px;
-          font-weight: 800;
-          color: #0F172A;
-          letter-spacing: -0.5px;
-        }
-
         .header-actions {
           display: flex;
           align-items: center;
-          gap: 16px;
+          gap: 14px;
         }
 
-        .plan-badge {
+        /* Bottom futuristic accent strip (Rounded with Top Bar) */
+        .header-bottom-accent-strip {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 24px;
+          display: flex;
+          align-items: flex-end;
+          pointer-events: none;
+          border-bottom-left-radius: 20px;
+          border-bottom-right-radius: 20px;
+        }
+        .header-bottom-accent-line-left {
+          position: absolute;
+          left: 19px;
+          bottom: 0;
+          width: calc(44% - 19px);
+          height: 2.5px;
+          background: linear-gradient(90deg, #2563EB 0%, #3B82F6 100%);
+        }
+        .header-bottom-accent-hatch {
+          position: absolute;
+          left: 44%;
+          bottom: -1px;
+          height: 8px;
+        }
+        .header-bottom-accent-line-right {
+          position: absolute;
+          left: calc(44% + 46px);
+          right: 0;
+          bottom: 0;
+          height: 1px;
+          background: #E2E8F0;
+        }
+
+        /* Header Plan Widget (Lighter Pastel Shade & Soft Gradient) */
+        .header-plan-widget {
+          position: relative;
+          overflow: hidden;
           display: flex;
           align-items: center;
-          gap: 6px;
-          background-color: #ECFDF5;
-          color: #059669;
-          padding: 6px 14px;
-          border-radius: 99px;
-          font-size: 12.5px;
-          font-weight: 700;
-        }
-
-        .plan-dot {
-          width: 6px;
-          height: 6px;
-          background-color: #10B981;
-          border-radius: 50%;
-        }
-
-        .alert-outline-badge {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background-color: #FEF2F2;
-          border: 1px solid #FCA5A5;
-          color: #EF4444;
-          padding: 6px 14px;
-          border-radius: 99px;
-          font-size: 12.5px;
-          font-weight: 700;
+          background: linear-gradient(135deg, #FFFFFF 0%, #F5F9FF 60%, #EBF3FE 100%);
+          border: 1px solid rgba(224, 236, 255, 0.9);
+          border-radius: 14px;
+          padding: 7px 28px 7px 14px;
+          min-width: 140px;
           cursor: pointer;
-          transition: all 0.2s;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 4px 16px -2px rgba(147, 197, 253, 0.28), 0 1px 3px rgba(0, 0, 0, 0.02);
+          user-select: none;
+        }
+        .header-plan-widget:hover {
+          transform: translateY(-1.5px);
+          box-shadow: 0 8px 22px -2px rgba(147, 197, 253, 0.45);
+          border-color: rgba(191, 219, 254, 1);
         }
 
-        .alert-outline-badge:hover {
-          background-color: #FEE2E2;
+        /* Header Alerts Widget (Lighter Pastel Shade & Soft Gradient) */
+        .header-alerts-widget {
+          position: relative;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          background: linear-gradient(135deg, #FFFFFF 0%, #FFF8F8 60%, #FFEFEF 100%);
+          border: 1px solid rgba(254, 226, 226, 0.9);
+          border-radius: 14px;
+          padding: 7px 28px 7px 14px;
+          min-width: 140px;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 4px 16px -2px rgba(252, 165, 165, 0.28), 0 1px 3px rgba(0, 0, 0, 0.02);
+          user-select: none;
+        }
+        .header-alerts-widget:hover {
+          transform: translateY(-1.5px);
+          box-shadow: 0 8px 22px -2px rgba(252, 165, 165, 0.45);
+          border-color: rgba(253, 164, 175, 1);
+        }
+
+        /* Header Bell Widget */
+        .header-bell-widget {
+          position: relative;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 42px;
+          height: 42px;
+          border-radius: 12px;
+          border: 1px solid #E2E8F0;
+          color: #0F172A;
+          background: #FFFFFF;
+          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+          transition: all 0.2s ease;
+          user-select: none;
+        }
+        .header-bell-widget:hover {
+          background-color: #F8FAFC;
+          border-color: #CBD5E1;
           transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
         }
 
-        .add-staff-btn {
-          height: 38px;
-          background-color: #2563EB;
+        /* Header Manage / Add Staff Button (Futuristic Chevron Point) */
+        .header-add-staff-btn {
+          height: 42px;
+          background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
           color: #FFFFFF;
-          font-weight: 700;
-          font-size: 13px;
-          font-style: normal !important;
-          font-family: inherit !important;
+          font-weight: 800;
+          font-size: 13.5px;
           border: none;
-          border-radius: 10px;
-          padding: 0 16px;
+          border-radius: 12px 4px 4px 12px;
+          padding: 0 22px 0 16px;
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 10px;
           cursor: pointer;
-          box-shadow: 0 4px 10px rgba(37, 99, 235, 0.15);
+          box-shadow: 0 6px 18px -2px rgba(37, 99, 235, 0.42), 0 2px 6px rgba(37, 99, 235, 0.2);
           transition: all 0.2s ease;
           white-space: nowrap;
+          clip-path: polygon(0% 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 0% 100%);
+          user-select: none;
         }
-
-        .add-staff-btn span {
-          font-style: normal !important;
-          font-family: inherit !important;
-          font-weight: 700 !important;
-        }
-
-        .add-staff-btn:hover {
-          background-color: #1D4ED8;
-          transform: translateY(-1px);
-          box-shadow: 0 6px 14px rgba(37, 99, 235, 0.25);
+        .header-add-staff-btn:hover {
+          background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%);
+          transform: translateY(-1.5px);
+          box-shadow: 0 8px 24px -2px rgba(37, 99, 235, 0.52);
         }
 
         /* 4. Dashboard contents container */
         .admin-dashboard-content {
           padding: 16px 20px;
           animation: adminFadeIn 0.3s ease-out;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          overflow-x: hidden;
         }
 
         @keyframes adminFadeIn {
           from { opacity: 0; transform: translateY(12px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Approvals & Tasks Modern Component Styles (Refined Compact Height) */
+        .approvals-tasks-card-modern {
+          position: relative;
+          background: #FFFFFF;
+          border: 1px solid #EAECF0;
+          border-radius: 20px;
+          box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+          padding: 13px 18px;
+          overflow: hidden;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+        }
+        .approvals-left-accent {
+          position: absolute;
+          top: 11px;
+          left: 0;
+          width: 5px;
+          height: 36px;
+          background: linear-gradient(180deg, #F97316 0%, #EA580C 100%);
+          border-top-right-radius: 4px;
+          border-bottom-right-radius: 4px;
+        }
+        .approvals-tasks-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          margin-bottom: 8px;
+        }
+        .approvals-tasks-body {
+          display: flex;
+          gap: 14px;
+          align-items: stretch;
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+        }
+        .approvals-metric-cards-col {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+          flex: 1;
+          min-width: 0;
+        }
+        .approvals-metric-card {
+          position: relative;
+          overflow: hidden;
+          border-radius: 10px;
+          padding: 8px 7px;
+          display: flex;
+          flex-direction: column;
+          cursor: pointer;
+          min-width: 0;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .approvals-metric-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
+        }
+        .approvals-metric-orange {
+          background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+          border: 1px solid rgba(254, 215, 170, 0.9);
+        }
+        .approvals-metric-blue {
+          background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+          border: 1px solid rgba(191, 219, 254, 0.9);
+        }
+        .approvals-metric-red {
+          background: linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%);
+          border: 1px solid rgba(254, 205, 211, 0.9);
+        }
+        .approvals-divider-v {
+          width: 1px;
+          background: #F1F5F9;
+          margin: 0 2px;
+          align-self: stretch;
+          flex-shrink: 0;
+        }
+        .approvals-table-col {
+          flex: 1.35;
+          min-width: 0;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+        .approvals-table-header {
+          display: grid;
+          grid-template-columns: 1.8fr 1.3fr 0.9fr 1.2fr;
+          gap: 8px;
+          padding: 0 8px 5px 8px;
+          border-bottom: 1px solid #F1F5F9;
+          font-size: 10.5px;
+          font-weight: 800;
+          color: #94A3B8;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          min-width: 0;
+        }
+        .approvals-table-row {
+          display: grid;
+          grid-template-columns: 1.8fr 1.3fr 0.9fr 1.2fr;
+          gap: 8px;
+          align-items: center;
+          padding: 6px 8px;
+          border-bottom: 1px solid #F8FAFC;
+          border-radius: 8px;
+          transition: all 0.15s ease;
+          cursor: pointer;
+          min-width: 0;
+        }
+        .approvals-table-row:hover {
+          background: #F8FAFC;
+        }
+        .approvals-table-row:last-child {
+          border-bottom: none;
+        }
+        .approvals-badge-pending {
+          background: #FFEDD5;
+          color: #C2410C;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 10.5px;
+          font-weight: 800;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: fit-content;
+        }
+        .approvals-badge-review {
+          background: #DBEAFE;
+          color: #1D4ED8;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 10.5px;
+          font-weight: 800;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: fit-content;
+        }
+        .approvals-badge-approved {
+          background: #D1FAE5;
+          color: #047857;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 10.5px;
+          font-weight: 800;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: fit-content;
+        }
+
+        /* Pending Alerts & Tasks Redesigned Component */
+        .pending-alerts-card-modern {
+          position: relative;
+          background: #FFFFFF;
+          border: 1px solid #EAECF0;
+          border-radius: 20px;
+          box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+          padding: 18px 20px;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          overflow: hidden;
+        }
+        .pending-alerts-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 14px;
+        }
+        .pending-alerts-title-wrap {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .pending-alerts-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #EF4444;
+          flex-shrink: 0;
+        }
+        .pending-alerts-title {
+          font-size: 17px;
+          font-weight: 800;
+          color: #0F172A;
+          font-family: 'Outfit', sans-serif;
+          margin: 0;
+          line-height: 1.2;
+        }
+        .pending-alerts-badge {
+          background: #FEE2E2;
+          color: #EF4444;
+          border-radius: 12px;
+          padding: 2px 7px;
+          font-size: 11.5px;
+          font-weight: 800;
+        }
+        .pending-alerts-view-all {
+          color: #2563EB;
+          font-weight: 800;
+          font-size: 13px;
+          background: none;
+          border: none;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+        .pending-alerts-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          max-height: 410px;
+          overflow-y: auto;
+          padding-right: 2px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .pending-alert-row-card {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 10px 12px;
+          background: linear-gradient(135deg, #FFFDF9 0%, #FFF7ED 55%, #FFEDD5 100%);
+          border: 1px solid rgba(254, 215, 170, 0.9);
+          border-left: 4.5px solid #EA580C;
+          border-radius: 12px;
+          box-shadow: 0 3px 10px -2px rgba(234, 88, 12, 0.08);
+          transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          max-height: 85px;
+          opacity: 1;
+          transform: translateY(0) scale(1);
+          overflow: hidden;
+        }
+        .pending-alert-row-card:hover:not(.resolved-state):not(.disappearing) {
+          transform: translateY(-1.5px);
+          background: linear-gradient(135deg, #FFFFFF 0%, #FFF7ED 50%, #FFEDD5 100%);
+          border-color: rgba(251, 146, 60, 0.95);
+          box-shadow: 0 6px 16px -2px rgba(234, 88, 12, 0.16);
+        }
+        .pending-alert-row-card.critical {
+          background: linear-gradient(135deg, #FFFDFD 0%, #FFF1F2 55%, #FFE4E6 100%);
+          border: 1px solid rgba(254, 205, 211, 0.9);
+          border-left: 4.5px solid #EF4444;
+          box-shadow: 0 3px 10px -2px rgba(239, 68, 68, 0.08);
+        }
+        .pending-alert-row-card.critical:hover:not(.resolved-state):not(.disappearing) {
+          background: linear-gradient(135deg, #FFFFFF 0%, #FFF1F2 50%, #FFE4E6 100%);
+          border-color: rgba(248, 113, 113, 0.95);
+          box-shadow: 0 6px 16px -2px rgba(239, 68, 68, 0.16);
+        }
+        .pending-alert-row-card.resolved-state {
+          background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
+          border: 1px solid rgba(167, 243, 208, 0.9);
+          border-left: 4.5px solid #059669;
+          justify-content: center;
+          padding: 14px 12px;
+        }
+        .pending-alert-row-card.disappearing {
+          opacity: 0 !important;
+          transform: translateY(-8px) scale(0.96) !important;
+          max-height: 0 !important;
+          padding-top: 0 !important;
+          padding-bottom: 0 !important;
+          margin-top: 0 !important;
+          margin-bottom: -10px !important;
+          border-width: 0 !important;
+          pointer-events: none !important;
+        }
+        .pending-alert-resolved-center-banner {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          width: 100%;
+          font-size: 14px;
+          font-weight: 800;
+          color: #059669;
+          letter-spacing: 0.3px;
+          animation: adminFadeIn 0.25s ease-out;
+        }
+        .pending-alert-icon-box {
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          background: linear-gradient(135deg, #FFFFFF 0%, #FFEDD5 100%);
+          border: 1px solid rgba(254, 215, 170, 0.9);
+          color: #EA580C;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          box-shadow: 0 2px 5px rgba(234, 88, 12, 0.08);
+        }
+        .pending-alert-icon-box.critical {
+          background: linear-gradient(135deg, #FFFFFF 0%, #FFE4E6 100%);
+          border: 1px solid rgba(254, 205, 211, 0.9);
+          color: #EF4444;
+          box-shadow: 0 2px 5px rgba(239, 68, 68, 0.08);
+        }
+        .pending-alert-divider-v {
+          width: 1px;
+          height: 28px;
+          background: rgba(203, 213, 225, 0.65);
+          margin: 0 1px;
+          flex-shrink: 0;
+        }
+        .pending-alert-content {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+        }
+        .pending-alert-title-text {
+          font-size: 13.5px;
+          font-weight: 800;
+          color: #0F172A;
+          line-height: 1.3;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pending-alert-meta-text {
+          font-size: 11px;
+          font-weight: 800;
+          color: #D97706;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pending-alert-meta-text.critical {
+          color: #EF4444;
+        }
+        .pending-alert-date-row {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 11.5px;
+          font-weight: 600;
+          color: #64748B;
+          margin-top: 1px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pending-alert-actions {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          flex-shrink: 0;
+          width: 78px;
+          min-width: 78px;
+        }
+        .pending-alert-btn-resolve {
+          background: #2563EB;
+          color: #FFFFFF;
+          font-size: 11.5px;
+          font-weight: 800;
+          border: none;
+          border-radius: 6px;
+          padding: 3px 8px;
+          cursor: pointer;
+          text-align: center;
+          transition: all 0.15s ease;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .pending-alert-btn-resolve:hover:not(:disabled) {
+          background: #1D4ED8;
+        }
+        .pending-alert-btn-resolve.resolving {
+          background: #1E40AF;
+          opacity: 0.9;
+          cursor: not-allowed;
+          gap: 4px;
+        }
+        .alert-spinner {
+          animation: alertSpin 0.75s linear infinite;
+        }
+        @keyframes alertSpin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .pending-alert-btn-details {
+          background: #FFFFFF;
+          color: #2563EB;
+          font-size: 11.5px;
+          font-weight: 800;
+          border: 1.2px solid #BFDBFE;
+          border-radius: 6px;
+          padding: 2px 8px;
+          cursor: pointer;
+          text-align: center;
+          transition: all 0.15s ease;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .pending-alert-btn-details:hover:not(:disabled) {
+          background: #EFF6FF;
         }
 
         /* KPI stat cards */
@@ -3509,16 +4387,23 @@ const AdminDashboard = () => {
         /* RESTORED AND OPTIMIZED GRID LAYOUT AND WIDGET STYLINGS */
         .dashboard-layout-cols {
           display: grid;
-          grid-template-columns: 2fr 1fr;
-          gap: 28px;
+          grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+          gap: 20px;
           align-items: start;
-          margin-top: 28px;
+          margin-top: 20px;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
         }
 
         .dashboard-col-left, .dashboard-col-right {
           display: flex;
           flex-direction: column;
-          gap: 28px;
+          gap: 20px;
+          min-width: 0;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
         }
 
         .dashboard-widget-card {
@@ -5683,59 +6568,95 @@ const AdminDashboard = () => {
           }
         }
 
-        /* ----- MODERNIZED DASHBOARD STAT CARDS ----- */
+        /* ----- MODERNIZED DASHBOARD STAT CARDS (REFERENCE AURORA GRADIENT MESH) ----- */
         .admin-kpi-card-new {
-          border-radius: 24px !important;
-          padding: 24px !important;
+          background-color: #FFFFFF !important;
+          border-radius: 20px !important;
+          padding: 22px 22px 20px 22px !important;
           display: flex !important;
           flex-direction: column !important;
-          gap: 16px !important;
-          border: none !important;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02) !important;
-          transition: transform 0.2s, box-shadow 0.2s !important;
+          justify-content: space-between !important;
+          min-height: 154px !important;
+          border: 1px solid rgba(226, 232, 240, 0.85) !important;
+          box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(0, 0, 0, 0.02) !important;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
           text-decoration: none !important;
+          position: relative !important;
+          overflow: hidden !important;
+          cursor: pointer !important;
         }
         .admin-kpi-card-new:hover {
-          transform: translateY(-2px) !important;
-          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.05) !important;
+          transform: translateY(-3px) !important;
+          box-shadow: 0 14px 30px -4px rgba(15, 23, 42, 0.08), 0 4px 10px -2px rgba(0, 0, 0, 0.03) !important;
+          border-color: rgba(203, 213, 225, 0.9) !important;
         }
+
+        .kpi-card-aurora-blue {
+          background-image: radial-gradient(circle at 92% 10%, rgba(59, 130, 246, 0.35) 0%, rgba(147, 197, 253, 0.2) 32%, rgba(239, 246, 255, 0.05) 60%, rgba(255, 255, 255, 0) 75%) !important;
+        }
+        .kpi-card-aurora-purple {
+          background-image: radial-gradient(circle at 92% 10%, rgba(168, 85, 247, 0.35) 0%, rgba(192, 132, 252, 0.2) 32%, rgba(243, 232, 255, 0.05) 60%, rgba(255, 255, 255, 0) 75%) !important;
+        }
+        .kpi-card-aurora-emerald {
+          background-image: radial-gradient(circle at 92% 10%, rgba(16, 185, 129, 0.32) 0%, rgba(110, 231, 183, 0.18) 32%, rgba(209, 250, 229, 0.05) 60%, rgba(255, 255, 255, 0) 75%) !important;
+        }
+        .kpi-card-aurora-amber {
+          background-image: radial-gradient(circle at 92% 10%, rgba(249, 115, 22, 0.32) 0%, rgba(253, 186, 116, 0.18) 32%, rgba(255, 237, 213, 0.05) 60%, rgba(255, 255, 255, 0) 75%) !important;
+        }
+
         .kpi-card-top-row-new {
           display: flex !important;
           justify-content: space-between !important;
           align-items: center !important;
           width: 100% !important;
+          position: relative !important;
+          z-index: 2 !important;
         }
         .kpi-icon-container-new {
-          width: 48px !important;
-          height: 48px !important;
+          width: 44px !important;
+          height: 44px !important;
           border-radius: 12px !important;
           display: flex !important;
           align-items: center !important;
           justify-content: center !important;
           flex-shrink: 0 !important;
+          transition: transform 0.2s ease !important;
+        }
+        .admin-kpi-card-new:hover .kpi-icon-container-new {
+          transform: scale(1.05) !important;
         }
         .kpi-pill-badge-new {
           font-size: 11px !important;
           font-weight: 800 !important;
-          padding: 4px 10px !important;
+          padding: 5px 12px !important;
           border-radius: 99px !important;
           text-transform: uppercase !important;
           letter-spacing: 0.5px !important;
+          background: rgba(255, 255, 255, 0.9) !important;
+          border: 1px solid rgba(226, 232, 240, 0.8) !important;
+          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+          backdrop-filter: blur(8px) !important;
+          -webkit-backdrop-filter: blur(8px) !important;
         }
         .kpi-label-new {
-          font-size: 12.5px !important;
+          font-size: 14px !important;
           font-weight: 800 !important;
-          color: #64748B !important;
-          text-transform: capitalize !important;
-          margin: 0 !important;
+          margin: 0 0 6px 0 !important;
+          letter-spacing: -0.01em !important;
+          font-family: 'Plus Jakarta Sans', 'Outfit', sans-serif !important;
+          position: relative !important;
+          z-index: 2 !important;
         }
         .kpi-value-new {
-          font-size: 32px !important;
+          font-size: 34px !important;
           font-weight: 900 !important;
           color: #0F172A !important;
           margin: 0 !important;
           font-family: 'Outfit', sans-serif !important;
           line-height: 1 !important;
+          letter-spacing: -0.02em !important;
+          position: relative !important;
+          z-index: 2 !important;
         }
 
         /* ----- ROLE COVERAGE WIDGET ----- */
@@ -6125,533 +7046,1029 @@ const AdminDashboard = () => {
         />
       )}
 
-      {/* 1. Light Theme Sidebar Navigation */}
-      {activeTab !== 'hr-payroll' && (
-        <div 
-          className={`admin-sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${mobileSidebarOpen ? 'mobile-open' : ''}`} 
-          ref={sidebarRef}
-          onClick={() => setMobileSidebarOpen(false)}
-          data-lenis-prevent
-        >
-        <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative', width: '100%' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: '#2563EB', color: '#FFFFFF', fontWeight: 900, fontSize: '16px', boxShadow: '0 0 15px rgba(59, 113, 254, 0.15)', flexShrink: 0 }}>
-            C
-          </div>
-          <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 900, color: '#2563EB', letterSpacing: '-0.02em' }}>Curoxa</span>
-          <button 
-            className="sidebar-collapse-toggle desktop-only-flex"
-            onClick={(e) => {
-              e.stopPropagation();
-              const newState = !isSidebarCollapsed;
-              setIsSidebarCollapsed(newState);
-              localStorage.setItem('curoxa_sidebar_collapsed', String(newState));
-            }}
-            style={{
-              transform: isSidebarCollapsed ? 'rotate(180deg)' : 'none'
-            }}
+        {/* 1. Light Theme Sidebar Navigation: Pixel-Perfect Reference Match */}
+        {activeTab !== 'hr-payroll' && (
+          <div 
+            className={`admin-sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${mobileSidebarOpen ? 'mobile-open' : ''}`} 
+            ref={sidebarRef}
+            onClick={() => setMobileSidebarOpen(false)}
+            data-lenis-prevent
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          </button>
-        </div>
+            {/* Top Branding & Decorative Waves */}
+            <div className="sidebar-brand-wrapper">
+              {/* Subtle flowing background waves */}
+              <svg 
+                className="sidebar-wave-bg" 
+                viewBox="0 0 280 130" 
+                fill="none" 
+                style={{ 
+                  position: 'absolute', 
+                  top: 0, 
+                  left: 0, 
+                  width: '100%', 
+                  height: '130px', 
+                  pointerEvents: 'none', 
+                  zIndex: 0,
+                  opacity: isSidebarCollapsed ? 0 : 0.95,
+                  transition: 'opacity 0.2s'
+                }}
+              >
+                <path d="M0,0 L280,0 L280,65 C215,100 155,70 85,105 C40,120 15,110 0,100 Z" fill="url(#curoxaWaveGrad1)" />
+                <path d="M0,0 L280,0 L280,40 C195,80 135,50 55,90 C20,102 0,92 0,92 Z" fill="url(#curoxaWaveGrad2)" opacity="0.65" />
+                <defs>
+                  <linearGradient id="curoxaWaveGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#DBEAFE" stopOpacity="0.85" />
+                    <stop offset="50%" stopColor="#E0E7FF" stopOpacity="0.6" />
+                    <stop offset="100%" stopColor="#F3E8FF" stopOpacity="0.2" />
+                  </linearGradient>
+                  <linearGradient id="curoxaWaveGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#BAE6FD" stopOpacity="0.75" />
+                    <stop offset="100%" stopColor="#DDD6FE" stopOpacity="0.15" />
+                  </linearGradient>
+                </defs>
+              </svg>
 
-        <div className="sidebar-nav-container" ref={sidebarNavRef}>
-          {/* Overview Group */}
-          <div className="sidebar-group">
-            <div className="sidebar-group-title">Overview</div>
-            <div 
-              className={`sidebar-link ${activeTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => setActiveTab('dashboard')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="10" rx="1"/><rect width="7" height="5" x="3" y="14" rx="1"/></svg>
-              <span>Dashboard</span>
-            </div>
-            <div 
-              className={`sidebar-link ${activeTab === 'supply' ? 'active' : ''}`}
-              onClick={() => setActiveTab('supply')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
-              <span>Alerts & tasks</span>
-            </div>
-            <div 
-              className={`sidebar-link ${activeTab === 'approvals' ? 'active' : ''}`}
-              onClick={() => setActiveTab('approvals')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-              <span>Approvals</span>
-            </div>
-            {tenantModules.inventory?.enabled !== false && (
-              <div 
-                className={`sidebar-link ${activeTab === 'po-approvals' ? 'active' : ''}`}
-                onClick={() => setActiveTab('po-approvals')}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                <span>PO Approvals</span>
-              </div>
-            )}
-          </div>
- 
-          {/* Clinic Group */}
-          <div className="sidebar-group">
-            <div className="sidebar-group-title">Clinic</div>
-            {tenantModules.reception?.enabled !== false && (
-              <div 
-                className={`sidebar-link ${activeTab === 'appointments' ? 'active' : ''}`}
-                onClick={() => setActiveTab('appointments')}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>
-                <span>Appointments</span>
-              </div>
-            )}
-            {tenantModules.reception?.enabled !== false && (
-              <div 
-                className={`sidebar-link ${['patients', 'patient-details'].includes(activeTab) ? 'active' : ''}`}
-                onClick={() => { setActiveTab('patients'); setViewingPatient(null); }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                <span>Patients</span>
-              </div>
-            )}
-            <div 
-              className={`sidebar-link ${activeTab === 'workforce' ? 'active' : ''}`}
-              onClick={() => setActiveTab('workforce')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
-              <span>Staff</span>
-            </div>
-            <div 
-              className={`sidebar-link ${activeTab === 'permissions' ? 'active' : ''}`}
-              onClick={() => setActiveTab('permissions')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-              <span>Role Coverage</span>
-            </div>
-          </div>
- 
-          {/* Finance & System Group */}
-          <div className="sidebar-group">
-            <div className="sidebar-group-title">Finance & System</div>
-            <div 
-              className={`sidebar-link ${activeTab === 'financials' ? 'active' : ''}`}
-              onClick={() => setActiveTab('financials')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-              <span>Revenue</span>
-            </div>
-            <div 
-              className={`sidebar-link ${activeTab === 'audit' ? 'active' : ''}`}
-              onClick={() => setActiveTab('audit')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
-              <span>Audit Logs</span>
-            </div>
-            {tenantModules.dpdp?.enabled !== false && (
-              <div 
-                className={`sidebar-link ${activeTab === 'dpdp' ? 'active' : ''}`}
-                onClick={() => setActiveTab('dpdp')}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                <span>DPO & Compliance</span>
-              </div>
-            )}
-          </div>
-
-          {/* Settings Group */}
-          <div className="sidebar-group">
-            <div className="sidebar-group-title">Settings</div>
-            <div 
-              className={`sidebar-link ${activeTab === 'services-catalog' ? 'active' : ''}`}
-              onClick={() => setActiveTab('services-catalog')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M17 9.5a3.5 3.5 0 0 0-7 0c0 2 2.5 3.5 3.5 4.5s3.5 2.5 3.5 4.5a3.5 3.5 0 0 1-7 0"/></svg>
-              <span>Pricing & Procedures</span>
-            </div>
-            <div 
-              className={`sidebar-link ${activeTab === 'lab-catalog' ? 'active' : ''}`}
-              onClick={() => setActiveTab('lab-catalog')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-              <span>Lab Tests Catalog</span>
-            </div>
-            <div 
-              className={`sidebar-link ${activeTab === 'subscription' ? 'active' : ''}`}
-              onClick={() => setActiveTab('subscription')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
-              <span>Subscription</span>
-            </div>
-            <div 
-              className={`sidebar-link ${activeTab === 'maintenance' ? 'active' : ''}`}
-              onClick={() => setActiveTab('maintenance')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>
-              <span>Maintenance</span>
-            </div>
-            <div 
-              className={`sidebar-link ${activeTab === 'letterhead' ? 'active' : ''}`}
-              onClick={() => setActiveTab('letterhead')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-              <span>Letterhead Settings</span>
-            </div>
-            <div 
-              className={`sidebar-link ${activeTab === 'updates' ? 'active' : ''}`}
-              onClick={() => setActiveTab('updates')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-              <span>Updates</span>
-            </div>
-          </div>
-
-          {/* Active Coverages Group */}
-          {coverageState && Object.keys(coverageState).some(k => coverageState[k]?.on) && (
-            <div className="sidebar-group">
-              <div className="sidebar-group-title" style={{ color: '#EF4444', fontWeight: 800 }}>Active Coverages</div>
-              {(Object.keys(coverageState).some(k => k.startsWith('rc-') && coverageState[k]?.on)) && tenantModules.reception?.enabled !== false && (
+              <div className="sidebar-brand">
                 <div 
-                  className="sidebar-link"
-                  onClick={() => window.open('/receptionist', '_blank')}
-                  style={{ color: '#E11D48', fontWeight: 800 }}
+                  className="sidebar-brand-badge"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '13px',
+                    background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 45%, #6366F1 80%, #9333EA 100%)',
+                    boxShadow: '0 6px 16px -2px rgba(37, 99, 235, 0.38), 0 2px 6px -1px rgba(147, 51, 234, 0.25)',
+                    flexShrink: 0,
+                    padding: '7px',
+                    position: 'relative'
+                  }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-                  <span>Receptionist Cover</span>
+                  <img 
+                    src="/curoxa_icon_logo.png" 
+                    alt="Curoxa Logo" 
+                    className="sidebar-brand-icon"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      filter: 'brightness(0) invert(1)',
+                      flexShrink: 0
+                    }}
+                  />
+                </div>
+                <div className="sidebar-brand-text-group" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                  <span className="sidebar-brand-text" style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif", fontWeight: 900, fontSize: '18px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1 }}>
+                    CUROXA
+                  </span>
+                  <span className="sidebar-brand-subtitle" style={{ fontSize: '11px', color: '#64748B', fontWeight: 500, letterSpacing: '-0.01em', marginTop: '3px', lineHeight: 1 }}>
+                    Health Management
+                  </span>
+                </div>
+                <button 
+                  className="sidebar-collapse-toggle desktop-only-flex"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const newState = !isSidebarCollapsed;
+                    setIsSidebarCollapsed(newState);
+                    localStorage.setItem('curoxa_sidebar_collapsed', String(newState));
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '-12px',
+                    top: '26px',
+                    width: '26px',
+                    height: '26px',
+                    borderRadius: '50%',
+                    background: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
+                    boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    zIndex: 100,
+                    transition: 'transform 0.3s ease',
+                    transform: isSidebarCollapsed ? 'rotate(180deg)' : 'none'
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="sidebar-nav-container" ref={sidebarNavRef}>
+              {/* SECTION 1: OVERVIEW GROUP */}
+              <div className="sidebar-group">
+                <div className="sidebar-group-title" style={{ color: '#2563EB' }}>
+                  <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> OVERVIEW
+                </div>
+                
+                {/* Active Dashboard item matching exact reference */}
+                <div 
+                  className={`sidebar-link ${activeTab === 'dashboard' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('dashboard')}
+                >
+                  {activeTab === 'dashboard' && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: activeTab === 'dashboard' ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#EFF6FF',
+                    color: activeTab === 'dashboard' ? '#FFFFFF' : '#2563EB',
+                    boxShadow: activeTab === 'dashboard' ? '0 3px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="7" x="3" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="14" rx="1.5"/><rect width="7" height="7" x="3" y="14" rx="1.5"/></svg>
+                  </div>
+                  <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'dashboard' ? 700 : 600, color: activeTab === 'dashboard' ? '#2563EB' : '#0F172A', letterSpacing: '-0.01em' }}>
+                    Dashboard
+                  </span>
+                </div>
+
+                <div 
+                  className={`sidebar-link ${activeTab === 'supply' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('supply')}
+                >
+                  {activeTab === 'supply' && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: activeTab === 'supply' ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#EFF6FF',
+                    color: activeTab === 'supply' ? '#FFFFFF' : '#2563EB',
+                    boxShadow: activeTab === 'supply' ? '0 3px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                  </div>
+                  <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'supply' ? 700 : 600, color: activeTab === 'supply' ? '#2563EB' : '#0F172A', letterSpacing: '-0.01em' }}>
+                    Alerts & tasks
+                  </span>
+                </div>
+
+                <div 
+                  className={`sidebar-link ${activeTab === 'approvals' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('approvals')}
+                >
+                  {activeTab === 'approvals' && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: activeTab === 'approvals' ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#EFF6FF',
+                    color: activeTab === 'approvals' ? '#FFFFFF' : '#2563EB',
+                    boxShadow: activeTab === 'approvals' ? '0 3px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                  </div>
+                  <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'approvals' ? 700 : 600, color: activeTab === 'approvals' ? '#2563EB' : '#0F172A', letterSpacing: '-0.01em' }}>
+                    Approvals
+                  </span>
+                </div>
+
+                {tenantModules.inventory?.enabled !== false && (
+                  <div 
+                    className={`sidebar-link ${activeTab === 'po-approvals' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('po-approvals')}
+                  >
+                    {activeTab === 'po-approvals' && (
+                      <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
+                    )}
+                    <div className="sidebar-link-icon" style={{
+                      background: activeTab === 'po-approvals' ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#EFF6FF',
+                      color: activeTab === 'po-approvals' ? '#FFFFFF' : '#2563EB',
+                      boxShadow: activeTab === 'po-approvals' ? '0 3px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                    }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    </div>
+                    <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'po-approvals' ? 700 : 600, color: activeTab === 'po-approvals' ? '#2563EB' : '#0F172A', letterSpacing: '-0.01em' }}>
+                      PO Approvals
+                    </span>
+                  </div>
+                )}
+              </div>
+     
+              {/* SECTION 2: CLINIC GROUP (Subtle Teal/Cyan Tinted Background Zone) */}
+              <div className={`sidebar-zone sidebar-zone-clinic ${!sectionOpen.clinic ? 'collapsed' : ''}`}>
+                <div 
+                  className={`sidebar-group-title ${!sectionOpen.clinic ? 'collapsed' : ''}`}
+                  style={{ color: '#0D9488' }}
+                  onClick={() => toggleSection('clinic')}
+                  title="Toggle Clinic Section"
+                >
+                  <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> CLINIC
+                  <span className="sidebar-group-chevron" style={{ transform: sectionOpen.clinic ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </span>
+                </div>
+                {sectionOpen.clinic && (
+                  <>
+                    {tenantModules.reception?.enabled !== false && (
+                      <div 
+                        className={`sidebar-link ${activeTab === 'appointments' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('appointments')}
+                      >
+                        {activeTab === 'appointments' && (
+                          <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                        )}
+                        <div className="sidebar-link-icon" style={{
+                          background: activeTab === 'appointments' ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                          color: activeTab === 'appointments' ? '#FFFFFF' : '#0D9488',
+                          boxShadow: activeTab === 'appointments' ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                        }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>
+                        </div>
+                        <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'appointments' ? 700 : 600, color: activeTab === 'appointments' ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
+                          Appointments
+                        </span>
+                      </div>
+                    )}
+                    {tenantModules.reception?.enabled !== false && (
+                      <div 
+                        className={`sidebar-link ${['patients', 'patient-details'].includes(activeTab) ? 'active' : ''}`}
+                        onClick={() => { setActiveTab('patients'); setViewingPatient(null); }}
+                      >
+                        {['patients', 'patient-details'].includes(activeTab) && (
+                          <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                        )}
+                        <div className="sidebar-link-icon" style={{
+                          background: ['patients', 'patient-details'].includes(activeTab) ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                          color: ['patients', 'patient-details'].includes(activeTab) ? '#FFFFFF' : '#0D9488',
+                          boxShadow: ['patients', 'patient-details'].includes(activeTab) ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                        }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        </div>
+                        <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: ['patients', 'patient-details'].includes(activeTab) ? 700 : 600, color: ['patients', 'patient-details'].includes(activeTab) ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
+                          Patients
+                        </span>
+                      </div>
+                    )}
+                    <div 
+                      className={`sidebar-link ${activeTab === 'workforce' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('workforce')}
+                    >
+                      {activeTab === 'workforce' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'workforce' ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                        color: activeTab === 'workforce' ? '#FFFFFF' : '#0D9488',
+                        boxShadow: activeTab === 'workforce' ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                      }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                      </div>
+                      <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'workforce' ? 700 : 600, color: activeTab === 'workforce' ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
+                        Staff
+                      </span>
+                    </div>
+                    <div 
+                      className={`sidebar-link ${activeTab === 'permissions' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('permissions')}
+                    >
+                      {activeTab === 'permissions' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'permissions' ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                        color: activeTab === 'permissions' ? '#FFFFFF' : '#0D9488',
+                        boxShadow: activeTab === 'permissions' ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                      }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                      </div>
+                      <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'permissions' ? 700 : 600, color: activeTab === 'permissions' ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
+                        Role Coverage
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+     
+              {/* SECTION 3: FINANCE & SYSTEM GROUP (Subtle Warm Peach/Orange Tinted Background Zone) */}
+              <div className={`sidebar-zone sidebar-zone-finance ${!sectionOpen.finance ? 'collapsed' : ''}`}>
+                <div 
+                  className={`sidebar-group-title ${!sectionOpen.finance ? 'collapsed' : ''}`}
+                  style={{ color: '#EA580C' }}
+                  onClick={() => toggleSection('finance')}
+                  title="Toggle Finance Section"
+                >
+                  <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> FINANCE & SYSTEM
+                  <span className="sidebar-group-chevron" style={{ transform: sectionOpen.finance ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </span>
+                </div>
+                {sectionOpen.finance && (
+                  <>
+                    <div 
+                      className={`sidebar-link ${activeTab === 'financials' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('financials')}
+                    >
+                      {activeTab === 'financials' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#EA580C' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'financials' ? 'linear-gradient(135deg, #EA580C 0%, #F97316 100%)' : '#FFEDD5',
+                        color: activeTab === 'financials' ? '#FFFFFF' : '#EA580C',
+                        boxShadow: activeTab === 'financials' ? '0 3px 10px rgba(234, 88, 12, 0.25)' : 'none'
+                      }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                      </div>
+                      <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'financials' ? 700 : 600, color: activeTab === 'financials' ? '#EA580C' : '#0F172A', letterSpacing: '-0.01em' }}>
+                        Revenue
+                      </span>
+                    </div>
+                    <div 
+                      className={`sidebar-link ${activeTab === 'audit' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('audit')}
+                    >
+                      {activeTab === 'audit' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#EA580C' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'audit' ? 'linear-gradient(135deg, #EA580C 0%, #F97316 100%)' : '#FFEDD5',
+                        color: activeTab === 'audit' ? '#FFFFFF' : '#EA580C',
+                        boxShadow: activeTab === 'audit' ? '0 3px 10px rgba(234, 88, 12, 0.25)' : 'none'
+                      }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                      </div>
+                      <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'audit' ? 700 : 600, color: activeTab === 'audit' ? '#EA580C' : '#0F172A', letterSpacing: '-0.01em' }}>
+                        Audit Logs
+                      </span>
+                    </div>
+                    {tenantModules.dpdp?.enabled !== false && (
+                      <div 
+                        className={`sidebar-link ${activeTab === 'dpdp' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('dpdp')}
+                      >
+                        {activeTab === 'dpdp' && (
+                          <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#EA580C' }} />
+                        )}
+                        <div className="sidebar-link-icon" style={{
+                          background: activeTab === 'dpdp' ? 'linear-gradient(135deg, #EA580C 0%, #F97316 100%)' : '#FFEDD5',
+                          color: activeTab === 'dpdp' ? '#FFFFFF' : '#EA580C',
+                          boxShadow: activeTab === 'dpdp' ? '0 3px 10px rgba(234, 88, 12, 0.25)' : 'none'
+                        }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                        </div>
+                        <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'dpdp' ? 700 : 600, color: activeTab === 'dpdp' ? '#EA580C' : '#0F172A', letterSpacing: '-0.01em' }}>
+                          DPO & Compliance
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* SECTION 4: SETTINGS GROUP (Collapsed by default) */}
+              <div className="sidebar-group">
+                <div 
+                  className={`sidebar-group-title ${!sectionOpen.settings ? 'collapsed' : ''}`}
+                  style={{ color: '#64748B' }}
+                  onClick={() => toggleSection('settings')}
+                  title="Toggle Settings Section"
+                >
+                  <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> SETTINGS
+                  <span className="sidebar-group-chevron" style={{ transform: sectionOpen.settings ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </span>
+                </div>
+                {sectionOpen.settings && (
+                  <>
+                    <div 
+                      className={`sidebar-link ${activeTab === 'services-catalog' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('services-catalog')}
+                    >
+                      {activeTab === 'services-catalog' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'services-catalog' ? '#0F172A' : '#F1F5F9',
+                        color: activeTab === 'services-catalog' ? '#FFFFFF' : '#64748B'
+                      }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M17 9.5a3.5 3.5 0 0 0-7 0c0 2 2.5 3.5 3.5 4.5s3.5 2.5 3.5 4.5a3.5 3.5 0 0 1-7 0"/></svg>
+                      </div>
+                      <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'services-catalog' ? 700 : 600, color: activeTab === 'services-catalog' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
+                        Pricing & Procedures
+                      </span>
+                    </div>
+                    <div 
+                      className={`sidebar-link ${activeTab === 'lab-catalog' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('lab-catalog')}
+                    >
+                      {activeTab === 'lab-catalog' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'lab-catalog' ? '#0F172A' : '#F1F5F9',
+                        color: activeTab === 'lab-catalog' ? '#FFFFFF' : '#64748B'
+                      }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                      </div>
+                      <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'lab-catalog' ? 700 : 600, color: activeTab === 'lab-catalog' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
+                        Lab Tests Catalog
+                      </span>
+                    </div>
+                    <div 
+                      className={`sidebar-link ${activeTab === 'subscription' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('subscription')}
+                    >
+                      {activeTab === 'subscription' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'subscription' ? '#0F172A' : '#F1F5F9',
+                        color: activeTab === 'subscription' ? '#FFFFFF' : '#64748B'
+                      }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+                      </div>
+                      <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'subscription' ? 700 : 600, color: activeTab === 'subscription' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
+                        Subscription
+                      </span>
+                    </div>
+                    <div 
+                      className={`sidebar-link ${activeTab === 'maintenance' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('maintenance')}
+                    >
+                      {activeTab === 'maintenance' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'maintenance' ? '#0F172A' : '#F1F5F9',
+                        color: activeTab === 'maintenance' ? '#FFFFFF' : '#64748B'
+                      }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>
+                      </div>
+                      <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'maintenance' ? 700 : 600, color: activeTab === 'maintenance' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
+                        Maintenance
+                      </span>
+                    </div>
+                    <div 
+                      className={`sidebar-link ${activeTab === 'letterhead' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('letterhead')}
+                    >
+                      {activeTab === 'letterhead' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'letterhead' ? '#0F172A' : '#F1F5F9',
+                        color: activeTab === 'letterhead' ? '#FFFFFF' : '#64748B'
+                      }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                      </div>
+                      <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'letterhead' ? 700 : 600, color: activeTab === 'letterhead' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
+                        Letterhead Settings
+                      </span>
+                    </div>
+                    <div 
+                      className={`sidebar-link ${activeTab === 'updates' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('updates')}
+                    >
+                      {activeTab === 'updates' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'updates' ? '#0F172A' : '#F1F5F9',
+                        color: activeTab === 'updates' ? '#FFFFFF' : '#64748B'
+                      }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                      </div>
+                      <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'updates' ? 700 : 600, color: activeTab === 'updates' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
+                        Updates
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Active Coverages Group */}
+              {coverageState && Object.keys(coverageState).some(k => coverageState[k]?.on) && (
+                <div className="sidebar-group">
+                  <div className="sidebar-group-title" style={{ color: '#EF4444' }}>
+                    <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> ACTIVE COVERAGES
+                  </div>
+                  {(Object.keys(coverageState).some(k => k.startsWith('rc-') && coverageState[k]?.on)) && tenantModules.reception?.enabled !== false && (
+                    <div 
+                      className="sidebar-link"
+                      onClick={() => window.open('/receptionist', '_blank')}
+                      style={{ color: '#E11D48', fontWeight: 800 }}
+                      title="Receptionist Cover"
+                    >
+                      <div className="sidebar-link-icon" style={{ background: '#FFE4E6', color: '#E11D48' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Receptionist Cover</span>
+                    </div>
+                  )}
+                  {(Object.keys(coverageState).some(k => k.startsWith('lt-') && coverageState[k]?.on)) && tenantModules.laboratory?.enabled !== false && (
+                    <div 
+                      className="sidebar-link"
+                      onClick={() => window.open('/lab', '_blank')}
+                      style={{ color: '#059669', fontWeight: 800 }}
+                      title="Lab Cover"
+                    >
+                      <div className="sidebar-link-icon" style={{ background: '#D1FAE5', color: '#059669' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18H18"/><path d="M10 14H14"/><path d="M12 2v20"/><path d="M18 10H6"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Lab Cover</span>
+                    </div>
+                  )}
+                  {(Object.keys(coverageState).some(k => (k.startsWith('ph-') || k === 'dr-stockview') && coverageState[k]?.on)) && tenantModules.pharmacy?.enabled !== false && (
+                    <div 
+                      className="sidebar-link"
+                      onClick={() => window.open('/pharmacy', '_blank')}
+                      style={{ color: '#2563EB', fontWeight: 800 }}
+                      title="Pharmacy Cover"
+                    >
+                      <div className="sidebar-link-icon" style={{ background: '#DBEAFE', color: '#2563EB' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Pharmacy Cover</span>
+                    </div>
+                  )}
+                  {(Object.keys(coverageState).some(k => k.startsWith('dr-') && k !== 'dr-stockview' && coverageState[k]?.on)) && tenantModules.doctor?.enabled !== false && (
+                    <div 
+                      className="sidebar-link"
+                      onClick={() => window.open('/doctor', '_blank')}
+                      style={{ color: '#8B5CF6', fontWeight: 800 }}
+                      title="Doctor Cover"
+                    >
+                      <div className="sidebar-link-icon" style={{ background: '#EDE9FE', color: '#8B5CF6' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Doctor Cover</span>
+                    </div>
+                  )}
                 </div>
               )}
-              {(Object.keys(coverageState).some(k => k.startsWith('lt-') && coverageState[k]?.on)) && tenantModules.laboratory?.enabled !== false && (
-                <div 
-                  className="sidebar-link"
-                  onClick={() => window.open('/lab', '_blank')}
-                  style={{ color: '#059669', fontWeight: 800 }}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18H18"/><path d="M10 14H14"/><path d="M12 2v20"/><path d="M18 10H6"/></svg>
-                  <span>Lab Cover</span>
-                </div>
-              )}
-              {(Object.keys(coverageState).some(k => (k.startsWith('ph-') || k === 'dr-stockview') && coverageState[k]?.on)) && tenantModules.pharmacy?.enabled !== false && (
-                <div 
-                  className="sidebar-link"
-                  onClick={() => window.open('/pharmacy', '_blank')}
-                  style={{ color: '#2563EB', fontWeight: 800 }}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                  <span>Pharmacy Cover</span>
-                </div>
-              )}
-              {(Object.keys(coverageState).some(k => k.startsWith('dr-') && k !== 'dr-stockview' && coverageState[k]?.on)) && tenantModules.doctor?.enabled !== false && (
-                <div 
-                  className="sidebar-link"
-                  onClick={() => window.open('/doctor', '_blank')}
-                  style={{ color: '#8B5CF6', fontWeight: 800 }}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                  <span>Doctor Cover</span>
-                </div>
-              )}
             </div>
-          )}
-        </div>
 
-        {/* Bottom Profile Section with Dropdown toggle */}
-        <div className="sidebar-profile" onClick={(e) => { e.stopPropagation(); setShowProfileMenu(!showProfileMenu); }}>
-          {currentUser.avatar ? (
-            <img 
-              src={currentUser.avatar} 
-              alt="Avatar" 
-              className="profile-avatar"
-              style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #60A5FA' }}
-            />
-          ) : (
-            <div className="profile-avatar-initials" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #3B71FE 0%, #2563EB 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px', flexShrink: 0 }}>
-              {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'AD'}
+            {/* Bottom Profile Section sitting at bottom with soft blur fade above */}
+            <div className="sidebar-profile-footer">
+              <div className="sidebar-profile-fade-top" />
+              <div className="sidebar-profile" onClick={(e) => { e.stopPropagation(); setShowProfileMenu(!showProfileMenu); }}>
+                <div className="profile-avatar-wrap">
+                  {currentUser.avatar ? (
+                    <img 
+                      src={currentUser.avatar} 
+                      alt="Avatar" 
+                      className="profile-avatar"
+                    />
+                  ) : (
+                    <div className="profile-avatar-initials">
+                      {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'HG'}
+                    </div>
+                  )}
+                  <span className="profile-avatar-status-dot" />
+                </div>
+                <div className="profile-info">
+                  <div className="profile-name">
+                    {currentUser.name || 'Harsh Gupta'}
+                  </div>
+                  <div className="profile-role">
+                    {currentUser.role || 'Administrator'}
+                  </div>
+                </div>
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  width="14" 
+                  height="14" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2.5" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  className="profile-chevron" 
+                  style={{ 
+                    marginLeft: 'auto', 
+                    transform: showProfileMenu ? 'rotate(180deg)' : 'none' 
+                  }}
+                >
+                  <path d="m18 15-6-6-6 6"/>
+                </svg>
+
+                {showProfileMenu && (
+                  <div 
+                    className="sidebar-profile-popover-card" 
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {/* Gradient Profile Header */}
+                    <div className="profile-popover-header">
+                      <div className="profile-popover-header-glow" />
+                      <div className="profile-avatar-wrap">
+                        {currentUser.avatar ? (
+                          <img 
+                            src={currentUser.avatar} 
+                            alt="Avatar" 
+                            className="profile-avatar"
+                            style={{ border: '1.5px solid rgba(255,255,255,0.7)' }}
+                          />
+                        ) : (
+                          <div 
+                            className="profile-avatar-initials"
+                            style={{ 
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                              border: '1.5px solid rgba(255,255,255,0.7)'
+                            }}
+                          >
+                            {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'HG'}
+                          </div>
+                        )}
+                        <span className="profile-avatar-status-dot" style={{ borderColor: '#FFFFFF' }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0, zIndex: 1 }}>
+                        <div className="profile-popover-header-name">
+                          {currentUser.name || 'Harsh Gupta'}
+                        </div>
+                        <div className="profile-popover-header-role">
+                          {currentUser.role || 'Administrator'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* White Menu Body */}
+                    <div className="profile-popover-body">
+                      <div 
+                        className="profile-popover-item"
+                        onClick={() => {
+                          setActiveTab('dashboard');
+                          setShowProfileMenu(false);
+                          setMobileSidebarOpen(false);
+                        }}
+                      >
+                        <div className="profile-popover-item-icon">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="10" rx="1"/><rect width="7" height="5" x="3" y="14" rx="1"/></svg>
+                        </div>
+                        <div className="profile-popover-item-texts">
+                          <span className="profile-popover-item-title">Dashboard</span>
+                          <span className="profile-popover-item-sub">Go to dashboard</span>
+                        </div>
+                      </div>
+
+                      <div 
+                        className="profile-popover-item"
+                        onClick={() => {
+                          setActiveTab('subscription');
+                          setShowProfileMenu(false);
+                          setMobileSidebarOpen(false);
+                        }}
+                      >
+                        <div className="profile-popover-item-icon">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+                        </div>
+                        <div className="profile-popover-item-texts">
+                          <span className="profile-popover-item-title">Subscription</span>
+                          <span className="profile-popover-item-sub">Manage plan</span>
+                        </div>
+                      </div>
+
+                      <div 
+                        className="profile-popover-item"
+                        onClick={() => {
+                          setShowProfileEditModal(true);
+                          setShowProfileMenu(false);
+                        }}
+                      >
+                        <div className="profile-popover-item-icon">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        </div>
+                        <div className="profile-popover-item-texts">
+                          <span className="profile-popover-item-title">Edit Profile</span>
+                          <span className="profile-popover-item-sub">Update information</span>
+                        </div>
+                      </div>
+
+                      <div 
+                        className="profile-popover-item"
+                        onClick={() => {
+                          setActiveTab('hr-payroll');
+                          setShowProfileMenu(false);
+                        }}
+                      >
+                        <div className="profile-popover-item-icon">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                        </div>
+                        <div className="profile-popover-item-texts">
+                          <span className="profile-popover-item-title">HR & Payroll</span>
+                          <span className="profile-popover-item-sub">Manage payroll</span>
+                        </div>
+                      </div>
+
+                      <div className="profile-popover-divider" />
+
+                      <div 
+                        className="profile-popover-item logout-item"
+                        onClick={handleLogout}
+                      >
+                        <div className="profile-popover-item-icon">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                        </div>
+                        <div className="profile-popover-item-texts">
+                          <span className="profile-popover-item-title">Logout</span>
+                          <span className="profile-popover-item-sub">Sign out of account</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-          <div className="profile-info" style={{ flex: 1 }}>
-            <div className="profile-name">{currentUser.name || 'Kunal'}</div>
-            <div className="profile-role">Admin</div>
           </div>
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="profile-chevron" style={{ marginLeft: 'auto', width: '16px', color: '#94A3B8', transition: '0.3s', transform: showProfileMenu ? 'rotate(180deg)' : 'none' }}><path d="m6 9 6 6 6-6"/></svg>
-
-          {showProfileMenu && (
-            <div 
-              className="glass-card sidebar-profile-popover" 
-              style={{ 
-                position: 'absolute', 
-                bottom: '72px', 
-                left: '0px', 
-                width: '208px', 
-                zIndex: 3000, 
-                padding: '8px', 
-                boxShadow: '0 -10px 40px rgba(0,0,0,0.06)', 
-                background: 'white',
-                borderRadius: '12px',
-                border: '1px solid #F1F5F9',
-                animation: 'slideUp 0.2s ease-out'
-              }}
-              onClick={e => e.stopPropagation()}
-            >
-              <div style={{ padding: '10px 12px', borderBottom: '1px solid #F1F5F9', marginBottom: '6px' }}>
-                <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0F172A' }}>{currentUser.name || 'Kunal'}</div>
-                <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Admin</div>
-              </div>
-              <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#334155', 
-                  cursor: 'pointer',
-                  transition: 'background 0.2s',
-                  marginBottom: '4px'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={() => {
-                  setActiveTab('dashboard');
-                  setShowProfileMenu(false);
-                  setMobileSidebarOpen(false);
-                }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="10" rx="1"/><rect width="7" height="5" x="3" y="14" rx="1"/></svg> Dashboard
-              </div>
-              <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#334155', 
-                  cursor: 'pointer',
-                  transition: 'background 0.2s',
-                  marginBottom: '4px'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={() => {
-                  setActiveTab('subscription');
-                  setShowProfileMenu(false);
-                  setMobileSidebarOpen(false);
-                }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg> Subscription
-              </div>
-              <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#334155', 
-                  cursor: 'pointer',
-                  transition: 'background 0.2s',
-                  marginBottom: '4px'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={() => {
-                  setShowProfileEditModal(true);
-                  setShowProfileMenu(false);
-                }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Edit Profile
-              </div>
-              <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#334155', 
-                  cursor: 'pointer',
-                  transition: 'background 0.2s',
-                  marginBottom: '4px'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={() => {
-                  setActiveTab('hr-payroll');
-                  setShowProfileMenu(false);
-                }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg> HR & Payroll
-              </div>
-              <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#DC2626', 
-                  cursor: 'pointer',
-                  transition: 'background 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#FEF2F2'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={handleLogout}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg> Logout
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    )}
+        )}
 
       {/* 2. Main content area canvas */}
       <div className={`admin-main-canvas ${activeTab === 'hr-payroll' ? 'fullscreen-portal' : (isSidebarCollapsed ? 'collapsed' : '')}`} data-lenis-prevent>
         {/* 3. Top Navigation Header */}
         {activeTab !== 'hr-payroll' && (
           <div className="admin-top-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {/* Hamburger Mobile Menu Toggle Button */}
-            <button 
-              className="mobile-menu-toggle"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMobileSidebarOpen(!mobileSidebarOpen);
-              }}
-              style={{
-                display: 'none',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#475569',
-                padding: '8px',
-                borderRadius: '8px',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'background-color 0.2s'
-              }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {/* Hamburger Mobile Menu Toggle Button */}
+              <button 
+                className="mobile-menu-toggle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMobileSidebarOpen(!mobileSidebarOpen);
+                }}
+                style={{
+                  display: 'none',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#475569',
+                  padding: '8px',
+                  borderRadius: '8px',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+              </button>
 
-            <div className="header-title-container">
-              {renderHeaderTitle()}
-            </div>
-          </div>
-
-          <div className="header-actions">
-            <div className="plan-badge">
-              <span className="plan-dot" />
-              <span>{subscription ? `${subscription.plan.split(' (')[0]} - ${subscription.status.toLowerCase()}` : 'Loading...'}</span>
-            </div>
-            
-            {/* Pill outline button for alerts count */}
-            <div 
-              className="alert-outline-badge" 
-              onClick={() => setActiveTab('supply')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-              <span>{totalAlertsCount} alerts</span>
+              <div className="header-title-container">
+                {renderHeaderTitle()}
+              </div>
             </div>
 
-            {/* Notification Bell */}
-            <div 
-              ref={notificationRef}
-              style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '8px', border: '1px solid #E2E8F0', color: '#64748B', background: 'white' }}
-              onClick={() => {
-                setShowNotifications(!showNotifications);
-                if (!showNotifications) {
-                  const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
-                  localStorage.setItem(`curoxa_notifications_last_seen_${userKey}`, String(Date.now()));
-                  setUnreadCount(0);
-                }
-              }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-bell"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-              {unreadCount > 0 && (
-                <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#EF4444', color: 'white', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
-                  {unreadCount}
-                </span>
-              )}
+            <div className="header-actions">
+              {/* 1. Plan Widget (Lighter Pastel Shade & Soft Gradient) */}
+              <div 
+                className="header-plan-widget"
+                onClick={() => setActiveTab('subscription')}
+                title="View Subscription"
+              >
+                {/* Top Right Active Green Dot */}
+                <div style={{ position: 'absolute', top: '7px', right: '10px', width: '6.5px', height: '6.5px', borderRadius: '50%', background: '#22C55E', border: '1.5px solid #FFFFFF', boxShadow: '0 0 6px rgba(34, 197, 94, 0.6)', zIndex: 3 }} />
 
-              {showNotifications && (
-                <div data-lenis-prevent 
+                {/* Bottom Right Organic Light Pastel Blue Wave */}
+                <svg 
+                  viewBox="0 0 70 50" 
+                  fill="none" 
+                  xmlns="http://www.w3.org/2000/svg"
                   style={{
                     position: 'absolute',
-                    top: '48px',
-                    right: '0',
-                    width: '320px',
-                    background: 'rgba(255, 255, 255, 0.95)',
-                    backdropFilter: 'blur(8px)',
-                    borderRadius: '12px',
-                    border: '1px solid #E2E8F0',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                    zIndex: 1000,
-                    padding: '16px',
-                    maxHeight: '400px',
-                    overflowY: 'auto',
-                    textAlign: 'left'
+                    right: 0,
+                    bottom: 0,
+                    width: '46px',
+                    height: '34px',
+                    pointerEvents: 'none',
+                    zIndex: 1
                   }}
-                  onClick={(e) => e.stopPropagation()}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 800, fontSize: '14px', color: '#0F172A' }}>Notifications</span>
-                    <button 
-                      style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
-                      onClick={() => {
-                        const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
-                        const clearedKey = `curoxa_cleared_notifications_${userKey}`;
-                        const clearedIds = JSON.parse(localStorage.getItem(clearedKey) || '[]');
-                        const newClearedIds = [...clearedIds, ...notifications.map(n => n.id)];
-                        localStorage.setItem(clearedKey, JSON.stringify(newClearedIds));
-                        setNotifications([]);
-                        setUnreadCount(0);
-                      }}
-                    >
-                      Clear all
-                    </button>
-                  </div>
+                  <path d="M10 50 C24 45 36 28 46 14 C52 4 60 0 70 0 L70 50 Z" fill="url(#planBlueWaveLight)" opacity="0.65" />
+                  <path d="M22 50 C36 46 44 32 54 18 C58 8 64 3 70 2 L70 50 Z" fill="url(#planBlueWaveAccent)" opacity="0.4" />
+                  <path d="M10 50 C24 45 36 28 46 14 C52 4 60 0 70 0" stroke="rgba(255, 255, 255, 0.65)" strokeWidth="0.8" />
+                  <path d="M22 50 C36 46 44 32 54 18 C58 8 64 3 70 2" stroke="rgba(255, 255, 255, 0.45)" strokeWidth="0.8" />
+                  <defs>
+                    <linearGradient id="planBlueWaveLight" x1="10" y1="0" x2="70" y2="50" gradientUnits="userSpaceOnUse">
+                      <stop stopColor="#93C5FD" stopOpacity="0.8" />
+                      <stop offset="0.6" stopColor="#60A5FA" stopOpacity="0.9" />
+                      <stop offset="1" stopColor="#3B82F6" />
+                    </linearGradient>
+                    <linearGradient id="planBlueWaveAccent" x1="22" y1="0" x2="70" y2="50" gradientUnits="userSpaceOnUse">
+                      <stop stopColor="#BFDBFE" stopOpacity="0.6" />
+                      <stop offset="1" stopColor="#60A5FA" stopOpacity="0.8" />
+                    </linearGradient>
+                  </defs>
+                </svg>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {notifications.map(n => (
-                      <div key={n.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px', borderRadius: '8px', background: n.isNew ? '#EFF6FF' : '#F8FAFC', borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #E2E8F0' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#1E293B' }}>{n.title}</span>
-                          <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>{n.time}</span>
-                        </div>
-                        <span style={{ fontSize: '11.5px', color: '#475569', fontWeight: 550, lineHeight: 1.4 }}>{n.message}</span>
-                      </div>
-                    ))}
-                    {notifications.length === 0 && (
-                      <div style={{ textAlign: 'center', padding: '20px 0', color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
-                        No notifications
-                      </div>
-                    )}
-                  </div>
+                {/* Left Shield with Checkmark Icon */}
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, position: 'relative', zIndex: 2 }}>
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  <polyline points="9 12 11 14 15 10"/>
+                </svg>
+
+                {/* Vertical Divider */}
+                <div style={{ width: '1px', height: '22px', background: 'rgba(226, 232, 240, 0.95)', margin: '0 10px 0 8px', flexShrink: 0, position: 'relative', zIndex: 2 }} />
+
+                {/* Text Block */}
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, paddingRight: '14px', position: 'relative', zIndex: 2 }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', lineHeight: 1.15, letterSpacing: '-0.01em', fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}>
+                    {subscription?.plan ? subscription.plan.split(' (')[0] : 'Trial Plan'}
+                  </span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563EB', lineHeight: 1.15, textTransform: 'capitalize', marginTop: '1px' }}>
+                    {subscription?.status ? subscription.status.toLowerCase() : 'Active'}
+                  </span>
                 </div>
-              )}
+              </div>
+              
+              {/* 2. Alerts Widget (Lighter Pastel Shade & Soft Gradient) */}
+              <div 
+                className="header-alerts-widget" 
+                onClick={() => setActiveTab('supply')}
+                title="View Alerts & Tasks"
+              >
+                {/* Bottom Right Organic Light Pastel Coral Wave */}
+                <svg 
+                  viewBox="0 0 75 55" 
+                  fill="none" 
+                  xmlns="http://www.w3.org/2000/svg"
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    bottom: 0,
+                    width: '48px',
+                    height: '36px',
+                    pointerEvents: 'none',
+                    zIndex: 1
+                  }}
+                >
+                  <path d="M8 55 C22 48 34 30 46 13 C54 2 64 0 75 0 L75 55 Z" fill="url(#alertCoralWaveLight)" opacity="0.65" />
+                  <path d="M20 55 C34 49 44 34 54 20 C60 9 67 3 75 2 L75 55 Z" fill="url(#alertCoralWaveAccent)" opacity="0.4" />
+                  <path d="M8 55 C22 48 34 30 46 13 C54 2 64 0 75 0" stroke="rgba(255, 255, 255, 0.65)" strokeWidth="0.8" />
+                  <path d="M20 55 C34 49 44 34 54 20 C60 9 67 3 75 2" stroke="rgba(255, 255, 255, 0.45)" strokeWidth="0.8" />
+                  <defs>
+                    <linearGradient id="alertCoralWaveLight" x1="8" y1="0" x2="75" y2="55" gradientUnits="userSpaceOnUse">
+                      <stop stopColor="#FECDD3" stopOpacity="0.85" />
+                      <stop offset="0.5" stopColor="#FDA4AF" stopOpacity="0.9" />
+                      <stop offset="1" stopColor="#F87171" />
+                    </linearGradient>
+                    <linearGradient id="alertCoralWaveAccent" x1="20" y1="0" x2="75" y2="55" gradientUnits="userSpaceOnUse">
+                      <stop stopColor="#FFE4E6" stopOpacity="0.6" />
+                      <stop offset="1" stopColor="#FB7185" stopOpacity="0.8" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+
+                {/* Left Warning Triangle Icon */}
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, position: 'relative', zIndex: 2 }}>
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+
+                {/* Vertical Divider */}
+                <div style={{ width: '1px', height: '22px', background: 'rgba(254, 205, 211, 0.95)', margin: '0 10px 0 8px', flexShrink: 0, position: 'relative', zIndex: 2 }} />
+
+                {/* Text Block */}
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, paddingRight: '14px', position: 'relative', zIndex: 2 }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', lineHeight: 1.15, letterSpacing: '-0.01em', fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}>
+                    {totalAlertsCount} Alerts
+                  </span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#EF4444', lineHeight: 1.15, marginTop: '1px' }}>
+                    View all
+                  </span>
+                </div>
+              </div>
+
+              {/* 3. Notification Bell matching reference */}
+              <div 
+                ref={notificationRef}
+                className="header-bell-widget"
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  if (!showNotifications) {
+                    const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
+                    localStorage.setItem(`curoxa_notifications_last_seen_${userKey}`, String(Date.now()));
+                    setUnreadCount(0);
+                  }
+                }}
+                title="Notifications"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                
+                {/* Glowing status dot */}
+                <span style={{ position: 'absolute', top: '1px', right: '1px', width: '8px', height: '8px', borderRadius: '50%', background: '#7C3AED', border: '2px solid #FFFFFF', boxShadow: '0 0 8px rgba(124, 58, 237, 0.8)' }} />
+
+                {unreadCount > 0 && (
+                  <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#EF4444', color: 'white', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
+                    {unreadCount}
+                  </span>
+                )}
+
+                {showNotifications && (
+                  <div data-lenis-prevent 
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 8px)',
+                      right: '0',
+                      width: '330px',
+                      background: '#FFFFFF',
+                      borderRadius: '16px',
+                      border: '1px solid #E2E8F0',
+                      boxShadow: '0 20px 40px -5px rgba(15, 23, 42, 0.16), 0 8px 20px -2px rgba(0, 0, 0, 0.08)',
+                      zIndex: 99999,
+                      padding: '16px',
+                      maxHeight: '400px',
+                      overflowY: 'auto',
+                      textAlign: 'left'
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
+                      <span style={{ fontWeight: 800, fontSize: '14px', color: '#0F172A' }}>Notifications</span>
+                      <button 
+                        style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                        onClick={() => {
+                          const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
+                          const clearedKey = `curoxa_cleared_notifications_${userKey}`;
+                          const clearedIds = JSON.parse(localStorage.getItem(clearedKey) || '[]');
+                          const newClearedIds = [...clearedIds, ...notifications.map(n => n.id)];
+                          localStorage.setItem(clearedKey, JSON.stringify(newClearedIds));
+                          setNotifications([]);
+                          setUnreadCount(0);
+                        }}
+                      >
+                        Clear all
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {notifications.map(n => (
+                        <div key={n.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px', borderRadius: '8px', background: n.isNew ? '#EFF6FF' : '#F8FAFC', borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #E2E8F0' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#1E293B' }}>{n.title}</span>
+                            <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>{n.time}</span>
+                          </div>
+                          <span style={{ fontSize: '11.5px', color: '#475569', fontWeight: 550, lineHeight: 1.4 }}>{n.message}</span>
+                        </div>
+                      ))}
+                      {notifications.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '20px 0', color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
+                          No notifications
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Action Button - Futuristic Chevron matching reference */}
+              <button 
+                className="header-add-staff-btn" 
+                onClick={() => { 
+                  setHrInitialTab('Directory');
+                  setHrInitialAdding(true);
+                  setActiveTab('hr-payroll'); 
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span>Manage / Add Staff</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '-2px' }}><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
             </div>
 
-            <button 
-              className="add-staff-btn" 
-              onClick={() => { 
-                setHrInitialTab('Directory');
-                setHrInitialAdding(true);
-                setActiveTab('hr-payroll'); 
-              }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>Manage / Add Staff</span>
-            </button>
+            {/* Bottom accent line & hatch stripes (Rounded with Top Bar) */}
+            <div className="header-bottom-accent-strip">
+              {/* Bottom-left corner curve (radius 20px) with White to Blue gradient */}
+              <svg 
+                width="24" 
+                height="24" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                xmlns="http://www.w3.org/2000/svg"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  bottom: 0,
+                  pointerEvents: 'none',
+                  zIndex: 2
+                }}
+              >
+                <path 
+                  d="M 1 0 L 1 4 A 19 19 0 0 0 20 23 L 21 23" 
+                  stroke="url(#cornerWhiteToBlueGrad)" 
+                  strokeWidth="2.5" 
+                  strokeLinecap="round" 
+                  fill="none" 
+                />
+                <defs>
+                  <linearGradient id="cornerWhiteToBlueGrad" x1="0" y1="0" x2="20" y2="23" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#FFFFFF" />
+                    <stop offset="40%" stopColor="#93C5FD" />
+                    <stop offset="100%" stopColor="#2563EB" />
+                  </linearGradient>
+                </defs>
+              </svg>
+
+              <div className="header-bottom-accent-line-left" />
+              <svg className="header-bottom-accent-hatch" width="48" height="8" viewBox="0 0 48 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="6" y1="8" x2="14" y2="0" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="14" y1="8" x2="22" y2="0" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="22" y1="8" x2="30" y2="0" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="30" y1="8" x2="38" y2="0" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="38" y1="8" x2="46" y2="0" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" />
+              </svg>
+              <div className="header-bottom-accent-line-right" />
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
         {/* Banners for actions feedback */}
         {activeTab !== 'hr-payroll' && (success || error) && (
@@ -6688,77 +8105,101 @@ const AdminDashboard = () => {
         {/* 4. Dashboard tab content */}
         {activeTab === 'dashboard' && (
           <div className="admin-dashboard-content">
-            {/* KPI STAT CARDS - Colored background matching mockup */}
+            {/* KPI STAT CARDS - Reference Aurora Gradient Mesh & Sparkles */}
             <div className="admin-kpi-row-new">
-              {/* Card 1: Today's Registrations */}
+              {/* Card 1: Today's Registrations (Blue Aurora) */}
               <div 
-                className="admin-kpi-card-new"
-                style={{ background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '150px' }}
+                className="admin-kpi-card-new kpi-card-aurora-blue"
                 onClick={() => { setSelectedPatientDateFilter('Today'); setActiveTab('patients'); }}
               >
+                {/* Decorative Sparkle Stars matching Reference */}
+                <svg className="kpi-sparkle-stars" viewBox="0 0 100 60" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ position: 'absolute', top: 8, right: 8, width: '85px', height: '50px', pointerEvents: 'none', zIndex: 1 }}>
+                  <path d="M72 14 C72 18.5 74.5 21 79 21 C74.5 21 72 23.5 72 28 C72 23.5 69.5 21 65 21 C69.5 21 72 18.5 72 14 Z" fill="#FFFFFF" opacity="0.95" />
+                  <path d="M48 22 C48 25 49.5 26.5 52.5 26.5 C49.5 26.5 48 28 48 31 C48 28 46.5 26.5 43.5 26.5 C46.5 26.5 48 25 48 22 Z" fill="#FFFFFF" opacity="0.85" />
+                  <circle cx="86" cy="28" r="1.5" fill="#FFFFFF" opacity="0.75" />
+                </svg>
+
                 <div className="kpi-card-top-row-new">
-                  <div className="kpi-icon-container-new" style={{ background: 'rgba(37,99,235,0.12)', color: '#2563EB' }}>
+                  <div className="kpi-icon-container-new" style={{ background: '#EFF6FF', color: '#2563EB', border: '1px solid rgba(191, 219, 254, 0.7)' }}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                   </div>
-                  <span className="kpi-pill-badge-new" style={{ background: 'rgba(37,99,235,0.15)', color: '#1D4ED8' }}>Patients</span>
+                  <span className="kpi-pill-badge-new" style={{ color: '#2563EB' }}>Patients</span>
                 </div>
                 <div>
-                  <div className="kpi-label-new" style={{ color: '#1E40AF', marginBottom: '6px' }}>Today's Registrations</div>
-                  <div className="kpi-value-new" style={{ color: '#1E3A8A', fontSize: '36px' }}>{todayPatientsCount}</div>
+                  <div className="kpi-label-new" style={{ color: '#2563EB' }}>Today's Registrations</div>
+                  <div className="kpi-value-new">{todayPatientsCount}</div>
                 </div>
               </div>
 
-              {/* Card 2: Appointments Today */}
+              {/* Card 2: Appointments Today (Purple Aurora) */}
               <div 
-                className="admin-kpi-card-new"
-                style={{ background: 'linear-gradient(135deg, #FAF5FF 0%, #F3E8FF 100%)', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '150px' }}
+                className="admin-kpi-card-new kpi-card-aurora-purple"
                 onClick={() => { setSelectedDateFilter('Today'); setActiveTab('appointments'); }}
               >
+                {/* Decorative Sparkle Stars matching Reference */}
+                <svg className="kpi-sparkle-stars" viewBox="0 0 100 60" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ position: 'absolute', top: 8, right: 8, width: '85px', height: '50px', pointerEvents: 'none', zIndex: 1 }}>
+                  <path d="M72 14 C72 18.5 74.5 21 79 21 C74.5 21 72 23.5 72 28 C72 23.5 69.5 21 65 21 C69.5 21 72 18.5 72 14 Z" fill="#FFFFFF" opacity="0.95" />
+                  <path d="M48 22 C48 25 49.5 26.5 52.5 26.5 C49.5 26.5 48 28 48 31 C48 28 46.5 26.5 43.5 26.5 C46.5 26.5 48 25 48 22 Z" fill="#FFFFFF" opacity="0.85" />
+                  <circle cx="86" cy="28" r="1.5" fill="#FFFFFF" opacity="0.75" />
+                </svg>
+
                 <div className="kpi-card-top-row-new">
-                  <div className="kpi-icon-container-new" style={{ background: 'rgba(124,58,237,0.12)', color: '#7C3AED' }}>
+                  <div className="kpi-icon-container-new" style={{ background: '#FAF5FF', color: '#7C3AED', border: '1px solid rgba(233, 213, 255, 0.7)' }}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
                   </div>
-                  <span className="kpi-pill-badge-new" style={{ background: 'rgba(124,58,237,0.15)', color: '#6B21A8' }}>Appointments</span>
+                  <span className="kpi-pill-badge-new" style={{ color: '#7C3AED' }}>Appointments</span>
                 </div>
                 <div>
-                  <div className="kpi-label-new" style={{ color: '#6B21A8', marginBottom: '6px' }}>Appointments Today</div>
-                  <div className="kpi-value-new" style={{ color: '#581C87', fontSize: '36px' }}>{todayAppts.length}</div>
+                  <div className="kpi-label-new" style={{ color: '#7C3AED' }}>Appointments Today</div>
+                  <div className="kpi-value-new">{todayAppts.length}</div>
                 </div>
               </div>
 
-              {/* Card 3: Today's Revenue */}
+              {/* Card 3: Today's Revenue (Emerald Aurora) */}
               <div 
-                className="admin-kpi-card-new"
-                style={{ background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '150px' }}
+                className="admin-kpi-card-new kpi-card-aurora-emerald"
                 onClick={() => { setRevenueTimeframe('today'); setShowRevenueModal(true); }}
               >
+                {/* Decorative Sparkle Stars matching Reference */}
+                <svg className="kpi-sparkle-stars" viewBox="0 0 100 60" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ position: 'absolute', top: 8, right: 8, width: '85px', height: '50px', pointerEvents: 'none', zIndex: 1 }}>
+                  <path d="M72 14 C72 18.5 74.5 21 79 21 C74.5 21 72 23.5 72 28 C72 23.5 69.5 21 65 21 C69.5 21 72 18.5 72 14 Z" fill="#FFFFFF" opacity="0.95" />
+                  <path d="M48 22 C48 25 49.5 26.5 52.5 26.5 C49.5 26.5 48 28 48 31 C48 28 46.5 26.5 43.5 26.5 C46.5 26.5 48 25 48 22 Z" fill="#FFFFFF" opacity="0.85" />
+                  <circle cx="86" cy="28" r="1.5" fill="#FFFFFF" opacity="0.75" />
+                </svg>
+
                 <div className="kpi-card-top-row-new">
-                  <div className="kpi-icon-container-new" style={{ background: 'rgba(16,185,129,0.12)', color: '#10B981' }}>
+                  <div className="kpi-icon-container-new" style={{ background: '#ECFDF5', color: '#059669', border: '1px solid rgba(167, 243, 208, 0.7)' }}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                   </div>
-                  <span className="kpi-pill-badge-new" style={{ background: 'rgba(16,185,129,0.15)', color: '#047857' }}>Collections</span>
+                  <span className="kpi-pill-badge-new" style={{ color: '#059669' }}>Collections</span>
                 </div>
                 <div>
-                  <div className="kpi-label-new" style={{ color: '#065F46', marginBottom: '6px' }}>Today's Revenue</div>
-                  <div className="kpi-value-new" style={{ color: '#064E3B', fontSize: '36px' }}>₹{todayRevenue.toLocaleString('en-IN')}</div>
+                  <div className="kpi-label-new" style={{ color: '#059669' }}>Today's Revenue</div>
+                  <div className="kpi-value-new">₹{todayRevenue.toLocaleString('en-IN')}</div>
                 </div>
               </div>
 
-              {/* Card 4: Staff Present Today */}
+              {/* Card 4: Staff Present Today (Amber Aurora) */}
               <div 
-                className="admin-kpi-card-new"
-                style={{ background: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '150px' }}
+                className="admin-kpi-card-new kpi-card-aurora-amber"
                 onClick={() => { setActiveTab('workforce'); }}
               >
+                {/* Decorative Sparkle Stars matching Reference */}
+                <svg className="kpi-sparkle-stars" viewBox="0 0 100 60" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ position: 'absolute', top: 8, right: 8, width: '85px', height: '50px', pointerEvents: 'none', zIndex: 1 }}>
+                  <path d="M72 14 C72 18.5 74.5 21 79 21 C74.5 21 72 23.5 72 28 C72 23.5 69.5 21 65 21 C69.5 21 72 18.5 72 14 Z" fill="#FFFFFF" opacity="0.95" />
+                  <path d="M48 22 C48 25 49.5 26.5 52.5 26.5 C49.5 26.5 48 28 48 31 C48 28 46.5 26.5 43.5 26.5 C46.5 26.5 48 25 48 22 Z" fill="#FFFFFF" opacity="0.85" />
+                  <circle cx="86" cy="28" r="1.5" fill="#FFFFFF" opacity="0.75" />
+                </svg>
+
                 <div className="kpi-card-top-row-new">
-                  <div className="kpi-icon-container-new" style={{ background: 'rgba(217,119,6,0.12)', color: '#D97706' }}>
+                  <div className="kpi-icon-container-new" style={{ background: '#FFF7ED', color: '#EA580C', border: '1px solid rgba(254, 215, 170, 0.7)' }}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg>
                   </div>
-                  <span className="kpi-pill-badge-new" style={{ background: 'rgba(217,119,6,0.15)', color: '#92400E' }}>Attendance</span>
+                  <span className="kpi-pill-badge-new" style={{ color: '#EA580C' }}>Attendance</span>
                 </div>
                 <div>
-                  <div className="kpi-label-new" style={{ color: '#92400E', marginBottom: '6px' }}>Staff Present Today</div>
-                  <div className="kpi-value-new" style={{ color: '#78350F', fontSize: '36px' }}>{staffPresentCount}</div>
+                  <div className="kpi-label-new" style={{ color: '#EA580C' }}>Staff Present Today</div>
+                  <div className="kpi-value-new">{staffPresentCount}</div>
                 </div>
               </div>
             </div>
@@ -6843,181 +8284,474 @@ const AdminDashboard = () => {
                   </div>
                 </div>
 
-                {/* Approvals & Tasks Section */}
-                <div className="dashboard-widget-card" style={{ padding: '28px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                {/* Approvals & Tasks Section (Redesign Matching Reference Mockup) */}
+                <div className="approvals-tasks-card-modern">
+                  {/* Left Orange Accent Bar */}
+                  <div className="approvals-left-accent" />
+
+                  {/* Header Row */}
+                  <div className="approvals-tasks-header">
                     <div>
-                      <span style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', fontFamily: "'Outfit', sans-serif" }}>Approvals & Tasks</span>
-                      <p style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, margin: '4px 0 0 0' }}>Pending requests awaiting your decision.</p>
+                      <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', fontFamily: "'Outfit', sans-serif", margin: 0, lineHeight: 1.2 }}>
+                        Approvals & Tasks
+                      </h3>
+                      <p style={{ fontSize: '13px', color: '#64748B', fontWeight: 500, margin: '4px 0 0 0' }}>
+                        Pending requests awaiting your decision.
+                      </p>
                     </div>
-                    <button className="widget-header-action-btn" onClick={() => setActiveTab('approvals')}>View All &gt;</button>
+                    <button 
+                      className="widget-header-action-btn" 
+                      style={{ color: '#2563EB', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px' }}
+                      onClick={() => setActiveTab('approvals')}
+                    >
+                      View All &rarr;
+                    </button>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {pendingApprovals.filter(x => x.status.toLowerCase() === 'pending').slice(0, 4).map(item => (
-                      <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', border: '1px solid #E2E8F0', borderRadius: '12px', background: '#FFFFFF' }}>
-                        <div 
-                          style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0, cursor: item.category === 'vendor_onboarding' ? 'pointer' : 'default' }}
-                          onClick={() => {
-                            if (item.category === 'vendor_onboarding') {
-                              const vendorId = item.raw?.details?.vendorId;
-                              const v = vendors.find(x => x._id === vendorId);
-                              if (v) setSelectedVendorProfile(v);
-                              else showToast('Vendor profile data not found in catalog', 'error');
-                            }
-                          }}
-                          title={item.category === 'vendor_onboarding' ? 'Click to view full vendor profile' : ''}
-                        >
-                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: item.category === 'vendor_onboarding' ? 'underline' : 'none' }}>{item.title}</span>
-                          <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>{item.category} · {item.subtitle || 'Pending'}</span>
+
+                  {/* Body Content (Left 3 Metrics + Right Table) */}
+                  <div className="approvals-tasks-body">
+                    {/* Left 3 Metrics Cards */}
+                    <div className="approvals-metric-cards-col">
+                      {/* Card 1: Pending Approvals (Orange) */}
+                      <div 
+                        className="approvals-metric-card approvals-metric-orange"
+                        onClick={() => setActiveTab('approvals')}
+                        title="Click to view Pending Approvals"
+                      >
+                        {/* Dot Grid */}
+                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style={{ position: 'absolute', top: '8px', right: '8px', opacity: 0.22, pointerEvents: 'none' }}>
+                          <circle cx="6" cy="6" r="1.5" fill="#F97316"/>
+                          <circle cx="16" cy="6" r="1.5" fill="#F97316"/>
+                          <circle cx="26" cy="6" r="1.5" fill="#F97316"/>
+                          <circle cx="6" cy="16" r="1.5" fill="#F97316"/>
+                          <circle cx="16" cy="16" r="1.5" fill="#F97316"/>
+                          <circle cx="26" cy="16" r="1.5" fill="#F97316"/>
+                          <circle cx="6" cy="26" r="1.5" fill="#F97316"/>
+                          <circle cx="16" cy="26" r="1.5" fill="#F97316"/>
+                          <circle cx="26" cy="26" r="1.5" fill="#F97316"/>
+                        </svg>
+
+                        <div style={{ width: '34px', height: '34px', borderRadius: '50%', border: '1.5px solid #F97316', background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F97316' }}>
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                          </svg>
                         </div>
-                        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                          <button style={{ background: '#10B981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: 800, cursor: 'pointer' }}
-                            onClick={() => approveApprovalItem(item.id, item.title, item.isDbItem)}
-                          >Approve</button>
-                          <button style={{ background: '#F1F5F9', color: '#64748B', border: 'none', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: 800, cursor: 'pointer' }}
-                            onClick={() => rejectApprovalItem(item.id, item.title, item.isDbItem)}
-                          >Reject</button>
+                        <div style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', marginTop: '12px', lineHeight: 1.1, fontFamily: "'Outfit', sans-serif" }}>
+                          {String(pendingApprovals.filter(x => x.status?.toLowerCase() === 'pending').length).padStart(2, '0')}
+                        </div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', marginTop: '4px', lineHeight: 1.2 }}>
+                          Pending Approvals
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>
+                          Needs your review
                         </div>
                       </div>
-                    ))}
-                    {pendingApprovals.filter(x => x.status.toLowerCase() === 'pending').length === 0 && (
-                      <div style={{ padding: '24px', border: '1px dashed #E2E8F0', borderRadius: '12px', textAlign: 'center', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                        No pending approvals. All clear!
+
+                      {/* Card 2: Assigned Tasks (Blue) */}
+                      <div 
+                        className="approvals-metric-card approvals-metric-blue"
+                        onClick={() => setActiveTab('permissions')}
+                        title="Click to view Assigned Tasks"
+                      >
+                        {/* Dot Grid */}
+                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style={{ position: 'absolute', top: '8px', right: '8px', opacity: 0.22, pointerEvents: 'none' }}>
+                          <circle cx="6" cy="6" r="1.5" fill="#3B82F6"/>
+                          <circle cx="16" cy="6" r="1.5" fill="#3B82F6"/>
+                          <circle cx="26" cy="6" r="1.5" fill="#3B82F6"/>
+                          <circle cx="6" cy="16" r="1.5" fill="#3B82F6"/>
+                          <circle cx="16" cy="16" r="1.5" fill="#3B82F6"/>
+                          <circle cx="26" cy="16" r="1.5" fill="#3B82F6"/>
+                          <circle cx="6" cy="26" r="1.5" fill="#3B82F6"/>
+                          <circle cx="16" cy="26" r="1.5" fill="#3B82F6"/>
+                          <circle cx="26" cy="26" r="1.5" fill="#3B82F6"/>
+                        </svg>
+
+                        <div style={{ width: '34px', height: '34px', borderRadius: '50%', border: '1.5px solid #3B82F6', background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3B82F6' }}>
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="8" y1="6" x2="21" y2="6"/>
+                            <line x1="8" y1="12" x2="21" y2="12"/>
+                            <line x1="8" y1="18" x2="21" y2="18"/>
+                            <line x1="3" y1="6" x2="3.01" y2="6"/>
+                            <line x1="3" y1="12" x2="3.01" y2="12"/>
+                            <line x1="3" y1="18" x2="3.01" y2="18"/>
+                          </svg>
+                        </div>
+                        <div style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', marginTop: '12px', lineHeight: 1.1, fontFamily: "'Outfit', sans-serif" }}>
+                          {String(getActiveDelegations().length).padStart(2, '0')}
+                        </div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', marginTop: '4px', lineHeight: 1.2 }}>
+                          Assigned Tasks
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>
+                          In progress
+                        </div>
                       </div>
-                    )}
+
+                      {/* Card 3: Urgent Actions (Red) */}
+                      <div 
+                        className="approvals-metric-card approvals-metric-red"
+                        onClick={() => setActiveTab('supply')}
+                        title="Click to view Urgent Actions"
+                      >
+                        {/* Dot Grid */}
+                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style={{ position: 'absolute', top: '8px', right: '8px', opacity: 0.22, pointerEvents: 'none' }}>
+                          <circle cx="6" cy="6" r="1.5" fill="#EF4444"/>
+                          <circle cx="16" cy="6" r="1.5" fill="#EF4444"/>
+                          <circle cx="26" cy="6" r="1.5" fill="#EF4444"/>
+                          <circle cx="6" cy="16" r="1.5" fill="#EF4444"/>
+                          <circle cx="16" cy="16" r="1.5" fill="#EF4444"/>
+                          <circle cx="26" cy="16" r="1.5" fill="#EF4444"/>
+                          <circle cx="6" cy="26" r="1.5" fill="#EF4444"/>
+                          <circle cx="16" cy="26" r="1.5" fill="#EF4444"/>
+                          <circle cx="26" cy="26" r="1.5" fill="#EF4444"/>
+                        </svg>
+
+                        <div style={{ width: '34px', height: '34px', borderRadius: '50%', border: '1.5px solid #EF4444', background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444' }}>
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                          </svg>
+                        </div>
+                        <div style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', marginTop: '12px', lineHeight: 1.1, fontFamily: "'Outfit', sans-serif" }}>
+                          {String(criticalAlerts.length).padStart(2, '0')}
+                        </div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', marginTop: '4px', lineHeight: 1.2 }}>
+                          Urgent Actions
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>
+                          Require immediate attention
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Vertical Divider */}
+                    <div className="approvals-divider-v" />
+
+                    {/* Right Table / Item List */}
+                    <div className="approvals-table-col">
+                      {/* Table Header */}
+                      <div className="approvals-table-header">
+                        <span>ITEM</span>
+                        <span>TYPE</span>
+                        <span>STATUS</span>
+                        <span style={{ textAlign: 'right' }}>REQUESTED</span>
+                      </div>
+
+                      {/* Table Rows (Real Dynamic Approval Data) */}
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        {(() => {
+                          const realPending = pendingApprovals.filter(x => x.status?.toLowerCase() === 'pending').slice(0, 4);
+
+                          if (realPending.length === 0) {
+                            return (
+                              <div style={{ padding: '36px 16px', textAlign: 'center', color: '#64748B', fontWeight: 600, fontSize: '13px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                  <polyline points="22 4 12 14.01 9 11.01"/>
+                                </svg>
+                                <span>No pending approvals awaiting decision. All clear!</span>
+                              </div>
+                            );
+                          }
+
+                          return realPending.map(item => {
+                            let cleanTitle = item.title;
+                            if (item.type === 'staff_signup' && item.raw?.requesterName) cleanTitle = item.raw.requesterName;
+                            else if (item.category === 'receptionist_indent' && item.raw?.details?.indentNumber) cleanTitle = item.raw.details.indentNumber;
+                            else if (item.category === 'vendor_onboarding' && item.raw?.details?.vendorName) cleanTitle = item.raw.details.vendorName;
+                            else if (item.category === 'purchase_order_approval' && item.raw?.details?.poNumber) cleanTitle = `PO: ${item.raw.details.poNumber}`;
+                            else if (item.category === 'item_price_update' && item.raw?.details?.vendorName) cleanTitle = `${item.raw.details.vendorName} Catalog`;
+
+                            let typeLabel = 'General Request';
+                            if (item.category === 'receptionist_indent') typeLabel = 'Indent Request';
+                            else if (item.category === 'vendor_onboarding') typeLabel = 'Vendor Onboarding';
+                            else if (item.category === 'purchase_order_approval') typeLabel = 'Purchase Order';
+                            else if (item.category === 'item_price_update') typeLabel = 'Price Update';
+                            else if (item.category === 'leave') typeLabel = 'Leave Request';
+                            else if (item.category === 'billing') typeLabel = 'Billing Discount';
+                            else if (item.category === 'reorder') typeLabel = 'Inventory Request';
+                            else if (item.raw?.type === 'staff_signup') typeLabel = 'Access Request';
+                            else if (item.raw?.type === 'role_change' || item.raw?.type === 'permission_request') typeLabel = 'Role Permission';
+
+                            const reqDate = item.raw?.requestedAt || item.raw?.createdAt;
+                            const reqTimeStr = reqDate 
+                              ? (() => {
+                                  const d = new Date(reqDate);
+                                  const isToday = d.toDateString() === new Date().toDateString();
+                                  const tStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                  return isToday ? `Today, ${tStr}` : `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${tStr}`;
+                                })()
+                              : 'Recently';
+
+                            return (
+                              <div 
+                                key={item.id} 
+                                className="approvals-table-row"
+                                onClick={() => {
+                                  if (item.category === 'vendor_onboarding') {
+                                    const vendorId = item.raw?.details?.vendorId;
+                                    const v = vendors.find(x => x._id === vendorId);
+                                    if (v) setSelectedVendorProfile(v);
+                                    else {
+                                      setApprovalSearchQuery(item.title);
+                                      setActiveTab('approvals');
+                                    }
+                                  } else {
+                                    setApprovalSearchQuery(item.title);
+                                    setActiveTab('approvals');
+                                  }
+                                }}
+                                title="Click to view details in Approvals"
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                  <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {cleanTitle}
+                                  </span>
+                                </div>
+
+                                <div style={{ fontSize: '12px', fontWeight: 500, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {typeLabel}
+                                </div>
+
+                                <div>
+                                  <span className={
+                                    item.status.toLowerCase() === 'review' 
+                                      ? 'approvals-badge-review' 
+                                      : item.status.toLowerCase() === 'approved' 
+                                        ? 'approvals-badge-approved' 
+                                        : 'approvals-badge-pending'
+                                  }>
+                                    {item.status}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                                  <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                    {reqTimeStr}
+                                  </span>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                                    <polyline points="9 18 15 12 9 6"/>
+                                  </svg>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
 
               <div className="dashboard-col-right" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 {/* Alerts & Tasks Widget */}
-                <div className="dashboard-widget-card" style={{ padding: '28px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                    <span style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', fontFamily: "'Outfit', sans-serif" }}>Alerts & Tasks</span>
-                    <button className="widget-header-action-btn" onClick={() => setActiveTab('supply')}>All &gt;</button>
+                {/* Alerts & Tasks Redesigned Section */}
+                <div className="pending-alerts-card-modern">
+                  {/* Header Row */}
+                  <div className="pending-alerts-header">
+                    <div className="pending-alerts-title-wrap">
+                      <span className="pending-alerts-dot" />
+                      <h3 className="pending-alerts-title">Pending Alerts</h3>
+                      <span className="pending-alerts-badge">
+                        {criticalAlerts.length + warningAlerts.length}
+                      </span>
+                    </div>
+                    <button className="pending-alerts-view-all" onClick={() => setActiveTab('supply')}>
+                      All &gt;
+                    </button>
                   </div>
 
-                  <div className="alerts-stack" style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '480px', overflowY: 'auto', paddingRight: '6px' }}>
-                    {criticalAlerts.map(alert => (
-                      <div 
-                        className="alert-row-item danger animate-in" 
-                        key={alert.id}
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          padding: '16px',
-                          background: '#FEF2F2',
-                          borderLeft: '4px solid #EF4444',
-                          borderRadius: '12px',
-                          gap: '12px',
-                          border: '1px solid #FEE2E2',
-                          borderLeftWidth: '4px'
-                        }}
-                      >
-                        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#EF4444', marginTop: '6px', flexShrink: 0 }} />
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#7F1D1D' }}>{alert.title}</span>
-                            <span style={{ fontSize: '10.5px', color: '#EF4444', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                              CRITICAL · {alert.subtext || 'SYSTEM'}
-                            </span>
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', paddingLeft: '18px' }}>
-                          <button 
-                            style={{
-                              background: '#2563EB',
-                              color: 'white',
-                              border: 'none',
-                              padding: '6px 14px',
-                              borderRadius: '6px',
-                              fontSize: '11.5px',
-                              fontWeight: 800,
-                              cursor: 'pointer'
-                            }}
-                            onClick={() => resolveCriticalAlert(alert.id, alert.title, alert.rawItem)}
-                          >
-                            Resolve
-                          </button>
-                          <button 
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#64748B',
-                              fontSize: '11.5px',
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                              padding: 0
-                            }}
-                            onClick={() => showFeedback(`Details: ${alert.title}`, 'success')}
-                          >
-                            Details
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                  {/* Alerts List */}
+                  <div className="pending-alerts-list">
+                    {/* Critical Alerts */}
+                    {criticalAlerts.map(alert => {
+                      const isResolved = !!alertInlineFeedback[alert.id];
+                      const isDisappearing = !!alertDisappearingIds[alert.id];
 
-                    {warningAlerts.map(alert => (
-                      <div 
-                        className="alert-row-item warning animate-in" 
-                        key={alert.id}
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          padding: '16px',
-                          background: '#FFFBEB',
-                          borderLeft: '4px solid #F59E0B',
-                          borderRadius: '12px',
-                          gap: '12px',
-                          border: '1px solid #FEF3C7',
-                          borderLeftWidth: '4px'
-                        }}
-                      >
-                        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#F59E0B', marginTop: '6px', flexShrink: 0 }} />
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#78350F' }}>{alert.title}</span>
-                            <span style={{ fontSize: '10.5px', color: '#D97706', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                              WARNING · {alert.subtext || 'SYSTEM'}
-                            </span>
-                          </div>
+                      return (
+                        <div 
+                          className={`pending-alert-row-card critical animate-in ${isResolved ? 'resolved-state' : ''} ${isDisappearing ? 'disappearing' : ''}`} 
+                          key={alert.id}
+                        >
+                          {isResolved ? (
+                            <div className="pending-alert-resolved-center-banner">
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                <polyline points="22 4 12 14.01 9 11.01"/>
+                              </svg>
+                              <span>Resolved</span>
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                                {/* Left Icon */}
+                                <div className="pending-alert-icon-box critical">
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="12" y1="8" x2="12" y2="12"/>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                                  </svg>
+                                </div>
+
+                                {/* Thin Vertical Divider */}
+                                <div className="pending-alert-divider-v" />
+
+                                {/* Middle Content */}
+                                <div className="pending-alert-content">
+                                  <span className="pending-alert-title-text" title={alert.title}>
+                                    {alert.title}
+                                  </span>
+                                  <span className="pending-alert-meta-text critical">
+                                    CRITICAL · {alert.subtext || 'SYSTEM ALERT'}
+                                  </span>
+                                  <div className="pending-alert-date-row">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                                      <rect width="18" height="18" x="3" y="4" rx="2"/>
+                                      <line x1="16" y1="2" x2="16" y2="6"/>
+                                      <line x1="8" y1="2" x2="8" y2="6"/>
+                                      <line x1="3" y1="10" x2="21" y2="10"/>
+                                    </svg>
+                                    <span>
+                                      Requested: {alert.rawItem?.createdAt ? new Date(alert.rawItem.createdAt).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Right Actions Stack */}
+                              <div className="pending-alert-actions">
+                                <button 
+                                  className={`pending-alert-btn-resolve ${resolvingAlertIds[alert.id] ? 'resolving' : ''}`}
+                                  onClick={() => !resolvingAlertIds[alert.id] && resolveCriticalAlert(alert.id, alert.title, alert.rawItem)}
+                                  disabled={!!resolvingAlertIds[alert.id]}
+                                >
+                                  {resolvingAlertIds[alert.id] ? (
+                                    <>
+                                      <svg className="alert-spinner" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ flexShrink: 0 }}>
+                                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25"/>
+                                        <path d="M4 12a8 8 0 018-8v8H4z" fill="currentColor" opacity="0.85"/>
+                                      </svg>
+                                      <span>Resolving</span>
+                                    </>
+                                  ) : (
+                                    'Resolve'
+                                  )}
+                                </button>
+                                <button 
+                                  className="pending-alert-btn-details"
+                                  onClick={() => showFeedback(`Details: ${alert.title}`, 'success')}
+                                  disabled={!!resolvingAlertIds[alert.id]}
+                                >
+                                  Details
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
-                        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', paddingLeft: '18px' }}>
-                          <button 
-                            style={{
-                              background: '#2563EB',
-                              color: 'white',
-                              border: 'none',
-                              padding: '6px 14px',
-                              borderRadius: '6px',
-                              fontSize: '11.5px',
-                              fontWeight: 800,
-                              cursor: 'pointer'
-                            }}
-                            onClick={() => resolveWarningAlert(alert.id, alert.title, alert.actionText, alert.rawItem)}
-                          >
-                            Resolve
-                          </button>
-                          <button 
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#64748B',
-                              fontSize: '11.5px',
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                              padding: 0
-                            }}
-                            onClick={() => showFeedback(`Details: ${alert.title}`, 'success')}
-                          >
-                            Details
-                          </button>
+                      );
+                    })}
+
+                    {/* Warning Alerts (e.g. Pending Lab Reports) */}
+                    {warningAlerts.map(alert => {
+                      const isResolved = !!alertInlineFeedback[alert.id];
+                      const isDisappearing = !!alertDisappearingIds[alert.id];
+
+                      let metaLine = alert.subtext || 'WARNING · STATUS: PENDING';
+                      let dateStr = alert.rawItem?.createdAt ? new Date(alert.rawItem.createdAt).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
+
+                      if (alert.subtext && alert.subtext.includes('· Requested:')) {
+                        const parts = alert.subtext.split('· Requested:');
+                        metaLine = parts[0].trim();
+                        dateStr = parts[1].trim();
+                      }
+
+                      return (
+                        <div 
+                          className={`pending-alert-row-card animate-in ${isResolved ? 'resolved-state' : ''} ${isDisappearing ? 'disappearing' : ''}`} 
+                          key={alert.id}
+                        >
+                          {isResolved ? (
+                            <div className="pending-alert-resolved-center-banner">
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                <polyline points="22 4 12 14.01 9 11.01"/>
+                              </svg>
+                              <span>Resolved</span>
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                                {/* Left Chemistry/Flask Icon */}
+                                <div className="pending-alert-icon-box">
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M10 2v8L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45L14 10V2z"/>
+                                    <path d="M8.5 2h7"/>
+                                    <path d="M7 16h10"/>
+                                  </svg>
+                                </div>
+
+                                {/* Thin Vertical Divider */}
+                                <div className="pending-alert-divider-v" />
+
+                                {/* Middle Content */}
+                                <div className="pending-alert-content">
+                                  <span className="pending-alert-title-text" title={alert.title}>
+                                    {alert.title}
+                                  </span>
+                                  <span className="pending-alert-meta-text">
+                                    {metaLine}
+                                  </span>
+                                  <div className="pending-alert-date-row">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                                      <rect width="18" height="18" x="3" y="4" rx="2"/>
+                                      <line x1="16" y1="2" x2="16" y2="6"/>
+                                      <line x1="8" y1="2" x2="8" y2="6"/>
+                                      <line x1="3" y1="10" x2="21" y2="10"/>
+                                    </svg>
+                                    <span>
+                                      Requested: {dateStr}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Right Actions Stack */}
+                              <div className="pending-alert-actions">
+                                <button 
+                                  className={`pending-alert-btn-resolve ${resolvingAlertIds[alert.id] ? 'resolving' : ''}`}
+                                  onClick={() => !resolvingAlertIds[alert.id] && resolveWarningAlert(alert.id, alert.title, alert.actionText, alert.rawItem)}
+                                  disabled={!!resolvingAlertIds[alert.id]}
+                                >
+                                  {resolvingAlertIds[alert.id] ? (
+                                    <>
+                                      <svg className="alert-spinner" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ flexShrink: 0 }}>
+                                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25"/>
+                                        <path d="M4 12a8 8 0 018-8v8H4z" fill="currentColor" opacity="0.85"/>
+                                      </svg>
+                                      <span>Resolving</span>
+                                    </>
+                                  ) : (
+                                    'Resolve'
+                                  )}
+                                </button>
+                                <button 
+                                  className="pending-alert-btn-details"
+                                  onClick={() => showFeedback(`Details: ${alert.title}`, 'success')}
+                                  disabled={!!resolvingAlertIds[alert.id]}
+                                >
+                                  Details
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     {criticalAlerts.length === 0 && warningAlerts.length === 0 && (
-                      <div style={{ padding: '24px', border: '1px dashed #E2E8F0', borderRadius: '12px', textAlign: 'center', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
+                      <div style={{ padding: '36px 16px', border: '1px dashed #E2E8F0', borderRadius: '14px', textAlign: 'center', fontSize: '13px', color: '#64748B', fontWeight: 600, background: '#FFFDF7' }}>
                         All systems operational. No active alerts.
                       </div>
                     )}

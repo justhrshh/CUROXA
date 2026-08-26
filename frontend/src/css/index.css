@@ -2322,15 +2322,16 @@ body .admin-sidebar {
 @media (min-width: 1025px) {
   /* Collapsed Widths */
   .sidebar.collapsed, .admin-sidebar.collapsed {
-    width: 70px !important;
+    width: 78px !important;
   }
   .top-nav.collapsed, .main-content.collapsed, .admin-main-canvas.collapsed {
-    margin-left: 70px !important;
+    margin-left: 78px !important;
   }
 
   /* Logo handling when collapsed */
   .sidebar.collapsed .sidebar-logo > *:not(:first-child):not(.sidebar-collapse-toggle),
-  .admin-sidebar.collapsed .sidebar-brand > *:not(:first-child):not(.sidebar-collapse-toggle) {
+  .admin-sidebar.collapsed .sidebar-brand > *:not(:first-child):not(.sidebar-collapse-toggle),
+  .admin-sidebar.collapsed .sidebar-wave-bg {
     display: none !important;
   }
   .sidebar.collapsed .sidebar-logo,
@@ -2340,24 +2341,29 @@ body .admin-sidebar {
     justify-content: center !important;
   }
 
-  /* Hide Group Titles in Sidebar when Collapsed */
+  /* Hide Group Titles & Zones in Sidebar when Collapsed */
   .sidebar.collapsed .sidebar-group-title,
   .admin-sidebar.collapsed .sidebar-group-title,
   .sidebar.collapsed .sidebar-title,
   .admin-sidebar.collapsed .sidebar-title {
     display: none !important;
   }
+  .admin-sidebar.collapsed .sidebar-zone {
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
 
   /* Hide Navigation Links text when Collapsed */
   .sidebar.collapsed .nav-link span,
   .admin-sidebar.collapsed .sidebar-link span,
+  .admin-sidebar.collapsed .sidebar-link-text,
   .sidebar.collapsed .nav-link-text {
     display: none !important;
   }
 
-  /* If nav-link contains direct text node */
-  body .sidebar.collapsed .nav-link,
-  body .admin-sidebar.collapsed .sidebar-link {
+  /* When collapsed, keep icon container centered */
+  body .sidebar.collapsed .nav-link {
     width: 44px !important;
     height: 44px !important;
     margin: 6px auto !important;
@@ -2365,22 +2371,36 @@ body .admin-sidebar {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    border-radius: 10px !important;
+    border-radius: 12px !important;
     font-size: 0 !important;
     border-left: none !important;
     border-right: none !important;
     transition: all 0.2s ease !important;
   }
+  body .admin-sidebar.collapsed .sidebar-link {
+    width: 48px !important;
+    height: 48px !important;
+    margin: 4px auto !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 14px !important;
+    font-size: 0 !important;
+    background: transparent !important;
+  }
+  body .admin-sidebar.collapsed .sidebar-link.active {
+    background: linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(245, 243, 255, 0.85) 100%) !important;
+  }
   body .sidebar.collapsed nav,
   body .admin-sidebar.collapsed .sidebar-nav-container {
-    padding-left: 0 !important;
-    padding-right: 0 !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
   }
   body .sidebar.collapsed .nav-link i,
   body .sidebar.collapsed .nav-link svg,
   body .admin-sidebar.collapsed .sidebar-link svg {
     margin: 0 !important;
-    margin-right: 0 !important;
     font-size: 20px !important;
     width: 20px !important;
     height: 20px !important;
@@ -2413,7 +2433,7 @@ body .admin-sidebar {
     margin: auto 8px 16px !important;
     padding: 6px !important;
     justify-content: center !important;
-    border-radius: 12px !important;
+    border-radius: 14px !important;
   }
 }
 
@@ -2718,11 +2738,11 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
    Sidebar Navigation Icon Color Overrides
    ========================================== */
 
-/* Unselected Sidebar Icons: Darken to #475569 (slate-600) */
+/* Unselected Sidebar Icons: Darken to #475569 (slate-600) for standard links */
 .sidebar .nav-link:not(.active) i,
 .sidebar .nav-link:not(.active) svg,
-.sidebar-link:not(.active) svg,
-.sidebar-link:not(.active) i,
+.sidebar-link:not(.active):not(:has(.sidebar-link-icon)) svg,
+.sidebar-link:not(.active):not(:has(.sidebar-link-icon)) i,
 .hr-sidebar .hr-menu-item:not(.active) svg,
 .hr-sidebar .hr-menu-item:not(.active) i,
 .admin-sidebar .admin-menu-item:not(.active) svg,
@@ -2733,11 +2753,17 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   stroke: #475569 !important;
 }
 
+.sidebar-link-icon svg,
+.sidebar-link.active .sidebar-link-icon svg {
+  color: inherit !important;
+  stroke: currentColor !important;
+}
+
 /* Hovered Unselected Sidebar Icons: Set to #0F172A (slate-900) */
 .sidebar .nav-link:not(.active):hover i,
 .sidebar .nav-link:not(.active):hover svg,
-.sidebar-link:not(.active):hover svg,
-.sidebar-link:not(.active):hover i,
+.sidebar-link:not(.active):not(:has(.sidebar-link-icon)):hover svg,
+.sidebar-link:not(.active):not(:has(.sidebar-link-icon)):hover i,
 .hr-sidebar .hr-menu-item:not(.active):hover svg,
 .hr-sidebar .hr-menu-item:not(.active):hover i,
 .admin-sidebar .admin-menu-item:not(.active):hover svg,
