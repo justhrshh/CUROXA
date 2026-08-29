@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../utils/api';
+import { socket } from '../utils/socket';
 
 function ExpiryManagementPanel({ showToast, onStockUpdated }) {
   const [summary, setSummary] = useState({
@@ -41,6 +42,17 @@ function ExpiryManagementPanel({ showToast, onStockUpdated }) {
 
   useEffect(() => {
     fetchData();
+
+    const handleDataChanged = (payload) => {
+      if (!payload || ['inventory_expiry', 'medicines', 'goods_receipts'].includes(payload.type)) {
+        fetchData();
+      }
+    };
+
+    socket.on('data_changed', handleDataChanged);
+    return () => {
+      socket.off('data_changed', handleDataChanged);
+    };
   }, []);
 
   const uniqueCategories = useMemo(() => {

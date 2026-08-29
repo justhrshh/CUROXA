@@ -181,6 +181,60 @@ const PharmacyDashboard = () => {
     return {};
   });
 
+  // Dedicated state for Pharmacy Overview sales and metrics reconciliation
+  const [overviewSales, setOverviewSales] = useState([]);
+  const [isLoadingOverviewSales, setIsLoadingOverviewSales] = useState(false);
+
+  const fetchOverviewSales = async () => {
+    try {
+      setIsLoadingOverviewSales(true);
+      const res = await api.get('/pharmacy-sales', { params: { limit: 200 } });
+      if (res.data) {
+        setOverviewSales(res.data.sales || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch overview sales:", err);
+    } finally {
+      setIsLoadingOverviewSales(false);
+    }
+  };
+
+  // Dedicated Pharmacy Sales Ledger States
+  const [pharmacySales, setPharmacySales] = useState([]);
+  const [salesTotalCount, setSalesTotalCount] = useState(0);
+  const [salesCurrentPage, setSalesCurrentPage] = useState(1);
+  const [salesPageSize, setSalesPageSize] = useState(10);
+  const [salesTotalPages, setSalesTotalPages] = useState(1);
+  const [salesFilterType, setSalesFilterType] = useState('ALL'); // 'ALL', 'DIRECT', 'PRESCRIPTION'
+  const [salesFilterStatus, setSalesFilterStatus] = useState('ALL'); // 'ALL', 'COMPLETED', 'CANCELLED', 'REFUNDED'
+  const [salesFilterPaymentMethod, setSalesFilterPaymentMethod] = useState('ALL'); // 'ALL', 'Cash', 'UPI', 'Card'
+  const [salesFilterDateRange, setSalesFilterDateRange] = useState('All Time'); // 'Today', 'This Week', 'This Month', 'All Time', 'Custom Range'
+  const [salesCustomStartDate, setSalesCustomStartDate] = useState('');
+  const [salesCustomEndDate, setSalesCustomEndDate] = useState('');
+  const [salesSearchQuery, setSalesSearchQuery] = useState('');
+  const [isLoadingSales, setIsLoadingSales] = useState(false);
+  const [selectedSaleDetail, setSelectedSaleDetail] = useState(null);
+  const [showSaleDetailModal, setShowSaleDetailModal] = useState(false);
+
+  // Direct Sale POS Modal States
+  const [showDirectSaleModal, setShowDirectSaleModal] = useState(false);
+  const [directSaleCustomerType, setDirectSaleCustomerType] = useState('WALK_IN'); // 'WALK_IN', 'REGISTERED'
+  const [directSaleSelectedPatientId, setDirectSaleSelectedPatientId] = useState('');
+  const [directSaleCustomerName, setDirectSaleCustomerName] = useState('');
+  const [directSaleCustomerMobile, setDirectSaleCustomerMobile] = useState('');
+  const [directSaleSearchPatientText, setDirectSaleSearchPatientText] = useState('');
+  const [directSalePatientHighlightIndex, setDirectSalePatientHighlightIndex] = useState(0);
+  const [directSalePaymentMethod, setDirectSalePaymentMethod] = useState('Cash'); // 'Cash', 'UPI', 'Card'
+  const [directSaleAmountReceived, setDirectSaleAmountReceived] = useState('');
+  const [directSaleTransactionRef, setDirectSaleTransactionRef] = useState('');
+  const [directSaleNotes, setDirectSaleNotes] = useState('');
+  const [directSaleItems, setDirectSaleItems] = useState([]);
+  const [directSaleSearchMedText, setDirectSaleSearchMedText] = useState('');
+  const [directSaleMedHighlightIndex, setDirectSaleMedHighlightIndex] = useState(0);
+  const [isSubmittingDirectSale, setIsSubmittingDirectSale] = useState(false);
+  const directSaleSearchPatientInputRef = useRef(null);
+  const directSaleSearchMedInputRef = useRef(null);
+
   // Dynamic role coverage subtab states
   const [receptionistSubTab, setReceptionistSubTab] = useState('queue');
   const [labSubTab, setLabSubTab] = useState('tests');
@@ -422,6 +476,8 @@ const PharmacyDashboard = () => {
       };
       const res = await api.post('/vendors', payload);
       await fetchProcurementData();
+      await fetchOverviewSales();
+      await fetchSales();
       setShowAddVendorModal(false);
       showToast('Vendor proposed successfully! Sent to Admin for review.');
     } catch (err) {
@@ -931,6 +987,8 @@ const PharmacyDashboard = () => {
 
       await fetchProcurementData();
       await fetchInventory();
+      await fetchSales();
+      await fetchOverviewSales();
       setShowGRNModal(false);
       setGrnSelectedPOId('');
       setGrnDirectVendorId('');
@@ -1178,6 +1236,7 @@ const PharmacyDashboard = () => {
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('All');
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState('All');
   const [showInventoryExportModal, setShowInventoryExportModal] = useState(false);
+  const [skuBatchRiskMap, setSkuBatchRiskMap] = useState({});
 
   const uniqueInventoryCategories = useMemo(() => {
     const cats = new Set();
@@ -1623,9 +1682,256 @@ const PharmacyDashboard = () => {
     try {
       const res = await api.get('/medicines');
       setInventory(res.data);
+      try {
+        const expiryRes = await api.get('/inventory-expiry?risk=ALL_RISKS&limit=300');
+        const batches = expiryRes.data?.batches || [];
+        const map = {};
+        batches.forEach(b => {
+          const key = String(b.sku || '').toUpperCase();
+          if (!map[key]) {
+            map[key] = { expiredCount: 0, criticalCount: 0, warningCount: 0 };
+          }
+          if (b.risk === 'EXPIRED') map[key].expiredCount++;
+          else if (b.risk === 'CRITICAL') map[key].criticalCount++;
+          else if (b.risk === 'WARNING') map[key].warningCount++;
+        });
+        setSkuBatchRiskMap(map);
+      } catch (e) {
+        // Expiry route silent fallback
+      }
     } catch (err) {
       console.error("Failed to fetch inventory", err);
     }
+  };
+
+  const handleAddDirectSaleMedicine = (med) => {
+    if (!med) return;
+    setDirectSaleItems(prev => {
+      const existingIdx = prev.findIndex(it => (it.medicineId && it.medicineId === med._id) || (it.sku && it.sku === med.sku));
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        const newQty = updated[existingIdx].quantity + 1;
+        if (newQty > (med.stock || 0)) {
+          showToast('Cannot add more. Available stock for ' + med.name + ' is ' + med.stock + '.', 'error');
+          return prev;
+        }
+        updated[existingIdx].quantity = newQty;
+        return updated;
+      } else {
+        if ((med.stock || 0) <= 0) {
+          showToast('Medicine ' + med.name + ' is Out of Stock.', 'error');
+          return prev;
+        }
+        return [
+          ...prev,
+          {
+            medicineId: med._id,
+            medicineName: med.name,
+            sku: med.sku || '',
+            unit: med.unit || 'Strip',
+            stock: med.stock || 0,
+            mrp: Number(med.mrp) || 0,
+            quantity: 1,
+            discountPercent: 0,
+            gstPercent: 0
+          }
+        ];
+      }
+    });
+    setDirectSaleSearchMedText('');
+  };
+
+  const handleRemoveDirectSaleMedicine = (index) => {
+    setDirectSaleItems(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleDirectSaleItemChange = (index, field, value) => {
+    setDirectSaleItems(prev => {
+      const updated = [...prev];
+      const item = { ...updated[index] };
+      if (field === 'quantity') {
+        const num = parseInt(value, 10);
+        item.quantity = isNaN(num) ? 0 : Math.max(1, num);
+      } else if (field === 'discountPercent') {
+        const num = parseFloat(value);
+        item.discountPercent = isNaN(num) ? 0 : Math.min(100, Math.max(0, num));
+      } else if (field === 'gstPercent') {
+        const num = parseFloat(value);
+        item.gstPercent = isNaN(num) ? 0 : Math.max(0, num);
+      } else if (field === 'mrp') {
+        const num = parseFloat(value);
+        item.mrp = isNaN(num) ? 0 : Math.max(0, num);
+      }
+      updated[index] = item;
+      return updated;
+    });
+  };
+
+  const handleDirectSaleSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (directSaleItems.length === 0) {
+      showToast("Please add at least one medicine to the sale.", 'error');
+      return;
+    }
+
+    let custName = directSaleCustomerName.trim();
+    let custMobile = directSaleCustomerMobile.trim();
+    let patId = undefined;
+    let patIdentifier = undefined;
+
+    if (directSaleCustomerType === 'REGISTERED') {
+      if (!directSaleSelectedPatientId) {
+        showToast("Please select a registered patient.", 'error');
+        return;
+      }
+      const p = patients.find(pt => pt._id === directSaleSelectedPatientId);
+      if (p) {
+        custName = p.name;
+        custMobile = p.contact || p.phone || '';
+        patId = p._id;
+        patIdentifier = p.patientId || p.uhid || ('MDC-' + p._id.toString().slice(-4).toUpperCase());
+      }
+    } else {
+      if (!custName) {
+        custName = 'Walk-in Customer';
+      }
+    }
+
+    for (const item of directSaleItems) {
+      if (!item.quantity || item.quantity <= 0) {
+        showToast('Invalid quantity for ' + item.medicineName + '. Must be > 0.', 'error');
+        return;
+      }
+      if (item.quantity > item.stock) {
+        showToast('Insufficient stock for ' + item.medicineName + '. Available: ' + item.stock + ', Requested: ' + item.quantity + '.', 'error');
+        return;
+      }
+    }
+
+    const grandTotal = directSaleItems.reduce((acc, it) => {
+      const gross = it.quantity * it.mrp;
+      const disc = gross * ((it.discountPercent || 0) / 100);
+      const tax = gross - disc;
+      const gst = tax * ((it.gstPercent || 0) / 100);
+      return acc + (tax + gst);
+    }, 0);
+
+    setIsSubmittingDirectSale(true);
+    try {
+      const payload = {
+        saleType: 'DIRECT',
+        customerName: custName,
+        customerMobile: custMobile,
+        patientId: patId,
+        patientIdentifier: patIdentifier,
+        doctorName: 'Self / No Doctor',
+        pharmacistName: currentUser?.name || 'Pharmacist',
+        pharmacistId: currentUser?.staff_id || '',
+        pharmacyLocation: 'Main Pharmacy',
+        paymentMethod: directSalePaymentMethod,
+        amountReceived: grandTotal,
+        transactionRef: directSaleTransactionRef,
+        notes: directSaleNotes,
+        items: directSaleItems.map(it => ({
+          medicineId: it.medicineId,
+          medicineName: it.medicineName,
+          sku: it.sku,
+          unit: it.unit,
+          quantity: it.quantity,
+          mrp: it.mrp,
+          discountPercent: it.discountPercent || 0,
+          gstPercent: it.gstPercent || 0
+        }))
+      };
+
+      const res = await api.post('/pharmacy-sales', payload);
+      showToast('Sale completed successfully! Sale ID: ' + res.data.saleId);
+
+      setShowDirectSaleModal(false);
+      setDirectSaleCustomerType('WALK_IN');
+      setDirectSaleCustomerName('');
+      setDirectSaleCustomerMobile('');
+      setDirectSaleSelectedPatientId('');
+      setDirectSaleItems([]);
+      setDirectSalePaymentMethod('Cash');
+      setDirectSaleAmountReceived('');
+      setDirectSaleTransactionRef('');
+      setDirectSaleNotes('');
+
+      await fetchInventory();
+      await fetchSales();
+      await fetchOverviewSales();
+    } catch (err) {
+      console.error("Direct sale error:", err);
+      showToast(err.response?.data?.error || "Failed to process Direct Sale.", 'error');
+    } finally {
+      setIsSubmittingDirectSale(false);
+    }
+  };
+
+  const handlePrintSaleReceipt = (sale) => {
+    if (!sale) return;
+    const printWindow = window.open('', '_blank');
+    const itemsHtml = (sale.items || []).map(it => {
+      const skuDiv = it.sku ? '<div style="font-size: 11px; color: #64748B;">SKU: ' + it.sku + '</div>' : '';
+      return '<tr>' +
+        '<td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; font-size: 13px; color: #0F172A; font-weight: 600;">' +
+          it.medicineName + skuDiv +
+        '</td>' +
+        '<td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; text-align: center; font-size: 13px; color: #475569;">' + it.quantity + ' ' + (it.unit || '') + '</td>' +
+        '<td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-size: 13px; color: #475569;">₹' + (it.mrp || 0).toFixed(2) + '</td>' +
+        '<td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-size: 13px; color: #475569;">' + (it.discountPercent || 0) + '%</td>' +
+        '<td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-size: 13px; color: #475569;">' + (it.gstPercent || 0) + '%</td>' +
+        '<td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-size: 13px; color: #0F172A; font-weight: 700;">₹' + (it.netAmount || 0).toFixed(2) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    const formattedDate = sale.saleDate ? new Date(sale.saleDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+    const formattedTime = sale.saleTime || (sale.createdAt ? new Date(sale.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+
+    const receiptHtml = '<!DOCTYPE html><html><head><title>Pharmacy Receipt - ' + sale.saleId + '</title>' +
+      '<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">' +
+      '<style>@page { margin: 15mm; } body { font-family: "Plus Jakarta Sans", sans-serif; color: #0F172A; margin: 0; padding: 20px; font-size: 13px; } table { width: 100%; border-collapse: collapse; margin-top: 15px; } th { background: #F8FAFC; padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; color: #475569; border-bottom: 2px solid #CBD5E1; }</style>' +
+      '</head><body>' +
+      '<div style="text-align: center; border-bottom: 2px solid #E2E8F0; padding-bottom: 16px; margin-bottom: 20px;">' +
+        '<h2 style="margin: 0; font-size: 22px; font-weight: 800; color: #2563EB;">CUROXA PHARMACY</h2>' +
+        '<div style="font-size: 12px; color: #64748B; margin-top: 4px;">Main Pharmacy Dispensary • Tax Invoice / Cash Receipt</div>' +
+      '</div>' +
+      '<div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 12.5px;">' +
+        '<div>' +
+          '<div><strong>Sale ID:</strong> <span style="font-family: monospace; font-size: 14px; font-weight: 700;">' + sale.saleId + '</span></div>' +
+          '<div style="margin-top: 4px;"><strong>Date & Time:</strong> ' + formattedDate + ' ' + formattedTime + '</div>' +
+          '<div style="margin-top: 4px;"><strong>Sale Type:</strong> <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; background: ' + (sale.saleType === 'DIRECT' ? '#EEF2FF' : '#ECFDF5') + '; color: ' + (sale.saleType === 'DIRECT' ? '#4F46E5' : '#059669') + '; font-weight: 700;">' + sale.saleType + '</span></div>' +
+          '<div style="margin-top: 4px;"><strong>Doctor / Source:</strong> ' + (sale.doctorName || 'Self / No Doctor') + '</div>' +
+        '</div>' +
+        '<div style="text-align: right;">' +
+          '<div><strong>Customer / Patient:</strong> ' + (sale.customerName || 'Walk-in') + '</div>' +
+          (sale.customerMobile ? '<div style="margin-top: 4px;"><strong>Mobile:</strong> ' + sale.customerMobile + '</div>' : '') +
+          (sale.patientIdentifier ? '<div style="margin-top: 4px;"><strong>Patient ID:</strong> ' + sale.patientIdentifier + '</div>' : '') +
+          '<div style="margin-top: 4px;"><strong>Pharmacist:</strong> ' + (sale.pharmacistName || 'Pharmacist') + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<table><thead><tr><th>Medicine / Item</th><th style="text-align: center;">Qty</th><th style="text-align: right;">MRP</th><th style="text-align: right;">Disc</th><th style="text-align: right;">GST</th><th style="text-align: right;">Net Amount</th></tr></thead>' +
+      '<tbody>' + itemsHtml + '</tbody></table>' +
+      '<div style="display: flex; justify-content: flex-end; margin-top: 20px;">' +
+        '<div style="width: 260px; background: #F8FAFC; padding: 16px; border-radius: 8px; border: 1px solid #E2E8F0;">' +
+          '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;"><span>Subtotal:</span><span>₹' + (sale.subtotal || 0).toFixed(2) + '</span></div>' +
+          '<div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #16A34A;"><span>Total Discount:</span><span>-₹' + (sale.totalDiscount || 0).toFixed(2) + '</span></div>' +
+          '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;"><span>GST:</span><span>₹' + (sale.totalGst || 0).toFixed(2) + '</span></div>' +
+          '<div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 2px solid #CBD5E1; font-weight: 800; font-size: 15px; color: #0F172A;"><span>Grand Total:</span><span>₹' + (sale.grandTotal || 0).toFixed(2) + '</span></div>' +
+          '<div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; color: #475569;"><span>Payment:</span><span style="font-weight: 700;">' + (sale.paymentMethod || 'Cash') + ' (' + (sale.paymentStatus || 'PAID') + ')</span></div>' +
+          (sale.paymentMethod === 'Cash' ? '<div style="display: flex; justify-content: space-between; font-size: 12px; color: #475569;"><span>Received:</span><span>₹' + (sale.amountReceived || sale.grandTotal).toFixed(2) + '</span></div><div style="display: flex; justify-content: space-between; font-size: 12px; color: #475569;"><span>Change:</span><span>₹' + (sale.changeReturned || 0).toFixed(2) + '</span></div>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div style="margin-top: 40px; text-align: center; color: #94A3B8; font-size: 11px; border-top: 1px solid #E2E8F0; padding-top: 12px;">Thank you for choosing Curoxa Healthcare. Get well soon!</div>' +
+      '</body></html>';
+
+    printWindow.document.write(receiptHtml);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 500);
   };
 
   const handleExportSalesCSV = () => {
@@ -1792,6 +2098,66 @@ const PharmacyDashboard = () => {
       console.error("Failed to fetch coverage data", err);
     }
   };
+
+  const fetchSales = async () => {
+    try {
+      setIsLoadingSales(true);
+      const params = {
+        page: salesCurrentPage,
+        limit: salesPageSize
+      };
+      if (salesFilterType !== 'ALL') params.saleType = salesFilterType;
+      if (salesFilterStatus !== 'ALL') params.status = salesFilterStatus;
+      if (salesFilterPaymentMethod !== 'ALL') params.paymentMethod = salesFilterPaymentMethod;
+      if (salesSearchQuery.trim()) params.search = salesSearchQuery.trim();
+
+      const now = new Date();
+      if (salesFilterDateRange === 'Today') {
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        params.startDate = start.toISOString();
+        params.endDate = end.toISOString();
+      } else if (salesFilterDateRange === 'This Week') {
+        const day = now.getDay();
+        const diffToMonday = (day === 0 ? -6 : 1) - day;
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday, 0, 0, 0, 0);
+        const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59, 999);
+        params.startDate = start.toISOString();
+        params.endDate = end.toISOString();
+      } else if (salesFilterDateRange === 'This Month') {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        params.startDate = start.toISOString();
+        params.endDate = end.toISOString();
+      } else if (salesFilterDateRange === 'Custom Range' && salesCustomStartDate && salesCustomEndDate) {
+        const start = new Date(salesCustomStartDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(salesCustomEndDate);
+        end.setHours(23, 59, 59, 999);
+        params.startDate = start.toISOString();
+        params.endDate = end.toISOString();
+      }
+
+      const res = await api.get('/pharmacy-sales', { params });
+      if (res.data) {
+        setPharmacySales(res.data.sales || []);
+        setSalesTotalCount(res.data.pagination?.total || 0);
+        setSalesTotalPages(res.data.pagination?.pages || 1);
+      }
+    } catch (err) {
+      console.error("Failed to fetch pharmacy sales:", err);
+    } finally {
+      setIsLoadingSales(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSales();
+  }, [salesCurrentPage, salesFilterType, salesFilterStatus, salesFilterPaymentMethod, salesFilterDateRange, salesCustomStartDate, salesCustomEndDate, salesSearchQuery]);
+
+  useEffect(() => {
+    fetchOverviewSales();
+  }, [activeTab]);
 
   const fetchData = async () => {
     try {
@@ -1972,16 +2338,6 @@ const PharmacyDashboard = () => {
   };
 
   const handleConfirmPaymentAndDispense = async () => {
-    if (selectedPaymentMode === 'Cash') {
-      const cashNum = Number(cashReceived);
-      const totalDue = selectedPrescriptionGroup.amountVal || 0;
-      if (!cashReceived || cashNum < totalDue) {
-        setErrorMessage('Insufficient cash received amount');
-        setTimeout(() => setErrorMessage(''), 3000);
-        return;
-      }
-    }
-    
     try {
       const raw = selectedPrescriptionGroup.rawObj;
       const ids = Array.isArray(raw) ? raw.map(x => x._id) : [raw._id];
@@ -2336,13 +2692,13 @@ const PharmacyDashboard = () => {
       return {
         id: pId,
         name: p.patientId?.name || 'Unknown Patient',
-        age: p.patientId?.age || 35,
+        age: p.patientId?.age ? String(p.patientId.age) : '',
         gender: p.patientId?.gender || 'Male',
-        phone: p.patientId?.phone || p.patientId?.contact || '9876543210',
+        phone: p.patientId?.contact || p.patientId?.phone || '',
         patientIdVal: p.patientId?._id || '',
         docName: p.doctorId?.name || 'Dr. Self',
         specialty: p.doctorId?.specialty || 'General Practitioner',
-        time: p.createdAt ? new Date(p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '10:00 AM',
+        time: p.createdAt ? new Date(p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-',
         dateObj: p.createdAt ? new Date(p.createdAt) : new Date(),
         itemsCount: enrichedItems.length,
         itemsList: enrichedItems,
@@ -2451,7 +2807,199 @@ const PharmacyDashboard = () => {
   const totalPrescriptionsPages = Math.ceil(activeTabPrescriptions.length / prescriptionsPageSize) || 1;
   const paginatedPrescriptions = activeTabPrescriptions.slice((prescriptionsPage - 1) * prescriptionsPageSize, prescriptionsPage * prescriptionsPageSize);
 
-  const salesBreakdown = getSalesBreakdown();
+  // === DYNAMIC PHARMACY OVERVIEW METRICS ===
+  const isSameCalendarDay = (dateA, dateB) => {
+    if (!dateA || !dateB) return false;
+    const dA = new Date(dateA);
+    const dB = new Date(dateB);
+    return !isNaN(dA.getTime()) && !isNaN(dB.getTime()) &&
+           dA.getFullYear() === dB.getFullYear() &&
+           dA.getMonth() === dB.getMonth() &&
+           dA.getDate() === dB.getDate();
+  };
+
+  const isTodayDate = (dateVal) => {
+    if (!dateVal) return false;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return false;
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() &&
+           d.getMonth() === now.getMonth() &&
+           d.getDate() === now.getDate();
+  };
+
+  const todayDate = useMemo(() => new Date(), []);
+
+  // Top KPI Card 1: Today's Prescriptions
+  const todayPrescriptionsList = useMemo(() => {
+    return prescriptions.filter(p => p.createdAt && (isTodayDate(p.createdAt) || isSameCalendarDay(p.createdAt, todayDate)));
+  }, [prescriptions, todayDate]);
+
+  // Top KPI Card 2: Pending to Dispense
+  const pendingDispenseCount = useMemo(() => {
+    return prescriptions.filter(p => 
+      p.status === 'Pending' || 
+      p.status === 'Pending Pharmacy Dispatch' || 
+      p.status === 'In Progress'
+    ).length;
+  }, [prescriptions]);
+
+  // Top KPI Card 3: Prescriptions Dispensed
+  const dispensedPrescriptionsCount = useMemo(() => {
+    return prescriptions.filter(p => 
+      p.status === 'Dispensed' || 
+      p.status === 'Dispensed by Pharmacy'
+    ).length;
+  }, [prescriptions]);
+
+  // Combined Sales List with fallback
+  const allSalesList = useMemo(() => {
+    if (overviewSales && overviewSales.length > 0) return overviewSales;
+    if (pharmacySales && pharmacySales.length > 0) return pharmacySales;
+    return [];
+  }, [overviewSales, pharmacySales]);
+
+  // Top KPI Card 4: Today's Sales from actual PharmacySale records
+  const todayOverviewSales = useMemo(() => {
+    return (allSalesList || []).filter(s => {
+      if (s.status === 'CANCELLED') return false;
+      const d = s.saleDate || s.createdAt;
+      return isTodayDate(d);
+    });
+  }, [allSalesList]);
+
+  const todaySalesTotalRev = useMemo(() => {
+    return todayOverviewSales.reduce((acc, s) => acc + (Number(s.grandTotal) || 0), 0);
+  }, [todayOverviewSales]);
+
+  // Top KPI Card 5: Low Stock Items
+  const lowStockTotalCount = useMemo(() => {
+    return inventory.filter(item => {
+      const stock = Number(item.stock) || 0;
+      return item.status === 'Low Stock' || item.status === 'Out of Stock' || stock <= 20;
+    }).length;
+  }, [inventory]);
+
+  // Today's Overview Calendar Card Stats
+  const calendarDayPrescriptions = useMemo(() => {
+    if (!activeCalendarDate) return [];
+    return prescriptions.filter(p => p.createdAt && isSameCalendarDay(p.createdAt, activeCalendarDate));
+  }, [prescriptions, activeCalendarDate]);
+
+  const calendarDayStats = useMemo(() => {
+    const total = calendarDayPrescriptions.length;
+    const dispensed = calendarDayPrescriptions.filter(p => p.status === 'Dispensed' || p.status === 'Dispensed by Pharmacy').length;
+    const pending = calendarDayPrescriptions.filter(p => p.status === 'Pending' || p.status === 'Pending Pharmacy Dispatch' || p.status === 'In Progress').length;
+    const cancelled = calendarDayPrescriptions.filter(p => p.status === 'Cancelled').length;
+    return { total, dispensed, pending, cancelled };
+  }, [calendarDayPrescriptions]);
+
+  // Bottom Card 1: Inventory Snapshot Stats
+  const inventorySnapshotStats = useMemo(() => {
+    const total = inventory.length;
+    let inStock = 0;
+    let lowStock = 0;
+    let outOfStock = 0;
+
+    inventory.forEach(item => {
+      const stock = Number(item.stock) || 0;
+      if (item.status === 'Out of Stock' || stock <= 0) {
+        outOfStock++;
+      } else if (item.status === 'Low Stock' || stock <= 20) {
+        lowStock++;
+      } else {
+        inStock++;
+      }
+    });
+
+    const inStockPct = total > 0 ? Math.round((inStock / total) * 100) : 0;
+    const lowStockPct = total > 0 ? Math.round((lowStock / total) * 100) : 0;
+    const outOfStockPct = total > 0 ? Math.max(0, 100 - inStockPct - lowStockPct) : 0;
+
+    return { total, inStock, lowStock, outOfStock, inStockPct, lowStockPct, outOfStockPct };
+  }, [inventory]);
+
+  // Bottom Card 2: Sales Split Stats (reconciled with actual PharmacySale records)
+  const salesSplitStats = useMemo(() => {
+    const validSales = (allSalesList || []).filter(s => s.status !== 'CANCELLED');
+    let directSales = 0;
+    let opdSales = 0;
+    let ipdSales = 0;
+    let otherSales = 0;
+    let totalDiscount = 0;
+
+    validSales.forEach(s => {
+      const amount = Number(s.grandTotal) || 0;
+      const disc = Number(s.totalDiscount) || 0;
+      totalDiscount += disc;
+
+      if (s.saleType === 'DIRECT') {
+        directSales += amount;
+      } else if (s.saleType === 'PRESCRIPTION') {
+        opdSales += amount;
+      } else {
+        otherSales += amount;
+      }
+    });
+
+    const totalSales = directSales + opdSales + ipdSales + otherSales;
+    const base = totalSales > 0 ? totalSales : 1;
+    const directPct = totalSales > 0 ? Math.round((directSales / base) * 100) : 0;
+    const opdPct = totalSales > 0 ? Math.round((opdSales / base) * 100) : 0;
+    const ipdPct = totalSales > 0 ? Math.round((ipdSales / base) * 100) : 0;
+    const otherPct = totalSales > 0 ? Math.max(0, 100 - directPct - opdPct - ipdPct) : 0;
+
+    return {
+      directSales,
+      opdSales,
+      ipdSales,
+      otherSales,
+      totalDiscount,
+      totalSales,
+      directPct,
+      opdPct,
+      ipdPct,
+      otherPct
+    };
+  }, [allSalesList]);
+
+  // Bottom Card 3: Actual Low Stock Alerts from inventory
+  const actualLowStockAlerts = useMemo(() => {
+    return inventory
+      .filter(item => {
+        const stock = Number(item.stock) || 0;
+        return item.status === 'Low Stock' || item.status === 'Out of Stock' || stock <= 20;
+      })
+      .sort((a, b) => (Number(a.stock) || 0) - (Number(b.stock) || 0))
+      .slice(0, 4)
+      .map(item => ({
+        name: item.name,
+        stock: Number(item.stock) || 0,
+        severity: (Number(item.stock) || 0) <= 0 ? 'red' : 'orange'
+      }));
+  }, [inventory]);
+
+  // Bottom Card 4: Payment Summary (Today's collected vs pending from actual sales)
+  const paymentSummaryToday = useMemo(() => {
+    let collected = 0;
+    let pending = 0;
+
+    todayOverviewSales.forEach(s => {
+      const grandTotal = Number(s.grandTotal) || 0;
+      const received = Number(s.amountReceived) || 0;
+
+      if (s.paymentStatus === 'PAID') {
+        collected += grandTotal;
+      } else if (s.paymentStatus === 'PENDING') {
+        collected += received;
+        pending += Math.max(0, grandTotal - received);
+      }
+    });
+
+    return { collected, pending };
+  }, [todayOverviewSales]);
+
+    const salesBreakdown = getSalesBreakdown();
   const totalVal = salesBreakdown.total || 1;
   const cashPct = Math.round((salesBreakdown.cash / totalVal) * 100);
   const cardPct = Math.round((salesBreakdown.card / totalVal) * 100);
@@ -3556,6 +4104,25 @@ const PharmacyDashboard = () => {
 
                   {(currentUser?.role === 'pharmacy' || coverageState['ph-stock']?.on) && (
                     <div 
+                      className={`sidebar-link ${activeTab === 'expiry' ? 'active' : ''}`}
+                      onClick={(e) => { e.preventDefault(); setActiveTab('expiry'); setMobileSidebarOpen(false); }}
+                    >
+                      {activeTab === 'expiry' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'expiry' ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                        color: activeTab === 'expiry' ? '#FFFFFF' : '#0D9488',
+                        boxShadow: activeTab === 'expiry' ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                      }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Expiry Management</span>
+                    </div>
+                  )}
+
+                  {(currentUser?.role === 'pharmacy' || coverageState['ph-stock']?.on) && (
+                    <div 
                       className={`sidebar-link ${activeTab === 'returns' ? 'active' : ''}`}
                       onClick={(e) => { e.preventDefault(); setActiveTab('returns'); setMobileSidebarOpen(false); }}
                     >
@@ -4045,10 +4612,7 @@ const PharmacyDashboard = () => {
                 <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
-                      {prescriptions.filter(p => {
-                        const pDate = p.createdAt ? new Date(p.createdAt).toDateString() : new Date().toDateString();
-                        return pDate === new Date().toDateString();
-                      }).length}
+                      {todayPrescriptionsList.length}
                     </div>
                     <div style={{ fontSize: '12px', color: '#2563EB', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }}></span> Active today
@@ -4132,7 +4696,7 @@ const PharmacyDashboard = () => {
                 <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
-                      {prescriptions.filter(p => p.status === 'Pending Pharmacy Dispatch' || p.status === 'Pending' || p.status === 'In Progress').length || 0}
+                      {pendingDispenseCount}
                     </div>
                     <div style={{ fontSize: '12px', color: '#D97706', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#D97706', display: 'inline-block' }}></span> Awaiting payment
@@ -4216,7 +4780,7 @@ const PharmacyDashboard = () => {
                 <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
-                      {prescriptions.filter(p => p.status === 'Dispensed' || p.status === 'Dispensed by Pharmacy').length || 0}
+                      {dispensedPrescriptionsCount}
                     </div>
                     <div style={{ fontSize: '12px', color: '#059669', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669', display: 'inline-block' }}></span> Completed
@@ -4300,10 +4864,10 @@ const PharmacyDashboard = () => {
                 <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
-                      ₹{(salesBreakdown.total || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                      ₹{(todaySalesTotalRev || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </div>
                     <div style={{ fontSize: '12px', color: '#7C3AED', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#7C3AED', display: 'inline-block' }}></span> Real-time billing
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#7C3AED', display: 'inline-block' }}></span> {todayOverviewSales.length} transaction{todayOverviewSales.length === 1 ? '' : 's'} today
                     </div>
                   </div>
 
@@ -4384,7 +4948,7 @@ const PharmacyDashboard = () => {
                 <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
-                      {inventory.filter(item => item.status === 'Low Stock' || item.status === 'Out of Stock').length}
+                      {lowStockTotalCount}
                     </div>
                     <div style={{ fontSize: '12px', color: '#E11D48', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#E11D48', display: 'inline-block' }}></span> View all alerts →
@@ -4438,7 +5002,13 @@ const PharmacyDashboard = () => {
                     {/* Subtab Pills */}
                     <div style={{ display: 'flex', gap: '6px', background: '#F8FAFC', padding: '3px', borderRadius: '10px', border: '1px solid #F1F5F9' }}>
                       {['All', 'Urgent', 'New', 'In Progress'].map(tab => {
-                        const count = tab === 'All' ? (prescriptions.length || 13) : tab === 'Urgent' ? (prescriptions.filter(p => p.status === 'Pending' || p.status === 'Pending Pharmacy Dispatch').slice(0, 2).length || 2) : tab === 'New' ? (prescriptions.filter(p => p.status === 'Pending' || p.status === 'Pending Pharmacy Dispatch').length || 10) : (prescriptions.filter(p => p.status === 'In Progress').length || 0);
+                        const count = tab === 'All'
+                          ? prescriptions.length
+                          : tab === 'Urgent'
+                            ? prescriptions.filter(p => (p.status === 'Pending' || p.status === 'Pending Pharmacy Dispatch') && (p.isUrgent || p.priority === 'Urgent' || (p.items && p.items.length > 3))).length
+                            : tab === 'New'
+                              ? prescriptions.filter(p => p.status === 'Pending' || p.status === 'Pending Pharmacy Dispatch').length
+                              : prescriptions.filter(p => p.status === 'In Progress').length;
                         return (
                           <span 
                             key={tab} 
@@ -4662,7 +5232,13 @@ const PharmacyDashboard = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', marginBottom: '18px' }}>
                     {getCalendarDays().map((d, idx) => {
                       const isToday = d.current && d.day === activeCalendarDate.getDate();
-                      const hasActivity = d.current && (d.day === 18 || d.day === 25 || d.day === activeCalendarDate.getDate());
+                      const hasActivity = d.current && prescriptions.some(p => {
+                        if (!p.createdAt) return false;
+                        const pD = new Date(p.createdAt);
+                        return pD.getFullYear() === activeCalendarDate.getFullYear() &&
+                               pD.getMonth() === activeCalendarDate.getMonth() &&
+                               pD.getDate() === d.day;
+                      });
                       return (
                         <div 
                           key={idx} 
@@ -4686,7 +5262,7 @@ const PharmacyDashboard = () => {
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB' }}></span>
                       <span>Prescriptions</span>
                     </div>
-                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>58</span>
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>{calendarDayStats.total}</span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -4694,7 +5270,7 @@ const PharmacyDashboard = () => {
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }}></span>
                       <span>Dispensed</span>
                     </div>
-                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>35</span>
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>{calendarDayStats.dispensed}</span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -4702,7 +5278,7 @@ const PharmacyDashboard = () => {
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#F59E0B' }}></span>
                       <span>Pending</span>
                     </div>
-                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>23</span>
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>{calendarDayStats.pending}</span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -4710,7 +5286,7 @@ const PharmacyDashboard = () => {
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#EF4444' }}></span>
                       <span>Cancelled</span>
                     </div>
-                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>0</span>
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>{calendarDayStats.cancelled}</span>
                   </div>
                 </div>
 
@@ -4737,20 +5313,20 @@ const PharmacyDashboard = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div>
                       <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 700 }}>Total Items</div>
-                      <div style={{ fontSize: '20px', fontWeight: 850, color: '#0F172A' }}>256</div>
+                      <div style={{ fontSize: '20px', fontWeight: 850, color: '#0F172A' }}>{inventorySnapshotStats.total}</div>
                     </div>
                     <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748B', display: 'flex', gap: '10px', flexDirection: 'column' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px' }}>
                         <span>In Stock</span>
-                        <span style={{ color: '#10B981', fontWeight: 800 }}>201 (79%)</span>
+                        <span style={{ color: '#10B981', fontWeight: 800 }}>{inventorySnapshotStats.inStock} ({inventorySnapshotStats.inStockPct}%)</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px' }}>
                         <span>Low Stock</span>
-                        <span style={{ color: '#F97316', fontWeight: 800 }}>26 (10%)</span>
+                        <span style={{ color: '#F97316', fontWeight: 800 }}>{inventorySnapshotStats.lowStock} ({inventorySnapshotStats.lowStockPct}%)</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px' }}>
                         <span>Out of Stock</span>
-                        <span style={{ color: '#EF4444', fontWeight: 800 }}>29 (11%)</span>
+                        <span style={{ color: '#EF4444', fontWeight: 800 }}>{inventorySnapshotStats.outOfStock} ({inventorySnapshotStats.outOfStockPct}%)</span>
                       </div>
                     </div>
                   </div>
@@ -4760,14 +5336,14 @@ const PharmacyDashboard = () => {
                     <svg width="90" height="90" viewBox="0 0 36 36">
                       <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#F1F5F9" strokeWidth="4"/>
                       {/* 79% In Stock (Teal/Indigo) */}
-                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#3B82F6" strokeWidth="4" strokeDasharray="79 21" strokeDashoffset="25"/>
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#3B82F6" strokeWidth="4" strokeDasharray={`${inventorySnapshotStats.inStockPct} ${100 - inventorySnapshotStats.inStockPct}`} strokeDashoffset="25"/>
                       {/* 10% Low Stock (Orange) */}
-                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#F97316" strokeWidth="4" strokeDasharray="10 90" strokeDashoffset="-54"/>
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#F97316" strokeWidth="4" strokeDasharray={`${inventorySnapshotStats.lowStockPct} ${100 - inventorySnapshotStats.lowStockPct}`} strokeDashoffset={25 - inventorySnapshotStats.inStockPct}/>
                       {/* 11% Out of Stock (Red) */}
-                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#EF4444" strokeWidth="4" strokeDasharray="11 89" strokeDashoffset="-64"/>
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#EF4444" strokeWidth="4" strokeDasharray={`${inventorySnapshotStats.outOfStockPct} ${100 - inventorySnapshotStats.outOfStockPct}`} strokeDashoffset={25 - inventorySnapshotStats.inStockPct - inventorySnapshotStats.lowStockPct}/>
                     </svg>
                     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', lineHeight: 1.1 }}>256</span>
+                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', lineHeight: 1.1 }}>{inventorySnapshotStats.total}</span>
                       <span style={{ fontSize: '8.5px', color: '#94A3B8', fontWeight: 700 }}>Items</span>
                     </div>
                   </div>
@@ -4791,13 +5367,16 @@ const PharmacyDashboard = () => {
                     <svg width="85" height="85" viewBox="0 0 36 36">
                       <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#F1F5F9" strokeWidth="4.5"/>
                       {/* OPD: 50% */}
-                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#3B82F6" strokeWidth="4.5" strokeDasharray="50 50" strokeDashoffset="25"/>
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#3B82F6" strokeWidth="4.5" strokeDasharray={`${salesSplitStats.directPct} ${100 - salesSplitStats.directPct}`} strokeDashoffset="25"/>
                       {/* IPD: 30% */}
-                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#06B6D4" strokeWidth="4.5" strokeDasharray="30 70" strokeDashoffset="-25"/>
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#06B6D4" strokeWidth="4.5" strokeDasharray={`${salesSplitStats.opdPct} ${100 - salesSplitStats.opdPct}`} strokeDashoffset={25 - salesSplitStats.directPct}/>
                       {/* Other: 14% */}
-                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#8B5CF6" strokeWidth="4.5" strokeDasharray="14 86" strokeDashoffset="-55"/>
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#8B5CF6" strokeWidth="4.5" strokeDasharray={`${salesSplitStats.otherPct} ${100 - salesSplitStats.otherPct}`} strokeDashoffset={25 - salesSplitStats.directPct - salesSplitStats.opdPct}/>
                       {/* Discounts: 6% */}
-                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#F59E0B" strokeWidth="4.5" strokeDasharray="6 94" strokeDashoffset="-69"/>
+                      {/* Discounts indicator if any */}
+                      {salesSplitStats.totalDiscount > 0 && (
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#F59E0B" strokeWidth="4.5" strokeDasharray="4 96" strokeDashoffset="-71"/>
+                      )}
                     </svg>
                   </div>
 
@@ -4807,32 +5386,32 @@ const PharmacyDashboard = () => {
                       <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#64748B', fontWeight: 600 }}>
                         <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3B82F6' }}></span> OPD Sales
                       </span>
-                      <span style={{ fontWeight: 800, color: '#0F172A' }}>₹2,100</span>
+                      <span style={{ fontWeight: 800, color: '#0F172A' }}>₹{salesSplitStats.directSales.toFixed(0)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#64748B', fontWeight: 600 }}>
                         <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#06B6D4' }}></span> IPD Sales
                       </span>
-                      <span style={{ fontWeight: 800, color: '#0F172A' }}>₹1,250</span>
+                      <span style={{ fontWeight: 800, color: '#0F172A' }}>₹{salesSplitStats.opdSales.toFixed(0)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#64748B', fontWeight: 600 }}>
                         <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#8B5CF6' }}></span> Other Sales
                       </span>
-                      <span style={{ fontWeight: 800, color: '#0F172A' }}>₹600</span>
+                      <span style={{ fontWeight: 800, color: '#0F172A' }}>₹{salesSplitStats.otherSales.toFixed(0)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#64748B', fontWeight: 600 }}>
                         <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#F59E0B' }}></span> Discounts
                       </span>
-                      <span style={{ fontWeight: 800, color: '#0F172A' }}>₹250</span>
+                      <span style={{ fontWeight: 800, color: '#0F172A' }}>₹{salesSplitStats.totalDiscount.toFixed(0)}</span>
                     </div>
                   </div>
                 </div>
 
                 <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>Total Sales</span>
-                  <span style={{ fontSize: '15px', fontWeight: 900, color: '#2563EB' }}>₹4,200</span>
+                  <span style={{ fontSize: '15px', fontWeight: 900, color: '#2563EB' }}>₹{salesSplitStats.totalSales.toFixed(0)}</span>
                 </div>
               </div>
 
@@ -4849,19 +5428,20 @@ const PharmacyDashboard = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {[
-                    { name: 'Paracetamol 500mg', stock: 2, severity: 'red' },
-                    { name: 'Amoxicillin 250mg', stock: 3, severity: 'red' },
-                    { name: 'Metformin 500mg', stock: 5, severity: 'orange' },
-                    { name: 'Vitamin D3 60K', stock: 6, severity: 'orange' }
-                  ].map((med, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: '#F8FAFC', borderRadius: '8px' }}>
-                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>{med.name}</span>
-                      <span style={{ fontSize: '11.5px', fontWeight: 800, color: med.severity === 'red' ? '#EF4444' : '#F97316' }}>
-                        Stock: {med.stock}
-                      </span>
+                  {actualLowStockAlerts.length > 0 ? (
+                    actualLowStockAlerts.map((med, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: '#F8FAFC', borderRadius: '8px' }}>
+                        <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B', maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={med.name}>{med.name}</span>
+                        <span style={{ fontSize: '11.5px', fontWeight: 800, color: med.severity === 'red' ? '#EF4444' : '#F97316' }}>
+                          Stock: {med.stock}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '16px 8px', color: '#10B981', fontSize: '12px', fontWeight: 700, background: '#F0FDF4', borderRadius: '8px' }}>
+                      ✓ All stock levels healthy
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
 
@@ -4879,12 +5459,12 @@ const PharmacyDashboard = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div>
                     <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>Collected Today</div>
-                    <div style={{ fontSize: '24px', fontWeight: 850, color: '#10B981', lineHeight: 1.2 }}>₹3,950</div>
+                    <div style={{ fontSize: '24px', fontWeight: 850, color: '#10B981', lineHeight: 1.2 }}>₹{paymentSummaryToday.collected.toFixed(0)}</div>
                   </div>
 
                   <div>
                     <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>Pending Amount</div>
-                    <div style={{ fontSize: '20px', fontWeight: 850, color: '#F97316', lineHeight: 1.2 }}>₹250</div>
+                    <div style={{ fontSize: '20px', fontWeight: 850, color: '#F97316', lineHeight: 1.2 }}>₹{paymentSummaryToday.pending.toFixed(0)}</div>
                   </div>
                 </div>
 
@@ -5476,41 +6056,72 @@ const PharmacyDashboard = () => {
                         </td>
                       </tr>
                     ) : (
-                      filteredInventory.map(inv => (
-                        <tr key={inv._id}>
-                          <td>
-                            <div style={{ fontWeight: 800, color: '#0F172A' }}>{inv.name}</div>
-                          </td>
-                          <td style={{ fontWeight: 600, color: '#64748B' }}>{inv.category}</td>
-                          <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#475569' }}>{inv.sku}</td>
-                          <td>
-                            <b style={{ color: inv.stock > 20 ? '#10B981' : '#EF4444', fontWeight: 800 }}>
-                              {inv.stock}
-                            </b>
-                          </td>
-                          <td style={{ fontWeight: 600, color: '#64748B' }}>{inv.unit}</td>
-                          <td style={{ fontWeight: 800, color: '#0F172A' }}>₹{inv.mrp ? Number(inv.mrp).toFixed(2) : '0.00'}</td>
-                          <td style={{ fontWeight: 600, color: '#475569' }}>{inv.expiry}</td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button 
-                                className="btn btn-secondary" 
-                                style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid #E2E8F0', background: 'transparent', color: '#475569', fontWeight: 700, cursor: 'pointer' }} 
-                                onClick={() => handleOpenEdit(inv)}
-                              >
-                                Edit
-                              </button>
-                              <button 
-                                className="btn btn-secondary" 
-                                style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid #FEE2E2', background: 'transparent', color: '#EF4444', fontWeight: 700, cursor: 'pointer' }} 
-                                onClick={() => handleDeleteMedicine(inv._id)}
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                      filteredInventory.map(inv => {
+                        const risk = skuBatchRiskMap[String(inv.sku || '').toUpperCase()];
+                        const hasExpired = risk && risk.expiredCount > 0;
+                        const hasCritical = risk && risk.criticalCount > 0;
+                        const hasWarning = risk && risk.warningCount > 0;
+
+                        let rowBg = 'transparent';
+                        if (hasExpired) rowBg = 'linear-gradient(90deg, rgba(254, 242, 242, 0.45) 0%, rgba(255, 255, 255, 0.95) 100%)';
+                        else if (hasCritical) rowBg = 'linear-gradient(90deg, rgba(255, 247, 237, 0.45) 0%, rgba(255, 255, 255, 0.95) 100%)';
+                        else if (hasWarning) rowBg = 'linear-gradient(90deg, rgba(254, 252, 232, 0.45) 0%, rgba(255, 255, 255, 0.95) 100%)';
+
+                        return (
+                          <tr key={inv._id} style={{ background: rowBg }}>
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ fontWeight: 800, color: '#0F172A' }}>{inv.name}</div>
+                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                  {hasExpired && (
+                                    <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '5px', background: '#FEE2E2', color: '#DC2626', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                      🔴 {risk.expiredCount} expired batch{risk.expiredCount > 1 ? 'es' : ''}
+                                    </span>
+                                  )}
+                                  {hasCritical && (
+                                    <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '5px', background: '#FFEDD5', color: '#C2410C', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                      🟠 {risk.criticalCount} batch{risk.criticalCount > 1 ? 'es' : ''} expiring ≤30d
+                                    </span>
+                                  )}
+                                  {hasWarning && (
+                                    <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '5px', background: '#FEF9C3', color: '#854D0E', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                      🟡 {risk.warningCount} batch{risk.warningCount > 1 ? 'es' : ''} expiring ≤90d
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ fontWeight: 600, color: '#64748B' }}>{inv.category}</td>
+                            <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#475569' }}>{inv.sku}</td>
+                            <td>
+                              <b style={{ color: inv.stock > 20 ? '#10B981' : '#EF4444', fontWeight: 800 }}>
+                                {inv.stock}
+                              </b>
+                            </td>
+                            <td style={{ fontWeight: 600, color: '#64748B' }}>{inv.unit}</td>
+                            <td style={{ fontWeight: 800, color: '#0F172A' }}>₹{inv.mrp ? Number(inv.mrp).toFixed(2) : '0.00'}</td>
+                            <td style={{ fontWeight: 600, color: '#475569' }}>{inv.expiry}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button 
+                                  className="btn btn-secondary" 
+                                  style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid #E2E8F0', background: 'transparent', color: '#475569', fontWeight: 700, cursor: 'pointer' }} 
+                                  onClick={() => handleOpenEdit(inv)}
+                                >
+                                  Edit
+                                </button>
+                                <button 
+                                  className="btn btn-secondary" 
+                                  style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid #FEE2E2', background: 'transparent', color: '#EF4444', fontWeight: 700, cursor: 'pointer' }} 
+                                  onClick={() => handleDeleteMedicine(inv._id)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -5718,20 +6329,488 @@ const PharmacyDashboard = () => {
           );
         })()}
 
-        {/* TAB 5: SALES LOG */}
+                {/* TAB 5: SALES LOG */}
         {activeTab === 'sales' && (
           <div style={{ animation: 'slideUp 0.3s ease-out' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', marginBottom: '24px' }}>Sales & Settlement Logs</h2>
-            <div className="glass-card" style={{ padding: '40px', textAlign: 'center' }}>
-              <i data-lucide="credit-card" style={{ width: '48px', height: '48px', marginBottom: '16px', color: '#2563EB' }}></i>
-              <h3>Today's Billing Batches</h3>
-              <p style={{ color: '#64748B', maxWidth: '400px', margin: '0 auto 20px' }}>Monitor live billing settlements, download invoice drafts, and review total daily collections isolated to the active hospital branch.</p>
-              <button className="btn btn-primary" onClick={handleExportSalesCSV} style={{ padding: '10px 20px', fontSize: '13px', borderRadius: '10px', background: '#2563EB', border: 'none', color: 'white', fontWeight: 700, cursor: 'pointer' }}>
-                <i data-lucide="download" style={{ width: '16px', marginRight: '6px' }}></i> Export Transaction Report
-              </button>
+            
+            {/* Header with Title and Action Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Sales & Settlement Logs</h2>
+                <p style={{ color: '#64748B', fontSize: '13px', margin: '4px 0 0', fontWeight: 500 }}>
+                  Real-time pharmacy transaction ledger for both Prescription and Direct sales.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDirectSaleCustomerType('WALK_IN');
+                    setDirectSaleCustomerName('');
+                    setDirectSaleCustomerMobile('');
+                    setDirectSaleSelectedPatientId('');
+                    setDirectSaleItems([]);
+                    setShowDirectSaleModal(true);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '9px 18px',
+                    borderRadius: '10px',
+                    background: '#2563EB',
+                    color: 'white',
+                    fontWeight: 700,
+                    fontSize: '13.5px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  + Direct Sale
+                </button>
+
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={handleExportSalesCSV} 
+                  style={{ 
+                    padding: '9px 16px', 
+                    fontSize: '13px', 
+                    borderRadius: '10px', 
+                    background: 'white', 
+                    border: '1px solid #CBD5E1', 
+                    color: '#334155', 
+                    fontWeight: 700, 
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Export Report
+                </button>
+              </div>
             </div>
+
+            {/* Operational Summary KPI Cards */}
+            {(() => {
+              const todaySales = (pharmacySales || []).filter(s => {
+                const d = s.saleDate || s.createdAt;
+                return isTodayDate(d);
+              });
+
+              const todayRev = todaySales.reduce((acc, s) => acc + (s.grandTotal || 0), 0);
+              const directCount = (pharmacySales || []).filter(s => s.saleType === 'DIRECT').length;
+              const rxCount = (pharmacySales || []).filter(s => s.saleType === 'PRESCRIPTION').length;
+              const totalLedgerRev = (pharmacySales || []).reduce((acc, s) => acc + (s.grandTotal || 0), 0);
+
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+                  <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Today's Sales</div>
+                    <div style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', marginTop: '6px' }}>₹{todayRev.toFixed(2)}</div>
+                    <div style={{ fontSize: '11.5px', color: '#10B981', fontWeight: 700, marginTop: '4px' }}>{todaySales.length} transactions today</div>
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Direct Sales</div>
+                    <div style={{ fontSize: '22px', fontWeight: 900, color: '#4F46E5', marginTop: '6px' }}>{directCount}</div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, marginTop: '4px' }}>OTC / Walk-in transactions</div>
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Prescription Sales</div>
+                    <div style={{ fontSize: '22px', fontWeight: 900, color: '#059669', marginTop: '6px' }}>{rxCount}</div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, marginTop: '4px' }}>Dispensed via Doctor Rx</div>
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Page Revenue</div>
+                    <div style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', marginTop: '6px' }}>₹{totalLedgerRev.toFixed(2)}</div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, marginTop: '4px' }}>Total on current view</div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Filter Toolbar */}
+            <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '16px', marginBottom: '20px', border: '1px solid #E2E8F0', background: 'white' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                
+                {/* Search Input */}
+                <div style={{ position: 'relative', flex: '1 1 240px', minWidth: '200px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  <input
+                    type="text"
+                    placeholder="Search Sale ID, Customer, Doctor..."
+                    value={salesSearchQuery}
+                    onChange={(e) => { setSalesSearchQuery(e.target.value); setSalesCurrentPage(1); }}
+                    style={{ width: '100%', padding: '8px 14px 8px 36px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '13px', fontWeight: 600, color: '#1E293B', outline: 'none' }}
+                  />
+                  {salesSearchQuery && (
+                    <button onClick={() => setSalesSearchQuery('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '13px', fontWeight: 'bold' }}>✕</button>
+                  )}
+                </div>
+
+                {/* Sale Type Filter */}
+                <select
+                  value={salesFilterType}
+                  onChange={(e) => { setSalesFilterType(e.target.value); setSalesCurrentPage(1); }}
+                  style={{ padding: '8px 14px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '13px', fontWeight: 600, color: '#334155', background: 'white', outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="ALL">All Sale Types</option>
+                  <option value="DIRECT">Direct Sale</option>
+                  <option value="PRESCRIPTION">Prescription Sale</option>
+                </select>
+
+                {/* Date Range Selector */}
+                <select
+                  value={salesFilterDateRange}
+                  onChange={(e) => { setSalesFilterDateRange(e.target.value); setSalesCurrentPage(1); }}
+                  style={{ padding: '8px 14px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '13px', fontWeight: 600, color: '#334155', background: 'white', outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="All Time">All Time</option>
+                  <option value="Today">Today</option>
+                  <option value="This Week">This Week</option>
+                  <option value="This Month">This Month</option>
+                  <option value="Custom Range">Custom Range</option>
+                </select>
+
+                {/* Custom Date Pickers */}
+                {salesFilterDateRange === 'Custom Range' && (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="date"
+                      value={salesCustomStartDate}
+                      onChange={(e) => { setSalesCustomStartDate(e.target.value); setSalesCurrentPage(1); }}
+                      style={{ padding: '7px 10px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '12.5px', fontWeight: 600, color: '#334155' }}
+                    />
+                    <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 700 }}>to</span>
+                    <input
+                      type="date"
+                      value={salesCustomEndDate}
+                      onChange={(e) => { setSalesCustomEndDate(e.target.value); setSalesCurrentPage(1); }}
+                      style={{ padding: '7px 10px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '12.5px', fontWeight: 600, color: '#334155' }}
+                    />
+                  </div>
+                )}
+
+                {/* Payment Method Filter */}
+                <select
+                  value={salesFilterPaymentMethod}
+                  onChange={(e) => { setSalesFilterPaymentMethod(e.target.value); setSalesCurrentPage(1); }}
+                  style={{ padding: '8px 14px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '13px', fontWeight: 600, color: '#334155', background: 'white', outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="ALL">All Methods</option>
+                  <option value="Cash">Cash</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Card">Card</option>
+                </select>
+
+                {/* Payment Status Filter */}
+                <select
+                  value={salesFilterStatus}
+                  onChange={(e) => { setSalesFilterStatus(e.target.value); setSalesCurrentPage(1); }}
+                  style={{ padding: '8px 14px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '13px', fontWeight: 600, color: '#334155', background: 'white', outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CANCELLED">Cancelled</option>
+                  <option value="REFUNDED">Refunded</option>
+                </select>
+
+                {/* Reset Filters */}
+                {(salesFilterType !== 'ALL' || salesFilterStatus !== 'ALL' || salesFilterPaymentMethod !== 'ALL' || salesFilterDateRange !== 'All Time' || salesSearchQuery) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSalesFilterType('ALL');
+                      setSalesFilterStatus('ALL');
+                      setSalesFilterPaymentMethod('ALL');
+                      setSalesFilterDateRange('All Time');
+                      setSalesCustomStartDate('');
+                      setSalesCustomEndDate('');
+                      setSalesSearchQuery('');
+                      setSalesCurrentPage(1);
+                    }}
+                    style={{ padding: '8px 12px', borderRadius: '8px', background: '#F1F5F9', border: 'none', color: '#64748B', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Reset Filters
+                  </button>
+                )}
+
+              </div>
+            </div>
+
+            {/* Sales Ledger Data Table */}
+            <div className="glass-card" style={{ borderRadius: '16px', overflow: 'hidden', border: '1px solid #E2E8F0', background: 'white' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '950px' }}>
+                  <thead>
+                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                      <th style={{ padding: '14px 18px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Sale ID</th>
+                      <th style={{ padding: '14px 18px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date & Time</th>
+                      <th style={{ padding: '14px 18px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Customer / Patient</th>
+                      <th style={{ padding: '14px 18px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Sale Type</th>
+                      <th style={{ padding: '14px 18px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Doctor / Source</th>
+                      <th style={{ padding: '14px 18px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Items</th>
+                      <th style={{ padding: '14px 18px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Amount</th>
+                      <th style={{ padding: '14px 18px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment</th>
+                      <th style={{ padding: '14px 18px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
+                      <th style={{ padding: '14px 18px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pharmacist</th>
+                      <th style={{ padding: '14px 18px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isLoadingSales ? (
+                      <tr>
+                        <td colSpan="11" style={{ padding: '40px', textAlign: 'center', color: '#64748B' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                            <div style={{ width: '20px', height: '20px', border: '2px solid #2563EB', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                            <span style={{ fontSize: '14px', fontWeight: 600 }}>Loading sales records...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (pharmacySales || []).length === 0 ? (
+                      <tr>
+                        <td colSpan="11" style={{ padding: '48px 20px', textAlign: 'center' }}>
+                          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F1F5F9', color: '#94A3B8', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                          </div>
+                          <div style={{ fontSize: '15px', fontWeight: 800, color: '#1E293B' }}>No sales transactions found</div>
+                          <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 16px' }}>Try adjusting your filters or complete a new Direct Sale.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDirectSaleCustomerType('WALK_IN');
+                              setDirectSaleCustomerName('');
+                              setDirectSaleCustomerMobile('');
+                              setDirectSaleSelectedPatientId('');
+                              setDirectSaleItems([]);
+                              setShowDirectSaleModal(true);
+                            }}
+                            style={{ padding: '8px 18px', background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            + Create Direct Sale
+                          </button>
+                        </td>
+                      </tr>
+                    ) : (
+                      pharmacySales.map((sale) => {
+                        const dateStr = sale.saleDate ? new Date(sale.saleDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+                        const timeStr = sale.saleTime || (sale.createdAt ? new Date(sale.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+
+                        return (
+                          <tr 
+                            key={sale._id}
+                            style={{ borderBottom: '1px solid #F1F5F9', transition: 'background-color 0.15s' }}
+                            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                          >
+                            {/* Sale ID */}
+                            <td style={{ padding: '14px 18px', fontWeight: 800, fontSize: '13.5px', color: '#2563EB', fontFamily: 'monospace' }}>
+                              {sale.saleId}
+                            </td>
+
+                            {/* Date & Time */}
+                            <td style={{ padding: '14px 18px' }}>
+                              <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>{dateStr}</div>
+                              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', fontWeight: 500 }}>{timeStr}</div>
+                            </td>
+
+                            {/* Customer / Patient */}
+                            <td style={{ padding: '14px 18px' }}>
+                              <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>
+                                {sale.customerName}
+                              </div>
+                              <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', fontWeight: 500 }}>
+                                {sale.patientIdentifier ? (sale.patientIdentifier + ' • ') : ''}{sale.customerMobile || 'No contact'}
+                              </div>
+                            </td>
+
+                            {/* Sale Type */}
+                            <td style={{ padding: '14px 18px' }}>
+                              <span style={{
+                                display: 'inline-block',
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.4px',
+                                background: sale.saleType === 'DIRECT' ? '#EEF2FF' : '#ECFDF5',
+                                color: sale.saleType === 'DIRECT' ? '#4F46E5' : '#059669',
+                                border: sale.saleType === 'DIRECT' ? '1px solid #C7D2FE' : '1px solid #A7F3D0'
+                              }}>
+                                {sale.saleType === 'DIRECT' ? 'DIRECT' : 'PRESCRIPTION'}
+                              </span>
+                            </td>
+
+                            {/* Doctor / Source */}
+                            <td style={{ padding: '14px 18px' }}>
+                              <div style={{ fontSize: '13px', fontWeight: 700, color: sale.saleType === 'DIRECT' ? '#64748B' : '#0F172A' }}>
+                                {sale.doctorName || (sale.saleType === 'DIRECT' ? 'Self / No Doctor' : 'Doctor')}
+                              </div>
+                              {sale.prescriptionCode && (
+                                <div style={{ fontSize: '11px', color: '#2563EB', fontWeight: 700, marginTop: '2px' }}>
+                                  {sale.prescriptionCode}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Items count */}
+                            <td style={{ padding: '14px 18px', textAlign: 'center' }}>
+                              <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '12px', background: '#F1F5F9', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
+                                {sale.items?.length || 0}
+                              </span>
+                            </td>
+
+                            {/* Grand Total Amount */}
+                            <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 900, fontSize: '14px', color: '#0F172A' }}>
+                              ₹{(sale.grandTotal || 0).toFixed(2)}
+                            </td>
+
+                            {/* Payment */}
+                            <td style={{ padding: '14px 18px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>
+                                  {sale.paymentMethod || 'Cash'}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#16A34A', fontWeight: 700, marginTop: '2px' }}>
+                                {sale.paymentStatus || 'PAID'}
+                              </div>
+                            </td>
+
+                            {/* Status */}
+                            <td style={{ padding: '14px 18px' }}>
+                              <span style={{
+                                display: 'inline-block',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                background: sale.status === 'COMPLETED' ? '#ECFDF5' : '#FEF2F2',
+                                color: sale.status === 'COMPLETED' ? '#047857' : '#DC2626'
+                              }}>
+                                {sale.status || 'COMPLETED'}
+                              </span>
+                            </td>
+
+                            {/* Pharmacist */}
+                            <td style={{ padding: '14px 18px', fontSize: '12.5px', color: '#475569', fontWeight: 600 }}>
+                              {sale.pharmacistName || 'Pharmacist'}
+                            </td>
+
+                            {/* Actions */}
+                            <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedSaleDetail(sale);
+                                    setShowSaleDetailModal(true);
+                                  }}
+                                  style={{
+                                    padding: '5px 10px',
+                                    borderRadius: '6px',
+                                    background: '#EFF6FF',
+                                    color: '#2563EB',
+                                    border: '1px solid #DBEAFE',
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s'
+                                  }}
+                                >
+                                  Details
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handlePrintSaleReceipt(sale)}
+                                  title="Print Tax Receipt"
+                                  style={{
+                                    padding: '5px 8px',
+                                    borderRadius: '6px',
+                                    background: '#F1F5F9',
+                                    color: '#475569',
+                                    border: '1px solid #E2E8F0',
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Bar */}
+              {salesTotalCount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderTop: '1px solid #E2E8F0', background: '#F8FAFC', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
+                    Showing <strong style={{ color: '#0F172A' }}>{Math.min(salesTotalCount, (salesCurrentPage - 1) * salesPageSize + 1)}</strong> to <strong style={{ color: '#0F172A' }}>{Math.min(salesTotalCount, salesCurrentPage * salesPageSize)}</strong> of <strong style={{ color: '#0F172A' }}>{salesTotalCount}</strong> sales
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      disabled={salesCurrentPage <= 1}
+                      onClick={() => setSalesCurrentPage(prev => Math.max(1, prev - 1))}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #CBD5E1',
+                        background: salesCurrentPage <= 1 ? '#F1F5F9' : 'white',
+                        color: salesCurrentPage <= 1 ? '#94A3B8' : '#334155',
+                        fontSize: '12.5px',
+                        fontWeight: 700,
+                        cursor: salesCurrentPage <= 1 ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      Previous
+                    </button>
+                    
+                    <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#475569', padding: '0 4px' }}>
+                      Page {salesCurrentPage} of {salesTotalPages}
+                    </span>
+
+                    <button
+                      type="button"
+                      disabled={salesCurrentPage >= salesTotalPages}
+                      onClick={() => setSalesCurrentPage(prev => Math.min(salesTotalPages, prev + 1))}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #CBD5E1',
+                        background: salesCurrentPage >= salesTotalPages ? '#F1F5F9' : 'white',
+                        color: salesCurrentPage >= salesTotalPages ? '#94A3B8' : '#334155',
+                        fontSize: '12.5px',
+                        fontWeight: 700,
+                        cursor: salesCurrentPage >= salesTotalPages ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
           </div>
         )}
+
 
         {/* TAB 6: RETURNS */}
         {activeTab === 'returns' && (
@@ -7228,6 +8307,25 @@ const PharmacyDashboard = () => {
                           value={rxSearchQuery}
                           onFocus={() => setIsRxDropdownOpen(true)}
                           onChange={(e) => { setRxSearchQuery(e.target.value); setIsRxDropdownOpen(true); }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const filtered = dispensedPrescriptions.filter(p => {
+                                const rxCode = `RX-${p._id.substring(p._id.length - 6).toUpperCase()}`;
+                                const name = (p.patientId?.name || '').toLowerCase();
+                                const query = rxSearchQuery.toLowerCase().trim();
+                                return rxCode.toLowerCase().includes(query) || name.includes(query);
+                              });
+                              if (filtered.length > 0) {
+                                const p = filtered[0];
+                                const rxCode = `RX-${p._id.substring(p._id.length - 6).toUpperCase()}`;
+                                const formattedDate = new Date(p.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+                                handleSelectPrescriptionForReturn(p._id);
+                                setRxSearchQuery(`${rxCode} - ${p.patientId?.name || 'Unknown Patient'} (${formattedDate})`);
+                                setIsRxDropdownOpen(false);
+                              }
+                            }
+                          }}
                           style={{ width: '100%', padding: '10px 36px 10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', outline: 'none', fontSize: '13.5px', fontWeight: 600, color: '#334155', background: 'white' }}
                         />
                         <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
@@ -10878,7 +11976,886 @@ const PharmacyDashboard = () => {
           </div>
         );
       })()}
-    </>
+      {/* DIRECT SALE POS MODAL */}
+      {showDirectSaleModal && (
+        <div
+          onClick={() => setShowDirectSaleModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15,23,42,0.5)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 9200,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'white',
+              borderRadius: '24px',
+              width: '100%',
+              maxWidth: '850px',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              overflow: 'hidden',
+              animation: 'fadeIn 0.2s ease-out'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 28px', borderBottom: '1px solid #F1F5F9', background: '#F8FAFC' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#EEF2FF', color: '#4F46E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '19px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Direct Pharmacy Sale</h3>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px', fontWeight: 600 }}>Over-The-Counter (OTC) Direct Dispense • Self / No Doctor</div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowDirectSaleModal(false)}
+                style={{ background: '#F1F5F9', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: '14px', fontWeight: 'bold' }}
+              >✕</button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px 28px', overflowY: 'auto', flex: 1 }} data-lenis-prevent>
+              
+              {/* Customer Type Selector & Doctor Pill */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '8px' }}>
+                    Customer Type
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setDirectSaleCustomerType('WALK_IN')}
+                      style={{
+                        flex: 1,
+                        padding: '9px 12px',
+                        borderRadius: '10px',
+                        border: directSaleCustomerType === 'WALK_IN' ? '2px solid #2563EB' : '1px solid #CBD5E1',
+                        background: directSaleCustomerType === 'WALK_IN' ? '#EFF6FF' : 'white',
+                        color: directSaleCustomerType === 'WALK_IN' ? '#2563EB' : '#475569',
+                        fontWeight: 800,
+                        fontSize: '12.5px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Walk-in Customer
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDirectSaleCustomerType('REGISTERED')}
+                      style={{
+                        flex: 1,
+                        padding: '9px 12px',
+                        borderRadius: '10px',
+                        border: directSaleCustomerType === 'REGISTERED' ? '2px solid #2563EB' : '1px solid #CBD5E1',
+                        background: directSaleCustomerType === 'REGISTERED' ? '#EFF6FF' : 'white',
+                        color: directSaleCustomerType === 'REGISTERED' ? '#2563EB' : '#475569',
+                        fontWeight: 800,
+                        fontSize: '12.5px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Registered Patient
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '8px' }}>
+                    Doctor / Source
+                  </label>
+                  <div style={{ padding: '9px 14px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#475569', fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#64748B' }}></span>
+                    Self / No Doctor (Direct OTC)
+                  </div>
+                </div>
+              </div>
+
+              {/* Customer Inputs */}
+              {directSaleCustomerType === 'WALK_IN' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', marginBottom: '24px', background: '#F8FAFC', padding: '16px', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Customer Name (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Walk-in Customer"
+                      value={directSaleCustomerName}
+                      onChange={(e) => setDirectSaleCustomerName(e.target.value)}
+                      style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13.5px', fontWeight: 600, color: '#0F172A', outline: 'none' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Mobile Number (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="10-digit mobile"
+                      value={directSaleCustomerMobile}
+                      onChange={(e) => setDirectSaleCustomerMobile(e.target.value)}
+                      style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13.5px', fontWeight: 600, color: '#0F172A', outline: 'none' }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ marginBottom: '24px', background: '#F8FAFC', padding: '16px', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
+                      Search & Select Registered Patient *
+                    </label>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
+                      {(patients || []).length} registered patients
+                    </span>
+                  </div>
+
+                  {directSaleSelectedPatientId ? (
+                    (() => {
+                      const sel = (patients || []).find(p => p._id === directSaleSelectedPatientId);
+                      return (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#EFF6FF', border: '1.5px solid #93C5FD', padding: '12px 16px', borderRadius: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#2563EB', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px' }}>
+                              {(sel?.name || 'P')[0]?.toUpperCase()}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: '14px', color: '#0F172A' }}>
+                                {sel?.name || 'Selected Patient'}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#475569', marginTop: '1px', fontWeight: 600 }}>
+                                <span style={{ fontFamily: 'monospace', color: '#2563EB', fontWeight: 700 }}>{sel?.uhid || sel?.patientId || 'ID'}</span> • {sel?.contact || sel?.phone || 'No phone'} {sel?.age ? `• ${sel.age} Y` : ''} {sel?.gender || ''}
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDirectSaleSelectedPatientId('');
+                              setDirectSaleCustomerName('');
+                              setDirectSaleCustomerMobile('');
+                              setDirectSaleSearchPatientText('');
+                            }}
+                            style={{ padding: '6px 12px', background: 'white', border: '1px solid #BFDBFE', borderRadius: '8px', color: '#2563EB', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
+                          >
+                            Change Patient
+                          </button>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div style={{ position: 'relative' }}>
+                      <div style={{ position: 'relative' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <input
+                          ref={directSaleSearchPatientInputRef}
+                          type="text"
+                          placeholder="Type to search patient by name, mobile, or Patient ID / UHID..."
+                          value={directSaleSearchPatientText}
+                          onChange={(e) => {
+                            setDirectSaleSearchPatientText(e.target.value);
+                            setDirectSalePatientHighlightIndex(0);
+                          }}
+                          onKeyDown={(e) => {
+                            const q = (directSaleSearchPatientText || '').trim().toLowerCase();
+                            const filtered = (patients || []).filter(p => {
+                              if (!q) return true;
+                              return (p.name && p.name.toLowerCase().includes(q)) ||
+                                     (p.contact && String(p.contact).includes(q)) ||
+                                     (p.phone && String(p.phone).includes(q)) ||
+                                     (p.patientId && p.patientId.toLowerCase().includes(q)) ||
+                                     (p.uhid && p.uhid.toLowerCase().includes(q));
+                            }).slice(0, 10);
+
+                            if (e.key === 'ArrowDown') {
+                              e.preventDefault();
+                              if (filtered.length > 0) {
+                                setDirectSalePatientHighlightIndex(prev => (prev + 1) % filtered.length);
+                              }
+                            } else if (e.key === 'ArrowUp') {
+                              e.preventDefault();
+                              if (filtered.length > 0) {
+                                setDirectSalePatientHighlightIndex(prev => (prev - 1 + filtered.length) % filtered.length);
+                              }
+                            } else if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (filtered.length > 0) {
+                                const sel = filtered[directSalePatientHighlightIndex] || filtered[0];
+                                setDirectSaleSelectedPatientId(sel._id);
+                                setDirectSaleCustomerName(sel.name);
+                                setDirectSaleCustomerMobile(sel.contact || sel.phone || '');
+                                setDirectSaleSearchPatientText('');
+                                setDirectSalePatientHighlightIndex(0);
+                                setTimeout(() => {
+                                  directSaleSearchMedInputRef.current?.focus();
+                                }, 50);
+                              }
+                            }
+                          }}
+                          style={{ width: '100%', padding: '10px 14px 10px 36px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13.5px', fontWeight: 600, color: '#0F172A', outline: 'none', background: 'white' }}
+                          autoFocus
+                        />
+                      </div>
+
+                      {/* Dropdown list */}
+                      {(() => {
+                        const q = (directSaleSearchPatientText || '').trim().toLowerCase();
+                        const filtered = (patients || []).filter(p => {
+                          if (!q) return true;
+                          return (p.name && p.name.toLowerCase().includes(q)) ||
+                                 (p.contact && String(p.contact).includes(q)) ||
+                                 (p.phone && String(p.phone).includes(q)) ||
+                                 (p.patientId && p.patientId.toLowerCase().includes(q)) ||
+                                 (p.uhid && p.uhid.toLowerCase().includes(q));
+                        }).slice(0, 10);
+
+                        return (
+                          <div style={{ marginTop: '6px', background: 'white', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', border: '1px solid #E2E8F0', maxHeight: '200px', overflowY: 'auto' }}>
+                            {filtered.length === 0 ? (
+                              <div style={{ padding: '12px 16px', fontSize: '13px', color: '#94A3B8', fontWeight: 600, textAlign: 'center' }}>
+                                No registered patients found matching "{directSaleSearchPatientText}"
+                              </div>
+                            ) : (
+                              filtered.map((p, idx) => {
+                                const isHighlighted = idx === directSalePatientHighlightIndex;
+                                return (
+                                  <div
+                                    key={p._id}
+                                    onClick={() => {
+                                      setDirectSaleSelectedPatientId(p._id);
+                                      setDirectSaleCustomerName(p.name);
+                                      setDirectSaleCustomerMobile(p.contact || p.phone || '');
+                                      setDirectSaleSearchPatientText('');
+                                      setDirectSalePatientHighlightIndex(0);
+                                      setTimeout(() => {
+                                        directSaleSearchMedInputRef.current?.focus();
+                                      }, 50);
+                                    }}
+                                    style={{
+                                      padding: '10px 16px',
+                                      borderBottom: '1px solid #F1F5F9',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      transition: 'background-color 0.15s',
+                                      backgroundColor: isHighlighted ? '#EFF6FF' : 'transparent'
+                                    }}
+                                    onMouseEnter={() => setDirectSalePatientHighlightIndex(idx)}
+                                  >
+                                    <div>
+                                      <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0F172A' }}>{p.name}</div>
+                                      <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '1px' }}>
+                                        <span style={{ fontFamily: 'monospace', color: '#2563EB', fontWeight: 700 }}>{p.uhid || p.patientId || 'ID'}</span> • {p.contact || p.phone || 'No phone'}
+                                      </div>
+                                    </div>
+                                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>
+                                      {p.age ? `${p.age} Y` : ''} {p.gender || ''}
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Medicine Search & Selection */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
+                    Add Medicines from Inventory
+                  </label>
+                  <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>
+                    {(inventory || []).length} items in inventory
+                  </span>
+                </div>
+
+                <div style={{ position: 'relative' }}>
+                  <input
+                    ref={directSaleSearchMedInputRef}
+                    type="text"
+                    placeholder="Search medicine by name or SKU to add..."
+                    value={directSaleSearchMedText}
+                    onChange={(e) => {
+                      setDirectSaleSearchMedText(e.target.value);
+                      setDirectSaleMedHighlightIndex(0);
+                    }}
+                    onKeyDown={(e) => {
+                      const q = (directSaleSearchMedText || '').trim().toLowerCase();
+                      const matches = (inventory || []).filter(m => 
+                        (m.name && m.name.toLowerCase().includes(q)) || 
+                        (m.sku && m.sku.toLowerCase().includes(q))
+                      ).slice(0, 10);
+
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (matches.length > 0) {
+                          setDirectSaleMedHighlightIndex(prev => (prev + 1) % matches.length);
+                        }
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (matches.length > 0) {
+                          setDirectSaleMedHighlightIndex(prev => (prev - 1 + matches.length) % matches.length);
+                        }
+                      } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (matches.length > 0) {
+                          const target = matches[directSaleMedHighlightIndex] || matches[0];
+                          handleAddDirectSaleMedicine(target);
+                          setDirectSaleMedHighlightIndex(0);
+                        }
+                      }
+                    }}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13.5px', fontWeight: 600, outline: 'none' }}
+                  />
+
+                  {/* Autocomplete Dropdown */}
+                  {directSaleSearchMedText.trim().length > 0 && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: 'white', borderRadius: '12px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)', border: '1px solid #E2E8F0', maxHeight: '220px', overflowY: 'auto', zIndex: 100 }}>
+                      {(() => {
+                        const q = directSaleSearchMedText.trim().toLowerCase();
+                        const matches = (inventory || []).filter(m => 
+                          (m.name && m.name.toLowerCase().includes(q)) || 
+                          (m.sku && m.sku.toLowerCase().includes(q))
+                        ).slice(0, 10);
+
+                        if (matches.length === 0) {
+                          return (
+                            <div style={{ padding: '12px 16px', fontSize: '13px', color: '#94A3B8', fontWeight: 600 }}>
+                              No medicines found matching "{directSaleSearchMedText}"
+                            </div>
+                          );
+                        }
+
+                        return matches.map((med, idx) => {
+                          const isHighlighted = idx === directSaleMedHighlightIndex;
+                          return (
+                            <div
+                              key={med._id}
+                              onClick={() => {
+                                handleAddDirectSaleMedicine(med);
+                                setDirectSaleMedHighlightIndex(0);
+                              }}
+                              style={{
+                                padding: '10px 16px',
+                                borderBottom: '1px solid #F1F5F9',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                transition: 'background-color 0.15s',
+                                backgroundColor: isHighlighted ? '#EFF6FF' : 'transparent'
+                              }}
+                              onMouseEnter={() => setDirectSaleMedHighlightIndex(idx)}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0F172A' }}>{med.name}</div>
+                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px' }}>SKU: {med.sku} • {med.unit || 'Strip'}</div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#059669' }}>₹{Number(med.mrp || 0).toFixed(2)}</div>
+                                <div style={{ fontSize: '11px', fontWeight: 700, color: (med.stock || 0) <= 0 ? '#EF4444' : (med.stock || 0) <= 20 ? '#F59E0B' : '#10B981' }}>
+                                  Stock: {med.stock || 0}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Items Line Items Table */}
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '10px' }}>
+                  Sale Line Items ({directSaleItems.length})
+                </div>
+
+                {directSaleItems.length === 0 ? (
+                  <div style={{ padding: '30px', textAlign: 'center', background: '#F8FAFC', borderRadius: '12px', border: '1px dashed #CBD5E1' }}>
+                    <div style={{ color: '#64748B', fontSize: '13px', fontWeight: 600 }}>No medicines added yet. Use the search bar above to add items.</div>
+                  </div>
+                ) : (
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                          <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>Medicine</th>
+                          <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>Stock</th>
+                          <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase', width: '100px' }}>Qty</th>
+                          <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>MRP</th>
+                          <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase', width: '80px' }}>Disc %</th>
+                          <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase', width: '80px' }}>GST %</th>
+                          <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>Total</th>
+                          <th style={{ padding: '10px 8px', textAlign: 'center', width: '40px' }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {directSaleItems.map((item, idx) => {
+                          const gross = item.quantity * item.mrp;
+                          const discAmt = gross * ((item.discountPercent || 0) / 100);
+                          const taxAmt = gross - discAmt;
+                          const gstAmt = taxAmt * ((item.gstPercent || 0) / 100);
+                          const net = taxAmt + gstAmt;
+                          const isOverStock = item.quantity > item.stock;
+
+                          return (
+                            <tr key={idx} style={{ borderBottom: idx === directSaleItems.length - 1 ? 'none' : '1px solid #F1F5F9', background: isOverStock ? '#FEF2F2' : 'white' }}>
+                              <td style={{ padding: '10px 12px' }}>
+                                <div style={{ fontWeight: 800, color: '#0F172A' }}>{item.medicineName}</div>
+                                {item.sku && <div style={{ fontSize: '11px', color: '#64748B' }}>SKU: {item.sku}</div>}
+                              </td>
+
+                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 800,
+                                  background: item.stock <= 0 ? '#FEE2E2' : item.stock <= 20 ? '#FEF3C7' : '#DCFCE7',
+                                  color: item.stock <= 0 ? '#DC2626' : item.stock <= 20 ? '#D97706' : '#15803D'
+                                }}>
+                                  {item.stock}
+                                </span>
+                              </td>
+
+                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max={item.stock}
+                                  value={item.quantity}
+                                  onChange={(e) => handleDirectSaleItemChange(idx, 'quantity', e.target.value)}
+                                  style={{
+                                    width: '60px',
+                                    padding: '4px 6px',
+                                    borderRadius: '6px',
+                                    border: isOverStock ? '2px solid #EF4444' : '1px solid #CBD5E1',
+                                    textAlign: 'center',
+                                    fontSize: '13px',
+                                    fontWeight: 800,
+                                    outline: 'none'
+                                  }}
+                                />
+                                {isOverStock && (
+                                  <div style={{ fontSize: '10px', color: '#EF4444', fontWeight: 700, marginTop: '2px' }}>Max: {item.stock}</div>
+                                )}
+                              </td>
+
+                              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#334155' }}>
+                                ₹{item.mrp.toFixed(2)}
+                              </td>
+
+                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  value={item.discountPercent}
+                                  onChange={(e) => handleDirectSaleItemChange(idx, 'discountPercent', e.target.value)}
+                                  style={{ width: '50px', padding: '4px 6px', borderRadius: '6px', border: '1px solid #CBD5E1', textAlign: 'center', fontSize: '12.5px', fontWeight: 700, outline: 'none' }}
+                                />
+                              </td>
+
+                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                <select
+                                  value={item.gstPercent}
+                                  onChange={(e) => handleDirectSaleItemChange(idx, 'gstPercent', e.target.value)}
+                                  style={{ padding: '4px 6px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', fontWeight: 700, outline: 'none', background: 'white' }}
+                                >
+                                  <option value="0">0%</option>
+                                  <option value="5">5%</option>
+                                  <option value="12">12%</option>
+                                  <option value="18">18%</option>
+                                </select>
+                              </td>
+
+                              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#0F172A' }}>
+                                ₹{net.toFixed(2)}
+                              </td>
+
+                              <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveDirectSaleMedicine(idx)}
+                                  style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
+                                  title="Remove item"
+                                >
+                                  ✕
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Financial Calculation Summary Card */}
+              {(() => {
+                const subtotal = directSaleItems.reduce((acc, it) => acc + (it.quantity * it.mrp), 0);
+                const totalDisc = directSaleItems.reduce((acc, it) => acc + (it.quantity * it.mrp * ((it.discountPercent || 0) / 100)), 0);
+                const taxable = Math.max(0, subtotal - totalDisc);
+                const totalGst = directSaleItems.reduce((acc, it) => {
+                  const gross = it.quantity * it.mrp;
+                  const d = gross * ((it.discountPercent || 0) / 100);
+                  const t = gross - d;
+                  return acc + (t * ((it.gstPercent || 0) / 100));
+                }, 0);
+                const grandTotal = Math.round((taxable + totalGst) * 100) / 100;
+
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px', marginBottom: '10px' }}>
+                    
+                    {/* Payment Section */}
+                    <div style={{ background: '#F8FAFC', padding: '16px 20px', borderRadius: '16px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '10px' }}>Payment Method</div>
+                      
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                        {['Cash', 'UPI', 'Card'].map(mode => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setDirectSalePaymentMethod(mode)}
+                            style={{
+                              padding: '10px 0',
+                              borderRadius: '8px',
+                              border: directSalePaymentMethod === mode ? '2px solid #2563EB' : '1px solid #CBD5E1',
+                              background: directSalePaymentMethod === mode ? '#EFF6FF' : 'white',
+                              color: directSalePaymentMethod === mode ? '#2563EB' : '#475569',
+                              fontWeight: 800,
+                              fontSize: '13px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {mode}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Totals Summary */}
+                    <div style={{ background: '#F8FAFC', padding: '16px 20px', borderRadius: '16px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                          <span>Subtotal:</span>
+                          <span style={{ fontWeight: 700 }}>₹{subtotal.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16A34A' }}>
+                          <span>Total Discount:</span>
+                          <span style={{ fontWeight: 700 }}>-₹{totalDisc.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                          <span>Taxable Amount:</span>
+                          <span style={{ fontWeight: 700 }}>₹{taxable.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                          <span>Total GST:</span>
+                          <span style={{ fontWeight: 700 }}>₹{totalGst.toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '2px solid #CBD5E1', marginTop: '10px' }}>
+                        <span style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A' }}>Grand Total:</span>
+                        <span style={{ fontSize: '20px', fontWeight: 900, color: '#2563EB' }}>₹{grandTotal.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                  </div>
+                );
+              })()}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '18px 28px', borderTop: '1px solid #F1F5F9', background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setShowDirectSaleModal(false)}
+                style={{ padding: '10px 20px', borderRadius: '10px', border: '1px solid #CBD5E1', background: 'white', color: '#64748B', fontWeight: 700, fontSize: '13.5px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+
+              {(() => {
+                const total = directSaleItems.reduce((acc, it) => {
+                  const gross = it.quantity * it.mrp;
+                  const disc = gross * ((it.discountPercent || 0) / 100);
+                  const tax = gross - disc;
+                  const gst = tax * ((it.gstPercent || 0) / 100);
+                  return acc + (tax + gst);
+                }, 0);
+
+                const hasOverStock = directSaleItems.some(it => it.quantity > it.stock);
+                const isFormInvalid = directSaleItems.length === 0 || hasOverStock;
+
+                return (
+                  <button
+                    type="button"
+                    disabled={isFormInvalid || isSubmittingDirectSale}
+                    onClick={handleDirectSaleSubmit}
+                    style={{
+                      padding: '10px 28px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: isFormInvalid ? '#94A3B8' : '#10B981',
+                      color: 'white',
+                      fontWeight: 800,
+                      fontSize: '14px',
+                      cursor: isFormInvalid ? 'not-allowed' : 'pointer',
+                      boxShadow: isFormInvalid ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.25)',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    {isSubmittingDirectSale ? 'Processing...' : ('Complete Sale — ₹' + total.toFixed(2))}
+                  </button>
+                );
+              })()}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* SALE DETAIL STRUCTURED MODAL */}
+      {showSaleDetailModal && selectedSaleDetail && (
+        <div
+          onClick={() => setShowSaleDetailModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15,23,42,0.5)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 9300,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'white',
+              borderRadius: '24px',
+              width: '100%',
+              maxWidth: '750px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              overflow: 'hidden',
+              animation: 'fadeIn 0.2s ease-out'
+            }}
+          >
+            {/* Detail Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 28px', borderBottom: '1px solid #F1F5F9', background: '#F8FAFC' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: 0, fontFamily: 'monospace' }}>
+                    {selectedSaleDetail.saleId}
+                  </h3>
+                  <span style={{
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    background: selectedSaleDetail.saleType === 'DIRECT' ? '#EEF2FF' : '#ECFDF5',
+                    color: selectedSaleDetail.saleType === 'DIRECT' ? '#4F46E5' : '#059669'
+                  }}>
+                    {selectedSaleDetail.saleType}
+                  </span>
+                  <span style={{
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    background: '#ECFDF5',
+                    color: '#047857'
+                  }}>
+                    {selectedSaleDetail.status || 'COMPLETED'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', fontWeight: 600 }}>
+                  {(selectedSaleDetail.saleDate ? new Date(selectedSaleDetail.saleDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '')} • {selectedSaleDetail.saleTime || ''}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowSaleDetailModal(false)}
+                style={{ background: '#F1F5F9', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: '14px', fontWeight: 'bold' }}
+              >✕</button>
+            </div>
+
+            {/* Detail Body */}
+            <div style={{ padding: '24px 28px', overflowY: 'auto', flex: 1 }} data-lenis-prevent>
+              
+              {/* Customer & Doctor Summary */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                <div style={{ background: '#F8FAFC', padding: '14px 16px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>Customer / Patient</div>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>{selectedSaleDetail.customerName}</div>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+                    {(selectedSaleDetail.patientIdentifier ? (selectedSaleDetail.patientIdentifier + ' • ') : '')}{selectedSaleDetail.customerMobile || 'No mobile provided'}
+                  </div>
+                </div>
+
+                <div style={{ background: '#F8FAFC', padding: '14px 16px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>Prescribing Source</div>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                    {selectedSaleDetail.doctorName || 'Self / No Doctor'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#2563EB', fontWeight: 700, marginTop: '2px' }}>
+                    {selectedSaleDetail.prescriptionCode ? ('Prescription: ' + selectedSaleDetail.prescriptionCode) : 'Direct Sale OTC'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Medicines Breakdown Table */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '10px' }}>
+                  Medicines Dispensed ({selectedSaleDetail.items?.length || 0})
+                </div>
+
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden' }}>
+                  <thead>
+                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>Medicine</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>Qty</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>MRP</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>Disc</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>GST</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>Net Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(selectedSaleDetail.items || []).map((it, idx) => (
+                      <tr key={idx} style={{ borderBottom: idx === (selectedSaleDetail.items.length - 1) ? 'none' : '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '8px 12px' }}>
+                          <div style={{ fontWeight: 800, color: '#0F172A' }}>{it.medicineName}</div>
+                          {it.sku && <div style={{ fontSize: '11px', color: '#64748B' }}>SKU: {it.sku}</div>}
+                        </td>
+                        <td style={{ padding: '8px 12px', textAlign: 'center', color: '#334155', fontWeight: 700 }}>{it.quantity} {it.unit || ''}</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', color: '#475569' }}>₹{(it.mrp || 0).toFixed(2)}</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', color: '#16A34A' }}>{it.discountPercent || 0}%</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', color: '#475569' }}>{it.gstPercent || 0}%</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#0F172A' }}>₹{(it.netAmount || 0).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Financial & Payment Overview */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', background: '#F8FAFC', padding: '16px 20px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: '12.5px', color: '#475569' }}>
+                  <div style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '11px', color: '#64748B', marginBottom: '6px' }}>Payment & Settlement</div>
+                  <div>Payment Method: <strong style={{ color: '#0F172A' }}>{selectedSaleDetail.paymentMethod || 'Cash'}</strong></div>
+                  <div style={{ marginTop: '3px' }}>Payment Status: <strong style={{ color: '#16A34A' }}>{selectedSaleDetail.paymentStatus || 'PAID'}</strong></div>
+                  {selectedSaleDetail.transactionRef && (
+                    <div style={{ marginTop: '3px' }}>Reference: <strong style={{ color: '#0F172A' }}>{selectedSaleDetail.transactionRef}</strong></div>
+                  )}
+                  {selectedSaleDetail.paymentMethod === 'Cash' && (
+                    <div>
+                      <div style={{ marginTop: '3px' }}>Amount Received: ₹{(selectedSaleDetail.amountReceived || selectedSaleDetail.grandTotal).toFixed(2)}</div>
+                      <div style={{ marginTop: '3px' }}>Change Returned: ₹{(selectedSaleDetail.changeReturned || 0).toFixed(2)}</div>
+                    </div>
+                  )}
+                  <div style={{ marginTop: '8px', fontSize: '11.5px', color: '#94A3B8' }}>
+                    Pharmacist: {selectedSaleDetail.pharmacistName || 'Pharmacist'} • Location: {selectedSaleDetail.pharmacyLocation || 'Main Pharmacy'}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12.5px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                    <span>Subtotal:</span>
+                    <span>₹{(selectedSaleDetail.subtotal || 0).toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16A34A' }}>
+                    <span>Discount:</span>
+                    <span>-₹{(selectedSaleDetail.totalDiscount || 0).toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                    <span>GST:</span>
+                    <span>₹{(selectedSaleDetail.totalGst || 0).toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '6px', borderTop: '2px solid #CBD5E1', marginTop: '4px', fontWeight: 900, fontSize: '16px', color: '#0F172A' }}>
+                    <span>Grand Total:</span>
+                    <span style={{ color: '#2563EB' }}>₹{(selectedSaleDetail.grandTotal || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Detail Footer */}
+            <div style={{ padding: '16px 28px', borderTop: '1px solid #F1F5F9', background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setShowSaleDetailModal(false)}
+                style={{ padding: '8px 18px', borderRadius: '8px', border: '1px solid #CBD5E1', background: 'white', color: '#64748B', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePrintSaleReceipt(selectedSaleDetail)}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  background: '#2563EB',
+                  color: 'white',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                Print Receipt
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+
+        </>
   );
 };
 

@@ -84,12 +84,16 @@ router.get('/', async (req, res) => {
       query.createdAt = {};
       if (req.query.startDate) {
         const start = new Date(req.query.startDate);
-        start.setHours(0, 0, 0, 0);
+        if (!String(req.query.startDate).includes('T')) {
+          start.setUTCHours(0, 0, 0, 0);
+        }
         query.createdAt.$gte = start;
       }
       if (req.query.endDate) {
         const end = new Date(req.query.endDate);
-        end.setHours(23, 59, 59, 999);
+        if (!String(req.query.endDate).includes('T')) {
+          end.setUTCHours(23, 59, 59, 999);
+        }
         query.createdAt.$lte = end;
       }
     }

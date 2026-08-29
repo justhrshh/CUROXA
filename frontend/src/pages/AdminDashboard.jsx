@@ -956,6 +956,7 @@ const AdminDashboard = () => {
     fetchPatients();
     fetchAppointments();
     fetchBills();
+    fetchPharmacySales();
     fetchMedicines();
     fetchPrescriptions();
     fetchReturns();
@@ -1107,6 +1108,7 @@ const AdminDashboard = () => {
         fetchPatients(),
         fetchAppointments(),
         fetchBills(),
+        fetchPharmacySales(),
         fetchMedicines(),
         fetchPrescriptions(),
         fetchReturns(),
@@ -2991,13 +2993,29 @@ const AdminDashboard = () => {
   const todayStr = new Date().toDateString();
   const todayAppts = appointments.filter(app => isSameDayAsToday(app.date));
 
-  const todayRevenue = bills
-    .filter(b => b.status === 'Paid' && new Date(b.createdAt).toDateString() === todayStr)
+  const isSameCalendarDay = (dateA, dateB) => {
+    if (!dateA || !dateB) return false;
+    const dA = new Date(dateA);
+    const dB = new Date(dateB);
+    return !isNaN(dA.getTime()) && !isNaN(dB.getTime()) &&
+           dA.getFullYear() === dB.getFullYear() &&
+           dA.getMonth() === dB.getMonth() &&
+           dA.getDate() === dB.getDate();
+  };
+
+  const todayBillsRev = bills
+    .filter(b => b.status === 'Paid' && isSameCalendarDay(b.createdAt, new Date()))
     .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+
+  const todayPharmacyRev = (pharmacySales || [])
+    .filter(s => s.status !== 'CANCELLED' && isSameCalendarDay(s.saleDate || s.createdAt, new Date()))
+    .reduce((sum, s) => sum + (Number(s.grandTotal) || 0), 0);
+
+  const todayRevenue = todayBillsRev + todayPharmacyRev;
 
   const todayPatientsCount = patients.filter(p => {
     if (!p.createdAt) return false;
-    return new Date(p.createdAt).toDateString() === todayStr;
+    return isSameCalendarDay(p.createdAt, new Date());
   }).length;
 
   const staffPresentCount = staff.filter(s => getStaffStatus(s) === 'On duty').length;
@@ -3013,13 +3031,23 @@ const AdminDashboard = () => {
   const getThisMonthRevenue = () => {
     const currentMonth = new Date().getMonth();
     const currentYear = new Date().getFullYear();
-    return bills
+    const billsMonth = bills
       .filter(b => {
         if (b.status !== 'Paid') return false;
         const d = new Date(b.createdAt);
         return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
       })
       .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+
+    const pharmacyMonth = (pharmacySales || [])
+      .filter(s => {
+        if (s.status === 'CANCELLED') return false;
+        const d = new Date(s.saleDate || s.createdAt);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      })
+      .reduce((sum, s) => sum + (Number(s.grandTotal) || 0), 0);
+
+    return billsMonth + pharmacyMonth;
   };
 
   const getConsultationShare = () => {
@@ -3193,6 +3221,13 @@ const AdminDashboard = () => {
       return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
     });
 
+    const monthPharmacy = (pharmacySales || []).filter(s => {
+      if (s.status === 'CANCELLED') return false;
+      const d = new Date(s.saleDate || s.createdAt);
+      if (isNaN(d.getTime())) return false;
+      return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+    });
+
     // Filter approved purchase orders for selected month
     const monthPOs = purchaseOrders.filter(po => {
       if (!['Approved', 'Sent', 'Confirmed', 'Completed'].includes(po.status)) return false;
@@ -3209,9 +3244,15 @@ const AdminDashboard = () => {
     const dailyData = [];
 
     for (let day = 1; day <= endDay; day++) {
-      const dayRev = monthBills
+      const dayBillsRev = monthBills
         .filter(b => new Date(b.createdAt).getDate() === day)
         .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+
+      const dayPharmacyRev = monthPharmacy
+        .filter(s => new Date(s.saleDate || s.createdAt).getDate() === day)
+        .reduce((sum, s) => sum + (Number(s.grandTotal) || 0), 0);
+
+      const dayRev = dayBillsRev + dayPharmacyRev;
 
       const dayExp = monthPOs
         .filter(po => new Date(po.createdAt || po.updatedAt || Date.now()).getDate() === day)
@@ -3326,22 +3367,23 @@ const AdminDashboard = () => {
   };
 
   const getPharmacyInventoryData = () => {
-    const today = new Date().toDateString();
+    const today = new Date();
     
-    // Orders today = Prescriptions created today + Indents created today
-    const rxToday = allPrescriptions.filter(p => p.createdAt && new Date(p.createdAt).toDateString() === today);
-    const indentsToday = pendingApprovals.filter(a => a.category === 'receptionist_indent' && a.raw?.createdAt && new Date(a.raw.createdAt).toDateString() === today);
-    const ordersToday = rxToday.length + indentsToday.length;
+    // Orders today = Prescriptions created today + Indents created today + Direct pharmacy sales today
+    const rxToday = allPrescriptions.filter(p => p.createdAt && isSameCalendarDay(p.createdAt, today));
+    const salesToday = (pharmacySales || []).filter(s => s.status !== 'CANCELLED' && isSameCalendarDay(s.saleDate || s.createdAt, today));
+    const indentsToday = pendingApprovals.filter(a => a.category === 'receptionist_indent' && a.raw?.createdAt && isSameCalendarDay(a.raw.createdAt, today));
+    const ordersToday = rxToday.length + indentsToday.length + salesToday.length;
 
-    // Dispensed today
-    const dispensedCount = allPrescriptions.filter(p => {
-      const isDisp = p.status === 'Completed' || p.status === 'Dispensed';
-      const d = p.updatedAt || p.createdAt;
-      return isDisp && d && new Date(d).toDateString() === today;
-    }).length;
+    // Dispensed count
+    const dispensedCount = allPrescriptions.filter(p => 
+      p.status === 'Completed' || p.status === 'Dispensed' || p.status === 'Dispensed by Pharmacy'
+    ).length;
 
-    // Pending today
-    const pendingCount = allPrescriptions.filter(p => p.status === 'Pending' || p.status === 'In Queue' || p.status === 'In Progress').length;
+    // Pending count
+    const pendingCount = allPrescriptions.filter(p => 
+      p.status === 'Pending' || p.status === 'In Queue' || p.status === 'In Progress' || p.status === 'Pending Pharmacy Dispatch'
+    ).length;
 
     // Return requests
     const returnsCount = returnsList.length;
@@ -3350,23 +3392,23 @@ const AdminDashboard = () => {
     const medList = medicines.length > 0 ? medicines : inventoryAlerts;
     const lowStockCount = medList.filter(m => (Number(m.stock) <= 20 || m.status === 'Low Stock' || m.status === 'Out of Stock')).length;
     const reorderCount = medList.filter(m => (Number(m.stock) > 20 && Number(m.stock) <= 50)).length;
-    
-    const now = new Date();
+
     const expiringCount = medList.filter(m => {
-      if (!m.expiry) return false;
-      const expDate = new Date(m.expiry);
-      const diffDays = (expDate - now) / (1000 * 60 * 60 * 24);
-      return diffDays >= 0 && diffDays <= 30;
+      if (!m.expiryDate) return false;
+      const exp = new Date(m.expiryDate);
+      const diffDays = (exp - new Date()) / (1000 * 60 * 60 * 24);
+      return diffDays > 0 && diffDays <= 90;
     }).length;
 
-    // Real exception items
-    const rawExceptions = medList.filter(m => Number(m.stock) <= 20 || m.status === 'Low Stock' || m.status === 'Out of Stock');
-    const exceptions = rawExceptions.slice(0, 3).map(item => ({
-      name: item.name || 'Medicine',
-      status: Number(item.stock) === 0 || item.status === 'Out of Stock' ? 'Out of stock' : 'Low stock',
-      units: `${item.stock || 0} ${item.unit || 'units'}`
-    }));
-
+    const exceptions = medList
+      .filter(m => Number(m.stock) <= 20 || m.status === 'Low Stock' || m.status === 'Out of Stock')
+      .slice(0, 3)
+      .map(m => ({
+        name: m.name || m.medicineName || 'Medicine',
+        status: (Number(m.stock) <= 0 || m.status === 'Out of Stock') ? 'Out of Stock' : 'Low Stock',
+        units: `${m.stock || 0} units`
+      }));
+    
     return {
       ordersToday,
       dispensedCount,
@@ -3375,7 +3417,7 @@ const AdminDashboard = () => {
       lowStockCount,
       reorderCount,
       expiringCount,
-      exceptions
+      exceptions: exceptions || []
     };
   };
 
@@ -11680,6 +11722,12 @@ const AdminDashboard = () => {
                     return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
                   });
 
+                  const yearPharmacy = (pharmacySales || []).filter(s => {
+                    if (s.status === 'CANCELLED') return false;
+                    const d = new Date(s.saleDate || s.createdAt);
+                    return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
+                  });
+
                   const yearPOs = purchaseOrders.filter(po => {
                     if (!['Approved', 'Sent', 'Confirmed', 'Completed'].includes(po.status)) return false;
                     const d = new Date(po.createdAt || po.updatedAt || Date.now());
@@ -11692,20 +11740,26 @@ const AdminDashboard = () => {
                       .filter(b => new Date(b.createdAt).getMonth() === mIdx)
                       .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
 
+                    const monthPharmacySum = yearPharmacy
+                      .filter(s => new Date(s.saleDate || s.createdAt).getMonth() === mIdx)
+                      .reduce((sum, s) => sum + (Number(s.grandTotal) || 0), 0);
+
+                    const totalMonthIncome = monthBillsSum + monthPharmacySum;
+
                     const monthPOsSum = yearPOs
                       .filter(po => new Date(po.createdAt || po.updatedAt || Date.now()).getMonth() === mIdx)
                       .reduce((sum, p) => sum + (p.totalAmount || 0), 0);
 
-                    if (monthBillsSum > rawMax) rawMax = monthBillsSum;
+                    if (totalMonthIncome > rawMax) rawMax = totalMonthIncome;
                     if (monthPOsSum > rawMax) rawMax = monthPOsSum;
 
                     return {
                       month: mName,
                       index: mIdx,
                       label: `${mName} ${targetYear}`,
-                      income: monthBillsSum,
+                      income: totalMonthIncome,
                       expense: monthPOsSum,
-                      net: monthBillsSum - monthPOsSum
+                      net: totalMonthIncome - monthPOsSum
                     };
                   });
 
@@ -12286,12 +12340,12 @@ const AdminDashboard = () => {
 
                       {/* Exception Items Rows */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        {pharmData.exceptions.length === 0 ? (
+                        {(pharmData.exceptions || []).length === 0 ? (
                           <div style={{ padding: '8px 12px', background: '#F8FAFC', borderRadius: '6px', fontSize: '11.5px', color: '#059669', fontWeight: 650, textAlign: 'center' }}>
                             ✓ No inventory stock issues detected
                           </div>
                         ) : (
-                          pharmData.exceptions.map((exc, idx) => (
+                          (pharmData.exceptions || []).map((exc, idx) => (
                             <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', background: '#F8FAFC', borderRadius: '6px', fontSize: '11.5px' }}>
                               <span style={{ fontWeight: 750, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                 <span>⚠️</span> {exc.name}
