@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Search, Filter, Plus, Shield, ShieldCheck, Mail, Phone, Eye, 
-  Trash2, Edit3, X, UserCheck, Briefcase, FileClock, ChevronDown, Check, Settings
+  Trash2, Edit3, X, UserCheck, Briefcase, FileClock, ChevronDown, Check, Settings, Download
 } from 'lucide-react';
+import ExportModal from '../export/ExportModal';
+import { staffExportColumns } from '../../utils/exportEngine';
 
 const DOCTOR_SPECIALIZATIONS = [
   'General Medicine', 'Cardiology', 'Dermatology', 'Orthopedics', 'Pediatrics',
@@ -67,6 +69,7 @@ export default function EmployeeDirectoryView({
   const [selectedDept, setSelectedDept] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [selectedType, setSelectedType] = useState('All');
+  const [showExportModal, setShowExportModal] = useState(false);
 
 
 
@@ -314,13 +317,24 @@ export default function EmployeeDirectoryView({
           <h1 className="text-xl font-display font-bold text-slate-900">Hospital Medical & Admin Staff</h1>
           <p className="text-slate-400 text-xs mt-0.5">Comprehensive employee records, credential settings, and reporting structure.</p>
         </div>
-        <button 
-          onClick={() => { resetForm(); setIsAdding(true); }}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 self-start shadow-sm transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Onboard New Staff
-        </button>
+        <div className="flex items-center gap-2 self-start">
+          <button 
+            type="button"
+            onClick={() => setShowExportModal(true)}
+            className="bg-white hover:bg-slate-50 text-blue-600 border border-blue-200 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            title="Export filtered staff records"
+          >
+            <Download className="w-4 h-4 stroke-[2.2]" />
+            Export
+          </button>
+          <button 
+            onClick={() => { resetForm(); setIsAdding(true); }}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Onboard New Staff
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -984,6 +998,22 @@ export default function EmployeeDirectoryView({
         </div>
       , document.body)}
 
+      {showExportModal && (
+        <ExportModal
+          dataset="Staff"
+          data={filteredEmployees}
+          columns={staffExportColumns}
+          dateField={['joiningDate', 'createdAt']}
+          currentFilters={{
+            search: searchTerm,
+            department: selectedDept,
+            status: selectedStatus,
+            type: selectedType
+          }}
+          clinicName="CUROXA HEALTHCARE"
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
     </div>
   );
 }

@@ -86,45 +86,102 @@ router.get('/', async (req, res) => {
 // Add a new vendor (scoped to tenant)
 router.post('/', async (req, res) => {
   try {
+    const { name, code, phone, email, address, type, medicines, attachments, creditLimit, creditDays, paymentMethod } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Vendor name is required' });
+    }
+    if (!code || !code.trim()) {
+      return res.status(400).json({ error: 'Vendor code is required' });
+    }
+
+    // Rate list validation
+    if (!Array.isArray(medicines) || medicines.length === 0) {
+      return res.status(400).json({ error: 'At least one medicine/rate-list item is required' });
+    }
+
+    const seenSkus = new Set();
+    const sanitizedMedicines = [];
+
+    for (let i = 0; i < medicines.length; i++) {
+      const item = medicines[i];
+      if (!item.name || !item.name.trim()) {
+        return res.status(400).json({ error: `Medicine name is required for item #${i + 1}` });
+      }
+      if (!item.sku || !item.sku.trim()) {
+        return res.status(400).json({ error: `SKU code is required for medicine '${item.name}'` });
+      }
+      
+      const cleanSku = item.sku.trim().toUpperCase();
+      if (seenSkus.has(cleanSku)) {
+        return res.status(400).json({ error: `Duplicate SKU '${cleanSku}' found in the submitted rate list` });
+      }
+      seenSkus.add(cleanSku);
+
+      const priceVal = Number(item.price);
+      if (!Number.isFinite(priceVal) || isNaN(priceVal) || priceVal <= 0) {
+        return res.status(400).json({ error: `Purchase price must be a valid positive number for '${item.name}'` });
+      }
+
+      const gstVal = item.gst !== undefined && item.gst !== '' ? Number(item.gst) : 12;
+      if (!Number.isFinite(gstVal) || isNaN(gstVal) || gstVal < 0) {
+        return res.status(400).json({ error: `GST must be a valid non-negative number for '${item.name}'` });
+      }
+
+      sanitizedMedicines.push({
+        name: item.name.trim(),
+        sku: cleanSku,
+        price: priceVal,
+        gst: gstVal,
+        available: item.available !== false
+      });
+    }
+
     const vendor = await Vendor.create({
       ...req.body,
       tenantId: req.tenantId,
-      type: req.body.type || 'Medicine',
+      name: name.trim(),
+      code: code.trim().toUpperCase(),
+      type: type || 'Medicine',
       status: 'Proposed', // Force Proposed status for admin approval
-      attachments: req.body.attachments || [],
-      creditLimit: Number(req.body.creditLimit) || 0,
-      creditDays: Number(req.body.creditDays) || 30,
-      paymentMethod: req.body.paymentMethod || 'NEFT',
-      medicines: req.body.medicines || [],
+      attachments: attachments || [],
+      creditLimit: Number(creditLimit) || 0,
+      creditDays: Number(creditDays) || 30,
+      paymentMethod: paymentMethod || 'NEFT',
+      medicines: sanitizedMedicines,
       purchaseHistory: []
     });
 
-    if (true) { // Always create approval task for new vendor onboarding
-      const Approval = require('../models/Approval');
-      await Approval.create({
-        tenantId: req.tenantId,
-        type: 'vendor_onboarding',
-        staffId: req.user.staff_id || req.user.id || 'system',
-        requesterName: req.user.name || 'Procurement Staff',
-        requesterRole: req.user.role || 'staff',
-        details: {
-          vendorId: vendor._id,
-          vendorName: vendor.name,
-          vendorCode: vendor.code,
-          contact: vendor.phone || vendor.email,
-          gstNumber: vendor.gstNumber,
-          attachments: vendor.attachments || []
-        },
-        comment: `Proposed vendor onboarding approval for ${vendor.name}`
-      });
-    }
+    const Approval = require('../models/Approval');
+    await Approval.create({
+      tenantId: req.tenantId,
+      type: 'vendor_onboarding',
+      staffId: req.user.staff_id || req.user.id || 'system',
+      requesterName: req.user.name || 'Procurement Staff',
+      requesterRole: req.user.role || 'staff',
+      details: {
+        vendorId: vendor._id,
+        vendorName: vendor.name,
+        vendorCode: vendor.code,
+        contact: vendor.phone || vendor.email || '',
+        gstNumber: vendor.gstNumber || '',
+        address: vendor.address || '',
+        items: sanitizedMedicines.map(m => ({
+          name: m.name,
+          sku: m.sku,
+          price: m.price,
+          gst: m.gst,
+          available: m.available
+        })),
+        attachments: vendor.attachments || []
+      },
+      comment: `Proposed vendor onboarding approval for ${vendor.name}`
+    });
     
     const io = req.app.get("io");
     if (io && req.tenantId) {
       io.to(req.tenantId).emit("data_changed", { type: "vendors" });
-      if (vendor.status === 'Proposed') {
-        io.to(req.tenantId).emit("data_changed", { type: "approvals" });
-      }
+      io.to(req.tenantId).emit("data_changed", { type: "approvals" });
     }
     res.status(201).json(vendor);
   } catch (error) {
@@ -160,9 +217,21 @@ router.put('/:id', async (req, res) => {
 router.put('/:id/price-list', async (req, res) => {
   const { medicines } = req.body;
   try {
+    const cleanMedicines = Array.isArray(medicines)
+      ? medicines
+          .filter(m => m && m.name && m.name.trim() !== '' && m.sku && m.sku.trim() !== '')
+          .map(m => ({
+            name: m.name.trim(),
+            sku: m.sku.trim().toUpperCase(),
+            price: Number(m.price || 0),
+            gst: m.gst !== undefined ? Number(m.gst) : 12,
+            available: m.available !== false
+          }))
+      : [];
+
     const vendor = await Vendor.findOneAndUpdate(
       { _id: req.params.id, tenantId: req.tenantId },
-      { medicines },
+      { medicines: cleanMedicines },
       { returnDocument: 'after' }
     );
     if (!vendor) return res.status(404).json({ error: 'Vendor not found' });

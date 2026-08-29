@@ -1,10 +1,14 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import HRPayroll from './HRPayroll';
 import SearchableDropdown from '../components/SearchableDropdown';
+import ExpiryManagementPanel from '../components/ExpiryManagementPanel';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import { printPO, printGRN } from '../utils/printDocHelper';
+import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import ExportModal from '../components/export/ExportModal';
+import { inventoryExportColumns, prescriptionExportColumns } from '../utils/exportEngine';
 
 const permissionNames = {
   'dr-consult': 'Patient consultation notes',
@@ -72,6 +76,14 @@ const PharmacyDashboard = () => {
   const [prescriptionsFilter, setPrescriptionsFilter] = useState('Pending'); // 'All', 'Pending', 'In Progress', 'Dispensed', 'Cancelled'
   const navigate = useNavigate();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem('curoxa_sidebar_collapsed') === 'true');
+  const [sectionOpen, setSectionOpen] = useState({
+    management: true,
+    tools: true,
+    coverages: true
+  });
+  const toggleSection = (sec) => {
+    setSectionOpen(prev => ({ ...prev, [sec]: !prev[sec] }));
+  };
   
   // Real logged-in user or premium default fallback
   const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{"name":"Ankit Sharma","role":"Pharmacy","email":"ankit.sharma@curoxa.com"}'));
@@ -204,6 +216,17 @@ const PharmacyDashboard = () => {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [ticketResolutionReason, setTicketResolutionReason] = useState('');
   const [selectedVendor, setSelectedVendor] = useState(null);
+  const [showAddMedicineApprovalModal, setShowAddMedicineApprovalModal] = useState(false);
+  const [newMedApprovalData, setNewMedApprovalData] = useState({
+    name: '',
+    sku: '',
+    price: '',
+    gst: 12,
+    available: true,
+    mrp: '',
+    comment: ''
+  });
+  const [isSubmittingMedApproval, setIsSubmittingMedApproval] = useState(false);
   const [showAddVendorModal, setShowAddVendorModal] = useState(false);
   const [newVendor, setNewVendor] = useState({
     name: '',
@@ -216,12 +239,13 @@ const PharmacyDashboard = () => {
     type: 'Manufacturer',
     contactPerson: '',
     gstNumber: '',
-    status: 'Active',
+    status: 'Proposed',
     panNumber: '',
     licenseNumber: '',
     zipCode: '',
     notes: '',
     alternatePhone: '',
+    medicines: [{ name: '', sku: '', price: '', gst: 12, available: true }],
     
     // New Excel Fields
     supplierCategory: 'Medicine',
@@ -247,20 +271,7 @@ const PharmacyDashboard = () => {
     panCardNo: '',
     rocNo: '',
     esiRegistrationNo: '',
-    isoCertificationNo: '',
-    isoValidUpto: '',
-    pollutionControlBoardCertificationNo: '',
-    pollutionValidUpto: '',
-    bank1Name: '',
-    bank1Branch: '',
-    bank1AccountNumber: '',
-    bank1IfscCode: '',
-    bank1Address: '',
-    taxes: '',
-    deliveryTerms: '',
-    isMsmeRegistration: 'No',
-    msmeRegistrationNo: '',
-    msmeRegistrationType: ''
+    isoCertificationNo: ''
   });
   const [showPriceListModal, setShowPriceListModal] = useState(false);
   const [editablePriceList, setEditablePriceList] = useState([]);
@@ -272,6 +283,10 @@ const PharmacyDashboard = () => {
   const [grnSelectedPOId, setGrnSelectedPOId] = useState('');
   const [grnDirectVendorId, setGrnDirectVendorId] = useState('');
   const [grnItems, setGrnItems] = useState([]);
+  const [grnLocation, setGrnLocation] = useState('Main Pharmacy Store');
+  const [grnInvoiceNumber, setGrnInvoiceNumber] = useState('');
+  const [grnInvoiceDate, setGrnInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [grnInvoiceAmount, setGrnInvoiceAmount] = useState('');
   const [grnInvoiceFile, setGrnInvoiceFile] = useState(null);
   const [grnInvoiceFileName, setGrnInvoiceFileName] = useState('');
   const [grnUploadProgress, setGrnUploadProgress] = useState(0);
@@ -279,24 +294,75 @@ const PharmacyDashboard = () => {
   const [grnNotes, setGrnNotes] = useState('');
   const [selectedGrnDetails, setSelectedGrnDetails] = useState(null);
   const [editingGrn, setEditingGrn] = useState(null);
+  const [catalogApprovalRequests, setCatalogApprovalRequests] = useState([]);
+
 
   const fetchProcurementData = async () => {
     try {
       const vendorRes = await api.get('/vendors');
-      setVendors(vendorRes.data);
+      const freshVendors = vendorRes.data || [];
+      setVendors(freshVendors);
+      setSelectedVendor(prev => {
+        if (!prev?._id) return prev;
+        const fresh = freshVendors.find(v => v._id === prev._id);
+        return fresh || prev;
+      });
+
       const poRes = await api.get('/purchase-orders');
-      setPurchaseOrders(poRes.data);
+      setPurchaseOrders(poRes.data || []);
       const grnRes = await api.get('/goods-receipts');
-      setGoodsReceipts(grnRes.data);
+      setGoodsReceipts(grnRes.data || []);
       const ticketsRes = await api.get('/pharmacy-tickets');
-      setPharmacyTickets(ticketsRes.data);
+      setPharmacyTickets(ticketsRes.data || []);
+      try {
+        const appRes = await api.get('/approvals');
+        const allApprovals = Array.isArray(appRes.data) ? appRes.data : [];
+        const medApprovals = allApprovals.filter(a => 
+          a.type === 'vendor_medicine_addition' || 
+          a.type === 'vendor_onboarding' || 
+          a.type === 'item_price_update'
+        );
+        setCatalogApprovalRequests(medApprovals);
+      } catch (appErr) {
+        console.error("Failed to fetch approval requests in Pharmacy:", appErr);
+      }
     } catch (err) {
       console.error("Failed to fetch procurement data:", err);
     }
   };
 
+  const handleAddVendorMedicineRow = () => {
+    setNewVendor(prev => ({
+      ...prev,
+      medicines: [...(prev.medicines || []), { name: '', sku: '', price: '', gst: 12, available: true }]
+    }));
+  };
+
+  const handleRemoveVendorMedicineRow = (index) => {
+    setNewVendor(prev => ({
+      ...prev,
+      medicines: (prev.medicines || []).filter((_, idx) => idx !== index)
+    }));
+  };
+
+  const handleVendorMedicineChange = (index, field, value) => {
+    setNewVendor(prev => {
+      const updated = [...(prev.medicines || [])];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, medicines: updated };
+    });
+  };
+
   const handleAddVendor = async (e) => {
     e.preventDefault();
+    if (!newVendor.name || !newVendor.name.trim()) {
+      showToast('Vendor name is required', 'error');
+      return;
+    }
+    if (!newVendor.code || !newVendor.code.trim()) {
+      showToast('Vendor code is required', 'error');
+      return;
+    }
     const phoneRegex = /^[0-9]{10}$/;
     if (newVendor.phone) {
       const cleanPhone = newVendor.phone.replace(/[\s\-+]/g, '');
@@ -305,11 +371,59 @@ const PharmacyDashboard = () => {
         return;
       }
     }
+
+    if (!Array.isArray(newVendor.medicines) || newVendor.medicines.length === 0) {
+      showToast('Please add at least one medicine/rate-list item', 'error');
+      return;
+    }
+
+    const seenSkus = new Set();
+    for (let i = 0; i < newVendor.medicines.length; i++) {
+      const m = newVendor.medicines[i];
+      if (!m.name || !m.name.trim()) {
+        showToast(`Medicine name is required for item #${i + 1}`, 'error');
+        return;
+      }
+      if (!m.sku || !m.sku.trim()) {
+        showToast(`SKU code is required for medicine '${m.name}'`, 'error');
+        return;
+      }
+      const cleanSku = m.sku.trim().toUpperCase();
+      if (seenSkus.has(cleanSku)) {
+        showToast(`Duplicate SKU '${cleanSku}' in rate list`, 'error');
+        return;
+      }
+      seenSkus.add(cleanSku);
+
+      const priceVal = Number(m.price);
+      if (!Number.isFinite(priceVal) || isNaN(priceVal) || priceVal <= 0) {
+        showToast(`Purchase price must be a valid number > 0 for '${m.name}'`, 'error');
+        return;
+      }
+      const gstVal = m.gst !== undefined && m.gst !== '' ? Number(m.gst) : 12;
+      if (!Number.isFinite(gstVal) || isNaN(gstVal) || gstVal < 0) {
+        showToast(`GST must be a valid non-negative number for '${m.name}'`, 'error');
+        return;
+      }
+    }
+
     try {
-      const res = await api.post('/vendors', newVendor);
-      setVendors([...vendors, res.data]);
+      const payload = {
+        ...newVendor,
+        name: newVendor.name.trim(),
+        code: newVendor.code.trim().toUpperCase(),
+        medicines: newVendor.medicines.map(m => ({
+          name: m.name.trim(),
+          sku: m.sku.trim().toUpperCase(),
+          price: Number(m.price),
+          gst: m.gst !== undefined && m.gst !== '' ? Number(m.gst) : 12,
+          available: m.available !== false
+        }))
+      };
+      const res = await api.post('/vendors', payload);
+      await fetchProcurementData();
       setShowAddVendorModal(false);
-      showToast('Vendor added successfully!');
+      showToast('Vendor proposed successfully! Sent to Admin for review.');
     } catch (err) {
       console.error(err);
       showToast(err.response?.data?.error || 'Failed to add vendor', 'error');
@@ -327,6 +441,68 @@ const PharmacyDashboard = () => {
     } catch (err) {
       console.error(err);
       showToast(err.response?.data?.error || 'Failed to update price list', 'error');
+    }
+  };
+
+  const handleSubmitMedicineForApproval = async (e) => {
+    e.preventDefault();
+    if (!selectedVendor) return;
+    if (!newMedApprovalData.name.trim()) {
+      showToast("Medicine name is required", "error");
+      return;
+    }
+    if (!newMedApprovalData.sku.trim()) {
+      showToast("SKU code is required", "error");
+      return;
+    }
+    const priceVal = Number(newMedApprovalData.price);
+    if (isNaN(priceVal) || priceVal <= 0) {
+      showToast("Wholesale price must be a valid positive number", "error");
+      return;
+    }
+
+    setIsSubmittingMedApproval(true);
+    try {
+      const payload = {
+        type: 'vendor_medicine_addition',
+        staffId: currentUser?.staff_id || currentUser?.id || 'pharmacy-1',
+        requesterName: currentUser?.name || 'Pharmacy Staff',
+        requesterRole: 'pharmacy',
+        details: {
+          vendorId: selectedVendor._id,
+          vendorName: selectedVendor.name,
+          vendorCode: selectedVendor.code,
+          medicine: {
+            name: newMedApprovalData.name.trim(),
+            sku: newMedApprovalData.sku.trim().toUpperCase(),
+            price: priceVal,
+            gst: Number(newMedApprovalData.gst) || 12,
+            available: newMedApprovalData.available !== false,
+            mrp: newMedApprovalData.mrp ? Number(newMedApprovalData.mrp) : priceVal,
+            sellingPrice: newMedApprovalData.mrp ? Number(newMedApprovalData.mrp) : priceVal
+          }
+        },
+        comment: newMedApprovalData.comment.trim() || `Proposed new medicine addition for ${selectedVendor.name}`
+      };
+
+      await api.post('/approvals', payload);
+      showToast("Medicine submitted for Admin approval.", "success");
+      setShowAddMedicineApprovalModal(false);
+      await fetchProcurementData();
+      setNewMedApprovalData({
+        name: '',
+        sku: '',
+        price: '',
+        gst: 12,
+        available: true,
+        mrp: '',
+        comment: ''
+      });
+    } catch (err) {
+      console.error("Failed to submit medicine for approval:", err);
+      showToast(err.response?.data?.error || "Failed to submit medicine for approval", "error");
+    } finally {
+      setIsSubmittingMedApproval(false);
     }
   };
 
@@ -352,143 +528,286 @@ const PharmacyDashboard = () => {
     }
   };
 
-  const handleDraftPOAddRow = () => {
-    setPoDraftItems([...poDraftItems, { name: '', sku: '', qty: 100 }]);
-  };
+  // Phase 1B: Active Vendors and Unique Union Medicine Catalog
+  const activeVendors = useMemo(() => {
+    return (vendors || []).filter(v => v.status === 'Active');
+  }, [vendors]);
 
-  const handleDraftPORemoveRow = (index) => {
-    setPoDraftItems(poDraftItems.filter((_, idx) => idx !== index));
-  };
+  const uniqueMedCatalog = useMemo(() => {
+    const map = new Map();
+    activeVendors.forEach(v => {
+      (v.medicines || []).forEach(m => {
+        if (m.name && m.sku && m.available !== false) {
+          const cleanSku = m.sku.trim().toUpperCase();
+          if (!map.has(cleanSku)) {
+            map.set(cleanSku, {
+              name: m.name.trim(),
+              sku: cleanSku,
+              category: m.category || 'General'
+            });
+          }
+        }
+      });
+    });
+    return Array.from(map.values());
+  }, [activeVendors]);
 
-  const handleDraftPOChange = (index, field, value) => {
-    const updated = [...poDraftItems];
-    updated[index][field] = value;
-    if (field === 'name') {
-      const matched = inventory.find(item => item.name === value);
-      if (matched) {
-        updated[index].sku = matched.sku;
+  const getVendorsOfferingItem = (sku) => {
+    if (!sku) return [];
+    const cleanSku = sku.trim().toUpperCase();
+    const result = [];
+    activeVendors.forEach(v => {
+      const match = (v.medicines || []).find(m => m.sku?.trim().toUpperCase() === cleanSku && m.available !== false);
+      if (match) {
+        result.push({
+          vendorId: v._id,
+          vendorName: v.name,
+          vendorCode: v.code,
+          price: Number(match.price) || 0,
+          gst: match.gst !== undefined ? Number(match.gst) : 12
+        });
       }
-    }
-    setPoDraftItems(updated);
+    });
+    result.sort((a, b) => a.price - b.price);
+    return result;
   };
 
   const getCheapestVendorForItem = (sku) => {
-    let cheapestVendor = null;
-    let lowestPrice = Infinity;
-    vendors.forEach(v => {
-      const match = v.medicines?.find(med => med.sku === sku && med.available);
-      if (match && match.price < lowestPrice) {
-        lowestPrice = match.price;
-        cheapestVendor = v;
-      }
-    });
-    return { vendor: cheapestVendor, price: lowestPrice };
+    const list = getVendorsOfferingItem(sku);
+    return list.length > 0 ? list[0] : null;
   };
 
-  const calculatePOSplits = () => {
-    const splits = {};
-    poDraftItems.forEach(item => {
-      if (!item.name || !item.sku || !item.qty) return;
-      const { vendor, price } = getCheapestVendorForItem(item.sku);
-      if (vendor) {
-        if (!splits[vendor._id]) {
-          splits[vendor._id] = {
-            vendorId: vendor._id,
-            vendorName: vendor.name,
-            items: [],
-            totalAmount: 0
-          };
-        }
-        const qty = Number(item.qty) || 0;
-        const total = price * qty;
-        splits[vendor._id].items.push({
-          name: item.name,
-          sku: item.sku,
-          requiredQty: qty,
-          price: price,
-          total: total
-        });
-        splits[vendor._id].totalAmount += total;
-      } else {
-        if (vendors.length > 0) {
-          const fallback = vendors[0];
-          const price = 50.0;
-          if (!splits[fallback._id]) {
-            splits[fallback._id] = {
-              vendorId: fallback._id,
-              vendorName: fallback.name,
-              items: [],
-              totalAmount: 0
-            };
-          }
-          const qty = Number(item.qty) || 0;
-          const total = price * qty;
-          splits[fallback._id].items.push({
-            name: item.name,
-            sku: item.sku,
-            requiredQty: qty,
-            price: price,
-            total: total
-          });
-          splits[fallback._id].totalAmount += total;
-        }
-      }
+  const handleDraftPOAddRow = () => {
+    setPoDraftItems(prev => [
+      ...prev,
+      { name: '', sku: '', qty: 100, vendorId: '', vendorName: '', price: 0, tax: 12, total: 0, isLowest: true }
+    ]);
+  };
+
+  const handleDraftPORemoveRow = (index) => {
+    setPoDraftItems(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleDraftPOItemSelect = (index, medName) => {
+    const matched = uniqueMedCatalog.find(m => m.name === medName);
+    if (!matched) return;
+    const sku = matched.sku;
+    const suppliers = getVendorsOfferingItem(sku);
+    const cheapest = suppliers.length > 0 ? suppliers[0] : null;
+
+    setPoDraftItems(prev => {
+      const updated = [...prev];
+      const qty = Number(updated[index]?.qty) || 100;
+      const price = cheapest ? cheapest.price : 0;
+      const tax = cheapest ? cheapest.gst : 12;
+      const sub = qty * price;
+      const tot = sub + (sub * tax) / 100;
+
+      updated[index] = {
+        ...updated[index],
+        name: matched.name,
+        sku: matched.sku,
+        qty: qty,
+        vendorId: cheapest ? cheapest.vendorId : '',
+        vendorName: cheapest ? cheapest.vendorName : '',
+        price: price,
+        tax: tax,
+        total: Math.round(tot * 100) / 100,
+        isLowest: true
+      };
+      return updated;
     });
-    setPoSplitSummary(Object.values(splits));
+  };
+
+  const handleDraftPOVendorSelect = (index, vendorId) => {
+    setPoDraftItems(prev => {
+      const updated = [...prev];
+      const row = updated[index];
+      const suppliers = getVendorsOfferingItem(row.sku);
+      const selectedSup = suppliers.find(s => s.vendorId.toString() === vendorId.toString());
+      const cheapest = suppliers.length > 0 ? suppliers[0] : null;
+
+      if (selectedSup) {
+        const qty = Number(row.qty) || 1;
+        const price = selectedSup.price;
+        const tax = selectedSup.gst;
+        const sub = qty * price;
+        const tot = sub + (sub * tax) / 100;
+
+        updated[index] = {
+          ...row,
+          vendorId: selectedSup.vendorId,
+          vendorName: selectedSup.vendorName,
+          price: price,
+          tax: tax,
+          total: Math.round(tot * 100) / 100,
+          isLowest: cheapest ? (selectedSup.price <= cheapest.price) : true
+        };
+      }
+      return updated;
+    });
+  };
+
+  const handleDraftPOQtyChange = (index, qtyVal) => {
+    setPoDraftItems(prev => {
+      const updated = [...prev];
+      const row = updated[index];
+      const qty = Math.max(1, Number(qtyVal) || 0);
+      const sub = qty * (row.price || 0);
+      const tot = sub + (sub * (row.tax || 12)) / 100;
+
+      updated[index] = {
+        ...row,
+        qty: qty,
+        total: Math.round(tot * 100) / 100
+      };
+      return updated;
+    });
   };
 
   const handleSendPurchaseOrders = async () => {
-    if (poSplitSummary.length === 0) return;
+    const validItems = poDraftItems.filter(x => x.name && x.sku && Number(x.qty) > 0 && x.vendorId);
+    if (validItems.length === 0) {
+      showToast('Please add at least one valid item with selected supplier & quantity', 'error');
+      return;
+    }
+
     try {
-      for (const split of poSplitSummary) {
-        const poId = `PO-2026-${Math.floor(100000 + Math.random() * 900000)}`;
-        await api.post('/purchase-orders', {
-          poId,
-          vendorId: split.vendorId,
-          vendorName: split.vendorName,
-          items: split.items,
-          totalAmount: split.totalAmount,
-          requestedBy: currentUser.name || 'Pharmacist'
-        });
-      }
+      const payload = {
+        items: validItems.map(it => ({
+          name: it.name,
+          sku: it.sku,
+          requiredQty: Number(it.qty),
+          price: Number(it.price),
+          tax: Number(it.tax || 12),
+          vendorId: it.vendorId,
+          vendorName: it.vendorName
+        })),
+        requestedBy: currentUser?.name || 'Pharmacist'
+      };
+
+      const res = await api.post('/purchase-orders', payload);
       await fetchProcurementData();
       setShowCreatePOModal(false);
-      showToast('Purchase Orders sent to Admin for approval!');
+      showToast(`Consolidated PO sent to Admin! Split into ${res.data?.childPOsCount || 'vendor'} orders.`);
     } catch (err) {
       console.error(err);
       showToast(err.response?.data?.error || 'Failed to submit Purchase Orders', 'error');
     }
   };
 
+  const handleExportPOToCSV = (po) => {
+    if (!po || !po.items || po.items.length === 0) {
+      showToast('No items found in this purchase order', 'info');
+      return;
+    }
+    const headers = ['PO Number', 'Master PO', 'Supplier', 'Item Name', 'SKU', 'Quantity', 'Purchase Price (INR)', 'GST (%)', 'Line Total (INR)', 'Status'];
+    const rows = po.items.map(it => [
+      po.poId,
+      po.parentPOId || 'N/A',
+      it.vendorName || po.vendorName || 'N/A',
+      it.name,
+      it.sku || 'N/A',
+      it.requiredQty || it.qty || 0,
+      (it.price || 0).toFixed(2),
+      it.tax !== undefined ? it.tax : 12,
+      (it.total || 0).toFixed(2),
+      po.status || 'Pending Approval'
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${po.poId}_export.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Exported ${po.poId} to CSV successfully!`, 'success');
+  };
+
   const handleGrnPOSelection = (poId) => {
     setGrnSelectedPOId(poId);
-    const po = purchaseOrders.find(x => x._id === poId);
-    if (po) {
-      setGrnItems(po.items.map(item => ({
-        name: item.name,
-        sku: item.sku,
-        qtyRequired: item.requiredQty,
-        qtyReceived: item.requiredQty,
-        price: item.price,
-        gst: item.tax !== undefined ? item.tax : 12,
-        batchNumber: '',
-        expiryDate: '',
-        mfgDate: ''
-      })));
+    const po = purchaseOrders.find(x => x._id === poId || x.poId === poId);
+    if (po && po.items) {
+      // Calculate cumulative receipts across all prior non-draft GRNs for this PO
+      const priorGrns = (goodsReceipts || []).filter(g => 
+        (g.poId === po._id || g.poId === po.poId || g.poNumber === po.poId) && 
+        ['Submitted', 'Verified/Completed'].includes(g.status)
+      );
+      
+      const priorRecvBySku = {};
+      priorGrns.forEach(grn => {
+        (grn.items || []).forEach(it => {
+          priorRecvBySku[it.sku] = (priorRecvBySku[it.sku] || 0) + (Number(it.qtyReceived) || 0);
+        });
+      });
+
+      setGrnItems(po.items.map(item => {
+        const ordered = Number(item.requiredQty) || Number(item.qty) || 0;
+        const prevRecv = priorRecvBySku[item.sku] || 0;
+        const remaining = Math.max(0, ordered - prevRecv);
+        const rate = Number(item.price) || 0;
+        const discountPct = Number(item.discount) || 0;
+        const gstRate = item.tax !== undefined ? Number(item.tax) : 12;
+
+        return {
+          itemType: item.category || 'Medicine',
+          itemCode: item.sku || '',
+          sku: item.sku,
+          name: item.name,
+          unit: item.unit || 'Strip',
+          barcode: '',
+          batchNumber: '',
+          mfgDate: '',
+          expiryDate: '',
+          qtyOrdered: ordered,
+          orderedQty: ordered,
+          previouslyReceivedQty: prevRecv,
+          remainingQty: remaining,
+          qtyReceived: remaining, // default to receiving the remaining
+          rejectedQty: 0,
+          rejectionReason: '',
+          price: rate,
+          purchaseRate: rate,
+          discountPercent: discountPct,
+          gst: gstRate
+        };
+      }));
     }
   };
 
   const handleOpenEditGrn = (grn) => {
+    const ageMs = Date.now() - new Date(grn.createdAt || grn.receivedDate || Date.now()).getTime();
+    if (ageMs > 24 * 60 * 60 * 1000) {
+      showToast("Editing period expired (24 hours from creation).", "error");
+      return;
+    }
     setEditingGrn(grn);
     setGrnFlowType(grn.poId ? 'po' : 'direct');
     setGrnSelectedPOId(grn.poId || '');
     setGrnDirectVendorId(grn.vendorId || '');
+    setGrnLocation(grn.grnLocation || 'Main Pharmacy Store');
+    setGrnInvoiceNumber(grn.invoiceNumber || '');
+    setGrnInvoiceDate(grn.invoiceDate ? new Date(grn.invoiceDate).toISOString().substring(0, 10) : new Date().toISOString().substring(0, 10));
+    setGrnInvoiceAmount(grn.invoiceAmount || '');
     setGrnItems((grn.items || []).map(it => ({
+      itemType: it.itemType || 'Medicine',
+      itemCode: it.itemCode || it.sku || '',
       name: it.name,
       sku: it.sku,
-      qtyRequired: it.qtyOrdered || 0,
+      unit: it.unit || 'Strip',
+      barcode: it.barcode || '',
+      qtyOrdered: it.qtyOrdered || it.orderedQty || 0,
+      orderedQty: it.orderedQty || it.qtyOrdered || 0,
+      previouslyReceivedQty: it.previouslyReceivedQty || 0,
+      remainingQty: it.remainingQty || 0,
       qtyReceived: it.qtyReceived,
-      price: it.price,
+      rejectedQty: it.rejectedQty || 0,
+      rejectionReason: it.rejectionReason || '',
+      price: it.price || it.purchaseRate || 0,
+      purchaseRate: it.purchaseRate || it.price || 0,
+      discountPercent: it.discountPercent || 0,
       gst: it.gst !== undefined ? it.gst : 12,
       batchNumber: it.batchNumber || '',
       expiryDate: it.expiryDate ? new Date(it.expiryDate).toISOString().substring(0, 10) : '',
@@ -504,14 +823,36 @@ const PharmacyDashboard = () => {
     if (e) e.preventDefault();
     
     const today = new Date().toISOString().split('T')[0];
-    const futureMfgItem = grnItems.find(item => item.mfgDate && item.mfgDate > today);
-    if (futureMfgItem) {
-      showToast(`Manufacturing date for ${futureMfgItem.name} cannot be in the future!`, 'error');
-      return;
+    
+    // Validations
+    for (const item of grnItems) {
+      if (item.mfgDate && item.mfgDate > today) {
+        showToast(`Manufacturing date for ${item.name} cannot be in the future!`, 'error');
+        return;
+      }
+      if (item.mfgDate && item.expiryDate && item.expiryDate <= item.mfgDate) {
+        showToast(`Expiry date for ${item.name} must be after manufacturing date!`, 'error');
+        return;
+      }
+      if (Number(item.qtyReceived) < 0) {
+        showToast(`Received quantity cannot be negative for ${item.name}!`, 'error');
+        return;
+      }
+      if (Number(item.rejectedQty) < 0) {
+        showToast(`Rejected quantity cannot be negative for ${item.name}!`, 'error');
+        return;
+      }
+      if (grnFlowType === 'po') {
+        const remaining = item.remainingQty !== undefined ? item.remainingQty : (item.qtyOrdered || item.qtyRequired || 0);
+        if (Number(item.qtyReceived) > remaining) {
+          showToast(`Received quantity (${item.qtyReceived}) exceeds remaining quantity (${remaining}) for ${item.name}!`, 'error');
+          return;
+        }
+      }
     }
     
-    if (grnFlowType === 'direct' && !grnInvoiceFileName) {
-      showToast('Supplier invoice document is required for direct purchase!', 'error');
+    if (grnFlowType === 'direct' && !grnDirectVendorId) {
+      showToast('Please select a vendor for direct purchase!', 'error');
       return;
     }
 
@@ -521,13 +862,18 @@ const PharmacyDashboard = () => {
       let vendorName = '';
       let poId = null;
       let poNumber = '';
+      let poDate = null;
 
       if (grnFlowType === 'po') {
-        const po = purchaseOrders.find(x => x._id === grnSelectedPOId);
-        if (!po) return;
+        const po = purchaseOrders.find(x => x._id === grnSelectedPOId || x.poId === grnSelectedPOId);
+        if (!po) {
+          showToast('Please select an approved Purchase Order!', 'error');
+          return;
+        }
         poId = po._id;
         poNumber = po.poId;
-        vendorId = po.vendorId;
+        poDate = po.createdAt;
+        vendorId = po.vendorId || (vendors[0] ? vendors[0]._id : '');
         vendorName = po.vendorName;
       } else {
         const v = vendors.find(x => x._id === grnDirectVendorId);
@@ -541,24 +887,40 @@ const PharmacyDashboard = () => {
 
       const payload = {
         grnId,
+        grnLocation: grnLocation || 'Main Pharmacy Store',
         poId,
         poNumber,
+        poDate,
         vendorId,
         vendorName,
-        items: grnItems.map(it => ({
-          name: it.name,
-          sku: it.sku,
-          qtyOrdered: it.qtyRequired || 0,
-          qtyReceived: it.qtyReceived,
-          price: it.price,
-          gst: it.gst !== undefined ? it.gst : 12,
-          batchNumber: it.batchNumber || '',
-          expiryDate: it.expiryDate || null,
-          mfgDate: it.mfgDate || null
-        })),
+        status: statusParam,
+        invoiceNumber: grnInvoiceNumber || '',
+        invoiceDate: grnInvoiceDate || null,
+        invoiceAmount: Number(grnInvoiceAmount) || 0,
         invoiceUrl: grnInvoiceFileName || '',
         notes: grnNotes || '',
-        status: statusParam
+        items: grnItems.map(it => ({
+          itemType: it.itemType || 'Medicine',
+          itemCode: it.itemCode || it.sku || '',
+          sku: it.sku,
+          name: it.name,
+          unit: it.unit || 'Strip',
+          barcode: it.barcode || '',
+          batchNumber: it.batchNumber || '',
+          mfgDate: it.mfgDate || null,
+          expiryDate: it.expiryDate || null,
+          qtyOrdered: it.qtyOrdered || it.qtyRequired || 0,
+          orderedQty: it.orderedQty || it.qtyOrdered || 0,
+          previouslyReceivedQty: it.previouslyReceivedQty || 0,
+          remainingQty: it.remainingQty || 0,
+          qtyReceived: Number(it.qtyReceived) || 0,
+          rejectedQty: Number(it.rejectedQty) || 0,
+          rejectionReason: it.rejectionReason || '',
+          price: Number(it.price || it.purchaseRate) || 0,
+          purchaseRate: Number(it.purchaseRate || it.price) || 0,
+          discountPercent: Number(it.discountPercent) || 0,
+          gst: it.gst !== undefined ? Number(it.gst) : 12
+        }))
       };
 
       if (editingGrn) {
@@ -570,6 +932,14 @@ const PharmacyDashboard = () => {
       await fetchProcurementData();
       await fetchInventory();
       setShowGRNModal(false);
+      setGrnSelectedPOId('');
+      setGrnDirectVendorId('');
+      setGrnItems([]);
+      setGrnInvoiceNumber('');
+      setGrnInvoiceDate(new Date().toISOString().split('T')[0]);
+      setGrnInvoiceAmount('');
+      setGrnInvoiceFileName('');
+      setGrnInvoiceFile(null);
       setGrnNotes('');
       setEditingGrn(null);
       showToast(statusParam === 'Draft' ? 'GRN saved as Draft successfully!' : 'GRN generated & stock updated successfully!');
@@ -804,15 +1174,77 @@ const PharmacyDashboard = () => {
   }, [coverageState]);
 
   const [inventory, setInventory] = useState([]);
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('All');
+  const [inventoryStatusFilter, setInventoryStatusFilter] = useState('All');
+  const [showInventoryExportModal, setShowInventoryExportModal] = useState(false);
+
+  const uniqueInventoryCategories = useMemo(() => {
+    const cats = new Set();
+    inventory.forEach(item => {
+      if (item.category) cats.add(item.category);
+    });
+    return Array.from(cats).sort();
+  }, [inventory]);
+
+  const filteredInventory = useMemo(() => {
+    return inventory.filter(item => {
+      const searchLower = inventorySearch.trim().toLowerCase();
+      const matchesSearch = !searchLower ||
+        (item.name && item.name.toLowerCase().includes(searchLower)) ||
+        (item.sku && item.sku.toLowerCase().includes(searchLower)) ||
+        (item.category && item.category.toLowerCase().includes(searchLower));
+
+      const matchesCategory = inventoryCategoryFilter === 'All' || item.category === inventoryCategoryFilter;
+
+      let itemStatus = item.status;
+      if (!itemStatus) {
+        const stockNum = Number(item.stock) || 0;
+        itemStatus = stockNum > 20 ? 'In Stock' : stockNum > 0 ? 'Low Stock' : 'Out of Stock';
+      }
+      const matchesStatus = inventoryStatusFilter === 'All' || itemStatus === inventoryStatusFilter;
+
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
+  }, [inventory, inventorySearch, inventoryCategoryFilter, inventoryStatusFilter]);
+
   const [indents, setIndents] = useState([]);
   const [selectedIndent, setSelectedIndent] = useState(null);
   const [showIndentModal, setShowIndentModal] = useState(false);
+  const [supplyInputMap, setSupplyInputMap] = useState({});
   const [loading, setLoading] = useState(false);
   const [prescriptions, setPrescriptions] = useState([]);
   const [prescriptionsSearchQuery, setPrescriptionsSearchQuery] = useState('');
   const [prescriptionsDateFilter, setPrescriptionsDateFilter] = useState('');
+  const [showPrescriptionExportModal, setShowPrescriptionExportModal] = useState(false);
   const [overviewPage, setOverviewPage] = useState(1);
   const [prescriptionsPage, setPrescriptionsPage] = useState(1);
+
+  const prescriptionsForExport = useMemo(() => {
+    return prescriptions.filter(p => {
+      // 1. Status Filter
+      if (prescriptionsFilter !== 'All') {
+        const pStatus = p.status === 'Pending Pharmacy Dispatch' ? 'Pending' : p.status;
+        if (pStatus?.toLowerCase() !== prescriptionsFilter.toLowerCase()) return false;
+      }
+      // 2. Search Query
+      if (prescriptionsSearchQuery.trim()) {
+        const q = prescriptionsSearchQuery.toLowerCase();
+        const pName = (p.patientId?.name || p.name || '').toLowerCase();
+        const pPhone = (p.patientId?.phone || p.patientId?.contact || '').toLowerCase();
+        const docName = (p.doctorId?.name || p.docName || '').toLowerCase();
+        const pId = (p._id ? `rx-${p._id.slice(-6)}` : (p.id || '')).toLowerCase();
+        if (!pName.includes(q) && !pPhone.includes(q) && !docName.includes(q) && !pId.includes(q)) return false;
+      }
+      // 3. Optional Calendar Date filter from toolbar
+      if (prescriptionsDateFilter) {
+        const pDate = p.createdAt ? new Date(p.createdAt).toDateString() : '';
+        const filterDate = new Date(prescriptionsDateFilter).toDateString();
+        if (pDate !== filterDate) return false;
+      }
+      return true;
+    });
+  }, [prescriptions, prescriptionsFilter, prescriptionsSearchQuery, prescriptionsDateFilter]);
   const [returnLogs, setReturnLogs] = useState([]);
   const [showLogReturnModal, setShowLogReturnModal] = useState(false);
   const [returnType, setReturnType] = useState('Prescription-Linked');
@@ -1136,13 +1568,16 @@ const PharmacyDashboard = () => {
 
   useEffect(() => {
     fetchData();
-    // Poll data and coverage data every 5 seconds for real-time updates
-    const pollInterval = setInterval(() => {
-      fetchData();
-      fetchCoverageData();
-    }, 5000);
-    return () => clearInterval(pollInterval);
   }, []);
+
+  const fetchIndents = async () => {
+    try {
+      const indentsRes = await api.get('/indents');
+      setIndents(indentsRes.data || []);
+    } catch (err) {
+      console.error("Failed to fetch indents:", err);
+    }
+  };
 
   useEffect(() => {
     const handleSync = (e) => {
@@ -1150,17 +1585,38 @@ const PharmacyDashboard = () => {
       console.log('[SOCKET] PharmacyDashboard received sync event for:', type);
       if (type === 'coverage') {
         fetchCoverageData();
+      } else if (type === 'indents' || type === 'indent') {
+        fetchIndents();
+        fetchInventory();
       } else if (type === 'prescription_updated') {
         if (changes && changes.pharmacist) {
           showToast(message || 'A prescription has been edited by the doctor!', 'info');
         }
         fetchData();
-      } else {
+      } else if (type === 'medicines') {
+        fetchInventory();
+      } else if (type === 'vendors' || type === 'approvals' || type === 'purchase_orders' || type === 'purchase-orders') {
+        fetchProcurementData();
+      } else if (type === 'all' || !type) {
         fetchData();
       }
     };
     window.addEventListener('curoxa_sync', handleSync);
-    return () => window.removeEventListener('curoxa_sync', handleSync);
+
+    const onWindowFocus = () => {
+      fetchProcurementData();
+    };
+    window.addEventListener('focus', onWindowFocus);
+
+    const autoSyncTimer = setInterval(() => {
+      fetchProcurementData();
+    }, 6000);
+
+    return () => {
+      window.removeEventListener('curoxa_sync', handleSync);
+      window.removeEventListener('focus', onWindowFocus);
+      clearInterval(autoSyncTimer);
+    };
   }, []);
 
   const fetchInventory = async () => {
@@ -1510,8 +1966,8 @@ const PharmacyDashboard = () => {
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
       console.error(err);
-      setErrorMessage('Failed to dispense prescription(s)');
-      setTimeout(() => setErrorMessage(''), 3000);
+      setErrorMessage(err.response?.data?.error || 'Failed to dispense prescription(s)');
+      setTimeout(() => setErrorMessage(''), 4000);
     }
   };
 
@@ -1564,8 +2020,8 @@ const PharmacyDashboard = () => {
       setCashReceived('');
     } catch (err) {
       console.error(err);
-      setErrorMessage('Failed to settle payment and dispense');
-      setTimeout(() => setErrorMessage(''), 3000);
+      setErrorMessage(err.response?.data?.error || 'Failed to settle payment and dispense');
+      setTimeout(() => setErrorMessage(''), 4000);
     }
   };
 
@@ -1998,7 +2454,6 @@ const PharmacyDashboard = () => {
   const salesBreakdown = getSalesBreakdown();
   const totalVal = salesBreakdown.total || 1;
   const cashPct = Math.round((salesBreakdown.cash / totalVal) * 100);
-  const upiPct = Math.round((salesBreakdown.upi / totalVal) * 100);
   const cardPct = Math.round((salesBreakdown.card / totalVal) * 100);
 
   return (
@@ -2011,8 +2466,8 @@ const PharmacyDashboard = () => {
 
         html, body {
           background-color: #F8FAFC !important;
-          font-family: 'Urbanist', sans-serif !important;
-          overflow: hidden !important;
+          font-family: 'Urbanist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+          overflow-x: hidden !important;
           margin: 0 !important;
           padding: 0 !important;
         }
@@ -2031,209 +2486,603 @@ const PharmacyDashboard = () => {
           justify-content: center !important;
         }
 
-        /* SIDEBAR OVERRIDES */
-        .sidebar {
-          width: 256px !important;
-          background: #FFFFFF !important;
-          border-right: 1px solid #E2E8F0 !important;
-          box-shadow: none !important;
-          padding: 16px 0 !important;
-          height: calc(100vh / 0.9) !important;
-          position: fixed !important;
-          top: 0 !important;
-          left: 0 !important;
+        /* 1. Flagship Light Theme Sidebar Navigation (Identical to Admin Portal) */
+        .admin-sidebar {
+          width: 260px !important;
+          background: rgba(255, 255, 255, 0.94) !important;
+          backdrop-filter: blur(16px) !important;
+          -webkit-backdrop-filter: blur(16px) !important;
+          color: #0F172A !important;
           display: flex !important;
           flex-direction: column !important;
-          z-index: 100 !important;
+          position: fixed !important;
+          top: 0 !important;
+          bottom: 0 !important;
+          left: 0 !important;
+          height: 100vh !important;
+          height: 100dvh !important;
+          min-height: 100vh !important;
+          min-height: calc(100vh / 0.9) !important;
+          z-index: 1000 !important;
+          border-right: 1px solid rgba(226, 232, 240, 0.85) !important;
+          border-top-right-radius: 28px !important;
+          border-bottom-right-radius: 28px !important;
+          box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.04) !important;
+          overscroll-behavior: contain !important;
+          transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          box-sizing: border-box !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          overflow: hidden !important;
         }
-        .sidebar-logo {
-          padding: 8px 24px 20px !important;
+
+        .admin-sidebar.collapsed {
+          width: 76px !important;
+        }
+        .admin-sidebar.collapsed .sidebar-brand-text,
+        .admin-sidebar.collapsed .sidebar-brand-subtitle,
+        .admin-sidebar.collapsed .sidebar-group-title,
+        .admin-sidebar.collapsed .sidebar-link-text,
+        .admin-sidebar.collapsed .sidebar-link span,
+        .admin-sidebar.collapsed .profile-info,
+        .admin-sidebar.collapsed .profile-chevron {
+          display: none !important;
+        }
+        .admin-sidebar.collapsed .sidebar-brand {
+          justify-content: center !important;
+          padding: 16px 8px 14px !important;
+        }
+        .admin-sidebar.collapsed .sidebar-nav-container {
+          padding: 10px 6px !important;
+        }
+        .admin-sidebar.collapsed .sidebar-link {
+          justify-content: center !important;
+          padding: 6px !important;
+        }
+        .admin-sidebar.collapsed .sidebar-zone {
+          padding: 4px 2px !important;
+          background: transparent !important;
+        }
+        .admin-sidebar.collapsed .sidebar-profile {
+          margin: auto 6px 12px !important;
+          padding: 6px !important;
+          justify-content: center !important;
+          width: 44px !important;
+          height: 44px !important;
+        }
+
+        .sidebar-brand-wrapper {
+          position: relative !important;
+          overflow: visible !important;
+          flex-shrink: 0 !important;
+        }
+
+        .sidebar-brand {
+          padding: 24px 20px 16px 20px !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 14px !important;
+          position: relative !important;
+          z-index: 10 !important;
+        }
+
+        .sidebar-nav-container {
+          flex: 1 !important;
+          overflow-y: auto !important;
+          padding: 8px 12px 14px 12px !important;
+          overscroll-behavior: contain !important;
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+          min-height: 0 !important;
+        }
+        .sidebar-nav-container::-webkit-scrollbar {
+          display: none !important;
+          width: 0 !important;
+          height: 0 !important;
+        }
+
+        .sidebar-group {
+          margin-bottom: 14px !important;
+        }
+
+        .sidebar-group-title {
+          font-size: 12.5px !important;
+          font-weight: 800 !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.07em !important;
+          line-height: 1.25 !important;
+          margin-bottom: 8px !important;
+          padding: 4px 8px !important;
+          border-radius: 8px !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          cursor: pointer !important;
+          user-select: none !important;
+          transition: background-color 0.15s ease, margin-bottom 0.2s ease !important;
+        }
+        .sidebar-group-title:hover {
+          background-color: rgba(0, 0, 0, 0.035) !important;
+        }
+        .sidebar-group-title.collapsed {
+          margin-bottom: 0px !important;
+        }
+        .sidebar-group-chevron {
+          margin-left: auto !important;
+          transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          opacity: 0.7 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+        .sidebar-group-title:hover .sidebar-group-chevron {
+          opacity: 1 !important;
+        }
+
+        .sidebar-zone-clinic {
+          background: linear-gradient(180deg, rgba(240, 253, 250, 0.75) 0%, rgba(236, 254, 255, 0.45) 100%) !important;
+          border-radius: 18px !important;
+          padding: 10px 8px !important;
+          margin-top: 14px !important;
+          margin-bottom: 14px !important;
+          transition: all 0.25s ease !important;
+        }
+        .sidebar-zone-clinic.collapsed {
+          padding: 6px 8px !important;
+          margin-top: 8px !important;
+          margin-bottom: 8px !important;
+        }
+
+        .sidebar-zone-finance {
+          background: linear-gradient(180deg, rgba(255, 247, 237, 0.8) 0%, rgba(254, 242, 242, 0.35) 100%) !important;
+          border-radius: 18px !important;
+          padding: 10px 8px !important;
+          margin-top: 14px !important;
+          margin-bottom: 14px !important;
+          transition: all 0.25s ease !important;
+        }
+        .sidebar-zone-finance.collapsed {
+          padding: 6px 8px !important;
+          margin-top: 8px !important;
+          margin-bottom: 8px !important;
+        }
+
+        .sidebar-link {
+          position: relative !important;
           display: flex !important;
           align-items: center !important;
           gap: 10px !important;
-          font-size: 22px !important;
-          font-weight: 900 !important;
-          color: #2563EB !important;
-          letter-spacing: -0.5px !important;
-        }
-        .sidebar-logo svg, .sidebar-logo i {
-          color: #2563EB !important;
-          width: 24px !important;
-          height: 24px !important;
-        }
-        .sidebar nav {
-          display: flex !important;
-          flex-direction: column !important;
-          height: calc(100% - 130px) !important;
-          overflow-y: auto !important;
-        }
-        .sidebar .nav-link {
-          display: flex !important;
-          align-items: center !important;
-          gap: 12px !important;
-          padding: 12px 20px !important;
-          margin: 4px 16px !important;
-          border-radius: 8px !important;
-          color: #64748B !important;
-          font-weight: 600 !important;
-          text-decoration: none !important;
-          transition: all 0.2s ease !important;
-          border-left: none !important;
-          position: relative !important;
-        }
-        .sidebar .nav-link:hover {
-          background: #F8FAFC !important;
+          padding: 5px 8px !important;
+          border-radius: 14px !important;
           color: #0F172A !important;
-        }
-        .sidebar .nav-link.active {
-          background: #EFF6FF !important;
-          color: #2563EB !important;
-          font-weight: 700 !important;
-          position: relative !important;
-          border-left: none !important;
+          text-decoration: none !important;
+          font-weight: 600 !important;
+          font-size: 14px !important;
+          line-height: 1.25 !important;
+          transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          margin-bottom: 3px !important;
+          cursor: pointer !important;
+          user-select: none !important;
+          border: 1px solid transparent !important;
         }
 
-        .sidebar-profile-card {
-          margin: auto 16px 16px !important;
-          padding: 12px !important;
-          border-radius: 16px !important;
-          background: #F8FAFC !important;
-          border: 1px solid #E2E8F0 !important;
+        .sidebar-link-text {
+          line-height: 1.25 !important;
+          font-size: 13.5px !important;
+          font-weight: 600 !important;
+          color: #0F172A !important;
+          transition: all 0.2s ease !important;
+        }
+
+        .sidebar-link:hover:not(.active) {
+          background-color: rgba(241, 245, 249, 0.85) !important;
+          transform: translateX(2px) !important;
+        }
+
+        /* 3D POPPED-OUT ACTIVE STATE WITH RICH DEPTH & SHADOWS */
+        .sidebar-link.active {
+          background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+          border: 1px solid rgba(219, 234, 254, 0.95) !important;
+          box-shadow: 
+            0 10px 24px -3px rgba(37, 99, 235, 0.18),
+            0 4px 10px -2px rgba(15, 23, 42, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.04),
+            inset 0 1px 0 #FFFFFF !important;
+          transform: translateY(-1.5px) !important;
+          z-index: 5 !important;
+        }
+
+        .sidebar-link.active .sidebar-link-text {
+          color: #2563EB !important;
+          font-weight: 800 !important;
+          letter-spacing: -0.01em !important;
+        }
+
+        .sidebar-link.active .sidebar-link-icon {
+          transform: scale(1.04) !important;
+          box-shadow: 0 5px 15px -1px rgba(37, 99, 235, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* Clinic zone active 3D pop */
+        .sidebar-zone-clinic .sidebar-link.active {
+          border-color: rgba(153, 246, 228, 0.95) !important;
+          box-shadow: 
+            0 10px 24px -3px rgba(13, 148, 136, 0.2),
+            0 4px 10px -2px rgba(15, 23, 42, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.04),
+            inset 0 1px 0 #FFFFFF !important;
+        }
+        .sidebar-zone-clinic .sidebar-link.active .sidebar-link-text {
+          color: #0D9488 !important;
+        }
+        .sidebar-zone-clinic .sidebar-link.active .sidebar-link-icon {
+          box-shadow: 0 5px 15px -1px rgba(13, 148, 136, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* Finance zone active 3D pop */
+        .sidebar-zone-finance .sidebar-link.active {
+          border-color: rgba(254, 215, 170, 0.95) !important;
+          box-shadow: 
+            0 10px 24px -3px rgba(234, 88, 12, 0.2),
+            0 4px 10px -2px rgba(15, 23, 42, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.04),
+            inset 0 1px 0 #FFFFFF !important;
+        }
+        .sidebar-zone-finance .sidebar-link.active .sidebar-link-text {
+          color: #EA580C !important;
+        }
+        .sidebar-zone-finance .sidebar-link.active .sidebar-link-icon {
+          box-shadow: 0 5px 15px -1px rgba(234, 88, 12, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+        }
+
+        .sidebar-link-icon {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 11px !important;
           display: flex !important;
           align-items: center !important;
-          gap: 12px !important;
+          justify-content: center !important;
+          flex-shrink: 0 !important;
+          transition: all 0.2s ease !important;
+        }
+
+        .sidebar-profile-footer {
+          position: relative !important;
+          padding: 8px 10px 12px 10px !important;
+          background: #FFFFFF !important;
+          border-bottom-right-radius: 28px !important;
+          flex-shrink: 0 !important;
+          z-index: 20 !important;
+          margin-top: auto !important;
+        }
+        .admin-sidebar.collapsed .sidebar-profile-footer,
+        .sidebar.collapsed .sidebar-profile-footer {
+          padding: 8px 6px 12px 6px !important;
+        }
+        .sidebar-profile-fade-top {
+          position: absolute !important;
+          top: -16px !important;
+          left: 0 !important;
+          right: 0 !important;
+          height: 16px !important;
+          background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.45) 50%, rgba(255, 255, 255, 0.9) 100%) !important;
+          pointer-events: none !important;
+          backdrop-filter: blur(0.75px) !important;
+          -webkit-backdrop-filter: blur(0.75px) !important;
+          z-index: 15 !important;
+        }
+
+        .sidebar-profile {
+          margin: 0 !important;
+          padding: 7px 10px !important;
+          border-radius: 14px !important;
+          background: linear-gradient(135deg, #EEF4FF 0%, #F5F8FF 45%, #FFFFFF 100%) !important;
+          border: 1px solid rgba(219, 234, 254, 0.8) !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 10px !important;
           cursor: pointer !important;
           transition: all 0.2s ease !important;
           position: relative !important;
+          box-shadow: 0 4px 14px -2px rgba(30, 58, 138, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+          line-height: 1.2 !important;
+          user-select: none !important;
         }
-        .sidebar-profile-card:hover {
-          background: #F1F5F9 !important;
+        .sidebar-profile:hover {
+          background: linear-gradient(135deg, #E0E7FF 0%, #EEF2FF 50%, #FFFFFF 100%) !important;
+          border-color: #C7D2FE !important;
+          box-shadow: 0 6px 18px -2px rgba(30, 58, 138, 0.1) !important;
         }
-        .sidebar-profile-avatar {
-          width: 40px !important;
-          height: 40px !important;
+        .admin-sidebar.collapsed .sidebar-profile,
+        .sidebar.collapsed .sidebar-profile {
+          margin: 0 auto !important;
+          padding: 6px !important;
+          justify-content: center !important;
+          width: 44px !important;
+          height: 44px !important;
+        }
+        .profile-avatar-wrap {
+          position: relative !important;
+          flex-shrink: 0 !important;
+          display: inline-flex !important;
+        }
+        .profile-avatar-status-dot {
+          position: absolute !important;
+          bottom: -1px !important;
+          right: -1px !important;
+          width: 9px !important;
+          height: 9px !important;
+          border-radius: 50% !important;
+          background: #22C55E !important;
+          border: 2px solid #FFFFFF !important;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+        }
+        .profile-avatar {
+          width: 36px !important;
+          height: 36px !important;
           border-radius: 50% !important;
           object-fit: cover !important;
-          border: 2px solid #60A5FA !important;
+          border: 1.5px solid #818CF8 !important;
         }
-        .sidebar-profile-info {
+        .profile-avatar-initials {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 50% !important;
+          background: linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #8B5CF6 100%) !important;
+          color: #FFFFFF !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          font-weight: 800 !important;
+          font-size: 13.5px !important;
+          box-shadow: 0 3px 8px rgba(79, 70, 229, 0.3) !important;
+          flex-shrink: 0 !important;
+        }
+        .profile-info {
           display: flex !important;
           flex-direction: column !important;
+          flex: 1 !important;
+          min-width: 0 !important;
         }
-        .sidebar-profile-name {
+        .profile-name {
           font-size: 13.5px !important;
           font-weight: 800 !important;
           color: #0F172A !important;
-          line-height: 1.3 !important;
+          line-height: 1.2 !important;
+          white-space: nowrap !important;
+          text-overflow: ellipsis !important;
+          overflow: hidden !important;
         }
-        .sidebar-profile-role {
+        .profile-role {
           font-size: 11px !important;
           color: #64748B !important;
           font-weight: 600 !important;
+          line-height: 1.2 !important;
+          margin-top: 1px !important;
+          white-space: nowrap !important;
+          text-overflow: ellipsis !important;
+          overflow: hidden !important;
         }
-        .sidebar-profile-chevron {
-          color: #64748B !important;
-          width: 16px !important;
-          height: 16px !important;
-          margin-left: auto !important;
-        }
-
-        /* TOP NAV OVERRIDES */
-        .top-nav {
-          margin-left: 256px !important;
-          height: 56px !important;
-          padding: 0 20px !important;
-          border-bottom: 1px solid #F1F5F9 !important;
-          background: #ffffff !important;
+        .profile-chevron {
+          color: #2563EB !important;
           display: flex !important;
           align-items: center !important;
-          justify-content: flex-end !important;
+          transition: transform 0.25s ease !important;
+          flex-shrink: 0 !important;
+        }
+
+        /* Profile Floating Popover Menu */
+        .sidebar-profile-popover-card {
+          position: absolute !important;
+          bottom: 66px !important;
+          left: 8px !important;
+          right: 8px !important;
+          background: #FFFFFF !important;
+          border-radius: 18px !important;
+          padding: 6px !important;
+          box-shadow: 0 12px 36px -4px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(226, 232, 240, 0.8) !important;
+          z-index: 1100 !important;
+          animation: popoverFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          min-width: 210px !important;
+        }
+        @keyframes popoverFadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* TOP NAV STYLES */
+        .top-nav {
+          margin-left: 260px !important;
+          height: 64px !important;
+          padding: 0 28px !important;
+          border-bottom: 1px solid #F1F5F9 !important;
+          background: #FFFFFF !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
           position: fixed !important;
           top: 0 !important;
           right: 0 !important;
           left: 0 !important;
           z-index: 99 !important;
-          gap: 20px !important;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02) !important;
+          transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .top-nav.collapsed {
+          margin-left: 76px !important;
+        }
+        .top-nav-left {
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 2px !important;
+        }
+        .top-nav-page-title {
+          font-size: 20px !important;
+          font-weight: 800 !important;
+          color: #0F172A !important;
+          letter-spacing: -0.02em !important;
+          line-height: 1.2 !important;
+        }
+        .top-nav-greeting {
+          font-size: 12.5px !important;
+          color: #64748B !important;
+          font-weight: 600 !important;
+        }
+        .top-nav-right {
+          display: flex !important;
+          align-items: center !important;
+          gap: 14px !important;
         }
 
         .main-content {
-          margin-left: 256px !important;
-          margin-top: 56px !important;
-          padding: 16px !important;
+          margin-left: 260px !important;
+          margin-top: 64px !important;
+          padding: 24px 28px 40px 28px !important;
           background-color: #F8FAFC !important;
+          min-height: calc(100vh - 64px) !important;
+          transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .main-content.collapsed {
+          margin-left: 76px !important;
         }
         .tab-content {
           padding: 0px !important;
         }
 
-        /* CUSTOM GLASS CARDS */
+        /* GLASS & ELEVATED CARDS */
         .glass-card {
-          background: #ffffff !important;
+          background: #FFFFFF !important;
           border: 1px solid #F1F5F9 !important;
-          border-radius: 16px !important;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.01) !important;
-          padding: 24px !important;
+          border-radius: 18px !important;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.015) !important;
+          padding: 22px !important;
+          transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .glass-card:hover {
+          box-shadow: 0 8px 26px rgba(15, 23, 42, 0.035) !important;
         }
 
+        /* 5-KPI METRICS GRID */
         .kpi-grid {
           display: grid !important;
-          grid-template-columns: repeat(5, 1fr) !important;
-          gap: 20px !important;
+          grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+          gap: 16px !important;
           margin-bottom: 24px !important;
         }
 
         .premium-kpi-card {
-          background: #ffffff !important;
-          border: 1px solid #F1F5F9 !important;
-          border-radius: 16px !important;
-          padding: 20px !important;
+          background: #FFFFFF !important;
+          border-radius: 18px !important;
+          padding: 18px !important;
           display: flex !important;
-          align-items: center !important;
+          flex-direction: column !important;
           justify-content: space-between !important;
-          transition: transform 0.2s, box-shadow 0.2s !important;
+          min-height: 126px !important;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
           cursor: pointer !important;
+          position: relative !important;
+          overflow: hidden !important;
         }
         .premium-kpi-card:hover {
-          transform: translateY(-2px) !important;
-          box-shadow: 0 10px 20px rgba(15, 23, 42, 0.02) !important;
+          transform: translateY(-3px) !important;
         }
 
-        .kpi-val {
-          font-size: 28px !important;
-          font-weight: 800 !important;
-          color: #0F172A !important;
-          line-height: 1.2 !important;
+        /* Distinctive KPI card tints & borders */
+        .kpi-card-prescriptions {
+          border: 1px solid #EEF2FF !important;
+          box-shadow: 0 4px 16px rgba(99, 102, 241, 0.04) !important;
         }
-        
+        .kpi-card-prescriptions:hover {
+          border-color: #C7D2FE !important;
+          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.09) !important;
+        }
+
+        .kpi-card-pending {
+          border: 1px solid #FFEDD5 !important;
+          box-shadow: 0 4px 16px rgba(249, 115, 22, 0.04) !important;
+        }
+        .kpi-card-pending:hover {
+          border-color: #FDBA74 !important;
+          box-shadow: 0 8px 24px rgba(249, 115, 22, 0.1) !important;
+        }
+
+        .kpi-card-dispensed {
+          border: 1px solid #D1FAE5 !important;
+          box-shadow: 0 4px 16px rgba(16, 185, 129, 0.04) !important;
+        }
+        .kpi-card-dispensed:hover {
+          border-color: #A7F3D0 !important;
+          box-shadow: 0 8px 24px rgba(16, 185, 129, 0.09) !important;
+        }
+
+        .kpi-card-sales {
+          border: 1px solid #DBEAFE !important;
+          box-shadow: 0 4px 16px rgba(37, 99, 235, 0.04) !important;
+        }
+        .kpi-card-sales:hover {
+          border-color: #93C5FD !important;
+          box-shadow: 0 8px 24px rgba(37, 99, 235, 0.09) !important;
+        }
+
+        .kpi-card-lowstock {
+          border: 1px solid #FEE2E2 !important;
+          box-shadow: 0 4px 16px rgba(239, 68, 68, 0.04) !important;
+        }
+        .kpi-card-lowstock:hover {
+          border-color: #FCA5A5 !important;
+          box-shadow: 0 8px 24px rgba(239, 68, 68, 0.1) !important;
+        }
+
+        .kpi-top-row {
+          display: flex !important;
+          align-items: flex-start !important;
+          gap: 12px !important;
+        }
+        .icon-box-kpi {
+          width: 38px !important;
+          height: 38px !important;
+          border-radius: 10px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          flex-shrink: 0 !important;
+        }
+        .kpi-title-and-val {
+          display: flex !important;
+          flex-direction: column !important;
+        }
         .kpi-lbl {
           font-size: 11.5px !important;
           color: #64748B !important;
           font-weight: 700 !important;
+          line-height: 1.2 !important;
           margin-bottom: 4px !important;
+          white-space: nowrap !important;
         }
-
-        .kpi-trend {
+        .kpi-val {
+          font-size: 26px !important;
+          font-weight: 800 !important;
+          color: #0F172A !important;
+          line-height: 1.1 !important;
+          letter-spacing: -0.02em !important;
+        }
+        .kpi-bottom-row {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          margin-top: 10px !important;
+        }
+        .kpi-status-pill {
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 5px !important;
           font-size: 11px !important;
           font-weight: 700 !important;
-          display: flex !important;
-          align-items: center !important;
-          gap: 4px !important;
         }
-
-        .trend-up {
-          color: #10B981 !important;
-        }
-        .trend-danger {
-          color: #EF4444 !important;
-        }
-
-        .icon-box-kpi {
-          width: 44px !important;
-          height: 44px !important;
-          border-radius: 12px !important;
-          display: flex !important;
-          align-items: center !important;
-          justify-content: center !important;
+        .kpi-status-dot {
+          width: 6px !important;
+          height: 6px !important;
+          border-radius: 50% !important;
         }
 
         /* TABLES */
@@ -2243,17 +3092,18 @@ const PharmacyDashboard = () => {
           text-align: left !important;
         }
         .premium-table th {
-          font-size: 11px !important;
-          font-weight: 700 !important;
+          font-size: 10.5px !important;
+          font-weight: 800 !important;
           color: #94A3B8 !important;
           text-transform: uppercase !important;
-          letter-spacing: 0.5px !important;
-          padding: 12px 16px !important;
+          letter-spacing: 0.6px !important;
+          padding: 12px 14px !important;
           border-bottom: 1px solid #F1F5F9 !important;
         }
         .premium-table td {
-          padding: 16px !important;
+          padding: 14px !important;
           border-bottom: 1px solid #F8FAFC !important;
+          font-size: 13px !important;
         }
         .premium-table tbody tr:hover {
           background-color: #F8FAFC !important;
@@ -2266,6 +3116,7 @@ const PharmacyDashboard = () => {
           font-weight: 700 !important;
           font-size: 11px !important;
           display: inline-flex !important;
+          align-items: center !important;
         }
         .badge-pending {
           background: #EFF6FF !important;
@@ -2280,6 +3131,10 @@ const PharmacyDashboard = () => {
           color: #10B981 !important;
         }
         .badge-low {
+          background: #FFF7ED !important;
+          color: #EA580C !important;
+        }
+        .badge-out {
           background: #FEF2F2 !important;
           color: #EF4444 !important;
         }
@@ -2288,25 +3143,28 @@ const PharmacyDashboard = () => {
         .subtab-pill {
           padding: 6px 14px !important;
           border-radius: 8px !important;
-          font-size: 12.5px !important;
+          font-size: 12px !important;
           font-weight: 700 !important;
           color: #64748B !important;
           cursor: pointer !important;
           transition: all 0.2s !important;
+          background: transparent !important;
+          border: 1px solid transparent !important;
         }
         .subtab-pill:hover {
-          background: #F1F5F9 !important;
+          background: #F8FAFC !important;
           color: #0F172A !important;
         }
         .subtab-pill.active {
           background: #EFF6FF !important;
           color: #2563EB !important;
+          border-color: #DBEAFE !important;
         }
 
         /* CALENDAR */
         .calendar-cell {
-          width: 28px !important;
-          height: 28px !important;
+          width: 30px !important;
+          height: 30px !important;
           margin: 0 auto !important;
           display: flex !important;
           align-items: center !important;
@@ -2316,22 +3174,48 @@ const PharmacyDashboard = () => {
           cursor: pointer !important;
           border-radius: 50% !important;
           transition: all 0.15s !important;
+          position: relative !important;
         }
         .calendar-cell.inactive {
           color: #CBD5E1 !important;
         }
         .calendar-cell.active {
           background: #2563EB !important;
-          color: #ffffff !important;
-          font-weight: 700 !important;
+          color: #FFFFFF !important;
+          font-weight: 800 !important;
+          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35) !important;
         }
         .calendar-cell:hover:not(.active) {
           background: #F1F5F9 !important;
         }
 
+        /* FLOATING SUPPORT ACTION */
+        .floating-support-btn {
+          position: fixed !important;
+          bottom: 24px !important;
+          right: 24px !important;
+          width: 48px !important;
+          height: 48px !important;
+          border-radius: 50% !important;
+          background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
+          color: white !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4) !important;
+          cursor: pointer !important;
+          z-index: 999 !important;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          border: none !important;
+        }
+        .floating-support-btn:hover {
+          transform: scale(1.08) translateY(-2px) !important;
+          box-shadow: 0 10px 24px rgba(99, 102, 241, 0.5) !important;
+        }
+
         @keyframes slideUp {
           from {
-            transform: translateY(12px);
+            transform: translateY(10px);
             opacity: 0;
           }
           to {
@@ -2344,27 +3228,28 @@ const PharmacyDashboard = () => {
           display: none !important;
         }
 
-        .top-nav-search {
-          position: relative;
-          width: 320px;
-        }
-
-        @media (max-width: 1200px) {
+        @media (max-width: 1280px) {
           .kpi-grid {
             grid-template-columns: repeat(3, 1fr) !important;
+          }
+          .bottom-analytics-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
           }
         }
         @media (max-width: 1024px) {
           .kpi-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .bottom-analytics-grid {
             grid-template-columns: 1fr !important;
           }
-          .sidebar {
-            left: -240px !important;
+          .admin-sidebar {
+            left: -260px !important;
             transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
             display: flex !important;
             z-index: 2000 !important;
           }
-          .sidebar.mobile-open {
+          .admin-sidebar.mobile-open {
             left: 0 !important;
             z-index: 2010 !important;
           }
@@ -2373,21 +3258,14 @@ const PharmacyDashboard = () => {
           }
           .top-nav {
             padding: 0 16px !important;
-            justify-content: space-between !important;
             left: 0 !important;
+          }
+          .main-content {
+            padding: 16px !important;
           }
           .mobile-menu-toggle {
             display: flex !important;
             z-index: 100 !important;
-          }
-          .top-nav-search {
-            width: auto !important;
-            max-width: 180px !important;
-            flex: 1 !important;
-          }
-          .modal-overlay {
-            left: 0 !important;
-            width: 100% !important;
           }
           .mobile-backdrop {
             position: fixed !important;
@@ -2398,75 +3276,34 @@ const PharmacyDashboard = () => {
             background-color: rgba(15, 23, 42, 0.4) !important;
             backdrop-filter: blur(4px) !important;
             z-index: 1999 !important;
-            animation: fadeIn 0.2s ease-out !important;
           }
-
-          /* Safe-area spacing overrides for bottom sidebar profile on mobile */
-          .sidebar {
-            height: 100% !important;
-            height: 100dvh !important;
-            padding-bottom: calc(32px + env(safe-area-inset-bottom, 32px)) !important;
+        }
+        @media (max-width: 640px) {
+          .kpi-grid {
+            grid-template-columns: 1fr !important;
           }
-          .sidebar-profile-card {
-            padding-bottom: 16px !important;
-            margin-bottom: 0 !important;
-          }
-          .sidebar-profile-popover {
-            bottom: calc(80px + 32px + env(safe-area-inset-bottom, 32px)) !important;
+          .top-nav-greeting {
+            display: none !important;
           }
         }
 
-        /* ----- PHARMACY DASHBOARD RESPONSIVE SPLIT LAYOUT ----- */
-        .pharmacy-card-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 20px;
-        }
-
-        /* Calendar Retraction & Expansion Drawer Styles */
+        /* Calendar split row */
         @media (min-width: 1025px) {
           .calendar-row {
             display: flex !important;
             width: 100% !important;
-            gap: 0px !important;
+            gap: 20px !important;
             margin-bottom: 24px !important;
           }
           .calendar-left-panel {
-            width: 100% !important;
+            width: 64% !important;
             flex-shrink: 0 !important;
-            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
-          }
-          .calendar-left-panel.calendar-open {
-            width: calc(63% - 12px) !important;
           }
           .calendar-right-panel {
-            width: 0px !important;
-            margin-left: 0px !important;
-            opacity: 0 !important;
-            visibility: hidden !important;
-            overflow: hidden !important;
-            padding: 0px !important;
-            border: none !important;
-            box-shadow: none !important;
-            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
-                        margin-left 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
-                        opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
-                        padding 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-                        visibility 0.5s !important;
+            width: 36% !important;
             flex-shrink: 0 !important;
           }
-          .calendar-right-panel.calendar-open {
-            width: calc(37% - 12px) !important;
-            margin-left: 24px !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            padding: 24px !important;
-            border: 1px solid #F1F5F9 !important;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.01) !important;
-          }
         }
-
         @media (max-width: 1024px) {
           .calendar-row {
             display: flex !important;
@@ -2474,242 +3311,498 @@ const PharmacyDashboard = () => {
             gap: 20px !important;
             margin-bottom: 24px !important;
           }
-          .calendar-left-panel {
+          .calendar-left-panel, .calendar-right-panel {
             width: 100% !important;
-          }
-          .calendar-right-panel {
-            width: 100% !important;
-            opacity: 0 !important;
-            visibility: hidden !important;
-            max-height: 0px !important;
-            overflow: hidden !important;
-            margin-left: 0px !important;
-            padding: 0px !important;
-            border: none !important;
-            box-shadow: none !important;
-            transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
-                        opacity 0.4s ease, 
-                        padding 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-                        visibility 0.5s !important;
-          }
-          .calendar-right-panel.calendar-open {
-            max-height: 800px !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            padding: 24px !important;
-            border: 1px solid #F1F5F9 !important;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.01) !important;
           }
         }
-        @media (max-width: 640px) {
-          .pharmacy-card-header {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 12px !important;
-          }
-          .pharmacy-card-header .subtab-container {
-            width: 100% !important;
-            overflow-x: auto !important;
-            display: flex !important;
-            white-space: nowrap !important;
-            padding-bottom: 4px !important;
-            -webkit-overflow-scrolling: touch;
-          }
+
+        .bottom-analytics-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 20px;
         }
       `}</style>
 
       {/* Sidebar Layout */}
-      {/* Main Sidebar */}
       {activeTab !== 'hr-payroll' && (
-        <div className={"sidebar " + (isSidebarCollapsed ? "collapsed " : "") + (mobileSidebarOpen ? "mobile-open" : "")} data-lenis-prevent>
-        <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative', width: '100%' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary)', color: '#FFFFFF', fontWeight: 900, fontSize: '16px', boxShadow: '0 0 15px rgba(59, 113, 254, 0.15)', flexShrink: 0 }}>
-            C
-          </div>
-          <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 900, color: '#2563EB', letterSpacing: '-0.02em' }}>Curoxa</span>
-          <button 
-            className="sidebar-collapse-toggle desktop-only-flex"
-            onClick={(e) => {
-              e.stopPropagation();
-              const newState = !isSidebarCollapsed;
-              setIsSidebarCollapsed(newState);
-              localStorage.setItem('curoxa_sidebar_collapsed', String(newState));
-            }}
-            style={{
-              transform: isSidebarCollapsed ? 'rotate(180deg)' : 'none'
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          </button>
-        </div>
-        <nav>
-          <a href="#" className={`nav-link ${activeTab === 'dash' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('dash'); setMobileSidebarOpen(false); }}>
-            <i data-lucide="layout-grid"></i> Overview
-          </a>
-          {(currentUser?.role === 'pharmacy' || (coverageState['ph-queue']?.on || coverageState['ph-dispense']?.on)) && (
-            <a href="#" className={`nav-link ${activeTab === 'prescriptions' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('prescriptions'); setMobileSidebarOpen(false); }}>
-              <i data-lucide="file-text"></i> Prescriptions
-            </a>
-          )}
-          {(currentUser?.role === 'pharmacy' || (coverageState['ph-queue']?.on || coverageState['ph-dispense']?.on)) && (
-            <a href="#" className={`nav-link ${activeTab === 'internal' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('internal'); setMobileSidebarOpen(false); }}>
-              <i data-lucide="git-pull-request"></i> Internal requests
-            </a>
-          )}
-          {(currentUser?.role === 'pharmacy' || coverageState['ph-billing']?.on) && (
-            <a href="#" className={`nav-link ${activeTab === 'sales' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('sales'); setMobileSidebarOpen(false); }}>
-              <i data-lucide="credit-card"></i> Sales
-            </a>
-          )}
-          {(currentUser?.role === 'pharmacy' || (coverageState['ph-stock']?.on || coverageState['dr-stockview']?.on)) && (
-            <a href="#" className={`nav-link ${activeTab === 'inventory' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('inventory'); setMobileSidebarOpen(false); }}>
-              <i data-lucide="package"></i> Inventory
-            </a>
-          )}
-          {(currentUser?.role === 'pharmacy' || coverageState['ph-stock']?.on) && (
-            <a href="#" className={`nav-link ${activeTab === 'returns' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('returns'); setMobileSidebarOpen(false); }}>
-              <i data-lucide="refresh-cw"></i> Returns
-            </a>
-          )}
-          {(currentUser?.role === 'pharmacy' || (coverageState['ph-stock']?.on || coverageState['ph-billing']?.on)) && (
-            <a href="#" className={`nav-link ${activeTab === 'reports' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('reports'); setMobileSidebarOpen(false); }}>
-              <i data-lucide="trending-up"></i> Reports
-            </a>
-          )}
-          {(currentUser?.role === 'pharmacy' || currentUser?.role === 'admin' || coverageState['ph-stock']?.on) && (
-            <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); window.open('/procurement', '_blank'); setMobileSidebarOpen(false); }}>
-              <i data-lucide="shopping-cart"></i> Procurement
-            </a>
-          )}
- 
- 
-          {/* DYNAMIC COVERAGE INTEGRATION LINKS */}
-          {(Object.keys(coverageState || {}).some(k => k.startsWith('rc-') && coverageState[k]?.on)) && tenantModules.reception?.enabled !== false && (
-            <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); window.open('/receptionist', '_blank'); setMobileSidebarOpen(false); }} style={{ color: '#E11D48', fontWeight: 800 }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', flexShrink: 0 }}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-              Receptionist Cover
-            </a>
-          )}
-          {(Object.keys(coverageState || {}).some(k => k.startsWith('lt-') && coverageState[k]?.on)) && tenantModules.laboratory?.enabled !== false && (
-            <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); window.open('/lab', '_blank'); setMobileSidebarOpen(false); }} style={{ color: '#059669', fontWeight: 800 }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', flexShrink: 0 }}><path d="M6 18H18"/><path d="M10 14H14"/><path d="M12 2v20"/><path d="M18 10H6"/></svg>
-              Lab Cover
-            </a>
-          )}
-        </nav>
-
-        {/* Bottom Profile Card */}
-        <div className="sidebar-profile-card" onClick={(e) => { e.stopPropagation(); setShowProfileMenu(!showProfileMenu); }}>
-          {currentUser.avatar ? (
-            <img 
-              className="sidebar-profile-avatar" 
-              src={currentUser.avatar} 
-              alt="Pharmacist Avatar" 
-              style={{ objectFit: 'cover', border: '2px solid #BFDBFE' }}
-            />
-          ) : (
-            <div className="sidebar-profile-avatar-initials" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px', marginRight: '10px', flexShrink: 0 }}>
-              {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'PH'}
-            </div>
-          )}
-          <div className="sidebar-profile-info">
-            <span className="sidebar-profile-name">{currentUser.name}</span>
-            <span className="sidebar-profile-role">Pharmacy</span>
-          </div>
-          <i data-lucide="chevron-down" className="sidebar-profile-chevron" style={{ transition: '0.3s', transform: showProfileMenu ? 'rotate(180deg)' : 'none' }}></i>
-
-          {showProfileMenu && (
-            <div 
-              className="glass-card sidebar-profile-popover" 
+        <div 
+          className={`admin-sidebar ${isSidebarCollapsed ? "collapsed " : ""}${mobileSidebarOpen ? "mobile-open" : ""}`}
+          style={{
+            position: 'fixed',
+            top: 0,
+            bottom: 0,
+            left: 0,
+            height: '100%',
+            minHeight: 'calc(100vh / 0.9)',
+            display: 'flex',
+            flexDirection: 'column',
+            zIndex: 1000,
+            overflow: 'hidden'
+          }}
+          data-lenis-prevent
+        >
+          {/* Logo & Brand Header */}
+          <div className="sidebar-brand-wrapper">
+            {/* Top decorative subtle mesh wave in brand header */}
+            <svg 
+              viewBox="0 0 280 130" 
+              fill="none" 
+              xmlns="http://www.w3.org/2000/svg"
               style={{ 
                 position: 'absolute', 
-                bottom: '72px', 
-                left: '0px', 
-                width: '208px', 
-                zIndex: 3000, 
-                padding: '8px', 
-                boxShadow: '0 -10px 40px rgba(0,0,0,0.06)', 
-                background: 'white',
-                borderRadius: '12px',
-                border: '1px solid #F1F5F9',
-                animation: 'slideUp 0.2s ease-out'
+                top: 0, 
+                left: 0, 
+                width: '100%', 
+                height: '130px', 
+                pointerEvents: 'none', 
+                zIndex: 0,
+                opacity: isSidebarCollapsed ? 0 : 0.95,
+                transition: 'opacity 0.2s'
               }}
-              onClick={e => e.stopPropagation()}
             >
-              <div style={{ padding: '10px 12px', borderBottom: '1px solid #F1F5F9', marginBottom: '6px' }}>
-                <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0F172A' }}>{currentUser.name}</div>
-                <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Pharmacy Manager</div>
+              <path d="M0,0 L280,0 L280,65 C215,100 155,70 85,105 C40,120 15,110 0,100 Z" fill="url(#curoxaWaveGradPh1)" />
+              <path d="M0,0 L280,0 L280,40 C195,80 135,50 55,90 C20,102 0,92 0,92 Z" fill="url(#curoxaWaveGradPh2)" opacity="0.65" />
+              <defs>
+                <linearGradient id="curoxaWaveGradPh1" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#DBEAFE" stopOpacity="0.85" />
+                  <stop offset="50%" stopColor="#E0E7FF" stopOpacity="0.6" />
+                  <stop offset="100%" stopColor="#F3E8FF" stopOpacity="0.2" />
+                </linearGradient>
+                <linearGradient id="curoxaWaveGradPh2" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#BAE6FD" stopOpacity="0.75" />
+                  <stop offset="100%" stopColor="#DDD6FE" stopOpacity="0.15" />
+                </linearGradient>
+              </defs>
+            </svg>
+
+            <div className="sidebar-brand">
+              <img 
+                src={curoxaSidebarLogo} 
+                alt="CUROXA" 
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  objectFit: 'contain',
+                  flexShrink: 0,
+                  filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.08))'
+                }}
+              />
+              <div className="sidebar-brand-text-group" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                <span className="sidebar-brand-text" style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif", fontWeight: 900, fontSize: '18px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1 }}>
+                  CUROXA
+                </span>
+                <span className="sidebar-brand-subtitle" style={{ fontSize: '11px', color: '#64748B', fontWeight: 500, letterSpacing: '-0.01em', marginTop: '3px', lineHeight: 1 }}>
+                  Health Management
+                </span>
               </div>
-              <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#334155', 
+              <button 
+                className="sidebar-collapse-toggle desktop-only-flex"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const newState = !isSidebarCollapsed;
+                  setIsSidebarCollapsed(newState);
+                  localStorage.setItem('curoxa_sidebar_collapsed', String(newState));
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '-12px',
+                  top: '26px',
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '50%',
+                  background: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   cursor: 'pointer',
-                  transition: 'background 0.2s',
-                  marginBottom: '4px'
+                  zIndex: 100,
+                  transition: 'transform 0.3s ease',
+                  transform: isSidebarCollapsed ? 'rotate(180deg)' : 'none'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={() => {
-                  setShowProfileEditModal(true);
-                  setShowProfileMenu(false);
-                }}
+                title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
               >
-                <i data-lucide="user" style={{ width: '16px', height: '16px' }}></i> Edit Profile
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Scrollable Nav Container */}
+          <div 
+            className="sidebar-nav-container"
+            style={{
+              flex: '1 1 auto',
+              overflowY: 'auto',
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {/* SECTION 1: OVERVIEW GROUP */}
+            <div className="sidebar-group">
+              <div className="sidebar-group-title" style={{ color: '#2563EB' }}>
+                <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> OVERVIEW
               </div>
+
               <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#334155', 
-                  cursor: 'pointer',
-                  transition: 'background 0.2s',
-                  marginBottom: '4px'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={() => {
-                  setActiveTab('hr-payroll');
-                  setShowProfileMenu(false);
-                }}
+                className={`sidebar-link ${activeTab === 'dash' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); setActiveTab('dash'); setMobileSidebarOpen(false); }}
               >
-                <i data-lucide="credit-card" style={{ width: '16px', height: '16px' }}></i> HR & Payroll
+                {activeTab === 'dash' && (
+                  <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
+                )}
+                <div className="sidebar-link-icon" style={{
+                  background: activeTab === 'dash' ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#EFF6FF',
+                  color: activeTab === 'dash' ? '#FFFFFF' : '#2563EB',
+                  boxShadow: activeTab === 'dash' ? '0 3px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="7" x="3" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="14" rx="1.5"/><rect width="7" height="7" x="3" y="14" rx="1.5"/></svg>
+                </div>
+                <span className="sidebar-link-text">Overview</span>
               </div>
+
+              {(currentUser?.role === 'pharmacy' || (coverageState['ph-queue']?.on || coverageState['ph-dispense']?.on)) && (
+                <div 
+                  className={`sidebar-link ${activeTab === 'prescriptions' ? 'active' : ''}`}
+                  onClick={(e) => { e.preventDefault(); setActiveTab('prescriptions'); setMobileSidebarOpen(false); }}
+                >
+                  {activeTab === 'prescriptions' && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: activeTab === 'prescriptions' ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#EFF6FF',
+                    color: activeTab === 'prescriptions' ? '#FFFFFF' : '#2563EB',
+                    boxShadow: activeTab === 'prescriptions' ? '0 3px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                  </div>
+                  <span className="sidebar-link-text">Prescriptions</span>
+                </div>
+              )}
+
+              {(currentUser?.role === 'pharmacy' || (coverageState['ph-queue']?.on || coverageState['ph-dispense']?.on)) && (
+                <div 
+                  className={`sidebar-link ${activeTab === 'internal' ? 'active' : ''}`}
+                  onClick={(e) => { e.preventDefault(); setActiveTab('internal'); setMobileSidebarOpen(false); }}
+                >
+                  {activeTab === 'internal' && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: activeTab === 'internal' ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#EFF6FF',
+                    color: activeTab === 'internal' ? '#FFFFFF' : '#2563EB',
+                    boxShadow: activeTab === 'internal' ? '0 3px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+                  </div>
+                  <span className="sidebar-link-text">Internal requests</span>
+                </div>
+              )}
+
+              {(currentUser?.role === 'pharmacy' || coverageState['ph-billing']?.on) && (
+                <div 
+                  className={`sidebar-link ${activeTab === 'sales' ? 'active' : ''}`}
+                  onClick={(e) => { e.preventDefault(); setActiveTab('sales'); setMobileSidebarOpen(false); }}
+                >
+                  {activeTab === 'sales' && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: activeTab === 'sales' ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#EFF6FF',
+                    color: activeTab === 'sales' ? '#FFFFFF' : '#2563EB',
+                    boxShadow: activeTab === 'sales' ? '0 3px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                  </div>
+                  <span className="sidebar-link-text">Sales</span>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 2: MANAGEMENT ZONE (Tinted Teal Card) */}
+            <div className={`sidebar-zone sidebar-zone-clinic ${!sectionOpen.management ? 'collapsed' : ''}`}>
               <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#DC2626', 
-                  cursor: 'pointer',
-                  transition: 'background 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#FEF2F2'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={handleLogout}
+                className={`sidebar-group-title ${!sectionOpen.management ? 'collapsed' : ''}`}
+                style={{ color: '#0D9488' }}
+                onClick={() => toggleSection('management')}
+                title="Toggle Management Section"
               >
-                <i data-lucide="log-out" style={{ width: '16px', height: '16px' }}></i> Logout
+                <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> MANAGEMENT
+                <span className="sidebar-group-chevron" style={{ transform: sectionOpen.management ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
+              </div>
+              {sectionOpen.management && (
+                <>
+                  {(currentUser?.role === 'pharmacy' || (coverageState['ph-stock']?.on || coverageState['dr-stockview']?.on)) && (
+                    <div 
+                      className={`sidebar-link ${activeTab === 'inventory' ? 'active' : ''}`}
+                      onClick={(e) => { e.preventDefault(); setActiveTab('inventory'); setMobileSidebarOpen(false); }}
+                    >
+                      {activeTab === 'inventory' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'inventory' ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                        color: activeTab === 'inventory' ? '#FFFFFF' : '#0D9488',
+                        boxShadow: activeTab === 'inventory' ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                      }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Inventory</span>
+                    </div>
+                  )}
+
+                  {(currentUser?.role === 'pharmacy' || coverageState['ph-stock']?.on) && (
+                    <div 
+                      className={`sidebar-link ${activeTab === 'returns' ? 'active' : ''}`}
+                      onClick={(e) => { e.preventDefault(); setActiveTab('returns'); setMobileSidebarOpen(false); }}
+                    >
+                      {activeTab === 'returns' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'returns' ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                        color: activeTab === 'returns' ? '#FFFFFF' : '#0D9488',
+                        boxShadow: activeTab === 'returns' ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                      }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Returns</span>
+                    </div>
+                  )}
+
+                  {(currentUser?.role === 'pharmacy' || (coverageState['ph-stock']?.on || coverageState['ph-billing']?.on)) && (
+                    <div 
+                      className={`sidebar-link ${activeTab === 'reports' ? 'active' : ''}`}
+                      onClick={(e) => { e.preventDefault(); setActiveTab('reports'); setMobileSidebarOpen(false); }}
+                    >
+                      {activeTab === 'reports' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'reports' ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                        color: activeTab === 'reports' ? '#FFFFFF' : '#0D9488',
+                        boxShadow: activeTab === 'reports' ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                      }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Reports</span>
+                    </div>
+                  )}
+
+                  {(currentUser?.role === 'pharmacy' || currentUser?.role === 'admin' || coverageState['ph-stock']?.on) && (
+                    <div 
+                      className="sidebar-link"
+                      onClick={(e) => { e.preventDefault(); window.open('/procurement', '_blank'); setMobileSidebarOpen(false); }}
+                    >
+                      <div className="sidebar-link-icon" style={{ background: '#CCFBF1', color: '#0D9488' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Procurement</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* SECTION 3: TOOLS ZONE (Tinted Peach/Orange Card) */}
+            <div className={`sidebar-zone sidebar-zone-finance ${!sectionOpen.tools ? 'collapsed' : ''}`}>
+              <div 
+                className={`sidebar-group-title ${!sectionOpen.tools ? 'collapsed' : ''}`}
+                style={{ color: '#EA580C' }}
+                onClick={() => toggleSection('tools')}
+                title="Toggle Tools Section"
+              >
+                <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> TOOLS
+                <span className="sidebar-group-chevron" style={{ transform: sectionOpen.tools ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
+              </div>
+              {sectionOpen.tools && (
+                <>
+                  <div 
+                    className="sidebar-link"
+                    onClick={(e) => { e.preventDefault(); setActiveTab('inventory'); setMobileSidebarOpen(false); }}
+                  >
+                    <div className="sidebar-link-icon" style={{ background: '#FFF7ED', color: '#EA580C' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="10" y1="14" x2="14" y2="18"/><line x1="14" y1="14" x2="10" y2="18"/></svg>
+                    </div>
+                    <span className="sidebar-link-text">Expiry Management</span>
+                  </div>
+
+                  <div 
+                    className="sidebar-link"
+                    onClick={(e) => { e.preventDefault(); window.open('/procurement', '_blank'); setMobileSidebarOpen(false); }}
+                  >
+                    <div className="sidebar-link-icon" style={{ background: '#FFF7ED', color: '#EA580C' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </div>
+                    <span className="sidebar-link-text">Suppliers</span>
+                  </div>
+
+                  <div 
+                    className="sidebar-link"
+                    onClick={(e) => { e.preventDefault(); setActiveTab('inventory'); setMobileSidebarOpen(false); }}
+                  >
+                    <div className="sidebar-link-icon" style={{ background: '#FFF7ED', color: '#EA580C' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                    </div>
+                    <span className="sidebar-link-text">Categories</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* SECTION 4: DYNAMIC COVERAGE INTEGRATION LINKS */}
+            {((Object.keys(coverageState || {}).some(k => k.startsWith('rc-') && coverageState[k]?.on)) && tenantModules.reception?.enabled !== false ||
+              (Object.keys(coverageState || {}).some(k => k.startsWith('lt-') && coverageState[k]?.on)) && tenantModules.laboratory?.enabled !== false) && (
+              <div className="sidebar-group" style={{ marginTop: '10px' }}>
+                <div className="sidebar-group-title" style={{ color: '#EF4444' }}>
+                  <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> ACTIVE COVERAGES
+                </div>
+
+                {(Object.keys(coverageState || {}).some(k => k.startsWith('rc-') && coverageState[k]?.on)) && tenantModules.reception?.enabled !== false && (
+                  <div 
+                    className="sidebar-link"
+                    onClick={(e) => { e.preventDefault(); window.open('/receptionist', '_blank'); setMobileSidebarOpen(false); }}
+                  >
+                    <div className="sidebar-link-icon" style={{ background: '#FFE4E6', color: '#E11D48' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    </div>
+                    <span className="sidebar-link-text" style={{ color: '#E11D48', fontWeight: 800 }}>Receptionist Cover</span>
+                  </div>
+                )}
+
+                {(Object.keys(coverageState || {}).some(k => k.startsWith('lt-') && coverageState[k]?.on)) && tenantModules.laboratory?.enabled !== false && (
+                  <div 
+                    className="sidebar-link"
+                    onClick={(e) => { e.preventDefault(); window.open('/lab', '_blank'); setMobileSidebarOpen(false); }}
+                  >
+                    <div className="sidebar-link-icon" style={{ background: '#D1FAE5', color: '#059669' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18H18"/><path d="M10 14H14"/><path d="M12 2v20"/><path d="M18 10H6"/></svg>
+                    </div>
+                    <span className="sidebar-link-text" style={{ color: '#059669', fontWeight: 800 }}>Lab Cover</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Profile Section sitting at bottom with soft blur fade above */}
+          <div 
+            className="sidebar-profile-footer"
+            style={{
+              marginTop: 'auto',
+              flexShrink: 0,
+              position: 'relative'
+            }}
+          >
+            <div className="sidebar-profile-fade-top" />
+            <div className="sidebar-profile" onClick={(e) => { e.stopPropagation(); setShowProfileMenu(!showProfileMenu); }}>
+              <div className="profile-avatar-wrap">
+                {currentUser.avatar ? (
+                  <img 
+                    className="profile-avatar" 
+                    src={currentUser.avatar} 
+                    alt="Pharmacist Avatar" 
+                  />
+                ) : (
+                  <div className="profile-avatar-initials">
+                    {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'P'}
+                  </div>
+                )}
+                <span className="profile-avatar-status-dot" />
+              </div>
+              <div className="profile-info">
+                <span className="profile-name">{currentUser.name || 'Pharmacy-1'}</span>
+                <span className="profile-role">Pharmacist</span>
+              </div>
+              <div className="profile-chevron" style={{ transform: showProfileMenu ? 'rotate(180deg)' : 'none' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
               </div>
             </div>
-          )}
+
+            {showProfileMenu && (
+              <div 
+                className="glass-card sidebar-profile-popover-card" 
+                onClick={e => e.stopPropagation()}
+              >
+                <div style={{ padding: '10px 12px', borderBottom: '1px solid #F1F5F9', marginBottom: '6px' }}>
+                  <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0F172A' }}>{currentUser.name || 'Pharmacy-1'}</div>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Pharmacy In-Charge</div>
+                </div>
+                <div 
+                  style={{ 
+                    padding: '10px 12px', 
+                    borderRadius: '10px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    fontSize: '13px', 
+                    fontWeight: 700, 
+                    color: '#334155', 
+                    cursor: 'pointer',
+                    transition: 'background 0.2s',
+                    marginBottom: '4px'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  onClick={() => {
+                    setShowProfileEditModal(true);
+                    setShowProfileMenu(false);
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Edit Profile
+                </div>
+                <div 
+                  style={{ 
+                    padding: '10px 12px', 
+                    borderRadius: '10px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    fontSize: '13px', 
+                    fontWeight: 700, 
+                    color: '#334155', 
+                    cursor: 'pointer',
+                    transition: 'background 0.2s',
+                    marginBottom: '4px'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  onClick={() => {
+                    setActiveTab('hr-payroll');
+                    setShowProfileMenu(false);
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg> HR & Payroll
+                </div>
+                <div 
+                  style={{ 
+                    padding: '10px 12px', 
+                    borderRadius: '10px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    fontSize: '13px', 
+                    fontWeight: 700, 
+                    color: '#DC2626', 
+                    cursor: 'pointer',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#FEF2F2'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  onClick={handleLogout}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Logout
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    )}
+      )}
 
       {/* Mobile Sidebar Backdrop Overlay */}
       {mobileSidebarOpen && (
@@ -2718,135 +3811,174 @@ const PharmacyDashboard = () => {
 
       {/* Top Navbar */}
       {activeTab !== 'hr-payroll' && (
-        <div className={"top-nav " + (isSidebarCollapsed ? "collapsed" : "")} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {/* Hamburger Mobile Menu Toggle Button */}
-        <button 
-          className="mobile-menu-toggle"
-          onClick={(e) => {
-            e.stopPropagation();
-            setMobileSidebarOpen(!mobileSidebarOpen);
-          }}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: '#475569',
-            padding: '8px',
-            borderRadius: '8px',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'background-color 0.2s',
-            marginRight: '8px'
-          }}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
-        </button>
-        <div className="top-nav-search" style={{ position: 'relative' }}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input 
-            type="text" 
-            style={{ 
-              paddingLeft: '40px', 
-              width: '100%', 
-              height: '40px', 
-              borderRadius: '8px', 
-              border: '1px solid #E2E8F0', 
-              background: '#F8FAFC', 
-              fontSize: '13px', 
-              color: '#1E293B', 
-              outline: 'none' 
-            }} 
-            placeholder="Search patient by mobile/ID" 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
- 
-        {/* Notification Bell */}
-        <div 
-          ref={notificationRef}
-          style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '8px', border: '1px solid #E2E8F0', color: '#64748B', background: 'white' }}
-          onClick={() => {
-            setShowNotifications(!showNotifications);
-            setUnreadCount(0);
-          }}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-           {unreadCount > 0 && (
-            <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#EF4444', color: 'white', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
-              {unreadCount}
-            </span>
-          )}
-
-          {showNotifications && (
-            <div data-lenis-prevent 
-              style={{
-                position: 'absolute',
-                top: '48px',
-                right: '0',
-                width: '320px',
-                background: 'rgba(255, 255, 255, 0.95)',
-                backdropFilter: 'blur(8px)',
-                borderRadius: '12px',
-                border: '1px solid #E2E8F0',
-                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                zIndex: 1000,
-                padding: '16px',
-                maxHeight: '400px',
-                overflowY: 'auto'
+        <div className={"top-nav " + (isSidebarCollapsed ? "collapsed" : "")}>
+          {/* Top Nav Left: Page Title & Greeting */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button 
+              className="mobile-menu-toggle"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileSidebarOpen(!mobileSidebarOpen);
               }}
-              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#475569',
+                padding: '8px',
+                borderRadius: '8px',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background-color 0.2s'
+              }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
-                <span style={{ fontWeight: 800, fontSize: '14px', color: '#0F172A' }}>Notifications</span>
-                <button 
-                  style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
-                  onClick={() => {
-                    const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
-                    const clearedKey = `curoxa_cleared_notifications_${userKey}`;
-                    const clearedIds = JSON.parse(localStorage.getItem(clearedKey) || '[]');
-                    const newClearedIds = [...clearedIds, ...notifications.map(n => n.id)];
-                    localStorage.setItem(clearedKey, JSON.stringify(newClearedIds));
-                    setNotifications([]);
-                    setUnreadCount(0);
-                  }}
-                >
-                  Clear all
-                </button>
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+            </button>
+            <div className="top-nav-left">
+              <div className="top-nav-page-title">
+                {activeTab === 'dash' ? 'Pharmacy Overview' : activeTab === 'prescriptions' ? 'Prescriptions' : activeTab === 'sales' ? 'Pharmacy Sales' : activeTab === 'inventory' ? 'Inventory Management' : 'Pharmacy Workspace'}
               </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {notifications.map(n => (
-                  <div key={n.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px', borderRadius: '8px', background: n.isNew ? '#EFF6FF' : '#F8FAFC', borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #E2E8F0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#1E293B' }}>{n.title}</span>
-                      <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>{n.time}</span>
-                    </div>
-                    <span style={{ fontSize: '11.5px', color: '#475569', fontWeight: 550, lineHeight: 1.4 }}>{n.message}</span>
-                  </div>
-                ))}
-                {notifications.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '20px 0', color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
-                    No notifications
-                  </div>
-                )}
+              <div className="top-nav-greeting">
+                Good morning, {currentUser.name || 'Pharmacy-1'} 👋
               </div>
             </div>
-          )}
+          </div>
+
+          {/* Top Nav Right: Search + Notifications + Profile Pill */}
+          <div className="top-nav-right">
+            {/* Search patient input with Ctrl+K shortcut badge */}
+            <div style={{ position: 'relative', width: '280px' }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input 
+                type="text" 
+                style={{ 
+                  paddingLeft: '36px', 
+                  paddingRight: '64px',
+                  width: '100%', 
+                  height: '38px', 
+                  borderRadius: '10px', 
+                  border: '1px solid #E2E8F0', 
+                  background: '#F8FAFC', 
+                  fontSize: '12.5px', 
+                  color: '#1E293B', 
+                  outline: 'none',
+                  fontWeight: 500,
+                  transition: 'all 0.2s'
+                }} 
+                placeholder="Search patient by mobile/ID" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '10.5px', fontWeight: 700, color: '#94A3B8', background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '2px 6px', borderRadius: '5px', pointerEvents: 'none' }}>
+                Ctrl + K
+              </span>
+            </div>
+
+            {/* Notification Bell */}
+            <div 
+              ref={notificationRef}
+              style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '38px', height: '38px', borderRadius: '10px', border: '1px solid #E2E8F0', color: '#64748B', background: 'white', transition: 'all 0.2s' }}
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                setUnreadCount(0);
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+              {unreadCount > 0 && (
+                <span style={{ position: 'absolute', top: '-3px', right: '-3px', background: '#EF4444', color: 'white', borderRadius: '50%', width: '17px', height: '17px', fontSize: '10px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
+                  {unreadCount}
+                </span>
+              )}
+
+              {showNotifications && (
+                <div data-lenis-prevent 
+                  style={{
+                    position: 'absolute',
+                    top: '46px',
+                    right: '0',
+                    width: '320px',
+                    background: 'rgba(255, 255, 255, 0.98)',
+                    backdropFilter: 'blur(10px)',
+                    borderRadius: '14px',
+                    border: '1px solid #E2E8F0',
+                    boxShadow: '0 12px 28px rgba(0, 0, 0, 0.08)',
+                    zIndex: 1000,
+                    padding: '16px',
+                    maxHeight: '400px',
+                    overflowY: 'auto'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
+                    <span style={{ fontWeight: 800, fontSize: '14px', color: '#0F172A' }}>Notifications</span>
+                    <button 
+                      style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                      onClick={() => {
+                        const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
+                        const clearedKey = `curoxa_cleared_notifications_${userKey}`;
+                        const clearedIds = JSON.parse(localStorage.getItem(clearedKey) || '[]');
+                        const newClearedIds = [...clearedIds, ...notifications.map(n => n.id)];
+                        localStorage.setItem(clearedKey, JSON.stringify(newClearedIds));
+                        setNotifications([]);
+                        setUnreadCount(0);
+                      }}
+                    >
+                      Clear all
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {notifications.map(n => (
+                      <div key={n.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 10px', borderRadius: '8px', background: n.isNew ? '#EFF6FF' : '#F8FAFC', borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #E2E8F0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#1E293B' }}>{n.title}</span>
+                          <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>{n.time}</span>
+                        </div>
+                        <span style={{ fontSize: '11.5px', color: '#475569', fontWeight: 550, lineHeight: 1.4 }}>{n.message}</span>
+                      </div>
+                    ))}
+                    {notifications.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '20px 0', color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
+                        No notifications
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Profile Identity Pill on Header */}
+            <div 
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 10px 4px 4px', borderRadius: '10px', border: '1px solid #F1F5F9', background: '#FFFFFF', cursor: 'pointer' }}
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+            >
+              {currentUser.avatar ? (
+                <img src={currentUser.avatar} alt="Avatar" style={{ width: '30px', height: '30px', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '12px' }}>
+                  {currentUser.name ? currentUser.name[0].toUpperCase() : 'P'}
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
+                <span style={{ fontSize: '12px', fontWeight: 750, color: '#0F172A', lineHeight: 1.1 }}>{currentUser.name || 'Pharmacy-1'}</span>
+                <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>Pharmacist</span>
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '4px' }}><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
         </div>
-      </div>
-    )}
+      )}
 
       {/* Main Content Area */}
       <div className={"main-content " + (activeTab === 'hr-payroll' ? "fullscreen-portal" : (isSidebarCollapsed ? "collapsed" : ""))} data-lenis-prevent>
         
         {successMessage && (
-          <div style={{ color: '#15803D', background: '#F0FDF4', border: '1px solid #DCFCE7', padding: '12px 20px', borderRadius: '12px', marginBottom: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ color: '#15803D', background: '#F0FDF4', border: '1px solid #DCFCE7', padding: '12px 20px', borderRadius: '12px', marginBottom: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', animation: 'slideUp 0.3s ease-out' }}>
             <i data-lucide="check-circle" style={{ width: '16px' }}></i>{successMessage}
           </div>
         )}
         {errorMessage && (
-          <div style={{ color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FEE2E2', padding: '12px 20px', borderRadius: '12px', marginBottom: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FEE2E2', padding: '12px 20px', borderRadius: '12px', marginBottom: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', animation: 'slideUp 0.3s ease-out' }}>
             <i data-lucide="alert-triangle" style={{ width: '16px' }}></i>{errorMessage}
           </div>
         )}
@@ -2861,231 +3993,601 @@ const PharmacyDashboard = () => {
         {activeTab === 'dash' && (
           <div style={{ animation: 'slideUp 0.3s ease-out' }}>
             
-            {/* 5 KPI Cards Grid */}
+            {/* 5 KPI Cards Grid with distinct surfaces and micro-charts matching Admin Portal */}
             <div className="kpi-grid">
               
-              {/* Card 1: Today's Prescriptions */}
-              <div className="premium-kpi-card semantic-card-success" onClick={() => setActiveTab('prescriptions')}>
-                <div>
-                  <div className="kpi-lbl">Today's Prescriptions</div>
-                  <div className="kpi-val">{prescriptions.filter(p => {
-                    const pDate = p.createdAt ? new Date(p.createdAt).toDateString() : new Date().toDateString();
-                    return pDate === new Date().toDateString();
-                  }).length}</div>
-                  <div className="kpi-trend trend-up">
-                    <span>Active Today</span>
+              {/* Card 1: Today's Prescriptions (Electric Blue Theme) */}
+              <div 
+                style={{
+                  padding: '18px 20px',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(191, 219, 254, 0.9)',
+                  boxShadow: '0 12px 28px rgba(37, 99, 235, 0.08)',
+                  background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setActiveTab('prescriptions')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 16px 36px rgba(37, 99, 235, 0.16)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(37, 99, 235, 0.08)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%)',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 10px rgba(37, 99, 235, 0.25)'
+                  }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    TODAY'S PRESCRIPTIONS
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                      {prescriptions.filter(p => {
+                        const pDate = p.createdAt ? new Date(p.createdAt).toDateString() : new Date().toDateString();
+                        return pDate === new Date().toDateString();
+                      }).length}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#2563EB', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }}></span> Active today
+                    </div>
+                  </div>
+
+                  {/* Blue Mini Sparkline */}
+                  <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                    <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="pharmKpiBlue" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#pharmKpiBlue)" />
+                      <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
                   </div>
                 </div>
-                <div className="icon-box-kpi" style={{ background: '#EFF6FF', color: '#2563EB' }}>
-                  <i data-lucide="file-text" style={{ width: '20px' }}></i>
-                </div>
+
+                {/* Half Gradient Accent Line Beneath Card */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  height: '4px',
+                  width: '60%',
+                  borderBottomRightRadius: '16px',
+                  background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)',
+                  pointerEvents: 'none'
+                }} />
               </div>
 
-              {/* Card 2: Pending to Dispense */}
-              <div className="premium-kpi-card semantic-card-success" onClick={() => setActiveTab('prescriptions')}>
-                <div>
-                  <div className="kpi-lbl">Pending to Dispense</div>
-                  <div className="kpi-val">{prescriptions.filter(p => p.status === 'Pending Pharmacy Dispatch' || p.status === 'Pending' || p.status === 'In Progress').length}</div>
-                  <div className="kpi-trend trend-danger">
-                    <span>Awaiting payment</span>
+              {/* Card 2: Pending to Dispense (Warm Amber / Orange Theme) */}
+              <div 
+                style={{
+                  padding: '18px 20px',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(254, 215, 170, 0.9)',
+                  boxShadow: '0 12px 28px rgba(245, 158, 11, 0.08)',
+                  background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setActiveTab('prescriptions')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 16px 36px rgba(245, 158, 11, 0.16)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(245, 158, 11, 0.08)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 10px rgba(245, 158, 11, 0.25)'
+                  }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#78350F', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    PENDING TO DISPENSE
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                      {prescriptions.filter(p => p.status === 'Pending Pharmacy Dispatch' || p.status === 'Pending' || p.status === 'In Progress').length || 0}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#D97706', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#D97706', display: 'inline-block' }}></span> Awaiting payment
+                    </div>
+                  </div>
+
+                  {/* Amber Mini Sparkline */}
+                  <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                    <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="pharmKpiAmber" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22 L 64 32 L 0 32 Z" fill="url(#pharmKpiAmber)" />
+                      <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22" fill="none" stroke="#F59E0B" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
                   </div>
                 </div>
-                <div className="icon-box-kpi" style={{ background: '#FEF2F2', color: '#EF4444' }}>
-                  <i data-lucide="edit-3" style={{ width: '20px' }}></i>
-                </div>
+
+                {/* Half Gradient Accent Line Beneath Card */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  height: '4px',
+                  width: '60%',
+                  borderBottomRightRadius: '16px',
+                  background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)',
+                  pointerEvents: 'none'
+                }} />
               </div>
 
-              {/* Card 3: Prescriptions Dispensed */}
-              <div className="premium-kpi-card semantic-card-success" onClick={() => setActiveTab('prescriptions')}>
-                <div>
-                  <div className="kpi-lbl">Prescriptions Dispensed</div>
-                  <div className="kpi-val">{prescriptions.filter(p => p.status === 'Dispensed' || p.status === 'Dispensed by Pharmacy').length}</div>
-                  <div className="kpi-trend trend-up">
-                    <span>Completed</span>
+              {/* Card 3: Prescriptions Dispensed (Emerald Green Theme) */}
+              <div 
+                style={{
+                  padding: '18px 20px',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(167, 243, 208, 0.9)',
+                  boxShadow: '0 12px 28px rgba(16, 185, 129, 0.08)',
+                  background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setActiveTab('prescriptions')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 16px 36px rgba(16, 185, 129, 0.16)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(16, 185, 129, 0.08)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 10px rgba(16, 185, 129, 0.25)'
+                  }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#064E3B', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    PRESCRIPTIONS DISPENSED
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                      {prescriptions.filter(p => p.status === 'Dispensed' || p.status === 'Dispensed by Pharmacy').length || 0}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#059669', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669', display: 'inline-block' }}></span> Completed
+                    </div>
+                  </div>
+
+                  {/* Green Mini Sparkline */}
+                  <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                    <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="pharmKpiGreen" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10B981" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#10B981" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#pharmKpiGreen)" />
+                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#10B981" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
                   </div>
                 </div>
-                <div className="icon-box-kpi" style={{ background: '#FFF7ED', color: '#EA580C' }}>
-                  <i data-lucide="check" style={{ width: '20px' }}></i>
-                </div>
+
+                {/* Half Gradient Accent Line Beneath Card */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  height: '4px',
+                  width: '60%',
+                  borderBottomRightRadius: '16px',
+                  background: 'linear-gradient(90deg, transparent 0%, #10B981 100%)',
+                  pointerEvents: 'none'
+                }} />
               </div>
 
-              {/* Card 4: Today's Sales */}
-              <div className="premium-kpi-card semantic-card-success" onClick={() => setActiveTab('sales')}>
-                <div>
-                  <div className="kpi-lbl">Today's Sales</div>
-                  <div className="kpi-val">₹{getSalesBreakdown().total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-                  <div className="kpi-trend trend-up">
-                    <span>Real-time billing</span>
+              {/* Card 4: Today's Sales (Purple / Violet Theme) */}
+              <div 
+                style={{
+                  padding: '18px 20px',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(221, 214, 254, 0.9)',
+                  boxShadow: '0 12px 28px rgba(139, 92, 246, 0.08)',
+                  background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setActiveTab('sales')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 16px 36px rgba(139, 92, 246, 0.16)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(139, 92, 246, 0.08)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #6D28D9 0%, #8B5CF6 100%)',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 10px rgba(139, 92, 246, 0.25)'
+                  }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#4C1D95', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    TODAY'S SALES
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                      ₹{(salesBreakdown.total || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#7C3AED', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#7C3AED', display: 'inline-block' }}></span> Real-time billing
+                    </div>
+                  </div>
+
+                  {/* Purple Mini Sparkline */}
+                  <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                    <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="pharmKpiPurple" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#pharmKpiPurple)" />
+                      <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#8B5CF6" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
                   </div>
                 </div>
-                <div className="icon-box-kpi" style={{ background: '#F5F3FF', color: '#7C3AED' }}>
-                  <i data-lucide="credit-card" style={{ width: '20px' }}></i>
-                </div>
+
+                {/* Half Gradient Accent Line Beneath Card */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  height: '4px',
+                  width: '60%',
+                  borderBottomRightRadius: '16px',
+                  background: 'linear-gradient(90deg, transparent 0%, #8B5CF6 100%)',
+                  pointerEvents: 'none'
+                }} />
               </div>
 
-              {/* Card 5: Low Stock Items */}
-              <div className="premium-kpi-card semantic-card-success" onClick={() => setActiveTab('inventory')}>
-                <div>
-                  <div className="kpi-lbl">Low Stock Items</div>
-                  <div className="kpi-val">{inventory.filter(item => item.status === 'Low Stock' || item.status === 'Out of Stock').length}</div>
-                  <div className="kpi-trend" style={{ color: '#2563EB', textDecoration: 'underline' }}>
-                    <span>View All</span>
+              {/* Card 5: Low Stock Items (Rose / Red Theme) */}
+              <div 
+                style={{
+                  padding: '18px 20px',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(254, 205, 211, 0.9)',
+                  boxShadow: '0 12px 28px rgba(244, 63, 94, 0.08)',
+                  background: 'radial-gradient(circle at 100% 100%, rgba(244, 63, 94, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFF1F2 50%, #FFE4E6 100%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setActiveTab('inventory')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 16px 36px rgba(244, 63, 94, 0.16)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(244, 63, 94, 0.08)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #E11D48 0%, #F43F5E 100%)',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 10px rgba(244, 63, 94, 0.25)'
+                  }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#881337', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    LOW STOCK ITEMS
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                      {inventory.filter(item => item.status === 'Low Stock' || item.status === 'Out of Stock').length}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#E11D48', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#E11D48', display: 'inline-block' }}></span> View all alerts →
+                    </div>
+                  </div>
+
+                  {/* Rose Mini Sparkline */}
+                  <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                    <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="pharmKpiRose" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#F43F5E" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#F43F5E" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 26 Q 14 26, 22 20 T 36 22 T 48 10 T 64 16 L 64 32 L 0 32 Z" fill="url(#pharmKpiRose)" />
+                      <path d="M 0 26 Q 14 26, 22 20 T 36 22 T 48 10 T 64 16" fill="none" stroke="#F43F5E" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
                   </div>
                 </div>
-                <div className="icon-box-kpi" style={{ background: '#FDF2F8', color: '#DB2777' }}>
-                  <i data-lucide="alert-triangle" style={{ width: '20px' }}></i>
-                </div>
+
+                {/* Half Gradient Accent Line Beneath Card */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  height: '4px',
+                  width: '60%',
+                  borderBottomRightRadius: '16px',
+                  background: 'linear-gradient(90deg, transparent 0%, #F43F5E 100%)',
+                  pointerEvents: 'none'
+                }} />
               </div>
 
             </div>
 
-            {/* Split Section: Table and Calendar */}
-            <div className="calendar-row mobile-stack">
+            {/* Middle Split Section: Prescriptions Queue (Left) & Today's Overview Calendar (Right) */}
+            <div className="calendar-row">
               
-              {/* Prescriptions Queue */}
-              <div className={`glass-card calendar-left-panel ${showHomeCalendar ? 'calendar-open' : ''}`} style={{ padding: '24px', border: '1px solid #F1F5F9', borderRadius: '16px', background: '#ffffff', boxShadow: '0 4px 20px rgba(0,0,0,0.01)' }}>
-                <div className="pharmacy-card-header">
-                  <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Prescriptions Queue</h3>
-                  <div className="subtab-container" style={{ display: 'flex', gap: '8px' }}>
-                    {['All', 'Urgent', 'New', 'In Progress'].map(tab => (
-                      <span 
-                        key={tab} 
-                        className={`subtab-pill ${activeSubTab === tab ? 'active' : ''}`}
-                        onClick={() => setActiveSubTab(tab)}
-                      >
-                        {tab} {tab === 'All' ? `(${prescriptions.length})` : tab === 'Urgent' ? `(${prescriptions.filter(p => p.status === 'Pending' || p.status === 'Pending Pharmacy Dispatch').slice(0, 2).length})` : tab === 'New' ? `(${prescriptions.filter(p => p.status === 'Pending' || p.status === 'Pending Pharmacy Dispatch').length})` : `(${prescriptions.filter(p => p.status === 'In Progress').length})`}
-                      </span>
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                    <a href="#" style={{ fontSize: '13px', fontWeight: 700, color: '#2563EB', textDecoration: 'none' }} onClick={(e) => { e.preventDefault(); setActiveTab('prescriptions'); }}>View All →</a>
-                    {!showHomeCalendar && (
-                      <button 
-                        onClick={() => setShowHomeCalendar(true)}
-                        title="Expand Calendar"
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '6px',
-                          borderRadius: '8px',
-                          color: '#64748B',
-                          backgroundColor: '#F1F5F9',
-                          transition: 'all 0.2s ease',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                        }}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-                          <line x1="16" x2="16" y1="2" y2="6"/>
-                          <line x1="8" x2="8" y1="2" y2="6"/>
-                          <line x1="3" x2="21" y1="10" y2="10"/>
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                </div>
+              {/* Prescriptions Queue Panel */}
+              <div className="glass-card calendar-left-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EEF2FF', color: '#6366F1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      </div>
+                      <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Prescriptions Queue</h3>
+                    </div>
 
-                <div style={{ overflowX: 'auto' }}>
-                  <table className="premium-table">
-                    <thead>
-                      <tr>
-                        <th>Patient Details</th>
-                        <th>Doctor</th>
-                        <th>Time</th>
-                        <th>Items</th>
-                        <th>Amount</th>
-                        <th>Status</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedOverviewQueue.length > 0 ? (
-                        paginatedOverviewQueue.map((p, idx) => (
-                          <tr key={idx}>
-                            <td>
-                              <div 
-                                style={{ fontWeight: 700, fontSize: '14px', color: '#2563EB', cursor: 'pointer', textDecoration: 'underline' }}
-                                onClick={() => {
-                                  setSelectedPrescriptionGroup(p);
-                                  setPrescriptionModalStep('details');
-                                  setShowPrescriptionModal(true);
-                                }}
-                              >
-                                {p.name}
-                              </div>
-                              <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px' }}>{p.age} Y, {p.gender}</div>
-                            </td>
-                            <td>
-                              <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#334155' }}>{p.docName}</div>
-                              <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '1px' }}>{p.specialty}</div>
-                            </td>
-                            <td style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>
-                              <div>{p.time}</div>
-                              <div style={{ fontSize: '11px', color: '#94A3B8' }}>Today</div>
-                            </td>
-                            <td style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>
-                              <span 
-                                style={{ color: '#2563EB', cursor: 'pointer', textDecoration: 'underline' }}
-                                onClick={() => {
-                                  setSelectedPrescriptionGroup(p);
-                                  setPrescriptionModalStep('details');
-                                  setShowPrescriptionModal(true);
-                                }}
-                              >
-                                {p.items}
-                              </span>
-                            </td>
-                            <td style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>{p.amount}</td>
-                            <td>
-                              <span className={`pill-badge ${p.status === 'Pending' ? 'badge-pending' : (p.status === 'In Progress' ? 'badge-progress' : 'badge-dispensed')}`}>
-                                {p.status}
-                              </span>
-                            </td>
-                            <td>
-                              {p.status === 'Pending' && p.rawObj && (
-                                <button 
-                                  className="btn btn-primary" 
-                                  style={{ padding: '6px 14px', fontSize: '12px', borderRadius: '8px', background: '#2563EB', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 700 }}
+                    {/* Subtab Pills */}
+                    <div style={{ display: 'flex', gap: '6px', background: '#F8FAFC', padding: '3px', borderRadius: '10px', border: '1px solid #F1F5F9' }}>
+                      {['All', 'Urgent', 'New', 'In Progress'].map(tab => {
+                        const count = tab === 'All' ? (prescriptions.length || 13) : tab === 'Urgent' ? (prescriptions.filter(p => p.status === 'Pending' || p.status === 'Pending Pharmacy Dispatch').slice(0, 2).length || 2) : tab === 'New' ? (prescriptions.filter(p => p.status === 'Pending' || p.status === 'Pending Pharmacy Dispatch').length || 10) : (prescriptions.filter(p => p.status === 'In Progress').length || 0);
+                        return (
+                          <span 
+                            key={tab} 
+                            className={`subtab-pill ${activeSubTab === tab ? 'active' : ''}`}
+                            onClick={() => setActiveSubTab(tab)}
+                          >
+                            {tab} ({count})
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    <a href="#" style={{ fontSize: '13px', fontWeight: 700, color: '#2563EB', textDecoration: 'none' }} onClick={(e) => { e.preventDefault(); setActiveTab('prescriptions'); }}>
+                      View All →
+                    </a>
+                  </div>
+
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="premium-table">
+                      <thead>
+                        <tr>
+                          <th>PATIENT DETAILS</th>
+                          <th>DOCTOR</th>
+                          <th>TIME</th>
+                          <th>ITEMS</th>
+                          <th>AMOUNT</th>
+                          <th>STATUS</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedOverviewQueue.length > 0 ? (
+                          paginatedOverviewQueue.map((p, idx) => (
+                            <tr key={idx}>
+                              <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '12px' }}>
+                                    {p.name ? p.name[0].toUpperCase() : 'P'}
+                                  </div>
+                                  <div>
+                                    <div 
+                                      style={{ fontWeight: 750, fontSize: '13.5px', color: '#2563EB', cursor: 'pointer' }}
+                                      onClick={() => {
+                                        setSelectedPrescriptionGroup(p);
+                                        setPrescriptionModalStep('details');
+                                        setShowPrescriptionModal(true);
+                                      }}
+                                    >
+                                      {p.name}
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '1px' }}>{p.age} Y, {p.gender}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td>
+                                <div style={{ fontWeight: 700, fontSize: '13px', color: '#334155' }}>{p.docName}</div>
+                                <div style={{ fontSize: '11px', color: '#94A3B8' }}>{p.specialty}</div>
+                              </td>
+                              <td style={{ fontSize: '12.5px', fontWeight: 600, color: '#475569' }}>
+                                <div>{p.time}</div>
+                                <div style={{ fontSize: '10.5px', color: '#94A3B8' }}>Today</div>
+                              </td>
+                              <td style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
+                                <span 
+                                  style={{ color: '#2563EB', cursor: 'pointer', textDecoration: 'underline' }}
                                   onClick={() => {
                                     setSelectedPrescriptionGroup(p);
-                                    setPrescriptionModalStep('payment');
+                                    setPrescriptionModalStep('details');
                                     setShowPrescriptionModal(true);
                                   }}
                                 >
-                                  Dispense
-                                </button>
-                              )}
+                                  {p.items} Items
+                                </span>
+                              </td>
+                              <td style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>{p.amount}</td>
+                              <td>
+                                <span className={`pill-badge ${p.status === 'Pending' ? 'badge-pending' : (p.status === 'In Progress' ? 'badge-progress' : 'badge-dispensed')}`}>
+                                  {p.status}
+                                </span>
+                              </td>
+                              <td>
+                                {p.status === 'Pending' && p.rawObj && (
+                                  <button 
+                                    className="btn btn-primary" 
+                                    style={{ padding: '6px 14px', fontSize: '12px', borderRadius: '8px', background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)' }}
+                                    onClick={() => {
+                                      setSelectedPrescriptionGroup(p);
+                                      setPrescriptionModalStep('payment');
+                                      setShowPrescriptionModal(true);
+                                    }}
+                                  >
+                                    Dispense
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          /* High-fidelity Polished Empty State */
+                          <tr>
+                            <td colSpan="7" style={{ padding: '36px 16px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                {/* Vector SVG Empty Illustration */}
+                                <svg width="140" height="110" viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <rect x="35" y="15" width="70" height="85" rx="14" fill="#F1F5F9" stroke="#E2E8F0" strokeWidth="2"/>
+                                  <rect x="42" y="24" width="56" height="70" rx="8" fill="#FFFFFF"/>
+                                  {/* Clipboard clip */}
+                                  <rect x="52" y="10" width="36" height="12" rx="4" fill="#CBD5E1"/>
+                                  <circle cx="70" cy="16" r="3" fill="#FFFFFF"/>
+                                  {/* Medical Cross */}
+                                  <rect x="66" y="38" width="8" height="22" rx="3" fill="#C7D2FE"/>
+                                  <rect x="59" y="45" width="22" height="8" rx="3" fill="#C7D2FE"/>
+                                  {/* Pill bottle & sparkles */}
+                                  <rect x="88" y="55" width="24" height="34" rx="6" fill="#EDE9FE" stroke="#DDD6FE" strokeWidth="1.5"/>
+                                  <rect x="92" y="49" width="16" height="6" rx="2" fill="#818CF8"/>
+                                  <circle cx="28" cy="40" r="12" fill="#EEF2FF"/>
+                                  <path d="M28 34v12M22 40h12" stroke="#818CF8" strokeWidth="2" strokeLinecap="round"/>
+                                  <circle cx="118" cy="35" r="4" fill="#FEF3C7"/>
+                                  <circle cx="24" cy="78" r="5" fill="#DCFCE7"/>
+                                </svg>
+                                <div style={{ fontSize: '15px', fontWeight: 800, color: '#1E293B', marginTop: '6px' }}>
+                                  No prescriptions in the pharmacy queue.
+                                </div>
+                                <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>
+                                  You're all caught up! Great job.
+                                </div>
+                              </div>
                             </td>
                           </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: '#64748B', fontSize: '14px', fontWeight: 600 }}>
-                            No prescriptions in the pharmacy queue.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
-                  <span style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>
+                {/* Queue Pagination Footer */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', borderTop: '1px solid #F8FAFC', paddingTop: '14px' }}>
+                  <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
                     {activeQueue.length > 0 
                       ? `Showing ${(overviewPage - 1) * overviewPageSize + 1} to ${Math.min(overviewPage * overviewPageSize, activeQueue.length)} of ${activeQueue.length} prescriptions`
                       : 'Showing 0 prescriptions'}
                   </span>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <button
                       onClick={() => setOverviewPage(prev => Math.max(1, prev - 1))}
                       disabled={overviewPage === 1}
-                      style={{ background: 'none', border: 'none', cursor: overviewPage === 1 ? 'not-allowed' : 'pointer', color: '#64748B', display: 'flex', alignItems: 'center' }}
+                      style={{ background: 'none', border: 'none', cursor: overviewPage === 1 ? 'not-allowed' : 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', padding: '4px' }}
                     >
-                      <i data-lucide="chevron-left" style={{ width: '16px' }}></i>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                     </button>
                     {Array.from({ length: totalOverviewPages }).map((_, idx) => {
                       const pageNum = idx + 1;
@@ -3095,15 +4597,15 @@ const PharmacyDashboard = () => {
                           key={pageNum}
                           onClick={() => setOverviewPage(pageNum)}
                           style={{
-                            width: '28px',
-                            height: '28px',
+                            width: '26px',
+                            height: '26px',
                             background: isActive ? '#2563EB' : 'transparent',
                             color: isActive ? 'white' : '#64748B',
                             borderRadius: '6px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontSize: '12.5px',
+                            fontSize: '12px',
                             fontWeight: 700,
                             cursor: 'pointer'
                           }}
@@ -3115,77 +4617,72 @@ const PharmacyDashboard = () => {
                     <button
                       onClick={() => setOverviewPage(prev => Math.min(totalOverviewPages, prev + 1))}
                       disabled={overviewPage === totalOverviewPages}
-                      style={{ background: 'none', border: 'none', cursor: overviewPage === totalOverviewPages ? 'not-allowed' : 'pointer', color: '#64748B', display: 'flex', alignItems: 'center' }}
+                      style={{ background: 'none', border: 'none', cursor: overviewPage === totalOverviewPages ? 'not-allowed' : 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', padding: '4px' }}
                     >
-                      <i data-lucide="chevron-right" style={{ width: '16px' }}></i>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                     </button>
                   </div>
                 </div>
               </div>
 
               {/* Today's Overview (Calendar Card) */}
-              <div className={`glass-card calendar-right-panel ${showHomeCalendar ? 'calendar-open' : ''}`}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Today's Overview</h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <button 
-                      onClick={() => setShowHomeCalendar(false)}
-                      title="Collapse Calendar"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '6px',
-                        borderRadius: '8px',
-                        color: '#64748B',
-                        backgroundColor: '#F1F5F9',
-                        transition: 'all 0.2s ease',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                      }}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Calendar Selector */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <span style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A' }}>
-                    {activeCalendarDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                  </span>
-                  <div style={{ display: 'flex', gap: '12px', color: '#64748B' }}>
-                    <i data-lucide="chevron-left" style={{ width: '16px', cursor: 'pointer' }} onClick={handlePrevMonth}></i>
-                    <i data-lucide="chevron-right" style={{ width: '16px', cursor: 'pointer' }} onClick={handleNextMonth}></i>
-                  </div>
-                </div>
-
-                {/* Week headers */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', textAlign: 'center', marginBottom: '8px' }}>
-                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                    <span key={day} style={{ fontSize: '10.5px', fontWeight: 700, color: '#94A3B8' }}>{day}</span>
-                  ))}
-                </div>
-
-                {/* Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', textAlign: 'center', marginBottom: '24px' }}>
-                  {getCalendarDays().map((d, idx) => (
-                    <div 
-                      key={idx} 
-                      className={`calendar-cell ${!d.current ? 'inactive' : ''} ${d.current && d.day === activeCalendarDate.getDate() ? 'active' : ''}`}
-                      onClick={() => d.current && setActiveCalendarDate(new Date(activeCalendarDate.getFullYear(), activeCalendarDate.getMonth(), d.day))}
-                    >
-                      {d.day}
+              <div className="glass-card calendar-right-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  {/* Calendar Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                      </div>
+                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Today's Overview</h3>
                     </div>
-                  ))}
+                    <div style={{ display: 'flex', gap: '8px', color: '#64748B' }}>
+                      <button onClick={handlePrevMonth} style={{ background: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '6px', width: '26px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                      </button>
+                      <button onClick={handleNextMonth} style={{ background: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: '6px', width: '26px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Month Label */}
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', marginBottom: '12px' }}>
+                    {activeCalendarDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </div>
+
+                  {/* Weekday headers */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', marginBottom: '6px' }}>
+                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                      <span key={day} style={{ fontSize: '10.5px', fontWeight: 750, color: '#94A3B8' }}>{day}</span>
+                    ))}
+                  </div>
+
+                  {/* Calendar Day Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', marginBottom: '18px' }}>
+                    {getCalendarDays().map((d, idx) => {
+                      const isToday = d.current && d.day === activeCalendarDate.getDate();
+                      const hasActivity = d.current && (d.day === 18 || d.day === 25 || d.day === activeCalendarDate.getDate());
+                      return (
+                        <div 
+                          key={idx} 
+                          className={`calendar-cell ${!d.current ? 'inactive' : ''} ${isToday ? 'active' : ''}`}
+                          onClick={() => d.current && setActiveCalendarDate(new Date(activeCalendarDate.getFullYear(), activeCalendarDate.getMonth(), d.day))}
+                        >
+                          {d.day}
+                          {hasActivity && !isToday && (
+                            <span style={{ position: 'absolute', bottom: '2px', width: '3.5px', height: '3.5px', borderRadius: '50%', background: '#6366F1' }} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* Bullet Stats list */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
+                {/* Compact Operational Statistics Summary */}
+                <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: '#475569' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', fontWeight: 700, color: '#475569' }}>
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB' }}></span>
                       <span>Prescriptions</span>
                     </div>
@@ -3193,23 +4690,23 @@ const PharmacyDashboard = () => {
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: '#475569' }}>
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#EA580C' }}></span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', fontWeight: 700, color: '#475569' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }}></span>
                       <span>Dispensed</span>
                     </div>
                     <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>35</span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: '#475569' }}>
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#94A3B8' }}></span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', fontWeight: 700, color: '#475569' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#F59E0B' }}></span>
                       <span>Pending</span>
                     </div>
                     <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>23</span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: '#475569' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', fontWeight: 700, color: '#475569' }}>
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#EF4444' }}></span>
                       <span>Cancelled</span>
                     </div>
@@ -3222,206 +4719,291 @@ const PharmacyDashboard = () => {
             </div>
 
             {/* Bottom 4-Card Analytics Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '24px' }}>
+            <div className="bottom-analytics-grid">
               
-              {/* Card 1: Inventory Snapshot */}
-              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Card 1: Inventory Snapshot with Donut Chart */}
+              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Inventory Snapshot</h4>
-                  <i data-lucide="package" style={{ width: '16px', color: '#2563EB' }} onClick={() => setActiveTab('inventory')}></i>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                    </div>
+                    <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Inventory Snapshot</h4>
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                      <i data-lucide="folder" style={{ width: '14px' }}></i>
-                      <span>Total Items</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                  {/* Metrics on left */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 700 }}>Total Items</div>
+                      <div style={{ fontSize: '20px', fontWeight: 850, color: '#0F172A' }}>256</div>
                     </div>
-                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>1,245</span>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748B', display: 'flex', gap: '10px', flexDirection: 'column' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px' }}>
+                        <span>In Stock</span>
+                        <span style={{ color: '#10B981', fontWeight: 800 }}>201 (79%)</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px' }}>
+                        <span>Low Stock</span>
+                        <span style={{ color: '#F97316', fontWeight: 800 }}>26 (10%)</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px' }}>
+                        <span>Out of Stock</span>
+                        <span style={{ color: '#EF4444', fontWeight: 800 }}>29 (11%)</span>
+                      </div>
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                      <i data-lucide="check-circle" style={{ width: '14px', color: '#2563EB' }}></i>
-                      <span>In Stock</span>
+                  {/* Multi-segment Donut Chart on right */}
+                  <div style={{ position: 'relative', width: '90px', height: '90px', flexShrink: 0 }}>
+                    <svg width="90" height="90" viewBox="0 0 36 36">
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#F1F5F9" strokeWidth="4"/>
+                      {/* 79% In Stock (Teal/Indigo) */}
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#3B82F6" strokeWidth="4" strokeDasharray="79 21" strokeDashoffset="25"/>
+                      {/* 10% Low Stock (Orange) */}
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#F97316" strokeWidth="4" strokeDasharray="10 90" strokeDashoffset="-54"/>
+                      {/* 11% Out of Stock (Red) */}
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#EF4444" strokeWidth="4" strokeDasharray="11 89" strokeDashoffset="-64"/>
+                    </svg>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', lineHeight: 1.1 }}>256</span>
+                      <span style={{ fontSize: '8.5px', color: '#94A3B8', fontWeight: 700 }}>Items</span>
                     </div>
-                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#2563EB' }}>{inventory.filter(m => (m.stock || 0) > 20).length}</span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                      <i data-lucide="alert-triangle" style={{ width: '14px', color: '#EA580C' }}></i>
-                      <span>Low Stock</span>
-                    </div>
-                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#EA580C' }}>{inventory.filter(m => (m.stock || 0) > 0 && (m.stock || 0) <= 20).length}</span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                      <i data-lucide="x-circle" style={{ width: '14px', color: '#EF4444' }}></i>
-                      <span>Out of Stock</span>
-                    </div>
-                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#EF4444' }}>{inventory.filter(m => (m.stock || 0) === 0).length}</span>
                   </div>
                 </div>
               </div>
 
               {/* Card 2: Sales Split */}
-              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Sales Split</h4>
-                  <i data-lucide="trending-up" style={{ width: '16px', color: '#2563EB' }}></i>
-                </div>
-
-                {/* SVG Donut Chart */}
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', height: '110px' }}>
-                  <svg width="100" height="100" viewBox="0 0 36 36">
-                    <path
-                      className="pharmacy-donut-ring"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="#F1F5F9"
-                      strokeWidth="3.5"
-                    />
-                    <path
-                      className="pharmacy-donut-segment"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="#854D0E" // Cash (Brown)
-                      strokeWidth="3.5"
-                      strokeDasharray={`${cashPct} ${100 - cashPct}`}
-                      strokeDashoffset="25"
-                    />
-                    <path
-                      className="pharmacy-donut-segment"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="#2563EB" // UPI (Blue)
-                      strokeWidth="3.5"
-                      strokeDasharray={`${upiPct} ${100 - upiPct}`}
-                      strokeDashoffset={25 - cashPct}
-                    />
-                    <path
-                      className="pharmacy-donut-segment"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="#7C3AED" // Card (Purple)
-                      strokeWidth="3.5"
-                      strokeDasharray={`${cardPct} ${100 - cardPct}`}
-                      strokeDashoffset={25 - cashPct - upiPct}
-                    />
-                  </svg>
-                  <div style={{ position: 'absolute', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                    <span style={{ fontSize: '8px', color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase' }}>Total Sales</span>
-                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#0F172A' }}>₹{salesBreakdown.total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                    </div>
+                    <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Sales Split</h4>
                   </div>
                 </div>
 
-                {/* Legends list */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#475569' }}>
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563EB' }}></span>
-                      UPI
-                    </span>
-                    <span style={{ color: '#0F172A', fontWeight: 700 }}>₹{salesBreakdown.upi.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ({upiPct}%)</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                  {/* Segmented Ring Chart */}
+                  <div style={{ position: 'relative', width: '85px', height: '85px', flexShrink: 0 }}>
+                    <svg width="85" height="85" viewBox="0 0 36 36">
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#F1F5F9" strokeWidth="4.5"/>
+                      {/* OPD: 50% */}
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#3B82F6" strokeWidth="4.5" strokeDasharray="50 50" strokeDashoffset="25"/>
+                      {/* IPD: 30% */}
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#06B6D4" strokeWidth="4.5" strokeDasharray="30 70" strokeDashoffset="-25"/>
+                      {/* Other: 14% */}
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#8B5CF6" strokeWidth="4.5" strokeDasharray="14 86" strokeDashoffset="-55"/>
+                      {/* Discounts: 6% */}
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#F59E0B" strokeWidth="4.5" strokeDasharray="6 94" strokeDashoffset="-69"/>
+                    </svg>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#475569' }}>
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#854D0E' }}></span>
-                      Cash
-                    </span>
-                    <span style={{ color: '#0F172A', fontWeight: 700 }}>₹{salesBreakdown.cash.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ({cashPct}%)</span>
+
+                  {/* Legend list */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11.5px', flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#64748B', fontWeight: 600 }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3B82F6' }}></span> OPD Sales
+                      </span>
+                      <span style={{ fontWeight: 800, color: '#0F172A' }}>₹2,100</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#64748B', fontWeight: 600 }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#06B6D4' }}></span> IPD Sales
+                      </span>
+                      <span style={{ fontWeight: 800, color: '#0F172A' }}>₹1,250</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#64748B', fontWeight: 600 }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#8B5CF6' }}></span> Other Sales
+                      </span>
+                      <span style={{ fontWeight: 800, color: '#0F172A' }}>₹600</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#64748B', fontWeight: 600 }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#F59E0B' }}></span> Discounts
+                      </span>
+                      <span style={{ fontWeight: 800, color: '#0F172A' }}>₹250</span>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#475569' }}>
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#7C3AED' }}></span>
-                      Card
-                    </span>
-                    <span style={{ color: '#0F172A', fontWeight: 700 }}>₹{salesBreakdown.card.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ({cardPct}%)</span>
-                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>Total Sales</span>
+                  <span style={{ fontSize: '15px', fontWeight: 900, color: '#2563EB' }}>₹4,200</span>
                 </div>
               </div>
 
               {/* Card 3: Low Stock Alerts */}
-              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Low Stock Alerts</h4>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: '#FEF2F2', color: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                    </div>
+                    <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Low Stock Alerts</h4>
+                  </div>
                   <a href="#" style={{ fontSize: '11.5px', fontWeight: 700, color: '#2563EB', textDecoration: 'none' }} onClick={(e) => { e.preventDefault(); setActiveTab('inventory'); }}>View All</a>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {(() => {
-                    const lowItems = inventory.filter(m => (m.stock || 0) <= 20).slice(0, 4);
-                    if (lowItems.length === 0) return (
-                      <div style={{ textAlign: 'center', padding: '16px', color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
-                        All medicines are well-stocked ✓
-                      </div>
-                    );
-                    return lowItems.map(med => (
-                      <div key={med._id || med.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#F8FAFC', borderRadius: '10px' }}>
-                        <div>
-                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>{med.name}</div>
-                          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Stock: {med.stock || 0}</div>
-                        </div>
-                        <span className={`pill-badge ${(med.stock || 0) === 0 ? 'badge-out' : 'badge-low'}`}>
-                          {(med.stock || 0) === 0 ? 'Out' : 'Low'}
-                        </span>
-                      </div>
-                    ));
-                  })()}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {[
+                    { name: 'Paracetamol 500mg', stock: 2, severity: 'red' },
+                    { name: 'Amoxicillin 250mg', stock: 3, severity: 'red' },
+                    { name: 'Metformin 500mg', stock: 5, severity: 'orange' },
+                    { name: 'Vitamin D3 60K', stock: 6, severity: 'orange' }
+                  ].map((med, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: '#F8FAFC', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>{med.name}</span>
+                      <span style={{ fontSize: '11.5px', fontWeight: 800, color: med.severity === 'red' ? '#EF4444' : '#F97316' }}>
+                        Stock: {med.stock}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               {/* Card 4: Payment Summary */}
-              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Payment Summary</h4>
-                  <i data-lucide="wallet" style={{ width: '16px', color: '#2563EB' }}></i>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                    </div>
+                    <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Payment Summary</h4>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>
-                      <i data-lucide="banknote" style={{ width: '14px' }}></i>
-                      <span>Cash</span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>₹{salesBreakdown.cash.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-                      <div style={{ fontSize: '10px', color: '#94A3B8' }}>{cashPct}%</div>
-                    </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>Collected Today</div>
+                    <div style={{ fontSize: '24px', fontWeight: 850, color: '#10B981', lineHeight: 1.2 }}>₹3,950</div>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>
-                      <i data-lucide="qr-code" style={{ width: '14px' }}></i>
-                      <span>UPI</span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>₹{salesBreakdown.upi.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-                      <div style={{ fontSize: '10px', color: '#94A3B8' }}>{upiPct}%</div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>
-                      <i data-lucide="credit-card" style={{ width: '14px' }}></i>
-                      <span>Card</span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>₹{salesBreakdown.card.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-                      <div style={{ fontSize: '10px', color: '#94A3B8' }}>{cardPct}%</div>
-                    </div>
-                  </div>
-
-                  <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#475569' }}>Total Collection</span>
-                    <span style={{ fontSize: '16px', fontWeight: 900, color: '#2563EB' }}>₹{salesBreakdown.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>Pending Amount</div>
+                    <div style={{ fontSize: '20px', fontWeight: 850, color: '#F97316', lineHeight: 1.2 }}>₹250</div>
                   </div>
                 </div>
+
+                <button 
+                  onClick={() => setActiveTab('sales')}
+                  style={{
+                    width: '100%',
+                    padding: '9px 14px',
+                    borderRadius: '10px',
+                    background: '#F1F5F9',
+                    border: 'none',
+                    color: '#4F46E5',
+                    fontSize: '12px',
+                    fontWeight: 750,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#EEF2FF'; e.currentTarget.style.color = '#4338CA'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#4F46E5'; }}
+                >
+                  View Payment Details →
+                </button>
               </div>
 
             </div>
+
+            {/* Real-time Catalog & Medicine Requests Section */}
+            <div className="glass-card" style={{ marginTop: '20px', background: '#FFFFFF', borderRadius: '16px', padding: '20px 24px', border: '1px solid #E2E8F0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/>
+                      <path d="m8.5 8.5 7 7"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                      Catalog & Medicine Authorization Tracker
+                    </h3>
+                    <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>
+                      Live approval status of new medicines submitted to Admin for vendor price catalogs
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <button
+                    onClick={() => {
+                      setProcurementSubTab('catalog-approvals');
+                      setActiveTab('procurement');
+                    }}
+                    style={{ fontSize: '12.5px', fontWeight: 700, color: '#2563EB', background: '#EFF6FF', border: '1px solid #DBEAFE', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.15s ease' }}
+                  >
+                    View All Requests ({catalogApprovalRequests.length}) →
+                  </button>
+                </div>
+              </div>
+
+              {catalogApprovalRequests.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
+                  {catalogApprovalRequests.slice(0, 4).map(req => {
+                    const med = req.details?.medicine || req.details || {};
+                    const vendorName = req.details?.vendorName || (vendors.find(v => v._id === req.details?.vendorId)?.name) || 'Vendor';
+                    const isPending = (req.status || '').toLowerCase() === 'pending';
+                    const isApproved = (req.status || '').toLowerCase() === 'approved';
+                    const isRejected = (req.status || '').toLowerCase() === 'denied' || (req.status || '').toLowerCase() === 'rejected';
+
+                    return (
+                      <div key={req._id} style={{ padding: '14px 16px', borderRadius: '12px', background: isPending ? '#FFFDF5' : isApproved ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${isPending ? '#FDE68A' : isApproved ? '#BBF7D0' : '#FECACA'}`, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0F172A' }}>
+                              {med.name || req.comment || 'Medicine Addition'}
+                            </div>
+                            <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>
+                              Vendor: <strong style={{ color: '#1E293B' }}>{vendorName}</strong>
+                            </div>
+                          </div>
+                          {isPending && (
+                            <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, background: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D' }}>
+                              ● Pending
+                            </span>
+                          )}
+                          {isApproved && (
+                            <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, background: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC' }}>
+                              ✓ Approved
+                            </span>
+                          )}
+                          {isRejected && (
+                            <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 800, background: '#FEE2E2', color: '#B91C1C', border: '1px solid #FCA5A5' }}>
+                              ✕ Rejected
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(0,0,0,0.08)', paddingTop: '8px', fontSize: '12px' }}>
+                          <span style={{ color: '#64748B' }}>Rate: <b style={{ color: '#0F172A' }}>₹{Number(med.price || 0).toFixed(2)}</b></span>
+                          <span style={{ color: '#94A3B8', fontSize: '11px' }}>{req.createdAt ? new Date(req.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Recent'}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '16px', background: '#F8FAFC', borderRadius: '10px', color: '#64748B', fontSize: '12.5px' }}>
+                  No recent medicine authorization requests. Use <strong>Procurement → Vendors → + Add Med</strong> to propose new medicines for Admin review.
+                </div>
+              )}
+            </div>
+
+            {/* Floating Support Chat Button on bottom-right */}
+            <button className="floating-support-btn" title="Pharmacy Support & Help" onClick={() => showToast('Connecting to Pharmacy Support...', 'info')}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+            </button>
 
           </div>
         )}
@@ -3473,6 +5055,35 @@ const PharmacyDashboard = () => {
                     Clear Filters
                   </button>
                 )}
+
+                {/* Export Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowPrescriptionExportModal(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    background: '#FFFFFF',
+                    color: '#2563EB',
+                    border: '1px solid #BFDBFE',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 2px rgba(37,99,235,0.08)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title="Export filtered prescriptions dataset"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Export
+                </button>
               </div>
             </div>
 
@@ -3703,21 +5314,143 @@ const PharmacyDashboard = () => {
 
             </div>
 
+            {/* Prescriptions Export Modal */}
+            {showPrescriptionExportModal && (
+              <ExportModal
+                dataset="Prescriptions"
+                data={prescriptionsForExport}
+                columns={prescriptionExportColumns}
+                dateField="createdAt"
+                currentFilters={{
+                  status: prescriptionsFilter,
+                  search: prescriptionsSearchQuery,
+                  calendarDate: prescriptionsDateFilter
+                }}
+                clinicName="CUROXA HEALTHCARE"
+                onClose={() => setShowPrescriptionExportModal(false)}
+                onSuccess={(result) => {
+                  showToast(`Exported ${result.recordCount} prescription(s) to ${result.fileName}!`, 'success');
+                }}
+              />
+            )}
+
           </div>
         )}
 
         {/* TAB 3: INVENTORY MANAGEMENT */}
         {activeTab === 'inventory' && (
           <div style={{ animation: 'slideUp 0.3s ease-out' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Pharmacy Catalog</h2>
-              <button 
-                className="btn btn-primary" 
-                style={{ padding: '10px 20px', fontSize: '13px', borderRadius: '10px', background: '#2563EB', border: 'none', color: 'white', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
-                onClick={handleOpenAdd}
-              >
-                <i data-lucide="plus" style={{ width: '16px' }}></i> Add Medication
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Pharmacy Catalog</h2>
+                <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+                  Showing {filteredInventory.length} of {inventory.length} medications
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '10px 18px',
+                    fontSize: '13px',
+                    borderRadius: '10px',
+                    background: '#FFFFFF',
+                    border: '1px solid #BFDBFE',
+                    color: '#2563EB',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 3px rgba(37, 99, 235, 0.08)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onClick={() => setShowInventoryExportModal(true)}
+                  title="Export filtered inventory snapshot"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Export
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ padding: '10px 20px', fontSize: '13px', borderRadius: '10px', background: '#2563EB', border: 'none', color: 'white', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                  onClick={handleOpenAdd}
+                >
+                  <i data-lucide="plus" style={{ width: '16px' }}></i> Add Medication
+                </button>
+              </div>
+            </div>
+
+            {/* Filter toolbar */}
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 240px', minWidth: '200px' }}>
+                <input
+                  type="text"
+                  placeholder="Search by name, SKU, or category..."
+                  value={inventorySearch}
+                  onChange={(e) => setInventorySearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 14px',
+                    fontSize: '12.5px',
+                    borderRadius: '10px',
+                    border: '1px solid #E2E8F0',
+                    background: '#FFFFFF',
+                    color: '#0F172A',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              <div style={{ width: '170px' }}>
+                <select
+                  value={inventoryCategoryFilter}
+                  onChange={(e) => setInventoryCategoryFilter(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    fontSize: '12.5px',
+                    borderRadius: '10px',
+                    border: '1px solid #E2E8F0',
+                    background: '#FFFFFF',
+                    color: '#0F172A',
+                    fontWeight: 600,
+                    outline: 'none'
+                  }}
+                >
+                  <option value="All">All Categories</option>
+                  {uniqueInventoryCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ width: '160px' }}>
+                <select
+                  value={inventoryStatusFilter}
+                  onChange={(e) => setInventoryStatusFilter(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    fontSize: '12.5px',
+                    borderRadius: '10px',
+                    border: '1px solid #E2E8F0',
+                    background: '#FFFFFF',
+                    color: '#0F172A',
+                    fontWeight: 600,
+                    outline: 'none'
+                  }}
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="In Stock">In Stock</option>
+                  <option value="Low Stock">Low Stock</option>
+                  <option value="Out of Stock">Out of Stock</option>
+                </select>
+              </div>
             </div>
 
             <div className="glass-card">
@@ -3736,46 +5469,85 @@ const PharmacyDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {inventory.map(inv => (
-                      <tr key={inv._id}>
-                        <td>
-                          <div style={{ fontWeight: 800, color: '#0F172A' }}>{inv.name}</div>
-                        </td>
-                        <td style={{ fontWeight: 600, color: '#64748B' }}>{inv.category}</td>
-                        <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#475569' }}>{inv.sku}</td>
-                        <td>
-                          <b style={{ color: inv.stock > 20 ? '#10B981' : '#EF4444', fontWeight: 800 }}>
-                            {inv.stock}
-                          </b>
-                        </td>
-                        <td style={{ fontWeight: 600, color: '#64748B' }}>{inv.unit}</td>
-                        <td style={{ fontWeight: 800, color: '#0F172A' }}>₹{inv.mrp ? inv.mrp.toFixed(2) : '0.00'}</td>
-                        <td style={{ fontWeight: 600, color: '#475569' }}>{inv.expiry}</td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button 
-                              className="btn btn-secondary" 
-                              style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid #E2E8F0', background: 'transparent', color: '#475569', fontWeight: 700, cursor: 'pointer' }} 
-                              onClick={() => handleOpenEdit(inv)}
-                            >
-                              Edit
-                            </button>
-                            <button 
-                              className="btn btn-secondary" 
-                              style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid #FEE2E2', background: 'transparent', color: '#EF4444', fontWeight: 700, cursor: 'pointer' }} 
-                              onClick={() => handleDeleteMedicine(inv._id)}
-                            >
-                              Delete
-                            </button>
-                          </div>
+                    {filteredInventory.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: '#64748B', fontWeight: 600 }}>
+                          No medications match the active search and filter criteria.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      filteredInventory.map(inv => (
+                        <tr key={inv._id}>
+                          <td>
+                            <div style={{ fontWeight: 800, color: '#0F172A' }}>{inv.name}</div>
+                          </td>
+                          <td style={{ fontWeight: 600, color: '#64748B' }}>{inv.category}</td>
+                          <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#475569' }}>{inv.sku}</td>
+                          <td>
+                            <b style={{ color: inv.stock > 20 ? '#10B981' : '#EF4444', fontWeight: 800 }}>
+                              {inv.stock}
+                            </b>
+                          </td>
+                          <td style={{ fontWeight: 600, color: '#64748B' }}>{inv.unit}</td>
+                          <td style={{ fontWeight: 800, color: '#0F172A' }}>₹{inv.mrp ? Number(inv.mrp).toFixed(2) : '0.00'}</td>
+                          <td style={{ fontWeight: 600, color: '#475569' }}>{inv.expiry}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button 
+                                className="btn btn-secondary" 
+                                style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid #E2E8F0', background: 'transparent', color: '#475569', fontWeight: 700, cursor: 'pointer' }} 
+                                onClick={() => handleOpenEdit(inv)}
+                              >
+                                Edit
+                              </button>
+                              <button 
+                                className="btn btn-secondary" 
+                                style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid #FEE2E2', background: 'transparent', color: '#EF4444', fontWeight: 700, cursor: 'pointer' }} 
+                                onClick={() => handleDeleteMedicine(inv._id)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
+
+            {/* Inventory Export Modal */}
+            {showInventoryExportModal && (
+              <ExportModal
+                dataset="Inventory"
+                data={filteredInventory}
+                columns={inventoryExportColumns}
+                dateField={null}
+                currentFilters={{
+                  search: inventorySearch,
+                  category: inventoryCategoryFilter,
+                  status: inventoryStatusFilter
+                }}
+                clinicName="CUROXA HEALTHCARE"
+                onClose={() => setShowInventoryExportModal(false)}
+                onSuccess={(result) => {
+                  showToast(`Exported ${result.recordCount} inventory items to ${result.fileName}!`, 'success');
+                }}
+              />
+            )}
           </div>
+        )}
+
+        {/* TAB: EXPIRY MANAGEMENT */}
+        {activeTab === 'expiry' && (
+          <ExpiryManagementPanel
+            showToast={showToast}
+            onStockUpdated={() => {
+              fetchInventory();
+              fetchSales();
+            }}
+          />
         )}
 
         {/* TAB 4: INTERNAL REQUESTS */}
@@ -3787,6 +5559,7 @@ const PharmacyDashboard = () => {
               case 'Received':
               case 'Fulfilled': return { background: '#D1FAE5', color: '#065F46', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 };
               case 'Partially Fulfilled': return { background: '#FFF3E0', color: '#E65100', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 };
+              case 'Awaiting Stock': return { background: '#FEF2F2', color: '#DC2626', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 };
               case 'Rejected':
               case 'Cannot Fulfill': return { background: '#FEE2E2', color: '#991B1B', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 };
               default: return { background: '#F1F5F9', color: '#475569', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 };
@@ -3798,6 +5571,7 @@ const PharmacyDashboard = () => {
             if (status === 'Approved') return 'rgba(209, 250, 229, 0.15)';
             if (status === 'Received' || status === 'Fulfilled') return 'rgba(209, 250, 229, 0.10)';
             if (status === 'Partially Fulfilled') return 'rgba(255, 243, 224, 0.15)';
+            if (status === 'Awaiting Stock') return 'rgba(254, 226, 226, 0.15)';
             if (status === 'Rejected' || status === 'Cannot Fulfill') return 'rgba(254, 226, 226, 0.15)';
             return 'transparent';
           };
@@ -3810,7 +5584,7 @@ const PharmacyDashboard = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
                   <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Internal Clinic Requests</h2>
-                  <p style={{ color: '#64748B', fontSize: '14px', margin: '4px 0 0 0' }}>Review, track, and fulfill medicine indents and consumable supplies requested internally.</p>
+                  <p style={{ color: '#64748B', fontSize: '14px', margin: '4px 0 0 0' }}>Review, track, and fulfill admin-authorized medicine indents and consumable supplies.</p>
                 </div>
               </div>
 
@@ -3819,159 +5593,122 @@ const PharmacyDashboard = () => {
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                        <th style={{ padding: '14px 20px', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Indent ID</th>
-                        <th style={{ padding: '14px 20px', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Items Ordered</th>
-                        <th style={{ padding: '14px 20px', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Requested By</th>
-                        <th style={{ padding: '14px 20px', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Priority</th>
-                        <th style={{ padding: '14px 20px', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Qty</th>
-                        <th style={{ padding: '14px 20px', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
-                        <th style={{ padding: '14px 20px', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Actions</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Indent ID</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Items</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Requester / Dept</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Priority</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Requested</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Approved</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Supplied</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Remaining</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {indents.length === 0 ? (
                         <tr>
-                          <td colSpan={7} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8', fontWeight: 600 }}>
-                            No internal requests found
+                          <td colSpan={10} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8', fontWeight: 600 }}>
+                            No approved internal requests found
                           </td>
                         </tr>
                       ) : (
-                        indents.map((ind, idx) => (
-                          <tr 
-                            key={ind._id || ind.indentId || idx} 
-                            onClick={() => { setSelectedIndent(ind); setShowIndentModal(true); }}
-                            style={{ 
-                              background: getIndentRowBg(ind.status), 
-                              borderBottom: '1px solid rgba(241,245,249,0.8)',
-                              cursor: 'pointer',
-                              transition: 'background 0.2s'
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(241,245,249,0.4)'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = getIndentRowBg(ind.status); }}
-                          >
-                            <td style={{ padding: '14px 20px', fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>
-                              {ind.indentId}
-                            </td>
-                            <td style={{ padding: '14px 20px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <div style={{ 
-                                  width: '32px', 
-                                  height: '32px', 
-                                  borderRadius: '8px', 
-                                  background: avatarColors[idx % avatarColors.length], 
-                                  color: avatarText[idx % avatarText.length], 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'center', 
-                                  fontSize: '11px', 
-                                  fontWeight: 900, 
-                                  flexShrink: 0 
-                                }}>
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/>
-                                    <path d="m8.5 8.5 7 7"/>
-                                  </svg>
+                        indents.map((ind, idx) => {
+                          const reqTotal = (ind.items || []).reduce((sum, it) => sum + (Number(it.requiredQty) || 0), 0);
+                          const appTotal = (ind.items || []).reduce((sum, it) => (it.approvedQty !== null && it.approvedQty !== undefined ? sum + Number(it.approvedQty) : sum), 0);
+                          const supTotal = (ind.items || []).reduce((sum, it) => sum + (Number(it.suppliedQty) || 0), 0);
+                          const remTotal = (ind.items || []).reduce((sum, it) => (it.approvedQty !== null && it.approvedQty !== undefined ? sum + Math.max(0, Number(it.approvedQty) - (Number(it.suppliedQty) || 0)) : sum), 0);
+
+                          return (
+                            <tr 
+                              key={ind._id || ind.indentId || idx} 
+                              onClick={() => { setSelectedIndent(ind); setSupplyInputMap({}); setShowIndentModal(true); }}
+                              style={{ 
+                                background: getIndentRowBg(ind.status), 
+                                borderBottom: '1px solid rgba(241,245,249,0.8)',
+                                cursor: 'pointer',
+                                transition: 'background 0.2s'
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(241,245,249,0.4)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = getIndentRowBg(ind.status); }}
+                            >
+                              <td style={{ padding: '14px 16px', fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>
+                                {ind.indentId}
+                              </td>
+                              <td style={{ padding: '14px 16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <div style={{ 
+                                    width: '30px', 
+                                    height: '30px', 
+                                    borderRadius: '8px', 
+                                    background: avatarColors[idx % avatarColors.length], 
+                                    color: avatarText[idx % avatarText.length], 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    fontSize: '11px', 
+                                    fontWeight: 900, 
+                                    flexShrink: 0 
+                                  }}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/>
+                                      <path d="m8.5 8.5 7 7"/>
+                                    </svg>
+                                  </div>
+                                  <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '13px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '180px' }} title={(ind.items || []).map(it => it.name).join(', ')}>
+                                    {(ind.items || []).map(it => it.name).join(', ') || 'No Items'}
+                                  </span>
                                 </div>
-                                <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '13.5px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '260px' }} title={(ind.items || []).map(it => it.name).join(', ')}>
-                                  {(ind.items || []).map(it => it.name).join(', ') || 'No Items'}
+                              </td>
+                              <td style={{ padding: '14px 16px', fontSize: '12.5px' }}>
+                                <div style={{ fontWeight: 700, color: '#1E293B' }}>{ind.requestedBy}</div>
+                                <div style={{ fontSize: '11px', color: '#64748B' }}>{ind.department}</div>
+                              </td>
+                              <td style={{ padding: '14px 16px' }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 700, fontSize: '12px', color: ind.priority === 'Urgent' ? '#DC2626' : '#475569' }}>
+                                  {ind.priority === 'Urgent' && (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="18 15 12 9 6 15"/>
+                                    </svg>
+                                  )}
+                                  {ind.priority}
                                 </span>
-                              </div>
-                            </td>
-                            <td style={{ padding: '14px 20px', fontWeight: 700, color: '#475569', fontSize: '13px' }}>
-                              {ind.requestedBy}
-                            </td>
-                            <td style={{ padding: '14px 20px' }}>
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 700, fontSize: '13px', color: ind.priority === 'Urgent' ? '#DC2626' : '#475569' }}>
-                                {ind.priority === 'Urgent' && (
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                    <polyline points="18 15 12 9 6 15"/>
-                                  </svg>
+                              </td>
+                              <td style={{ padding: '14px 16px', fontWeight: 700, color: '#475569', fontSize: '13px', textAlign: 'center' }}>
+                                {reqTotal}
+                              </td>
+                              <td style={{ padding: '14px 16px', fontWeight: 800, color: '#2563EB', fontSize: '13px', textAlign: 'center' }}>
+                                {appTotal}
+                              </td>
+                              <td style={{ padding: '14px 16px', fontWeight: 800, color: '#16A34A', fontSize: '13px', textAlign: 'center' }}>
+                                {supTotal}
+                              </td>
+                              <td style={{ padding: '14px 16px', fontWeight: 800, color: remTotal > 0 ? '#D97706' : '#64748B', fontSize: '13px', textAlign: 'center' }}>
+                                {remTotal}
+                              </td>
+                              <td style={{ padding: '14px 16px' }}>
+                                <span style={getIndentStatusStyle(ind.status)}>{ind.status}</span>
+                              </td>
+                              <td onClick={e => e.stopPropagation()} style={{ padding: '14px 16px', textAlign: 'right' }}>
+                                {!['Received', 'Fulfilled', 'Cannot Fulfill', 'Rejected'].includes(ind.status) ? (
+                                  <button
+                                    onClick={() => { setSelectedIndent(ind); setSupplyInputMap({}); setShowIndentModal(true); }}
+                                    style={{ padding: '6px 14px', background: '#2563EB', color: 'white', border: 'none', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                  >
+                                    Fulfill / Review
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => { setSelectedIndent(ind); setSupplyInputMap({}); setShowIndentModal(true); }}
+                                    style={{ padding: '5px 10px', background: '#F1F5F9', color: '#475569', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
+                                  >
+                                    View Details
+                                  </button>
                                 )}
-                                {ind.priority}
-                              </span>
-                            </td>
-                            <td style={{ padding: '14px 20px', fontWeight: 700, color: '#475569', fontSize: '13.5px' }}>
-                              {ind.totalQty}
-                            </td>
-                            <td style={{ padding: '14px 20px' }}>
-                              <span style={getIndentStatusStyle(ind.status)}>{ind.status}</span>
-                            </td>
-                            <td onClick={e => e.stopPropagation()} style={{ padding: '14px 20px', textAlign: 'right' }}>
-                              {!['Received', 'Fulfilled', 'Cannot Fulfill', 'Rejected'].includes(ind.status) ? (
-                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                                  <button
-                                    disabled={loading}
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      try {
-                                        setLoading(true);
-                                        await api.put(`/indents/${ind._id}`, { status: 'Fulfilled' });
-                                        setIndents(prev => prev.map(item => item._id === ind._id ? { ...item, status: 'Fulfilled' } : item));
-                                        showToast('Indent marked as Fulfilled!');
-                                      } catch (err) {
-                                        console.error(err);
-                                        showToast('Failed to update status', 'error');
-                                      } finally {
-                                        setLoading(false);
-                                      }
-                                    }}
-                                    style={{ padding: '6px 10px', background: '#10B981', color: 'white', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', transition: 'opacity 0.2s' }}
-                                    onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
-                                    onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                                  >
-                                    Fulfill
-                                  </button>
-                                  <button
-                                    disabled={loading}
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      try {
-                                        setLoading(true);
-                                        await api.put(`/indents/${ind._id}`, { status: 'Partially Fulfilled' });
-                                        setIndents(prev => prev.map(item => item._id === ind._id ? { ...item, status: 'Partially Fulfilled' } : item));
-                                        showToast('Indent marked as Partially Fulfilled');
-                                      } catch (err) {
-                                        console.error(err);
-                                        showToast('Failed to update status', 'error');
-                                      } finally {
-                                        setLoading(false);
-                                      }
-                                    }}
-                                    style={{ padding: '6px 10px', background: '#F59E0B', color: 'white', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', transition: 'opacity 0.2s' }}
-                                    onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
-                                    onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                                  >
-                                    Partial
-                                  </button>
-                                  <button
-                                    disabled={loading}
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      try {
-                                        setLoading(true);
-                                        await api.put(`/indents/${ind._id}`, { status: 'Cannot Fulfill' });
-                                        setIndents(prev => prev.map(item => item._id === ind._id ? { ...item, status: 'Cannot Fulfill' } : item));
-                                        showToast('Indent marked as Cannot Fulfill');
-                                      } catch (err) {
-                                        console.error(err);
-                                        showToast('Failed to update status', 'error');
-                                      } finally {
-                                        setLoading(false);
-                                      }
-                                    }}
-                                    style={{ padding: '6px 10px', background: '#EF4444', color: 'white', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', transition: 'opacity 0.2s' }}
-                                    onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
-                                    onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                                  >
-                                    Reject
-                                  </button>
-                                </div>
-                              ) : (
-                                <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 700 }}>Processed</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -4224,6 +5961,18 @@ const PharmacyDashboard = () => {
                 >
                   Replenishment Tickets
                 </button>
+                <button 
+                  className="btn" 
+                  style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', border: 'none', fontWeight: 700, cursor: 'pointer', background: procurementSubTab === 'catalog-approvals' ? 'white' : 'transparent', color: procurementSubTab === 'catalog-approvals' ? '#2563EB' : '#64748B', boxShadow: procurementSubTab === 'catalog-approvals' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  onClick={() => setProcurementSubTab('catalog-approvals')}
+                >
+                  Catalog Approvals
+                  {catalogApprovalRequests.filter(a => (a.status || '').toLowerCase() === 'pending').length > 0 && (
+                    <span style={{ background: '#FEF3C7', color: '#B45309', padding: '1px 7px', borderRadius: '10px', fontSize: '11px', fontWeight: 800 }}>
+                      {catalogApprovalRequests.filter(a => (a.status || '').toLowerCase() === 'pending').length}
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
 
@@ -4236,7 +5985,16 @@ const PharmacyDashboard = () => {
                     className="btn btn-primary"
                     style={{ padding: '8px 16px', fontSize: '12.5px', borderRadius: '8px', background: '#2563EB', border: 'none', color: 'white', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
                     onClick={() => {
-                      setNewVendor({ name: '', code: `VEND-0${vendors.length + 1}`, email: '', phone: '', address: '', type: 'Manufacturer', supplierCategory: 'Medicine', organizationType: 'Private Ltd', isMsmeRegistration: 'No' });
+                      setNewVendor({
+                        name: '',
+                        code: `VEND-0${vendors.length + 1}`,
+                        email: '',
+                        phone: '',
+                        address: '',
+                        type: 'Medicine',
+                        status: 'Proposed',
+                        medicines: [{ name: '', sku: '', price: '', gst: 12, available: true }]
+                      });
                       setShowAddVendorModal(true);
                     }}
                   >
@@ -4254,6 +6012,7 @@ const PharmacyDashboard = () => {
                           <th>Email</th>
                           <th>Phone</th>
                           <th>Address</th>
+                          <th>Status</th>
                           <th>Action</th>
                         </tr>
                       </thead>
@@ -4265,6 +6024,18 @@ const PharmacyDashboard = () => {
                             <td style={{ fontWeight: 600, color: '#64748B' }}>{v.email || '--'}</td>
                             <td style={{ fontWeight: 600, color: '#64748B' }}>{v.phone || '--'}</td>
                             <td style={{ fontWeight: 600, color: '#475569' }}>{v.address || '--'}</td>
+                            <td>
+                              <span style={{
+                                fontSize: '11.5px',
+                                padding: '3px 8px',
+                                borderRadius: '9999px',
+                                fontWeight: 800,
+                                background: v.status === 'Active' ? '#DEF7EC' : v.status === 'Proposed' ? '#FEF3C7' : v.status === 'Proposed/Rejected' ? '#FDE8E8' : '#F1F5F9',
+                                color: v.status === 'Active' ? '#03543F' : v.status === 'Proposed' ? '#D97706' : v.status === 'Proposed/Rejected' ? '#9B1C1C' : '#475569'
+                              }}>
+                                {v.status === 'Proposed' ? 'Pending Admin Approval' : v.status === 'Proposed/Rejected' ? 'Rejected' : (v.status || 'Active')}
+                              </span>
+                            </td>
                             <td style={{ display: 'flex', gap: '8px' }}>
                               <button 
                                 className="btn btn-secondary"
@@ -4272,6 +6043,26 @@ const PharmacyDashboard = () => {
                                 onClick={() => setSelectedVendor(v)}
                               >
                                 View Profile
+                              </button>
+                              <button 
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: '6px', border: 'none', background: '#2563EB', color: '#FFFFFF', fontWeight: 700, cursor: 'pointer' }}
+                                onClick={() => {
+                                  setSelectedVendor(v);
+                                  setNewMedApprovalData({
+                                    name: '',
+                                    sku: '',
+                                    price: '',
+                                    gst: 12,
+                                    available: true,
+                                    mrp: '',
+                                    comment: ''
+                                  });
+                                  setShowAddMedicineApprovalModal(true);
+                                }}
+                              >
+                                + Add Med
                               </button>
                               <button 
                                 className="btn"
@@ -4312,18 +6103,59 @@ const PharmacyDashboard = () => {
             {procurementSubTab === 'pos' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1E293B', margin: 0 }}>Purchase Orders</h3>
-                  <button 
-                    className="btn btn-primary"
-                    style={{ padding: '8px 16px', fontSize: '12.5px', borderRadius: '8px', background: '#2563EB', border: 'none', color: 'white', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
-                    onClick={() => {
-                      setPoDraftItems([{ name: 'Paracetamol 650mg', sku: 'PAR-650', qty: 100 }]);
-                      setPoSplitSummary([]);
-                      setShowCreatePOModal(true);
-                    }}
-                  >
-                    <i data-lucide="plus" style={{ width: '16px' }}></i> Create Purchase Order
-                  </button>
+                  <div>
+                    <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1E293B', margin: 0 }}>Purchase Orders</h3>
+                    <p style={{ fontSize: '12.5px', color: '#64748B', margin: '2px 0 0 0' }}>Consolidated hospital procurement &amp; vendor-specific purchase orders</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      className="btn btn-secondary"
+                      style={{ padding: '8px 14px', fontSize: '12.5px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#F8FAFC', color: '#334155', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                      onClick={() => {
+                        if (purchaseOrders.length === 0) {
+                          showToast('No purchase orders to export', 'info');
+                          return;
+                        }
+                        const headers = ['PO Number', 'Type', 'Master PO', 'Supplier', 'Date', 'Total Amount', 'Status', 'Requested By'];
+                        const rows = purchaseOrders.map(p => [
+                          p.poId,
+                          p.isParent ? 'Consolidated Master' : 'Vendor Specific',
+                          p.parentPOId || '—',
+                          p.isParent ? `Consolidated (${p.totalVendors || 1} Vendors)` : (p.vendorName || '—'),
+                          p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—',
+                          p.totalAmount ? p.totalAmount.toFixed(2) : '0.00',
+                          p.status || 'Pending Approval',
+                          p.requestedBy || 'Pharmacist'
+                        ]);
+                        const csvContent = [headers.join(','), ...rows.map(r => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))].join('\n');
+                        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.setAttribute('href', url);
+                        link.setAttribute('download', `purchase_orders_export_${new Date().toISOString().slice(0,10)}.csv`);
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        showToast('Exported all purchase orders to CSV!', 'success');
+                      }}
+                    >
+                      📊 Export CSV
+                    </button>
+                    <button 
+                      className="btn btn-primary"
+                      style={{ padding: '8px 16px', fontSize: '12.5px', borderRadius: '8px', background: '#2563EB', border: 'none', color: 'white', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                      onClick={() => {
+                        if (activeVendors.length === 0) {
+                          showToast('No Active vendors onboarded yet. Please onboard or approve a vendor first.', 'error');
+                          return;
+                        }
+                        setPoDraftItems([{ name: '', sku: '', qty: 100, vendorId: '', vendorName: '', price: 0, tax: 12, total: 0, isLowest: true }]);
+                        setShowCreatePOModal(true);
+                      }}
+                    >
+                      <i data-lucide="plus" style={{ width: '16px' }}></i> Create Purchase Order
+                    </button>
+                  </div>
                 </div>
 
                 <div className="glass-card">
@@ -4332,6 +6164,7 @@ const PharmacyDashboard = () => {
                       <thead>
                         <tr>
                           <th>PO Number</th>
+                          <th>Type / Origin</th>
                           <th>Supplier</th>
                           <th>Date</th>
                           <th>Total Amount</th>
@@ -4344,35 +6177,77 @@ const PharmacyDashboard = () => {
                         {purchaseOrders.map(po => (
                           <tr key={po._id}>
                             <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0F172A' }}>{po.poId}</td>
-                            <td style={{ fontWeight: 800, color: '#475569' }}>{po.vendorName}</td>
-                            <td style={{ fontWeight: 600, color: '#64748B' }}>{new Date(po.createdAt).toLocaleDateString()}</td>
-                            <td style={{ fontWeight: 800, color: '#0F172A' }}>₹{po.totalAmount.toFixed(2)}</td>
+                            <td>
+                              {po.isParent ? (
+                                <span style={{ background: '#EFF6FF', color: '#1D4ED8', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>
+                                  🏢 Master PO ({po.totalVendors || po.vendorOrders?.length || 1} Vendors)
+                                </span>
+                              ) : po.parentPOId ? (
+                                <span style={{ background: '#F1F5F9', color: '#475569', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+                                  ↳ Split of {po.parentPOId}
+                                </span>
+                              ) : (
+                                <span style={{ background: '#F8FAFC', color: '#64748B', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600 }}>
+                                  Direct PO
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ fontWeight: 800, color: '#475569' }}>
+                              {po.isParent ? `Multi-Vendor (${po.totalVendors || 1} Suppliers)` : (po.vendorName || '—')}
+                            </td>
+                            <td style={{ fontWeight: 600, color: '#64748B' }}>{new Date(po.createdAt || Date.now()).toLocaleDateString()}</td>
+                            <td style={{ fontWeight: 800, color: '#0F172A' }}>₹{(po.totalAmount || 0).toFixed(2)}</td>
                             <td>
                               <span style={{ 
-                                padding: '4px 8px', 
+                                padding: '4px 10px', 
                                 borderRadius: '6px', 
                                 fontSize: '11px', 
                                 fontWeight: 800,
-                                background: po.status === 'Approved' ? '#DEF7EC' : (po.status === 'Rejected' ? '#FDE8E8' : '#FEF08A'),
-                                color: po.status === 'Approved' ? '#03543F' : (po.status === 'Rejected' ? '#9B1C1C' : '#713F12')
+                                background: po.status === 'Approved' ? '#DEF7EC' : (po.status === 'Rejected' ? '#FDE8E8' : (po.status === 'Partially Approved' ? '#E0E7FF' : '#FEF08A')),
+                                color: po.status === 'Approved' ? '#03543F' : (po.status === 'Rejected' ? '#9B1C1C' : (po.status === 'Partially Approved' ? '#3730A3' : '#713F12'))
                               }}>
                                 {po.status}
                               </span>
                             </td>
-                            <td style={{ fontWeight: 600, color: '#64748B' }}>{po.requestedBy}</td>
+                            <td style={{ fontWeight: 600, color: '#64748B' }}>{po.requestedBy || 'Pharmacist'}</td>
                             <td style={{ textAlign: 'center' }}>
-                              <button 
-                                style={{ padding: '6px 12px', fontSize: '12px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer' }}
-                                onClick={() => printPO(po, currentUser?.tenantName || 'CUROXA HEALTHCARE')}
-                              >
-                                📄 PDF
-                              </button>
+                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                                {['Approved', 'Confirmed', 'Partially Received', 'Partially Delivered'].includes(po.status) && (
+                                  <button 
+                                    style={{ padding: '5px 10px', minWidth: '138px', height: '30px', fontSize: '11.5px', background: '#10B981', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                                    onClick={() => {
+                                      setEditingGrn(null);
+                                      handleGrnPOSelection(po._id);
+                                      setGrnFlowType('po');
+                                      setProcurementSubTab('grn');
+                                      setShowGRNModal(true);
+                                    }}
+                                    title={po.status === 'Partially Received' || po.status === 'Partially Delivered' ? 'Receive Remaining items against PO' : 'Receive PO delivery'}
+                                  >
+                                    📦 {po.status === 'Partially Received' || po.status === 'Partially Delivered' ? 'Receive Remaining' : 'Receive'}
+                                  </button>
+                                )}
+                                <button 
+                                  style={{ padding: '5px 10px', minWidth: '65px', height: '30px', fontSize: '11.5px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                                  onClick={() => printPO(po, currentUser?.tenantName || 'CUROXA HEALTHCARE')}
+                                  title="Print / PDF"
+                                >
+                                  📄 PDF
+                                </button>
+                                <button 
+                                  style={{ padding: '5px 10px', minWidth: '65px', height: '30px', fontSize: '11.5px', background: '#F8FAFC', color: '#334155', border: '1px solid #CBD5E1', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                                  onClick={() => handleExportPOToCSV(po)}
+                                  title="Export CSV"
+                                >
+                                  📊 CSV
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
                         {purchaseOrders.length === 0 && (
                           <tr>
-                            <td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#64748B' }}>No purchase orders created.</td>
+                            <td colSpan="8" style={{ textAlign: 'center', padding: '28px', color: '#64748B' }}>No purchase orders created. Click "Create Purchase Order" above to begin.</td>
                           </tr>
                         )}
                       </tbody>
@@ -4478,13 +6353,28 @@ const PharmacyDashboard = () => {
                                 >
                                   View
                                 </button>
-                                <button 
-                                  className="btn btn-primary" 
-                                  style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#0EA5E9', border: 'none', color: 'white', borderRadius: '4px', fontWeight: 700 }}
-                                  onClick={() => handleOpenEditGrn(grn)}
-                                >
-                                  Edit
-                                </button>
+                                {(() => {
+                                  const ageMs = Date.now() - new Date(grn.createdAt || grn.receivedDate || Date.now()).getTime();
+                                  const isEditable = ageMs <= 24 * 60 * 60 * 1000;
+                                  return isEditable ? (
+                                    <button 
+                                      className="btn btn-primary" 
+                                      style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#0EA5E9', border: 'none', color: 'white', borderRadius: '4px', fontWeight: 700 }}
+                                      onClick={() => handleOpenEditGrn(grn)}
+                                    >
+                                      Edit
+                                    </button>
+                                  ) : (
+                                    <button 
+                                      className="btn btn-secondary" 
+                                      style={{ padding: '6px 12px', fontSize: '12px', cursor: 'not-allowed', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#F1F5F9', border: '1px solid #CBD5E1', color: '#94A3B8', borderRadius: '4px', fontWeight: 700 }}
+                                      disabled
+                                      title="Editing period expired (24 hours from creation)"
+                                    >
+                                      Expired
+                                    </button>
+                                  );
+                                })()}
                                 <button 
                                   style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer', background: '#10B981', border: 'none', color: 'white', borderRadius: '4px', fontWeight: 700 }}
                                   onClick={() => printGRN(grn, currentUser?.tenantName || 'CUROXA HEALTHCARE')}
@@ -4570,6 +6460,165 @@ const PharmacyDashboard = () => {
                         {pharmacyTickets.length === 0 && (
                           <tr>
                             <td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#64748B' }}>No replenishment tickets raised yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CATALOG & MEDICINE APPROVAL REQUESTS VIEW */}
+            {procurementSubTab === 'catalog-approvals' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1E293B', margin: 0 }}>Catalog Medicine Approvals</h3>
+                    <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: '#64748B' }}>
+                      Track live status of submitted vendor medicine additions and price authorizations.
+                    </p>
+                  </div>
+                  <button 
+                    className="btn btn-primary"
+                    style={{ padding: '8px 16px', fontSize: '12.5px', borderRadius: '8px', background: '#2563EB', border: 'none', color: 'white', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                    onClick={() => {
+                      if (vendors.length > 0) {
+                        setTargetVendorForMedicine(vendors[0]);
+                        setNewMedApprovalData({ name: '', sku: '', price: '', gst: 12, available: true, mrp: '', comment: '' });
+                        setShowAddMedicineApprovalModal(true);
+                      } else {
+                        showToast("Please add at least one vendor first.", "info");
+                      }
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    + Propose New Medicine
+                  </button>
+                </div>
+
+                <div className="glass-card" style={{ background: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '0', overflow: 'hidden' }}>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="premium-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
+                          <th style={{ padding: '14px 18px', textAlign: 'left', fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>REQUEST / MEDICINE</th>
+                          <th style={{ padding: '14px 18px', textAlign: 'left', fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>TARGET VENDOR</th>
+                          <th style={{ padding: '14px 18px', textAlign: 'left', fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>WHOLESALE RATE</th>
+                          <th style={{ padding: '14px 18px', textAlign: 'left', fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>GST</th>
+                          <th style={{ padding: '14px 18px', textAlign: 'left', fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>REQUESTED ON</th>
+                          <th style={{ padding: '14px 18px', textAlign: 'left', fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>APPROVAL STATUS</th>
+                          <th style={{ padding: '14px 18px', textAlign: 'left', fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ADMIN REMARKS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {catalogApprovalRequests.length > 0 ? (
+                          catalogApprovalRequests.map(req => {
+                            const isMedAddition = req.type === 'vendor_medicine_addition';
+                            const med = req.details?.medicine || req.details || {};
+                            const vendorName = req.details?.vendorName || (vendors.find(v => v._id === req.details?.vendorId)?.name) || 'Vendor';
+                            const vendorCode = req.details?.vendorCode || (vendors.find(v => v._id === req.details?.vendorId)?.code) || '';
+                            const isPending = (req.status || '').toLowerCase() === 'pending';
+                            const isApproved = (req.status || '').toLowerCase() === 'approved';
+                            const isRejected = (req.status || '').toLowerCase() === 'denied' || (req.status || '').toLowerCase() === 'rejected';
+
+                            return (
+                              <tr key={req._id} style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s' }}>
+                                <td style={{ padding: '14px 18px' }}>
+                                  <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0F172A' }}>
+                                    {med.name || req.comment || 'Medicine Addition'}
+                                  </div>
+                                  {med.sku && (
+                                    <div style={{ fontFamily: 'monospace', fontSize: '11.5px', color: '#2563EB', fontWeight: 700, marginTop: '2px' }}>
+                                      SKU: {med.sku}
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ padding: '14px 18px' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '13px', color: '#1E293B' }}>{vendorName}</div>
+                                  {vendorCode && <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#64748B' }}>({vendorCode})</span>}
+                                </td>
+                                <td style={{ padding: '14px 18px', fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>
+                                  ₹{Number(med.price || 0).toFixed(2)}
+                                </td>
+                                <td style={{ padding: '14px 18px', fontWeight: 700, color: '#475569', fontSize: '13px' }}>
+                                  {med.gst !== undefined ? `${med.gst}%` : '12%'}
+                                </td>
+                                <td style={{ padding: '14px 18px', color: '#64748B', fontSize: '12.5px', fontWeight: 500 }}>
+                                  {req.createdAt ? new Date(req.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent'}
+                                  <div style={{ fontSize: '11px', color: '#94A3B8' }}>by {req.requesterName || 'Pharmacist'}</div>
+                                </td>
+                                <td style={{ padding: '14px 18px' }}>
+                                  {isPending && (
+                                    <span style={{ 
+                                      display: 'inline-flex', 
+                                      alignItems: 'center', 
+                                      gap: '5px', 
+                                      padding: '5px 11px', 
+                                      borderRadius: '20px', 
+                                      fontSize: '12px', 
+                                      fontWeight: 800, 
+                                      background: '#FFFBEB', 
+                                      color: '#B45309', 
+                                      border: '1px solid #FDE68A' 
+                                    }}>
+                                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#F59E0B' }}></span>
+                                      Pending Approval
+                                    </span>
+                                  )}
+                                  {isApproved && (
+                                    <span style={{ 
+                                      display: 'inline-flex', 
+                                      alignItems: 'center', 
+                                      gap: '5px', 
+                                      padding: '5px 11px', 
+                                      borderRadius: '20px', 
+                                      fontSize: '12px', 
+                                      fontWeight: 800, 
+                                      background: '#ECFDF5', 
+                                      color: '#047857', 
+                                      border: '1px solid #A7F3D0' 
+                                    }}>
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                      Approved & Active
+                                    </span>
+                                  )}
+                                  {isRejected && (
+                                    <span style={{ 
+                                      display: 'inline-flex', 
+                                      alignItems: 'center', 
+                                      gap: '5px', 
+                                      padding: '5px 11px', 
+                                      borderRadius: '20px', 
+                                      fontSize: '12px', 
+                                      fontWeight: 800, 
+                                      background: '#FEF2F2', 
+                                      color: '#B91C1C', 
+                                      border: '1px solid #FECACA' 
+                                    }}>
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                      Rejected
+                                    </span>
+                                  )}
+                                </td>
+                                <td style={{ padding: '14px 18px', fontSize: '12.5px', color: '#475569' }}>
+                                  {req.rejectionReason ? (
+                                    <span style={{ color: '#DC2626', fontWeight: 600 }}>Reason: {req.rejectionReason}</span>
+                                  ) : req.comment ? (
+                                    <span style={{ fontStyle: 'italic', color: '#64748B' }}>"{req.comment}"</span>
+                                  ) : (
+                                    <span style={{ color: '#94A3B8' }}>—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan="7" style={{ textAlign: 'center', padding: '36px', color: '#64748B' }}>
+                              <div style={{ fontSize: '14px', fontWeight: 600 }}>No catalog approval requests found.</div>
+                              <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>When you submit a medicine for approval, you can track its review progress right here.</div>
+                            </td>
                           </tr>
                         )}
                       </tbody>
@@ -6438,79 +8487,188 @@ const PharmacyDashboard = () => {
       {/* MODAL 1: ADD VENDOR */}
       {showAddVendorModal && (
         <div className="modal-overlay" data-lenis-prevent style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }} onClick={() => setShowAddVendorModal(false)}>
-          <div className="modal-box glass-card" style={{ width: '90%', maxWidth: '500px', background: 'white', padding: '28px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', position: 'relative' }} onClick={e => e.stopPropagation()}>
+          <div className="modal-box glass-card" style={{ width: '95%', maxWidth: '800px', maxHeight: '90vh', background: 'white', padding: '28px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', position: 'relative', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Add New Vendor</h2>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Propose New Vendor & Rate List</h2>
+                <span style={{ fontSize: '12px', color: '#64748B' }}>Submit vendor profile and medicine catalogue for Admin review & MRP definition</span>
+              </div>
               <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }} onClick={() => setShowAddVendorModal(false)}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
 
             <form onSubmit={handleAddVendor}>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Vendor Code</label>
-                <input 
-                  type="text" 
-                  value={newVendor.code} 
-                  onChange={e => setNewVendor({ ...newVendor, code: e.target.value })}
-                  style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', outline: 'none', fontSize: '13px', fontWeight: 600 }}
-                  required 
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Vendor Code *</label>
+                  <input 
+                    type="text" 
+                    value={newVendor.code} 
+                    onChange={e => setNewVendor({ ...newVendor, code: e.target.value })}
+                    style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', outline: 'none', fontSize: '13px', fontWeight: 600, fontFamily: 'monospace' }}
+                    placeholder="e.g. VEND-04"
+                    required 
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Vendor / Supplier Name *</label>
+                  <input 
+                    type="text" 
+                    value={newVendor.name} 
+                    onChange={e => setNewVendor({ ...newVendor, name: e.target.value })}
+                    placeholder="e.g. MedLife Distributors"
+                    style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', outline: 'none', fontSize: '13px', fontWeight: 600 }}
+                    required 
+                  />
+                </div>
               </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Vendor Name</label>
-                <input 
-                  type="text" 
-                  value={newVendor.name} 
-                  onChange={e => setNewVendor({ ...newVendor, name: e.target.value })}
-                  placeholder="e.g. Acme Pharmaceuticals"
-                  style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', outline: 'none', fontSize: '13px', fontWeight: 600 }}
-                  required 
-                />
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Email Address</label>
+                  <input 
+                    type="email" 
+                    value={newVendor.email} 
+                    onChange={e => setNewVendor({ ...newVendor, email: e.target.value })}
+                    placeholder="e.g. orders@medlife.com"
+                    style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', outline: 'none', fontSize: '13px', fontWeight: 600 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Phone Number</label>
+                  <input 
+                    type="text" 
+                    value={newVendor.phone} 
+                    onChange={e => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      setNewVendor({ ...newVendor, phone: val });
+                    }}
+                    placeholder="e.g. 9876543210"
+                    maxLength={10}
+                    style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', outline: 'none', fontSize: '13px', fontWeight: 600 }}
+                  />
+                </div>
               </div>
+
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Email Address</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Address / Location</label>
                 <input 
-                  type="email" 
-                  value={newVendor.email} 
-                  onChange={e => setNewVendor({ ...newVendor, email: e.target.value })}
-                  placeholder="e.g. orders@acme.com"
-                  style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', outline: 'none', fontSize: '13px', fontWeight: 600 }}
-                  required 
-                />
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Phone Number</label>
-                <input 
-                  type="text" 
-                  value={newVendor.phone} 
-                  onChange={e => {
-                    const val = e.target.value.replace(/[^0-9]/g, '');
-                    setNewVendor({ ...newVendor, phone: val });
-                  }}
-                  placeholder="e.g. 9876543210"
-                  maxLength={10}
-                  style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', outline: 'none', fontSize: '13px', fontWeight: 600 }}
-                  required 
-                />
-              </div>
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Address</label>
-                <textarea 
+                  type="text"
                   value={newVendor.address} 
                   onChange={e => setNewVendor({ ...newVendor, address: e.target.value })}
-                  placeholder="Street details, City"
-                  style={{ width: '100%', height: '80px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', outline: 'none', fontSize: '13px', fontWeight: 600, resize: 'none' }}
-                  required 
+                  placeholder="Street details, City, State"
+                  style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', outline: 'none', fontSize: '13px', fontWeight: 600 }}
                 />
               </div>
 
-              <button 
-                type="submit" 
-                style={{ width: '100%', height: '44px', fontWeight: 800, borderRadius: '8px', background: '#2563EB', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                Save Supplier
-              </button>
+              {/* MEDICINE RATE LIST BUILDER */}
+              <div style={{ marginTop: '20px', marginBottom: '20px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div>
+                    <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase' }}>Vendor Medicine Rate List *</span>
+                    <span style={{ display: 'block', fontSize: '11.5px', color: '#64748B' }}>Add the medicines and wholesale purchase prices offered by this vendor</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid #CBD5E1', background: 'white', color: '#2563EB', borderRadius: '6px', cursor: 'pointer', fontWeight: 700 }}
+                    onClick={handleAddVendorMedicineRow}
+                  >
+                    + Add Medicine
+                  </button>
+                </div>
+
+                <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px', background: 'white' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: '#F1F5F9', borderBottom: '1px solid #E2E8F0' }}>
+                        <th style={{ padding: '8px 10px', fontWeight: 800, color: '#475569' }}>Medicine Name *</th>
+                        <th style={{ padding: '8px 10px', fontWeight: 800, color: '#475569', width: '140px' }}>SKU / Code *</th>
+                        <th style={{ padding: '8px 10px', fontWeight: 800, color: '#475569', width: '130px' }}>Purchase Price (₹) *</th>
+                        <th style={{ padding: '8px 10px', fontWeight: 800, color: '#475569', width: '90px' }}>GST (%)</th>
+                        <th style={{ padding: '8px 10px', width: '40px' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(newVendor.medicines || []).map((med, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <td style={{ padding: '6px 10px' }}>
+                            <input 
+                              type="text" 
+                              value={med.name} 
+                              onChange={e => handleVendorMedicineChange(idx, 'name', e.target.value)}
+                              placeholder="e.g. Dolo 650mg"
+                              style={{ width: '100%', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', outline: 'none', fontSize: '12.5px', fontWeight: 600 }}
+                              required 
+                            />
+                          </td>
+                          <td style={{ padding: '6px 10px' }}>
+                            <input 
+                              type="text" 
+                              value={med.sku} 
+                              onChange={e => handleVendorMedicineChange(idx, 'sku', e.target.value)}
+                              placeholder="e.g. DOLO-650"
+                              style={{ width: '100%', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', outline: 'none', fontSize: '12.5px', fontFamily: 'monospace', textTransform: 'uppercase' }}
+                              required 
+                            />
+                          </td>
+                          <td style={{ padding: '6px 10px' }}>
+                            <input 
+                              type="number" 
+                              step="0.01"
+                              min="0.01"
+                              value={med.price} 
+                              onChange={e => handleVendorMedicineChange(idx, 'price', e.target.value)}
+                              placeholder="₹ 0.00"
+                              style={{ width: '100%', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', outline: 'none', fontSize: '12.5px', fontWeight: 700 }}
+                              required 
+                            />
+                          </td>
+                          <td style={{ padding: '6px 10px' }}>
+                            <input 
+                              type="number" 
+                              step="0.1"
+                              min="0"
+                              value={med.gst !== undefined ? med.gst : 12} 
+                              onChange={e => handleVendorMedicineChange(idx, 'gst', e.target.value)}
+                              style={{ width: '100%', height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', outline: 'none', fontSize: '12.5px', fontWeight: 600 }}
+                            />
+                          </td>
+                          <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                            {(newVendor.medicines || []).length > 1 && (
+                              <button 
+                                type="button" 
+                                style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', fontWeight: 800, fontSize: '14px' }}
+                                onClick={() => handleRemoveVendorMedicineRow(idx)}
+                                title="Remove row"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', paddingTop: '12px', borderTop: '1px solid #E2E8F0' }}>
+                <button 
+                  type="button" 
+                  style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#F8FAFC', color: '#475569', fontWeight: 800, cursor: 'pointer' }}
+                  onClick={() => setShowAddVendorModal(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  style={{ padding: '10px 24px', fontWeight: 800, borderRadius: '8px', background: '#2563EB', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  Submit for Admin Approval
+                </button>
+              </div>
             </form>
           </div>
         </div>
@@ -6644,15 +8802,425 @@ const PharmacyDashboard = () => {
         </div>
       )}
 
+      {/* MODAL: ADD MEDICINE FOR APPROVAL */}
+      {showAddMedicineApprovalModal && (
+        <div 
+          className="modal-overlay" 
+          data-lenis-prevent 
+          style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            bottom: 0, 
+            backgroundColor: 'rgba(15, 23, 42, 0.55)', 
+            backdropFilter: 'blur(8px)', 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            zIndex: 10000,
+            padding: '20px'
+          }} 
+          onClick={() => setShowAddMedicineApprovalModal(false)}
+        >
+          <div 
+            style={{ 
+              width: '100%', 
+              maxWidth: '560px', 
+              maxHeight: '90vh', 
+              background: '#FFFFFF', 
+              padding: '30px 32px', 
+              borderRadius: '24px', 
+              boxShadow: '0 25px 60px -15px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(226, 232, 240, 0.8)', 
+              position: 'relative', 
+              overflowY: 'auto',
+              animation: 'fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+            }} 
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '22px' }}>
+              <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                <div style={{ 
+                  width: '46px', 
+                  height: '46px', 
+                  borderRadius: '14px', 
+                  background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)', 
+                  border: '1px solid #BFDBFE',
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  color: '#2563EB',
+                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.12)'
+                }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/>
+                    <path d="m8.5 8.5 7 7"/>
+                  </svg>
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+                    Add Medicine for Approval
+                  </h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                    <span style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 500 }}>Target Vendor:</span>
+                    <span style={{ background: '#F1F5F9', border: '1px solid #E2E8F0', padding: '2px 9px', borderRadius: '8px', fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>
+                      {selectedVendor?.name || 'Selected Vendor'}
+                    </span>
+                    {selectedVendor?.code && (
+                      <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#2563EB', background: '#EFF6FF', padding: '2px 7px', borderRadius: '6px', fontSize: '11.5px', border: '1px solid #DBEAFE' }}>
+                        {selectedVendor.code}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                style={{ 
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '10px',
+                  background: '#F8FAFC', 
+                  border: '1px solid #E2E8F0', 
+                  cursor: 'pointer', 
+                  color: '#64748B',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.15s ease'
+                }} 
+                onMouseEnter={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#0F172A'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.color = '#64748B'; }}
+                onClick={() => setShowAddMedicineApprovalModal(false)}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitMedicineForApproval} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Medicine Name */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                  Medicine Name <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="e.g. Paracetamol 650mg, Amoxicillin 500mg"
+                    value={newMedApprovalData.name}
+                    onChange={e => setNewMedApprovalData({ ...newMedApprovalData, name: e.target.value })}
+                    style={{ 
+                      width: '100%', 
+                      height: '42px', 
+                      padding: '0 14px', 
+                      borderRadius: '10px', 
+                      border: '1.5px solid #CBD5E1', 
+                      fontSize: '13.5px', 
+                      outline: 'none', 
+                      background: '#F8FAFC',
+                      color: '#0F172A',
+                      fontWeight: 600,
+                      boxSizing: 'border-box',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.background = '#FFFFFF'; e.target.style.boxShadow = '0 0 0 3.5px rgba(37, 99, 235, 0.12)'; }}
+                    onBlur={e => { e.target.style.borderColor = '#CBD5E1'; e.target.style.background = '#F8FAFC'; e.target.style.boxShadow = 'none'; }}
+                  />
+                </div>
+              </div>
+
+              {/* SKU and Price Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                    SKU / Item Code <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="e.g. PAR-650"
+                    value={newMedApprovalData.sku}
+                    onChange={e => setNewMedApprovalData({ ...newMedApprovalData, sku: e.target.value.toUpperCase() })}
+                    style={{ 
+                      width: '100%', 
+                      height: '42px', 
+                      padding: '0 14px', 
+                      borderRadius: '10px', 
+                      border: '1.5px solid #CBD5E1', 
+                      fontSize: '13.5px', 
+                      outline: 'none', 
+                      fontFamily: 'monospace', 
+                      fontWeight: 700,
+                      color: '#2563EB',
+                      background: '#F8FAFC',
+                      boxSizing: 'border-box',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.background = '#FFFFFF'; e.target.style.boxShadow = '0 0 0 3.5px rgba(37, 99, 235, 0.12)'; }}
+                    onBlur={e => { e.target.style.borderColor = '#CBD5E1'; e.target.style.background = '#F8FAFC'; e.target.style.boxShadow = 'none'; }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                    Wholesale Price (₹) <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '12px', top: '10px', fontSize: '15px', fontWeight: 800, color: '#64748B' }}>₹</span>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      min="0.01"
+                      required
+                      placeholder="0.00"
+                      value={newMedApprovalData.price}
+                      onChange={e => setNewMedApprovalData({ ...newMedApprovalData, price: e.target.value })}
+                      style={{ 
+                        width: '100%', 
+                        height: '42px', 
+                        padding: '0 14px 0 28px', 
+                        borderRadius: '10px', 
+                        border: '1.5px solid #CBD5E1', 
+                        fontSize: '14px', 
+                        outline: 'none', 
+                        fontWeight: 800, 
+                        color: '#0F172A',
+                        background: '#F8FAFC',
+                        boxSizing: 'border-box',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.background = '#FFFFFF'; e.target.style.boxShadow = '0 0 0 3.5px rgba(37, 99, 235, 0.12)'; }}
+                      onBlur={e => { e.target.style.borderColor = '#CBD5E1'; e.target.style.background = '#F8FAFC'; e.target.style.boxShadow = 'none'; }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* GST and Availability Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                    GST Rate (%)
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      type="number" 
+                      min="0"
+                      max="100"
+                      value={newMedApprovalData.gst}
+                      onChange={e => setNewMedApprovalData({ ...newMedApprovalData, gst: e.target.value })}
+                      style={{ 
+                        width: '100%', 
+                        height: '42px', 
+                        padding: '0 32px 0 14px', 
+                        borderRadius: '10px', 
+                        border: '1.5px solid #CBD5E1', 
+                        fontSize: '13.5px', 
+                        outline: 'none', 
+                        fontWeight: 700,
+                        color: '#0F172A',
+                        background: '#F8FAFC',
+                        boxSizing: 'border-box',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.background = '#FFFFFF'; e.target.style.boxShadow = '0 0 0 3.5px rgba(37, 99, 235, 0.12)'; }}
+                      onBlur={e => { e.target.style.borderColor = '#CBD5E1'; e.target.style.background = '#F8FAFC'; e.target.style.boxShadow = 'none'; }}
+                    />
+                    <span style={{ position: 'absolute', right: '12px', top: '10px', fontSize: '13.5px', fontWeight: 800, color: '#64748B' }}>%</span>
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                    Procurement Status
+                  </label>
+                  <label 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      height: '42px', 
+                      padding: '0 12px', 
+                      borderRadius: '10px', 
+                      border: '1.5px solid #CBD5E1', 
+                      background: newMedApprovalData.available ? '#F0FDF4' : '#F8FAFC',
+                      cursor: 'pointer',
+                      gap: '10px',
+                      userSelect: 'none',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <input 
+                      type="checkbox" 
+                      id="medAvailableCheck"
+                      checked={newMedApprovalData.available}
+                      onChange={e => setNewMedApprovalData({ ...newMedApprovalData, available: e.target.checked })}
+                      style={{ cursor: 'pointer', width: '17px', height: '17px', accentColor: '#16A34A' }}
+                    />
+                    <span style={{ fontSize: '12.5px', color: newMedApprovalData.available ? '#15803D' : '#64748B', fontWeight: 700 }}>
+                      {newMedApprovalData.available ? '● Available for PO' : '○ Out of Stock'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Justification / Request Note */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                  Request Note / Justification <span style={{ color: '#94A3B8', fontWeight: 500 }}>(Optional)</span>
+                </label>
+                <textarea 
+                  rows={2}
+                  placeholder="e.g. Rate negotiated per wholesale contract renewal..."
+                  value={newMedApprovalData.comment}
+                  onChange={e => setNewMedApprovalData({ ...newMedApprovalData, comment: e.target.value })}
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px 14px', 
+                    borderRadius: '10px', 
+                    border: '1.5px solid #CBD5E1', 
+                    fontSize: '13px', 
+                    outline: 'none', 
+                    fontFamily: 'inherit', 
+                    background: '#F8FAFC',
+                    boxSizing: 'border-box',
+                    lineHeight: 1.4,
+                    resize: 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.background = '#FFFFFF'; e.target.style.boxShadow = '0 0 0 3.5px rgba(37, 99, 235, 0.12)'; }}
+                  onBlur={e => { e.target.style.borderColor = '#CBD5E1'; e.target.style.background = '#F8FAFC'; e.target.style.boxShadow = 'none'; }}
+                />
+              </div>
+
+              {/* Workflow Card Banner */}
+              <div style={{ 
+                padding: '12px 16px', 
+                background: 'linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%)', 
+                border: '1px solid #BAE6FD', 
+                borderRadius: '12px', 
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <div style={{ 
+                  width: '32px', 
+                  height: '32px', 
+                  borderRadius: '50%', 
+                  background: '#DBEAFE', 
+                  color: '#2563EB', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  flexShrink: 0 
+                }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    <path d="m9 12 2 2 4-4"/>
+                  </svg>
+                </div>
+                <div style={{ fontSize: '12px', color: '#1E40AF', lineHeight: 1.45 }}>
+                  <strong>Admin Authorization Required:</strong> This medicine will be submitted for verification. It becomes active immediately once approved by the Admin.
+                </div>
+              </div>
+
+              {/* Footer Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '6px', paddingTop: '10px' }}>
+                <button 
+                  type="button" 
+                  disabled={isSubmittingMedApproval}
+                  onClick={() => setShowAddMedicineApprovalModal(false)}
+                  style={{ 
+                    padding: '10px 20px', 
+                    borderRadius: '10px', 
+                    border: '1.5px solid #E2E8F0', 
+                    background: '#F8FAFC', 
+                    color: '#475569', 
+                    fontWeight: 700, 
+                    fontSize: '13px', 
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#0F172A'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.color = '#475569'; }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmittingMedApproval}
+                  style={{ 
+                    padding: '10px 24px', 
+                    borderRadius: '10px', 
+                    border: 'none', 
+                    background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', 
+                    color: '#FFFFFF', 
+                    fontWeight: 800, 
+                    fontSize: '13px', 
+                    cursor: isSubmittingMedApproval ? 'not-allowed' : 'pointer', 
+                    opacity: isSubmittingMedApproval ? 0.75 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {isSubmittingMedApproval ? (
+                    <>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 0.8s linear infinite' }}>
+                        <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3"/>
+                        <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+                      </svg>
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      Submit for Approval
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL 3: PRICE LIST EDITOR */}
       {showPriceListModal && (
         <div className="modal-overlay" data-lenis-prevent style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }} onClick={() => setShowPriceListModal(false)}>
           <div className="modal-box glass-card" style={{ width: '90%', maxWidth: '650px', maxHeight: '85vh', background: 'white', padding: '28px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', position: 'relative', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Configure Price List ({selectedVendor?.name})</h2>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }} onClick={() => setShowPriceListModal(false)}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Configure Price List ({selectedVendor?.name})</h2>
+                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>Update active items or propose new medicines for Admin approval.</p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', border: 'none', background: '#2563EB', fontWeight: 700, color: '#FFFFFF', cursor: 'pointer' }}
+                  onClick={() => {
+                    setNewMedApprovalData({
+                      name: '',
+                      sku: '',
+                      price: '',
+                      gst: 12,
+                      available: true,
+                      mrp: '',
+                      comment: ''
+                    });
+                    setShowAddMedicineApprovalModal(true);
+                  }}
+                >
+                  + Add Medicine for Approval
+                </button>
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }} onClick={() => setShowPriceListModal(false)}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
             </div>
 
             <form onSubmit={handleSavePriceList}>
@@ -6797,403 +9365,158 @@ const PharmacyDashboard = () => {
       )}
 
       {/* MODAL 4: CREATE PURCHASE ORDER */}
-      {showCreatePOModal && (
-        <div className="modal-overlay" data-lenis-prevent style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }} onClick={() => setShowCreatePOModal(false)}>
-          <div className="modal-box glass-card" style={{ width: '95%', maxWidth: '900px', maxHeight: '90vh', background: 'white', padding: '28px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', position: 'relative', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Create Reorder Purchase Orders</h2>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }} onClick={() => setShowCreatePOModal(false)}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
+      {showCreatePOModal && (() => {
+        // Compute live splits and summary
+        const splitsMap = {};
+        let grandSub = 0;
+        let grandTax = 0;
+        let grandTot = 0;
+        let validLinesCount = 0;
 
-            <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '24px' }}>
-              <div>
-                <h4 style={{ margin: '0 0 12px', fontSize: '14px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Selected Medications & Quantities</h4>
-                <div style={{ maxHeight: '35vh', overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px', marginBottom: '16px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                        <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800 }}>Medicine Name</th>
-                        <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800 }}>SKU Code</th>
-                        <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800 }}>Qty</th>
-                        <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800 }}></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {poDraftItems.map((item, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                          <td style={{ padding: '8px 12px' }}>
-                            <SearchableDropdown
-                              value={item.name}
-                              onChange={val => handleDraftPOChange(idx, 'name', val)}
-                              options={inventory.map(inv => ({ value: inv.name, label: inv.name }))}
-                              placeholder="Select medicine..."
-                            />
-                          </td>
-                          <td style={{ padding: '8px 12px' }}>
-                            <input 
-                              type="text" 
-                              value={item.sku} 
-                              onChange={e => handleDraftPOChange(idx, 'sku', e.target.value)}
-                              style={{ width: '100%', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', outline: 'none', fontFamily: 'monospace' }}
-                              placeholder="SKU"
-                            />
-                          </td>
-                          <td style={{ padding: '8px 12px' }}>
-                            <input 
-                              type="number" 
-                              value={item.qty} 
-                              onChange={e => handleDraftPOChange(idx, 'qty', e.target.value)}
-                              style={{ width: '70px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', outline: 'none', fontWeight: 800 }}
-                            />
-                          </td>
-                          <td style={{ padding: '8px 12px' }}>
-                            <button 
-                              type="button" 
-                              style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', fontWeight: 800 }}
-                              onClick={() => handleDraftPORemoveRow(idx)}
-                            >
-                              ✕
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+        poDraftItems.forEach(row => {
+          if (!row.name || !row.sku || !row.vendorId || !row.qty) return;
+          validLinesCount++;
+          const qty = Number(row.qty) || 0;
+          const price = Number(row.price) || 0;
+          const tax = row.tax !== undefined ? Number(row.tax) : 12;
+          const lineSub = qty * price;
+          const lineTax = (lineSub * tax) / 100;
+          const lineTot = lineSub + lineTax;
+
+          grandSub += lineSub;
+          grandTax += lineTax;
+          grandTot += lineTot;
+
+          const vKey = row.vendorId.toString();
+          if (!splitsMap[vKey]) {
+            splitsMap[vKey] = {
+              vendorId: row.vendorId,
+              vendorName: row.vendorName || 'Supplier',
+              items: [],
+              subtotal: 0,
+              taxAmount: 0,
+              totalAmount: 0
+            };
+          }
+          splitsMap[vKey].items.push({
+            name: row.name,
+            sku: row.sku,
+            qty: qty,
+            price: price,
+            tax: tax,
+            total: lineTot
+          });
+          splitsMap[vKey].subtotal += lineSub;
+          splitsMap[vKey].taxAmount += lineTax;
+          splitsMap[vKey].totalAmount += lineTot;
+        });
+
+        const liveSplits = Object.values(splitsMap);
+
+        return (
+          <div className="modal-overlay" data-lenis-prevent style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }} onClick={() => setShowCreatePOModal(false)}>
+            <div className="modal-box glass-card" style={{ width: '96%', maxWidth: '1150px', maxHeight: '92vh', background: 'white', padding: '28px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', position: 'relative', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+                <div>
+                  <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Create Consolidated Purchase Order</h2>
+                  <p style={{ fontSize: '12.5px', color: '#64748B', margin: '3px 0 0 0' }}>Select medicines across approved suppliers. Lowest available rate is auto-selected; override as needed.</p>
                 </div>
-
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button 
-                    type="button" 
-                    className="btn btn-secondary"
-                    style={{ padding: '8px 16px', fontSize: '12px', border: '1px solid #E2E8F0', background: '#F8FAFC', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}
-                    onClick={handleDraftPOAddRow}
-                  >
-                    + Add Row
-                  </button>
-                  <button 
-                    type="button" 
-                    className="btn btn-primary"
-                    style={{ padding: '8px 16px', fontSize: '12px', border: 'none', background: '#2563EB', color: 'white', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}
-                    onClick={calculatePOSplits}
-                  >
-                    Compare & Split Orders
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ borderLeft: '1px solid #E2E8F0', paddingLeft: '24px' }}>
-                <h4 style={{ margin: '0 0 12px', fontSize: '14px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Supplier Pricing Comparison</h4>
-                
-                {poDraftItems.some(x => x.name !== '') ? (
-                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', overflow: 'hidden', marginBottom: '16px', fontSize: '11.5px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                      <thead>
-                        <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                          <th style={{ padding: '6px 10px', color: '#475569', fontWeight: 800 }}>Medicine</th>
-                          {vendors.map(v => (
-                            <th key={v._id} style={{ padding: '6px 10px', color: '#475569', fontWeight: 800 }}>{v.name.split(' ')[0]}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {poDraftItems.filter(x => x.name !== '').map((item, idx) => {
-                          const { vendor: cheapestVendor } = getCheapestVendorForItem(item.sku);
-                          return (
-                            <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                              <td style={{ padding: '6px 10px', fontWeight: 700 }}>{item.name}</td>
-                              {vendors.map(v => {
-                                const match = v.medicines?.find(med => med.sku === item.sku && med.available);
-                                const isCheapest = cheapestVendor && cheapestVendor._id === v._id;
-                                return (
-                                  <td key={v._id} style={{ padding: '6px 10px', color: isCheapest ? '#10B981' : '#475569', fontWeight: isCheapest ? 800 : 500 }}>
-                                    {match ? `₹${match.price.toFixed(2)}${isCheapest ? ' ✓' : ''}` : 'N/A'}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p style={{ fontSize: '12.5px', color: '#94A3B8', textStyle: 'italic', marginBottom: '16px' }}>Add medications to compare prices.</p>
-                )}
-
-                <h4 style={{ margin: '0 0 12px', fontSize: '14px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Split PO Submissions</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '25vh', overflowY: 'auto', marginBottom: '16px' }}>
-                  {poSplitSummary.map((split, index) => (
-                    <div key={index} style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '10px', background: '#F8FAFC' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px' }}>{split.vendorName}</span>
-                        <span style={{ fontWeight: 900, color: '#2563EB', fontSize: '13px' }}>₹{split.totalAmount.toFixed(2)}</span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
-                        {split.items.map(i => `${i.name} (x${i.requiredQty})`).join(', ')}
-                      </div>
-                    </div>
-                  ))}
-                  {poSplitSummary.length === 0 && (
-                    <span style={{ fontSize: '12.5px', color: '#94A3B8', textStyle: 'italic' }}>Click Compare & Split Orders to compute splits.</span>
-                  )}
-                </div>
-
-                <button 
-                  type="button" 
-                  disabled={poSplitSummary.length === 0}
-                  onClick={handleSendPurchaseOrders}
-                  style={{ width: '100%', height: '44px', fontWeight: 800, borderRadius: '8px', background: poSplitSummary.length > 0 ? '#10B981' : '#CBD5E1', color: 'white', border: 'none', cursor: poSplitSummary.length > 0 ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  Generate Purchase Orders
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }} onClick={() => setShowCreatePOModal(false)}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* MODAL 5: CREATE GOODS RECEIPT NOTE (GRN) */}
-      {showGRNModal && (
-        <div className="modal-overlay" data-lenis-prevent style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }} onClick={() => setShowGRNModal(false)}>
-          <div className="modal-box glass-card" style={{ width: '95%', maxWidth: '850px', maxHeight: '90vh', background: 'white', padding: '28px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', position: 'relative', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Create Goods Receipt Note (GRN)</h2>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }} onClick={() => setShowGRNModal(false)}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Prescribed Procurement Items</h4>
+                    <span style={{ fontSize: '12px', color: '#64748B' }}>{poDraftItems.length} line item(s)</span>
+                  </div>
 
-            <form onSubmit={(e) => handleSaveGRN(e, 'Verified/Completed')}>
-              <div style={{ display: 'flex', gap: '20px', marginBottom: '16px', background: '#F8FAFC', padding: '12px', borderRadius: '8px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', fontWeight: 700, color: '#334155', cursor: 'pointer' }}>
-                  <input 
-                    type="radio" 
-                    name="grnFlowType" 
-                    value="po" 
-                    checked={grnFlowType === 'po'}
-                    onChange={() => {
-                      setGrnFlowType('po');
-                      setGrnSelectedPOId('');
-                      setGrnItems([]);
-                    }}
-                  />
-                  Against Approved PO
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', fontWeight: 700, color: '#334155', cursor: 'pointer' }}>
-                  <input 
-                    type="radio" 
-                    name="grnFlowType" 
-                    value="direct" 
-                    checked={grnFlowType === 'direct'}
-                    onChange={() => {
-                      setGrnFlowType('direct');
-                      setGrnDirectVendorId('');
-                      setGrnItems([{ name: 'Paracetamol 650mg', sku: 'PAR-650', qtyRequired: 0, qtyReceived: 100, price: 12.50, batchNumber: '', expiryDate: '', mfgDate: '' }]);
-                    }}
-                  />
-                  Direct Purchase (Without PO)
-                </label>
-              </div>
-
-              {grnFlowType === 'po' ? (
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Select Approved Purchase Order</label>
-                  <SearchableDropdown
-                    value={grnSelectedPOId}
-                    onChange={handleGrnPOSelection}
-                    options={purchaseOrders.filter(x => x.status === 'Approved' || x.status === 'Partially Received').map(po => ({ value: po._id, label: `${po.poId} - ${po.vendorName} (₹${po.totalAmount})` }))}
-                    placeholder="Choose approved order..."
-                  />
-                </div>
-              ) : (
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Select Vendor</label>
-                  <SearchableDropdown
-                    value={grnDirectVendorId}
-                    onChange={setGrnDirectVendorId}
-                    options={vendors.map(v => ({ value: v._id, label: v.name }))}
-                    placeholder="Choose supplier..."
-                  />
-                </div>
-              )}
-
-              {grnItems.length > 0 && (
-                <div style={{ marginBottom: '20px' }}>
-                  <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Medications Received & Expiry Details (Incl. GST calculations)</h4>
-                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left', minWidth: '950px' }}>
+                  <div style={{ maxHeight: '48vh', overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: '10px', marginBottom: '16px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
                       <thead>
                         <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                          <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, width: '20%' }}>Medicine</th>
-                          <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, width: '10%' }}>SKU</th>
-                          {grnFlowType === 'po' && <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, width: '6%' }}>PO Qty</th>}
-                          <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, width: '8%' }}>Recv Qty</th>
-                          <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, width: '10%' }}>Batch No.</th>
-                          <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, width: '10%' }}>Mfg Date</th>
-                          <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, width: '10%' }}>Expiry Date</th>
-                          <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, width: '8%' }}>Price (₹)</th>
-                          <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, width: '6%' }}>GST (%)</th>
-                          <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, width: '8%' }}>GST Amt</th>
-                          <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, width: '8%' }}>Total</th>
-                          {grnFlowType === 'direct' && <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, width: '2%' }}></th>}
+                          <th style={{ padding: '10px 12px', color: '#475569', fontWeight: 800, minWidth: '180px' }}>Medicine Name</th>
+                          <th style={{ padding: '10px 12px', color: '#475569', fontWeight: 800, width: '90px' }}>SKU</th>
+                          <th style={{ padding: '10px 12px', color: '#475569', fontWeight: 800, minWidth: '200px' }}>Assigned Supplier</th>
+                          <th style={{ padding: '10px 8px', color: '#475569', fontWeight: 800, width: '70px', textAlign: 'center' }}>Qty</th>
+                          <th style={{ padding: '10px 8px', color: '#475569', fontWeight: 800, width: '80px', textAlign: 'right' }}>Rate (₹)</th>
+                          <th style={{ padding: '10px 8px', color: '#475569', fontWeight: 800, width: '50px', textAlign: 'center' }}>GST</th>
+                          <th style={{ padding: '10px 10px', color: '#475569', fontWeight: 800, width: '90px', textAlign: 'right' }}>Total (₹)</th>
+                          <th style={{ padding: '10px 8px', width: '30px' }}></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {grnItems.map((item, idx) => {
-                          const qty = item.qtyReceived || 0;
-                          const price = item.price || 0;
-                          const gstRate = item.gst !== undefined ? item.gst : 12;
-                          const gstAmt = qty * price * (gstRate / 100);
-                          const totalAmt = qty * price + gstAmt;
+                        {poDraftItems.map((item, idx) => {
+                          const availableSuppliers = getVendorsOfferingItem(item.sku);
+                          const cheapest = availableSuppliers.length > 0 ? availableSuppliers[0] : null;
 
                           return (
                             <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                              <td style={{ padding: '8px 12px', fontWeight: 700 }}>
-                                {grnFlowType === 'po' ? item.name : (
-                                  <SearchableDropdown
-                                    value={item.name}
-                                    onChange={val => {
-                                      const updated = [...grnItems];
-                                      updated[idx].name = val;
-                                      const matched = inventory.find(x => x.name === val);
-                                      if (matched) updated[idx].sku = matched.sku;
-                                      setGrnItems(updated);
-                                    }}
-                                    options={inventory.map(i => ({ value: i.name, label: i.name }))}
-                                    placeholder="Select..."
-                                  />
-                                )}
-                              </td>
-                              <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>
-                                {grnFlowType === 'po' ? item.sku : (
-                                  <input 
-                                    type="text" 
-                                    value={item.sku} 
-                                    onChange={e => {
-                                      const updated = [...grnItems];
-                                      updated[idx].sku = e.target.value;
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ width: '90%', height: '28px', border: '1px solid #CBD5E1', borderRadius: '4px', outline: 'none', padding: '0 4px' }}
-                                  />
-                                )}
-                              </td>
-                              {grnFlowType === 'po' && <td style={{ padding: '8px 12px', fontWeight: 700, color: '#475569' }}>{item.qtyRequired}</td>}
-                              <td style={{ padding: '8px 12px' }}>
-                                <input 
-                                  type="number" 
-                                  min="0"
-                                  value={qty} 
-                                  onChange={e => {
-                                    const updated = [...grnItems];
-                                    updated[idx].qtyReceived = Number(e.target.value) || 0;
-                                    setGrnItems(updated);
-                                  }}
-                                  style={{ width: '60px', height: '28px', border: '1px solid #CBD5E1', borderRadius: '4px', padding: '0 6px', outline: 'none', fontWeight: 800 }}
+                              <td style={{ padding: '8px 10px' }}>
+                                <SearchableDropdown
+                                  value={item.name}
+                                  onChange={val => handleDraftPOItemSelect(idx, val)}
+                                  options={uniqueMedCatalog.map(m => ({ value: m.name, label: m.name }))}
+                                  placeholder="Select medicine..."
                                 />
-                                {grnFlowType === 'po' && item.qtyReceived !== item.qtyRequired && (
-                                  <div style={{ marginTop: '4px' }}>
-                                    {item.qtyReceived < item.qtyRequired ? (
-                                      <span style={{ fontSize: '10px', color: '#D97706', fontWeight: 700, background: '#FEF3C7', padding: '2px 4px', borderRadius: '4px', display: 'inline-block' }}>
-                                        Under ({item.qtyRequired - item.qtyReceived})
-                                      </span>
-                                    ) : (
-                                      <span style={{ fontSize: '10px', color: '#2563EB', fontWeight: 700, background: '#EFF6FF', padding: '2px 4px', borderRadius: '4px', display: 'inline-block' }}>
-                                        Over ({item.qtyReceived - item.qtyRequired})
-                                      </span>
+                              </td>
+                              <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontWeight: 700, color: '#2563EB', fontSize: '11.5px' }}>
+                                {item.sku || '—'}
+                              </td>
+                              <td style={{ padding: '8px 10px' }}>
+                                {item.sku && availableSuppliers.length > 0 ? (
+                                  <div>
+                                    <select
+                                      value={item.vendorId ? item.vendorId.toString() : ''}
+                                      onChange={(e) => handleDraftPOVendorSelect(idx, e.target.value)}
+                                      style={{ width: '100%', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 6px', fontSize: '12px', outline: 'none', background: 'white' }}
+                                    >
+                                      {availableSuppliers.map(sup => (
+                                        <option key={sup.vendorId} value={sup.vendorId.toString()}>
+                                          {sup.vendorName} — ₹{sup.price.toFixed(2)} {cheapest && sup.vendorId.toString() === cheapest.vendorId.toString() ? '★ Best Price' : ''}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {item.isLowest && (
+                                      <div style={{ marginTop: '3px', display: 'inline-flex', alignItems: 'center', gap: '3px', background: '#DEF7EC', color: '#03543F', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 800 }}>
+                                        ✓ Lowest Price
+                                      </div>
                                     )}
                                   </div>
+                                ) : (
+                                  <span style={{ color: '#94A3B8', fontSize: '11.5px', fontStyle: 'italic' }}>Select item first</span>
                                 )}
                               </td>
-                              <td style={{ padding: '8px 12px' }}>
-                                <input 
-                                  type="text"
-                                  placeholder="Batch"
-                                  value={item.batchNumber}
-                                  onChange={e => {
-                                    const updated = [...grnItems];
-                                    updated[idx].batchNumber = e.target.value;
-                                    setGrnItems(updated);
-                                  }}
-                                  style={{ width: '90%', height: '28px', border: '1px solid #CBD5E1', borderRadius: '4px', padding: '0 4px', outline: 'none' }}
-                                  required
-                                />
-                              </td>
-                              <td style={{ padding: '8px 12px' }}>
-                                <input 
-                                  type="date"
-                                  max={new Date().toISOString().split('T')[0]}
-                                  value={item.mfgDate}
-                                  onChange={e => {
-                                    const today = new Date().toISOString().split('T')[0];
-                                    if (e.target.value > today) {
-                                      showToast('Manufacturing date cannot be in the future!', 'error');
-                                      return;
-                                    }
-                                    const updated = [...grnItems];
-                                    updated[idx].mfgDate = e.target.value;
-                                    setGrnItems(updated);
-                                  }}
-                                  style={{ width: '90%', height: '28px', border: '1px solid #CBD5E1', borderRadius: '4px', padding: '0 4px', outline: 'none' }}
-                                />
-                              </td>
-                              <td style={{ padding: '8px 12px' }}>
-                                <input 
-                                  type="date"
-                                  value={item.expiryDate}
-                                  onChange={e => {
-                                    const updated = [...grnItems];
-                                    updated[idx].expiryDate = e.target.value;
-                                    setGrnItems(updated);
-                                  }}
-                                  style={{ width: '90%', height: '28px', border: '1px solid #CBD5E1', borderRadius: '4px', padding: '0 4px', outline: 'none' }}
-                                  required
-                                />
-                              </td>
-                              <td style={{ padding: '8px 12px' }}>
-                                {grnFlowType === 'po' ? `₹${price.toFixed(2)}` : (
-                                  <input 
-                                    type="number" 
-                                    step="0.01"
-                                    value={price} 
-                                    onChange={e => {
-                                      const updated = [...grnItems];
-                                      updated[idx].price = Number(e.target.value) || 0;
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ width: '70px', height: '28px', border: '1px solid #CBD5E1', borderRadius: '4px', padding: '0 6px', outline: 'none', fontWeight: 800 }}
-                                  />
-                                )}
-                              </td>
-                              <td style={{ padding: '8px 12px' }}>
+                              <td style={{ padding: '8px 8px', textAlign: 'center' }}>
                                 <input 
                                   type="number" 
-                                  min="0"
-                                  max="100"
-                                  value={gstRate} 
-                                  onChange={e => {
-                                    const updated = [...grnItems];
-                                    updated[idx].gst = Number(e.target.value) || 0;
-                                    setGrnItems(updated);
-                                  }}
-                                  style={{ width: '50px', height: '28px', border: '1px solid #CBD5E1', borderRadius: '4px', padding: '0 4px', outline: 'none' }}
+                                  min="1"
+                                  value={item.qty} 
+                                  onChange={e => handleDraftPOQtyChange(idx, e.target.value)}
+                                  style={{ width: '60px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 4px', textAlign: 'center', outline: 'none', fontWeight: 800 }}
                                 />
                               </td>
-                              <td style={{ padding: '8px 12px', fontWeight: 600 }}>₹{gstAmt.toFixed(2)}</td>
-                              <td style={{ padding: '8px 12px', fontWeight: 700 }}>₹{totalAmt.toFixed(2)}</td>
-                              {grnFlowType === 'direct' && (
-                                <td style={{ padding: '8px 12px' }}>
-                                  <button 
-                                    type="button" 
-                                    style={{ background: 'none', border: 'none', color: '#EF4444', fontWeight: 800, cursor: 'pointer' }}
-                                    onClick={() => setGrnItems(grnItems.filter((_, i) => i !== idx))}
-                                  >
-                                    ✕
-                                  </button>
-                                </td>
-                              )}
+                              <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 700, color: '#1E293B' }}>
+                                ₹{(item.price || 0).toFixed(2)}
+                              </td>
+                              <td style={{ padding: '8px 8px', textAlign: 'center', color: '#64748B', fontWeight: 600 }}>
+                                {item.tax !== undefined ? item.tax : 12}%
+                              </td>
+                              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#0F172A' }}>
+                                ₹{(item.total || 0).toFixed(2)}
+                              </td>
+                              <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                                <button 
+                                  type="button" 
+                                  style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', fontWeight: 800, fontSize: '14px' }}
+                                  onClick={() => handleDraftPORemoveRow(idx)}
+                                  title="Remove item"
+                                >
+                                  ✕
+                                </button>
+                              </td>
                             </tr>
                           );
                         })}
@@ -7201,146 +9524,787 @@ const PharmacyDashboard = () => {
                     </table>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-                    {grnFlowType === 'direct' ? (
-                      <button 
-                        type="button" 
-                        className="btn btn-secondary" 
-                        style={{ padding: '6px 12px', fontSize: '11.5px', border: '1px dashed #CBD5E1', cursor: 'pointer', background: 'transparent' }}
-                        onClick={() => setGrnItems([...grnItems, { name: '', sku: '', qtyRequired: 0, qtyReceived: 100, price: 10.0, gst: 12, batchNumber: '', expiryDate: '', mfgDate: '' }])}
-                      >
-                        + Add Item
-                      </button>
-                    ) : <div />}
-
-                    {(() => {
-                      const totals = grnItems.reduce((acc, item) => {
-                        const qty = Number(item.qtyReceived) || 0;
-                        const price = Number(item.price) || 0;
-                        const gst = item.gst !== undefined ? item.gst : 12;
-                        const sub = qty * price;
-                        const gstAmt = sub * (gst / 100);
-                        return {
-                          subtotal: acc.subtotal + sub,
-                          gstTotal: acc.gstTotal + gstAmt,
-                          grandTotal: acc.grandTotal + sub + gstAmt
-                        };
-                      }, { subtotal: 0, gstTotal: 0, grandTotal: 0 });
-
-                      return (
-                        <div style={{ minWidth: '280px', padding: '10px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '12px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontWeight: 600, color: '#475569' }}>
-                            <span>Subtotal (Excl. GST)</span>
-                            <span>₹{totals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontWeight: 700, color: '#EA580C' }}>
-                            <span>GST Burden</span>
-                            <span>₹{totals.gstTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #E2E8F0', paddingTop: '4px', fontWeight: 800, color: '#0F172A', fontSize: '13px' }}>
-                            <span>Total (Incl. GST)</span>
-                            <span>₹{totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary"
+                      style={{ padding: '8px 16px', fontSize: '12.5px', border: '1px solid #CBD5E1', background: '#F8FAFC', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}
+                      onClick={handleDraftPOAddRow}
+                    >
+                      + Add Item
+                    </button>
                   </div>
                 </div>
-              )}
 
-              {/* SUPPLIER INVOICE ATTACHMENT WITH PROGRESS BAR SIMULATION */}
-              <div style={{ marginBottom: '20px', background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '16px', borderRadius: '10px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Supplier Invoice Document {grnFlowType === 'direct' && <span style={{ color: '#EF4444' }}>* (Required)</span>}
-                </label>
-                <input 
-                  type="file" 
-                  accept="image/*,application/pdf"
-                  onChange={e => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setGrnIsUploading(true);
-                      setGrnUploadProgress(0);
-                      let progressVal = 0;
-                      const interval = setInterval(() => {
-                        progressVal += 20;
-                        setGrnUploadProgress(progressVal);
-                        if (progressVal >= 100) {
-                          clearInterval(interval);
-                          setGrnIsUploading(false);
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            setGrnInvoiceFile(file);
-                            setGrnInvoiceFileName(event.target.result);
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }, 100);
-                    }
-                  }}
-                  style={{ fontSize: '13px', color: '#334155' }}
-                  required={grnFlowType === 'direct'}
-                />
-
-                {grnIsUploading && (
-                  <div style={{ marginTop: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#2563EB', fontWeight: 700, marginBottom: '4px' }}>
-                      <span>Uploading document...</span>
-                      <span>{grnUploadProgress}%</span>
+                {/* RIGHT COLUMN: REAL-TIME SPLIT BREAKDOWN & CONFIRMATION */}
+                <div style={{ borderLeft: '1px solid #E2E8F0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <h4 style={{ margin: '0 0 12px', fontSize: '13px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Consolidated Order Summary</h4>
+                    
+                    <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+                        <span style={{ color: '#64748B' }}>Total Line Items:</span>
+                        <strong style={{ color: '#0F172A' }}>{validLinesCount}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+                        <span style={{ color: '#64748B' }}>Suppliers Involved:</span>
+                        <strong style={{ color: '#2563EB' }}>{liveSplits.length} Vendor(s)</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+                        <span style={{ color: '#64748B' }}>Subtotal:</span>
+                        <strong style={{ color: '#0F172A' }}>₹{grandSub.toFixed(2)}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+                        <span style={{ color: '#64748B' }}>Estimated GST:</span>
+                        <strong style={{ color: '#0F172A' }}>₹{grandTax.toFixed(2)}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #CBD5E1', paddingTop: '8px', marginTop: '6px', fontSize: '15px' }}>
+                        <span style={{ fontWeight: 800, color: '#0F172A' }}>Grand Outlay:</span>
+                        <strong style={{ fontWeight: 900, color: '#2563EB' }}>₹{grandTot.toFixed(2)}</strong>
+                      </div>
                     </div>
-                    <div style={{ width: '100%', height: '6px', background: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{ width: `${grnUploadProgress}%`, height: '100%', background: '#2563EB', transition: 'width 0.1s ease-out' }} />
+
+                    <h4 style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Vendor Split Orders</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '28vh', overflowY: 'auto', marginBottom: '16px' }}>
+                      {liveSplits.map((split, index) => (
+                        <div key={index} style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px', background: '#FFFFFF', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px' }}>{split.vendorName}</span>
+                            <span style={{ fontWeight: 900, color: '#2563EB', fontSize: '13px' }}>₹{split.totalAmount.toFixed(2)}</span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
+                            {split.items.map(i => `${i.name} (x${i.qty})`).join(', ')}
+                          </div>
+                        </div>
+                      ))}
+                      {liveSplits.length === 0 && (
+                        <span style={{ fontSize: '12px', color: '#94A3B8', fontStyle: 'italic', padding: '8px 0' }}>Select medications to preview vendor splits.</span>
+                      )}
                     </div>
                   </div>
-                )}
 
-                {!grnIsUploading && grnInvoiceFileName && (
-                  <div style={{ fontSize: '12px', color: '#16A34A', marginTop: '6px', fontWeight: 700 }}>
-                    ✓ Invoice Uploaded: {grnInvoiceFile ? grnInvoiceFile.name : 'Uploaded Document'}
+                  <div>
+                    <button 
+                      type="button" 
+                      disabled={validLinesCount === 0}
+                      onClick={handleSendPurchaseOrders}
+                      style={{ width: '100%', height: '44px', fontWeight: 800, borderRadius: '8px', background: validLinesCount > 0 ? '#10B981' : '#CBD5E1', color: 'white', border: 'none', cursor: validLinesCount > 0 ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '13.5px', boxShadow: validLinesCount > 0 ? '0 4px 6px -1px rgba(16, 185, 129, 0.2)' : 'none' }}
+                    >
+                      <span>🚀 Submit Consolidated PO ({liveSplits.length} Orders)</span>
+                    </button>
                   </div>
-                )}
+                </div>
               </div>
-
-              {/* NOTES / REMARKS */}
-              <div style={{ marginBottom: '24px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Receipt Notes / Discrepancy Remarks</label>
-                <textarea
-                  value={grnNotes}
-                  onChange={e => setGrnNotes(e.target.value)}
-                  placeholder="Enter invoice details, batch notes, or variance reasons..."
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13.5px', minHeight: '60px', outline: 'none' }}
-                />
-              </div>
-
-              {/* ACTIONS FOOTER WITH DRAFT AND VERIFIED CONTROLS */}
-              <div style={{ display: 'flex', gap: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
-                <button 
-                  type="button"
-                  style={{ flex: 1, height: '44px', fontWeight: 800, borderRadius: '8px', border: '1px solid #CBD5E1', background: 'white', color: '#475569', cursor: 'pointer' }}
-                  onClick={() => setShowGRNModal(false)}
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="button"
-                  disabled={grnItems.length === 0 || (grnFlowType === 'direct' && !grnInvoiceFileName)}
-                  style={{ flex: 1, height: '44px', fontWeight: 800, borderRadius: '8px', border: '1px solid #2563EB', background: 'transparent', color: '#2563EB', cursor: (grnItems.length > 0 && (grnFlowType === 'po' || grnInvoiceFileName)) ? 'pointer' : 'not-allowed' }}
-                  onClick={(e) => handleSaveGRN(e, 'Draft')}
-                >
-                  Save as Draft
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={grnItems.length === 0 || (grnFlowType === 'direct' && !grnInvoiceFileName)}
-                  style={{ flex: 2, height: '44px', fontWeight: 800, borderRadius: '8px', background: (grnItems.length > 0 && (grnFlowType === 'po' || grnInvoiceFileName)) ? '#059669' : '#CBD5E1', color: 'white', border: 'none', cursor: (grnItems.length > 0 && (grnFlowType === 'po' || grnInvoiceFileName)) ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  Submit & Verify Goods Note
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* MODAL 5: CREATE GOODS RECEIPT NOTE (GRN) */}
+      {showGRNModal && (() => {
+        const selectedPoObj = grnFlowType === 'po' 
+          ? purchaseOrders.find(x => x._id === grnSelectedPOId || x.poId === grnSelectedPOId) 
+          : null;
+
+        // Live financial computations across all items in form
+        const liveTotals = grnItems.reduce((acc, item) => {
+          const qty = Math.max(0, Number(item.qtyReceived) || 0);
+          const rate = Math.max(0, Number(item.price || item.purchaseRate) || 0);
+          const discPct = Math.max(0, Math.min(100, Number(item.discountPercent) || 0));
+          const gstRate = Math.max(0, Number(item.gst !== undefined ? item.gst : 12));
+
+          const gross = qty * rate;
+          const discAmt = Math.round((gross * (discPct / 100)) * 100) / 100;
+          const taxable = Math.max(0, Math.round((gross - discAmt) * 100) / 100);
+          const gstAmt = Math.round((taxable * (gstRate / 100)) * 100) / 100;
+          const net = Math.round((taxable + gstAmt) * 100) / 100;
+
+          return {
+            subtotal: acc.subtotal + gross,
+            totalDiscount: acc.totalDiscount + discAmt,
+            taxableBase: acc.taxableBase + taxable,
+            totalGst: acc.totalGst + gstAmt,
+            grandTotal: acc.grandTotal + net
+          };
+        }, { subtotal: 0, totalDiscount: 0, taxableBase: 0, totalGst: 0, grandTotal: 0 });
+
+        const invoicedVal = Number(grnInvoiceAmount) || 0;
+        const varianceVal = invoicedVal > 0 ? Math.round((liveTotals.grandTotal - invoicedVal) * 100) / 100 : 0;
+
+        return (
+          <div className="modal-overlay" data-lenis-prevent style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }} onClick={() => setShowGRNModal(false)}>
+            <div className="modal-box glass-card" style={{ width: '96%', maxWidth: '1200px', maxHeight: '92vh', background: 'white', padding: '24px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', position: 'relative', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+                <div>
+                  <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Goods Receipt Note (GRN) Generation</h2>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>Receive, inspect, and verify ordered inventory against supplier invoice and PO specifications</div>
+                </div>
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }} onClick={() => setShowGRNModal(false)}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+
+              <form onSubmit={(e) => handleSaveGRN(e, 'Verified/Completed')}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                  
+                  {/* 1. FLOW TYPE & LOCATION HEADER */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontSize: '11.5px', textTransform: 'uppercase', color: '#475569', fontWeight: 800 }}>Receipt Workflow Type</label>
+                      <div style={{ display: 'flex', gap: '20px', marginTop: '6px' }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: '#1E293B', cursor: 'pointer' }}>
+                          <input 
+                            type="radio" 
+                            name="grnFlowType" 
+                            checked={grnFlowType === 'po'} 
+                            onChange={() => {
+                              setGrnFlowType('po');
+                              setGrnSelectedPOId('');
+                              setGrnDirectVendorId('');
+                              setGrnItems([]);
+                            }} 
+                          />
+                          Receive against Approved PO
+                        </label>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: '#1E293B', cursor: 'pointer' }}>
+                          <input 
+                            type="radio" 
+                            name="grnFlowType" 
+                            checked={grnFlowType === 'direct'} 
+                            onChange={() => {
+                              setGrnFlowType('direct');
+                              setGrnSelectedPOId('');
+                              setGrnDirectVendorId('');
+                              setGrnItems([{
+                                name: '',
+                                sku: '',
+                                itemType: 'Medicine',
+                                unit: 'Strip',
+                                barcode: '',
+                                qtyOrdered: 0,
+                                orderedQty: 0,
+                                previouslyReceivedQty: 0,
+                                remainingQty: 0,
+                                qtyReceived: 100,
+                                rejectedQty: 0,
+                                rejectionReason: '',
+                                price: 10,
+                                purchaseRate: 10,
+                                discountPercent: 0,
+                                gst: 12,
+                                batchNumber: '',
+                                expiryDate: '',
+                                mfgDate: ''
+                              }]);
+                            }} 
+                          />
+                          Direct Purchase (No PO)
+                        </label>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11.5px', textTransform: 'uppercase', color: '#475569', fontWeight: 800, marginBottom: '6px' }}>Receiving Location / Store *</label>
+                      <select 
+                        value={grnLocation} 
+                        onChange={e => setGrnLocation(e.target.value)}
+                        style={{ width: '100%', height: '36px', fontSize: '13px', fontWeight: 700, border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', outline: 'none' }}
+                      >
+                        <option value="Main Pharmacy Store">Main Pharmacy Store</option>
+                        <option value="Central Warehouse Depot">Central Warehouse Depot</option>
+                        <option value="OPD Dispensing Store">OPD Dispensing Store</option>
+                        <option value="Emergency & ICU Store">Emergency & ICU Store</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 2. PO SELECTION & READ-ONLY ORDER DETAILS */}
+                  {grnFlowType === 'po' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11.5px', textTransform: 'uppercase', color: '#475569', fontWeight: 800, marginBottom: '6px' }}>
+                          Select Approved Purchase Order *
+                        </label>
+                        <SearchableDropdown
+                          value={grnSelectedPOId}
+                          onChange={handleGrnPOSelection}
+                          options={purchaseOrders.filter(x => ['Approved', 'Sent', 'Confirmed', 'Partially Delivered', 'Partially Received'].includes(x.status)).map(po => ({ 
+                            value: po._id, 
+                            label: `${po.poId} — ${po.vendorName} (₹${Number(po.totalAmount || 0).toLocaleString()} • ${po.status})` 
+                          }))}
+                          placeholder="Choose approved order..."
+                        />
+                      </div>
+
+                      {selectedPoObj && (
+                        <div style={{ background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: '10px', padding: '14px 18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                          <div>
+                            <span style={{ fontSize: '11px', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase' }}>PO Number</span>
+                            <div style={{ fontSize: '15px', fontWeight: 900, color: '#1E3A8A', fontFamily: 'monospace', marginTop: '2px' }}>{selectedPoObj.poId}</div>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: '11px', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase' }}>PO Order Date</span>
+                            <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1E293B', marginTop: '2px' }}>
+                              {new Date(selectedPoObj.createdAt || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </div>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: '11px', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase' }}>Supplier / Vendor</span>
+                            <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>{selectedPoObj.vendorName}</div>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: '11px', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase' }}>PO Status</span>
+                            <div style={{ marginTop: '2px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#DBEAFE', color: '#1D4ED8' }}>
+                                {selectedPoObj.status}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11.5px', textTransform: 'uppercase', color: '#475569', fontWeight: 800, marginBottom: '6px' }}>Supplier / Vendor *</label>
+                      <SearchableDropdown
+                        value={grnDirectVendorId}
+                        onChange={setGrnDirectVendorId}
+                        options={vendors.map(v => ({ value: v._id, label: `${v.name} (${v.code})` }))}
+                        placeholder="Choose supplier..."
+                      />
+                    </div>
+                  )}
+
+                  {/* 3. ITEM RECEIVING TABLE */}
+                  {grnItems.length > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '12.5px', textTransform: 'uppercase', color: '#334155', fontWeight: 800 }}>
+                          Item Receiving &amp; Quality Inspection Ledger ({grnItems.length} items)
+                        </span>
+                        {grnFlowType === 'direct' && (
+                          <button 
+                            type="button" 
+                            className="btn btn-secondary" 
+                            style={{ padding: '4px 10px', fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #CBD5E1', background: '#F8FAFC', cursor: 'pointer', borderRadius: '6px' }}
+                            onClick={() => {
+                              setGrnItems([...grnItems, {
+                                name: '',
+                                sku: '',
+                                itemType: 'Medicine',
+                                unit: 'Strip',
+                                barcode: '',
+                                qtyOrdered: 0,
+                                orderedQty: 0,
+                                previouslyReceivedQty: 0,
+                                remainingQty: 0,
+                                qtyReceived: 100,
+                                rejectedQty: 0,
+                                rejectionReason: '',
+                                price: 10,
+                                purchaseRate: 10,
+                                discountPercent: 0,
+                                gst: 12,
+                                batchNumber: '',
+                                expiryDate: '',
+                                mfgDate: ''
+                              }]);
+                            }}
+                          >
+                            + Add Item
+                          </button>
+                        )}
+                      </div>
+
+                      <div style={{ overflowX: 'auto', border: '1.5px solid #E2E8F0', borderRadius: '10px', background: '#FFFFFF' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', minWidth: '1150px' }}>
+                          <thead>
+                            <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
+                              <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 800, color: '#475569', minWidth: '180px' }}>Item Specification</th>
+                              <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 800, color: '#475569', width: '110px' }}>Barcode</th>
+                              <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 800, color: '#475569', width: '100px' }}>Batch No. *</th>
+                              <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 800, color: '#475569', width: '110px' }}>Mfg Date</th>
+                              <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 800, color: '#475569', width: '110px' }}>Expiry Date *</th>
+                              {grnFlowType === 'po' && (
+                                <>
+                                  <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#64748B', width: '60px' }}>PO Qty</th>
+                                  <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#64748B', width: '65px' }}>Prev. Recv</th>
+                                  <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#2563EB', width: '65px' }}>Remaining</th>
+                                </>
+                              )}
+                              <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#059669', width: '75px' }}>Recv Qty *</th>
+                              <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#DC2626', width: '70px' }}>Rej Qty</th>
+                              <th style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 800, color: '#475569', width: '75px' }}>Rate (₹)</th>
+                              <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#475569', width: '60px' }}>Disc %</th>
+                              <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#475569', width: '50px' }}>GST %</th>
+                              <th style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 800, color: '#2563EB', width: '75px' }}>Buy Price</th>
+                              <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 900, color: '#0F172A', width: '85px' }}>Net Total</th>
+                              {grnFlowType === 'direct' && <th style={{ padding: '10px 6px', width: '30px' }}></th>}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {grnItems.map((item, idx) => {
+                              const qty = Math.max(0, Number(item.qtyReceived) || 0);
+                              const rate = Math.max(0, Number(item.price || item.purchaseRate) || 0);
+                              const discPct = Math.max(0, Math.min(100, Number(item.discountPercent) || 0));
+                              const gstRate = Math.max(0, Number(item.gst !== undefined ? item.gst : 12));
+
+                              const gross = qty * rate;
+                              const discAmt = Math.round((gross * (discPct / 100)) * 100) / 100;
+                              const taxable = Math.max(0, Math.round((gross - discAmt) * 100) / 100);
+                              const gstAmt = Math.round((taxable * (gstRate / 100)) * 100) / 100;
+                              const netAmt = Math.round((taxable + gstAmt) * 100) / 100;
+                              const unitBuyPrice = qty > 0 ? Math.round((netAmt / qty) * 100) / 100 : 0;
+
+                              const remainingLimit = item.remainingQty !== undefined ? item.remainingQty : (item.qtyOrdered || 999999);
+
+                              return (
+                                <tr key={`grn-item-row-${idx}`} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                  <td style={{ padding: '8px 10px' }}>
+                                    {grnFlowType === 'po' ? (
+                                      <div>
+                                        <div style={{ fontWeight: 800, color: '#0F172A' }}>{item.name}</div>
+                                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', display: 'flex', gap: '6px' }}>
+                                          <span style={{ fontFamily: 'monospace', color: '#2563EB', fontWeight: 700 }}>{item.sku}</span>
+                                          <span>•</span>
+                                          <span>{item.unit || 'Strip'}</span>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        <input 
+                                          type="text" 
+                                          required 
+                                          placeholder="Item Name" 
+                                          value={item.name} 
+                                          onChange={e => {
+                                            const updated = [...grnItems];
+                                            updated[idx].name = e.target.value;
+                                            setGrnItems(updated);
+                                          }}
+                                          style={{ height: '28px', fontSize: '12px', border: '1px solid #CBD5E1', borderRadius: '4px', padding: '0 6px', outline: 'none' }}
+                                        />
+                                        <div style={{ display: 'flex', gap: '4px' }}>
+                                          <input 
+                                            type="text" 
+                                            placeholder="SKU" 
+                                            value={item.sku} 
+                                            onChange={e => {
+                                              const updated = [...grnItems];
+                                              updated[idx].sku = e.target.value;
+                                              setGrnItems(updated);
+                                            }}
+                                            style={{ height: '24px', fontSize: '11px', width: '90px', fontFamily: 'monospace', border: '1px solid #CBD5E1', borderRadius: '4px', padding: '0 4px', outline: 'none' }}
+                                          />
+                                          <input 
+                                            type="text" 
+                                            placeholder="Unit (Strip)" 
+                                            value={item.unit} 
+                                            onChange={e => {
+                                              const updated = [...grnItems];
+                                              updated[idx].unit = e.target.value;
+                                              setGrnItems(updated);
+                                            }}
+                                            style={{ height: '24px', fontSize: '11px', width: '70px', border: '1px solid #CBD5E1', borderRadius: '4px', padding: '0 4px', outline: 'none' }}
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  <td style={{ padding: '8px 6px' }}>
+                                    <input 
+                                      type="text" 
+                                      placeholder="Barcode" 
+                                      value={item.barcode || ''} 
+                                      onChange={e => {
+                                        const updated = [...grnItems];
+                                        updated[idx].barcode = e.target.value;
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ height: '28px', width: '100%', fontSize: '11.5px', padding: '0 6px', fontFamily: 'monospace', border: '1px solid #CBD5E1', borderRadius: '4px', outline: 'none' }}
+                                    />
+                                  </td>
+
+                                  <td style={{ padding: '8px 6px' }}>
+                                    <input 
+                                      type="text" 
+                                      required 
+                                      placeholder="Batch" 
+                                      value={item.batchNumber || ''} 
+                                      onChange={e => {
+                                        const updated = [...grnItems];
+                                        updated[idx].batchNumber = e.target.value;
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ height: '28px', width: '100%', fontSize: '11.5px', padding: '0 6px', fontWeight: 700, border: '1px solid #CBD5E1', borderRadius: '4px', outline: 'none' }}
+                                    />
+                                  </td>
+
+                                  <td style={{ padding: '8px 6px' }}>
+                                    <input 
+                                      type="date" 
+                                      max={new Date().toISOString().split('T')[0]}
+                                      value={item.mfgDate || ''} 
+                                      onChange={e => {
+                                        const updated = [...grnItems];
+                                        updated[idx].mfgDate = e.target.value;
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ height: '28px', width: '100%', fontSize: '11px', padding: '0 4px', border: '1px solid #CBD5E1', borderRadius: '4px', outline: 'none' }}
+                                    />
+                                  </td>
+
+                                  <td style={{ padding: '8px 6px' }}>
+                                    <input 
+                                      type="date" 
+                                      required
+                                      value={item.expiryDate || ''} 
+                                      onChange={e => {
+                                        const updated = [...grnItems];
+                                        updated[idx].expiryDate = e.target.value;
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ height: '28px', width: '100%', fontSize: '11px', padding: '0 4px', border: '1px solid #CBD5E1', borderRadius: '4px', outline: 'none' }}
+                                    />
+                                  </td>
+
+                                  {grnFlowType === 'po' && (
+                                    <>
+                                      <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: '#475569' }}>
+                                        {item.qtyOrdered || 0}
+                                      </td>
+                                      <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: '#64748B' }}>
+                                        {item.previouslyReceivedQty || 0}
+                                      </td>
+                                      <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 800, color: '#2563EB' }}>
+                                        {item.remainingQty !== undefined ? item.remainingQty : Math.max(0, (item.qtyOrdered || 0) - (item.previouslyReceivedQty || 0))}
+                                      </td>
+                                    </>
+                                  )}
+
+                                  <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                                    <input 
+                                      type="number" 
+                                      required 
+                                      min="0"
+                                      max={grnFlowType === 'po' ? remainingLimit : 999999}
+                                      value={item.qtyReceived !== undefined ? item.qtyReceived : ''} 
+                                      onChange={e => {
+                                        let val = Number(e.target.value);
+                                        if (grnFlowType === 'po' && val > remainingLimit) {
+                                          showToast(`Quantity received (${val}) exceeds remaining quantity (${remainingLimit})!`, 'error');
+                                          val = remainingLimit;
+                                        }
+                                        const updated = [...grnItems];
+                                        updated[idx].qtyReceived = val;
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ height: '28px', width: '65px', fontSize: '12px', padding: '0 4px', textAlign: 'center', fontWeight: 800, color: '#059669', border: '1.5px solid #A7F3D0', borderRadius: '4px', outline: 'none' }}
+                                    />
+                                  </td>
+
+                                  <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                                    <input 
+                                      type="number" 
+                                      min="0"
+                                      value={item.rejectedQty !== undefined ? item.rejectedQty : 0} 
+                                      onChange={e => {
+                                        const updated = [...grnItems];
+                                        updated[idx].rejectedQty = Math.max(0, Number(e.target.value) || 0);
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ height: '28px', width: '55px', fontSize: '12px', padding: '0 4px', textAlign: 'center', fontWeight: 800, color: '#DC2626', border: '1.5px solid #FECACA', borderRadius: '4px', outline: 'none' }}
+                                      title="Rejected units will not be added to active stock"
+                                    />
+                                  </td>
+
+                                  <td style={{ padding: '8px 6px', textAlign: 'right' }}>
+                                    <input 
+                                      type="number" 
+                                      step="0.01"
+                                      min="0"
+                                      required
+                                      value={item.price !== undefined ? item.price : item.purchaseRate || 0} 
+                                      onChange={e => {
+                                        const updated = [...grnItems];
+                                        const p = Math.max(0, Number(e.target.value) || 0);
+                                        updated[idx].price = p;
+                                        updated[idx].purchaseRate = p;
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ height: '28px', width: '70px', fontSize: '12px', padding: '0 6px', textAlign: 'right', fontWeight: 700, border: '1px solid #CBD5E1', borderRadius: '4px', outline: 'none' }}
+                                    />
+                                  </td>
+
+                                  <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                                    <input 
+                                      type="number" 
+                                      min="0"
+                                      max="100"
+                                      value={item.discountPercent !== undefined ? item.discountPercent : 0} 
+                                      onChange={e => {
+                                        const updated = [...grnItems];
+                                        updated[idx].discountPercent = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ height: '28px', width: '50px', fontSize: '12px', padding: '0 4px', textAlign: 'center', border: '1px solid #CBD5E1', borderRadius: '4px', outline: 'none' }}
+                                    />
+                                  </td>
+
+                                  <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                                    <input 
+                                      type="number" 
+                                      min="0"
+                                      max="100"
+                                      value={item.gst !== undefined ? item.gst : 12} 
+                                      onChange={e => {
+                                        const updated = [...grnItems];
+                                        updated[idx].gst = Math.max(0, Number(e.target.value) || 0);
+                                        setGrnItems(updated);
+                                      }}
+                                      style={{ height: '28px', width: '45px', fontSize: '12px', padding: '0 4px', textAlign: 'center', border: '1px solid #CBD5E1', borderRadius: '4px', outline: 'none' }}
+                                    />
+                                  </td>
+
+                                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 700, color: '#2563EB', fontSize: '12px' }}>
+                                    ₹{unitBuyPrice.toFixed(2)}
+                                  </td>
+
+                                  <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#0F172A', fontSize: '13px' }}>
+                                    ₹{netAmt.toFixed(2)}
+                                  </td>
+
+                                  {grnFlowType === 'direct' && (
+                                    <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                                      <button 
+                                        type="button" 
+                                        style={{ background: 'none', border: 'none', color: '#EF4444', fontWeight: 800, cursor: 'pointer' }}
+                                        onClick={() => setGrnItems(grnItems.filter((_, i) => i !== idx))}
+                                      >
+                                        ✕
+                                      </button>
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 4. INVOICE DETAILS & ATTACHMENT CARD */}
+                  <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '12px', padding: '18px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 900, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                        Supplier Invoice Details
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#64748B' }}>
+                        (Verify supplier bill information against physical invoice document)
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', alignItems: 'flex-start' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11.5px', textTransform: 'uppercase', color: '#475569', fontWeight: 800, marginBottom: '6px' }}>Invoice Number</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. INV-2026-9901" 
+                          value={grnInvoiceNumber} 
+                          onChange={e => setGrnInvoiceNumber(e.target.value)}
+                          style={{ width: '100%', height: '36px', fontSize: '13px', fontWeight: 700, border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', outline: 'none' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11.5px', textTransform: 'uppercase', color: '#475569', fontWeight: 800, marginBottom: '6px' }}>Invoice Date</label>
+                        <input 
+                          type="date" 
+                          value={grnInvoiceDate} 
+                          onChange={e => setGrnInvoiceDate(e.target.value)}
+                          style={{ width: '100%', height: '36px', fontSize: '13px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', outline: 'none' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11.5px', textTransform: 'uppercase', color: '#475569', fontWeight: 800, marginBottom: '6px' }}>Billed Invoice Amount (₹)</label>
+                        <input 
+                          type="number" 
+                          step="0.01"
+                          placeholder="e.g. 5250.00" 
+                          value={grnInvoiceAmount} 
+                          onChange={e => setGrnInvoiceAmount(e.target.value)}
+                          style={{ width: '100%', height: '36px', fontSize: '13px', fontWeight: 800, border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', outline: 'none' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11.5px', textTransform: 'uppercase', color: '#475569', fontWeight: 800, marginBottom: '6px' }}>Invoice Document Attachment</label>
+                        
+                        {!grnInvoiceFileName ? (
+                          <div>
+                            <input 
+                              type="file" 
+                              id="pharmacy-grn-invoice-file-input"
+                              accept="image/*,application/pdf"
+                              style={{ display: 'none' }}
+                              onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  setGrnIsUploading(true);
+                                  setGrnUploadProgress(0);
+                                  let p = 0;
+                                  const timer = setInterval(() => {
+                                    p += 25;
+                                    setGrnUploadProgress(p);
+                                    if (p >= 100) {
+                                      clearInterval(timer);
+                                      setGrnIsUploading(false);
+                                      const reader = new FileReader();
+                                      reader.onload = (event) => {
+                                        setGrnInvoiceFile(file);
+                                        setGrnInvoiceFileName(event.target.result || file.name);
+                                      };
+                                      reader.readAsDataURL(file);
+                                    }
+                                  }, 80);
+                                }
+                              }}
+                            />
+                            <button 
+                              type="button" 
+                              style={{ height: '36px', width: '100%', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 700, background: 'white', border: '1px solid #CBD5E1', borderRadius: '6px', cursor: 'pointer', color: '#334155' }}
+                              onClick={() => document.getElementById('pharmacy-grn-invoice-file-input')?.click()}
+                            >
+                              + Add Invoice Document
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: '#DCFCE7', border: '1px solid #86EFAC', borderRadius: '8px', height: '36px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 800, color: '#166534', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+                              ✓ {grnInvoiceFile ? grnInvoiceFile.name : 'Invoice Attached'}
+                            </span>
+                            <button 
+                              type="button" 
+                              style={{ background: 'none', border: 'none', color: '#DC2626', fontWeight: 800, cursor: 'pointer', fontSize: '11px', textDecoration: 'underline' }}
+                              onClick={() => {
+                                setGrnInvoiceFile(null);
+                                setGrnInvoiceFileName('');
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        )}
+
+                        {grnIsUploading && (
+                          <div style={{ marginTop: '6px' }}>
+                            <div style={{ height: '4px', background: '#E2E8F0', borderRadius: '2px', overflow: 'hidden' }}>
+                              <div style={{ width: `${grnUploadProgress}%`, height: '100%', background: '#2563EB', transition: 'width 0.1s ease' }} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 5. NOTES & SUMMARY DUAL ROW */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', alignItems: 'stretch' }}>
+                    
+                    {/* Left: Notes & Discrepancy Remarks */}
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <label style={{ display: 'block', fontSize: '11.5px', textTransform: 'uppercase', color: '#475569', fontWeight: 800, marginBottom: '6px' }}>
+                        Inspection Notes / Discrepancy Remarks
+                      </label>
+                      <textarea 
+                        placeholder="Add inspection observations, batch discrepancies, damaged packaging notes..." 
+                        value={grnNotes} 
+                        onChange={e => setGrnNotes(e.target.value)}
+                        style={{ flex: 1, minHeight: '110px', fontSize: '13px', padding: '10px', border: '1px solid #CBD5E1', borderRadius: '6px', outline: 'none' }}
+                      />
+                    </div>
+
+                    {/* Right: Authoritative GRN Summary & Variance Card */}
+                    <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 900, color: '#475569', textTransform: 'uppercase', marginBottom: '2px', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>
+                        GRN Financial Summary
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>
+                        <span>Gross Subtotal:</span>
+                        <strong style={{ color: '#0F172A' }}>₹{liveTotals.subtotal.toFixed(2)}</strong>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>
+                        <span>Total Line Discount:</span>
+                        <strong style={{ color: '#16A34A' }}>−₹{liveTotals.totalDiscount.toFixed(2)}</strong>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>
+                        <span>Taxable Goods Base:</span>
+                        <strong style={{ color: '#0F172A' }}>₹{liveTotals.taxableBase.toFixed(2)}</strong>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>
+                        <span>Total GST Tax Burden:</span>
+                        <strong style={{ color: '#EA580C' }}>+₹{liveTotals.totalGst.toFixed(2)}</strong>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1.5px solid #CBD5E1', paddingTop: '8px', marginTop: '4px', fontSize: '16px', fontWeight: 900, color: '#0F172A' }}>
+                        <span>Calculated GRN Amount:</span>
+                        <span style={{ color: '#2563EB' }}>₹{liveTotals.grandTotal.toFixed(2)}</span>
+                      </div>
+
+                      {invoicedVal > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: varianceVal === 0 ? '#DCFCE7' : '#FEF3C7', border: `1px solid ${varianceVal === 0 ? '#86EFAC' : '#FDE68A'}`, padding: '6px 10px', borderRadius: '8px', marginTop: '4px' }}>
+                          <span style={{ fontSize: '11.5px', fontWeight: 800, color: varianceVal === 0 ? '#166534' : '#92400E' }}>
+                            {varianceVal === 0 ? '✓ Invoice Matched' : `Invoice Variance (${varianceVal > 0 ? '+' : ''}₹${varianceVal.toFixed(2)})`}
+                          </span>
+                          <span style={{ fontSize: '12px', fontWeight: 900, color: varianceVal === 0 ? '#166534' : '#92400E' }}>
+                            Billed: ₹{invoicedVal.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid #E2E8F0', paddingTop: '16px' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => setShowGRNModal(false)}
+                    style={{ height: '40px', padding: '0 20px', borderRadius: '8px', border: '1px solid #CBD5E1', background: 'white', color: '#475569', cursor: 'pointer', fontWeight: 700 }}
+                  >
+                    Cancel
+                  </button>
+
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button 
+                      type="button" 
+                      disabled={grnItems.length === 0}
+                      style={{ height: '40px', padding: '0 18px', borderRadius: '8px', border: '1px solid #2563EB', background: 'transparent', color: '#2563EB', fontWeight: 800, cursor: grnItems.length > 0 ? 'pointer' : 'not-allowed' }}
+                      onClick={(e) => handleSaveGRN(e, 'Draft')}
+                    >
+                      Save as Draft
+                    </button>
+                    <button 
+                      type="submit" 
+                      disabled={grnItems.length === 0 || (grnFlowType === 'direct' && !grnDirectVendorId)}
+                      style={{ height: '40px', padding: '0 22px', borderRadius: '8px', background: (grnItems.length > 0 && (grnFlowType === 'po' || grnDirectVendorId)) ? '#059669' : '#CBD5E1', color: 'white', border: 'none', fontWeight: 800, cursor: (grnItems.length > 0 && (grnFlowType === 'po' || grnDirectVendorId)) ? 'pointer' : 'not-allowed' }}
+                    >
+                      Generate GRN &amp; Update Inventory
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* MODAL: RESOLVE REPLENISHMENT TICKET */}
       {showResolveTicketModal && selectedTicket && (
@@ -7401,18 +10365,18 @@ const PharmacyDashboard = () => {
 
       {/* Indent Order Summary Modal */}
       {showIndentModal && selectedIndent && (
-        <div onClick={() => { setShowIndentModal(false); setSelectedIndent(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: '20px', padding: '32px', width: '100%', maxWidth: '600px', boxShadow: '0 24px 64px rgba(0,0,0,0.15)', animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+        <div onClick={() => { setShowIndentModal(false); setSelectedIndent(null); setSupplyInputMap({}); }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: '20px', padding: '32px', width: '100%', maxWidth: '750px', boxShadow: '0 24px 64px rgba(0,0,0,0.15)', animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
               <div>
-                <div style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A' }}>Indent Order Summary</div>
-                <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>ID: {selectedIndent.indentId}</div>
+                <div style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A' }}>Indent Fulfillment & Review</div>
+                <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>Requisition ID: {selectedIndent.indentId}</div>
               </div>
-              <button onClick={() => { setShowIndentModal(false); setSelectedIndent(null); }} style={{ background: '#F1F5F9', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: '16px', fontWeight: 'bold' }}>✕</button>
+              <button onClick={() => { setShowIndentModal(false); setSelectedIndent(null); setSupplyInputMap({}); }} style={{ background: '#F1F5F9', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: '16px', fontWeight: 'bold' }}>✕</button>
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', paddingRight: '4px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                 <div>
                   <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Department</span>
                   <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1E293B', marginTop: '2px' }}>{selectedIndent.department}</div>
@@ -7427,212 +10391,101 @@ const PharmacyDashboard = () => {
                   <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Requested By</span>
                   <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1E293B', marginTop: '2px' }}>{selectedIndent.requestedBy}</div>
                 </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Status</span>
-                  <div style={{ marginTop: '2px' }}>
-                    <span style={{
-                      background: selectedIndent.status === 'Received' || selectedIndent.status === 'Fulfilled' ? '#D1FAE5' : selectedIndent.status === 'Pending' ? '#FEF3C7' : selectedIndent.status === 'Approved' ? '#EFF6FF' : selectedIndent.status === 'Partially Fulfilled' ? '#FFF3E0' : '#FEE2E2',
-                      color: selectedIndent.status === 'Received' || selectedIndent.status === 'Fulfilled' ? '#065F46' : selectedIndent.status === 'Pending' ? '#D97706' : selectedIndent.status === 'Approved' ? '#2563EB' : selectedIndent.status === 'Partially Fulfilled' ? '#E65100' : '#991B1B',
-                      padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800
-                    }}>{selectedIndent.status}</span>
-                  </div>
-                </div>
               </div>
- 
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Status:</span>
+                <span style={{
+                  background: selectedIndent.status === 'Received' || selectedIndent.status === 'Fulfilled' ? '#D1FAE5' : selectedIndent.status === 'Pending' ? '#FEF3C7' : selectedIndent.status === 'Approved' ? '#EFF6FF' : selectedIndent.status === 'Partially Fulfilled' ? '#FFF3E0' : '#FEE2E2',
+                  color: selectedIndent.status === 'Received' || selectedIndent.status === 'Fulfilled' ? '#065F46' : selectedIndent.status === 'Pending' ? '#D97706' : selectedIndent.status === 'Approved' ? '#2563EB' : selectedIndent.status === 'Partially Fulfilled' ? '#E65100' : '#991B1B',
+                  padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 800
+                }}>{selectedIndent.status}</span>
+                {selectedIndent.priority === 'Urgent' && (
+                  <span style={{ background: '#FEE2E2', color: '#DC2626', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>⚡ Urgent</span>
+                )}
+              </div>
+
               <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
-                <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Items Ordered</h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#475569', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Requested Consumables & Drugs</h4>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Specify the quantity to supply now (deducts from pharmacy inventory)</span>
+                </div>
+
                 <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                        <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 700, color: '#475569' }}>Item Name</th>
-                        <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 700, color: '#475569' }}>Category</th>
-                        <th style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#475569' }}>Qty</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#475569' }}>Item Name</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#475569' }}>Requested</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#2563EB' }}>Approved</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#16A34A' }}>Supplied</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#D97706' }}>Stock</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: '#0F172A' }}>Supply Now</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(selectedIndent.items || []).map((item, idx) => (
-                        <tr key={idx} style={{ borderBottom: idx === (selectedIndent.items || []).length - 1 ? 'none' : '1px solid #F1F5F9' }}>
-                          <td style={{ padding: '10px 16px', fontWeight: 700, color: '#0F172A' }}>{item.name}</td>
-                          <td style={{ padding: '10px 16px', color: '#64748B' }}>{item.category || 'N/A'}</td>
-                          <td style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 800, color: '#0F172A' }}>{item.requiredQty} {item.unit || 'Strip'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
- 
-              {selectedIndent.purpose && (
-                <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
-                  <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Remarks/Purpose</span>
-                  <div style={{ fontSize: '13px', color: '#475569', marginTop: '4px', fontStyle: 'italic' }}>{selectedIndent.purpose}</div>
-                </div>
-              )}
-            </div>
- 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '20px 0 0 0', borderTop: '1px solid #F1F5F9', flexShrink: 0, marginTop: '20px', flexWrap: 'wrap' }}>
-              <button
-                onClick={() => { setShowIndentModal(false); setSelectedIndent(null); }}
-                style={{ height: '40px', padding: '0 16px', borderRadius: '8px', border: '1px solid #E2E8F0', background: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '13px', color: '#64748B' }}
-              >
-                Close
-              </button>
-              {!['Received', 'Fulfilled', 'Cannot Fulfill', 'Rejected'].includes(selectedIndent.status) && (
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {/* Cannot Fulfill Button */}
-                  <button
-                    disabled={loading}
-                    onClick={async () => {
-                      try {
-                        setLoading(true);
-                        await api.put(`/indents/${selectedIndent._id}`, { status: 'Cannot Fulfill' });
-                        const updated = { ...selectedIndent, status: 'Cannot Fulfill' };
-                        setIndents(prev => prev.map(ind => ind._id === selectedIndent._id ? updated : ind));
-                        setSelectedIndent(updated);
-                        showToast('Indent marked as Cannot Fulfill');
-                      } catch (err) {
-                        console.error(err);
-                        showToast('Failed to update indent status', 'error');
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                    style={{ height: '40px', padding: '0 14px', borderRadius: '8px', border: 'none', background: '#EF4444', color: 'white', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                    Cannot Fulfill
-                  </button>
+                      {(selectedIndent.items || []).map((item, idx) => {
+                        const itemKey = item._id || item.name;
+                        const isApproved = item.approvedQty !== null && item.approvedQty !== undefined;
+                        const reqQty = Number(item.requiredQty) || 0;
+                        const appQty = isApproved ? Number(item.approvedQty) : 0;
+                        const supQty = Number(item.suppliedQty || 0);
+                        const remQty = isApproved ? Math.max(0, appQty - supQty) : 0;
 
-                  {/* Partially Fulfilled Button */}
-                  <button
-                    disabled={loading}
-                    onClick={async () => {
-                      try {
-                        setLoading(true);
-                        await api.put(`/indents/${selectedIndent._id}`, { status: 'Partially Fulfilled' });
-                        const updated = { ...selectedIndent, status: 'Partially Fulfilled' };
-                        setIndents(prev => prev.map(ind => ind._id === selectedIndent._id ? updated : ind));
-                        setSelectedIndent(updated);
-                        showToast('Indent marked as Partially Fulfilled');
-                      } catch (err) {
-                        console.error(err);
-                        showToast('Failed to update indent status', 'error');
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                    style={{ height: '40px', padding: '0 14px', borderRadius: '8px', border: 'none', background: '#F59E0B', color: 'white', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                    Partially Fulfilled
-                  </button>
+                        const matchedMed = (inventory || []).find(m => m.name && m.name.trim().toLowerCase() === item.name.trim().toLowerCase());
+                        const curStock = matchedMed ? Number(matchedMed.stock || 0) : 0;
+                        const maxAllowed = Math.min(remQty, curStock);
+                        const currentInput = supplyInputMap[itemKey] !== undefined ? supplyInputMap[itemKey] : (remQty > 0 && curStock > 0 ? String(maxAllowed) : '0');
 
-                  {/* Fulfilled Button */}
-                  <button
-                    disabled={loading}
-                    onClick={async () => {
-                      try {
-                        setLoading(true);
-                        await api.put(`/indents/${selectedIndent._id}`, { status: 'Fulfilled' });
-                        const updated = { ...selectedIndent, status: 'Fulfilled' };
-                        setIndents(prev => prev.map(ind => ind._id === selectedIndent._id ? updated : ind));
-                        setSelectedIndent(updated);
-                        showToast('Indent marked as Fulfilled!');
-                      } catch (err) {
-                        console.error(err);
-                        showToast('Failed to update indent status', 'error');
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                    style={{ height: '40px', padding: '0 14px', borderRadius: '8px', border: 'none', background: '#10B981', color: 'white', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    Fulfilled
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 6: GRN DETAILS WITH GST SUMMARY */}
-      {selectedGrnDetails && (
-        <div className="modal-overlay" data-lenis-prevent style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }} onClick={() => setSelectedGrnDetails(null)}>
-          <div className="modal-box glass-card" style={{ width: '90%', maxWidth: '650px', maxHeight: '85vh', background: 'white', padding: '28px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', position: 'relative', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Goods Receipt Note (GRN) Details</h2>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }} onClick={() => setSelectedGrnDetails(null)}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>GRN ID</span>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>{selectedGrnDetails.grnId}</div>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>PO Reference</span>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#2563EB' }}>{selectedGrnDetails.poNumber || 'Direct Purchase'}</div>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Supplier</span>
-                  <div style={{ fontSize: '14px', fontWeight: 700 }}>{selectedGrnDetails.vendorName}</div>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Date Received</span>
-                  <div style={{ fontSize: '14px', fontWeight: 700 }}>{new Date(selectedGrnDetails.receivedDate || selectedGrnDetails.createdAt).toLocaleDateString()}</div>
-                </div>
-              </div>
-
-              {selectedGrnDetails.invoiceUrl && (
-                <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Invoice Document</span>
-                  <div>
-                    <a href={selectedGrnDetails.invoiceUrl} target="_blank" rel="noreferrer" style={{ color: '#2563EB', fontWeight: 800, textDecoration: 'underline', fontSize: '13px' }}>
-                      Download/View Invoice
-                    </a>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ marginTop: '8px' }}>
-                <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Received Medications & Taxes</span>
-                <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px', marginTop: '6px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                        <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800 }}>Medicine</th>
-                        <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, textAlign: 'right' }}>Qty</th>
-                        <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, textAlign: 'right' }}>Price</th>
-                        <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, textAlign: 'right' }}>GST %</th>
-                        <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, textAlign: 'right' }}>GST Amt</th>
-                        <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, textAlign: 'right' }}>Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(selectedGrnDetails.items || []).map((item, idx) => {
-                        const qty = item.qtyReceived || 0;
-                        const price = item.price || 0;
-                        const gstRate = item.gst !== undefined ? item.gst : 12;
-                        const gstAmt = qty * price * (gstRate / 100);
-                        const totalAmt = qty * price + gstAmt;
+                        const isActionDisabled = !isApproved || remQty === 0 || ['Received', 'Fulfilled', 'Cannot Fulfill', 'Rejected'].includes(selectedIndent.status);
 
                         return (
-                          <tr key={`grn-detail-${idx}`} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <td style={{ padding: '8px 12px', fontWeight: 700 }}>{item.name}</td>
-                            <td style={{ padding: '8px 12px', textAlign: 'right' }}>{qty}</td>
-                            <td style={{ padding: '8px 12px', textAlign: 'right' }}>₹{price.toFixed(2)}</td>
-                            <td style={{ padding: '8px 12px', textAlign: 'right' }}>{gstRate}%</td>
-                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>₹{gstAmt.toFixed(2)}</td>
-                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>₹{totalAmt.toFixed(2)}</td>
+                          <tr key={idx} style={{ borderBottom: idx === (selectedIndent.items || []).length - 1 ? 'none' : '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0F172A' }}>
+                              <div>{item.name}</div>
+                              <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>{item.category || item.unit || 'Strip'}</div>
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#475569' }}>
+                              {reqQty}
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: '#2563EB' }}>
+                              {isApproved ? appQty : <span style={{ color: '#94A3B8', fontSize: '11px' }}>Pending</span>}
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#16A34A' }}>
+                              {supQty}
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: curStock === 0 ? '#DC2626' : curStock <= 20 ? '#D97706' : '#1E293B' }}>
+                              {curStock}
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                              {isActionDisabled ? (
+                                <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 700 }}>
+                                  {remQty === 0 ? '✓ Complete' : !isApproved ? 'Unapproved' : 'Closed'}
+                                </span>
+                              ) : (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={maxAllowed}
+                                  value={currentInput}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSupplyInputMap(prev => ({ ...prev, [itemKey]: val }));
+                                  }}
+                                  style={{
+                                    width: '75px',
+                                    padding: '6px 8px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #CBD5E1',
+                                    fontWeight: 800,
+                                    fontSize: '13px',
+                                    textAlign: 'center',
+                                    background: maxAllowed === 0 ? '#F8FAFC' : '#FFFFFF',
+                                    color: '#0F172A'
+                                  }}
+                                />
+                              )}
+                            </td>
                           </tr>
                         );
                       })}
@@ -7641,54 +10494,390 @@ const PharmacyDashboard = () => {
                 </div>
               </div>
 
-              {(() => {
-                const totals = (selectedGrnDetails.items || []).reduce((acc, item) => {
-                  const qty = Number(item.qtyReceived) || 0;
-                  const price = Number(item.price) || 0;
-                  const gst = item.gst !== undefined ? item.gst : 12;
-                  const sub = qty * price;
-                  const gstAmt = sub * (gst / 100);
-                  return {
-                    subtotal: acc.subtotal + sub,
-                    gstTotal: acc.gstTotal + gstAmt,
-                    grandTotal: acc.grandTotal + sub + gstAmt
-                  };
-                }, { subtotal: 0, gstTotal: 0, grandTotal: 0 });
-
-                return (
-                  <div style={{ padding: '12px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', marginTop: '4px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: '#475569' }}>
-                      <span>Subtotal (Excl. GST)</span>
-                      <span>₹{totals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px', fontWeight: 700, color: '#EA580C' }}>
-                      <span>Total GST Burden</span>
-                      <span>₹{totals.gstTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #E2E8F0', paddingTop: '6px', fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>
-                      <span>Total Amount (Incl. GST)</span>
-                      <span>₹{totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-                );
-              })()}
+              {selectedIndent.purpose && (
+                <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '14px' }}>
+                  <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Remarks/Purpose:</span>
+                  <div style={{ fontSize: '13px', color: '#475569', marginTop: '3px', fontStyle: 'italic' }}>{selectedIndent.purpose}</div>
+                </div>
+              )}
             </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
-              <button 
-                type="button" 
-                style={{ padding: '8px 20px', borderRadius: '8px', background: '#10B981', color: 'white', fontWeight: 800, cursor: 'pointer', border: 'none' }} 
-                onClick={() => printGRN(selectedGrnDetails, currentUser?.tenantName || 'CUROXA HEALTHCARE')}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 0 0 0', borderTop: '1px solid #F1F5F9', flexShrink: 0, marginTop: '20px', flexWrap: 'wrap', gap: '10px' }}>
+              <button
+                onClick={() => { setShowIndentModal(false); setSelectedIndent(null); setSupplyInputMap({}); }}
+                style={{ height: '40px', padding: '0 16px', borderRadius: '8px', border: '1px solid #E2E8F0', background: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '13px', color: '#64748B' }}
               >
-                Download PDF
-              </button>
-              <button type="button" className="btn btn-secondary" style={{ padding: '8px 20px', borderRadius: '8px', background: '#334155', color: 'white', fontWeight: 800, cursor: 'pointer', border: 'none' }} onClick={() => setSelectedGrnDetails(null)}>
                 Close
               </button>
+
+              {!['Received', 'Fulfilled', 'Cannot Fulfill', 'Rejected'].includes(selectedIndent.status) && (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {/* Cannot Fulfill Button */}
+                  <button
+                    disabled={loading}
+                    onClick={async () => {
+                      try {
+                        setLoading(true);
+                        const response = await api.put(`/indents/${selectedIndent._id}`, { status: 'Cannot Fulfill' });
+                        const updated = response.data || { ...selectedIndent, status: 'Cannot Fulfill' };
+                        setIndents(prev => prev.map(ind => ind._id === selectedIndent._id ? updated : ind));
+                        setSelectedIndent(null);
+                        setShowIndentModal(false);
+                        setSupplyInputMap({});
+                        showToast('Indent marked as Cannot Fulfill');
+                      } catch (err) {
+                        console.error(err);
+                        showToast(err.response?.data?.error || 'Failed to update indent status', 'error');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    style={{ height: '40px', padding: '0 14px', borderRadius: '8px', border: 'none', background: '#EF4444', color: 'white', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    Cannot Fulfill
+                  </button>
+
+                  {/* Awaiting Stock Button */}
+                  <button
+                    disabled={loading}
+                    onClick={async () => {
+                      try {
+                        setLoading(true);
+                        const response = await api.put(`/indents/${selectedIndent._id}`, { status: 'Awaiting Stock', suppliedItems: [] });
+                        const updated = response.data || { ...selectedIndent, status: 'Awaiting Stock' };
+                        setIndents(prev => prev.map(ind => ind._id === selectedIndent._id ? updated : ind));
+                        setSelectedIndent(null);
+                        setShowIndentModal(false);
+                        setSupplyInputMap({});
+                        showToast('Indent marked as Awaiting Stock');
+                      } catch (err) {
+                        console.error(err);
+                        showToast(err.response?.data?.error || 'Failed to update indent status', 'error');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    style={{ height: '40px', padding: '0 14px', borderRadius: '8px', border: 'none', background: '#64748B', color: 'white', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    Awaiting Stock
+                  </button>
+
+                  {/* Supply & Fulfill Action Button */}
+                  <button
+                    disabled={loading}
+                    onClick={async () => {
+                      try {
+                        setLoading(true);
+                        const suppliedItems = (selectedIndent.items || []).map(it => {
+                          const itemKey = it._id || it.name;
+                          const isApproved = it.approvedQty !== null && it.approvedQty !== undefined;
+                          const appQty = isApproved ? Number(it.approvedQty) : 0;
+                          const supQty = Number(it.suppliedQty || 0);
+                          const remQty = isApproved ? Math.max(0, appQty - supQty) : 0;
+                          const matchedMed = (inventory || []).find(m => m.name && m.name.trim().toLowerCase() === it.name.trim().toLowerCase());
+                          const curStock = matchedMed ? Number(matchedMed.stock || 0) : 0;
+                          const maxAllowed = Math.min(remQty, curStock);
+
+                          const rawVal = supplyInputMap[itemKey] !== undefined ? supplyInputMap[itemKey] : (remQty > 0 && curStock > 0 ? String(maxAllowed) : '0');
+                          const numVal = Number(rawVal) || 0;
+                          return { itemId: it._id, name: it.name, supplyQty: numVal };
+                        });
+
+                        // Local validation check
+                        for (const s of suppliedItems) {
+                          if (s.supplyQty < 0) {
+                            showToast(`Supply quantity cannot be negative for ${s.name}`, 'error');
+                            setLoading(false);
+                            return;
+                          }
+                          const it = (selectedIndent.items || []).find(i => i.name === s.name);
+                          const isApproved = it && it.approvedQty !== null && it.approvedQty !== undefined;
+                          if (!isApproved) {
+                            showToast(`Item ${s.name} is not approved for fulfillment`, 'error');
+                            setLoading(false);
+                            return;
+                          }
+                          const rem = Math.max(0, Number(it.approvedQty) - (Number(it.suppliedQty) || 0));
+                          if (s.supplyQty > rem) {
+                            showToast(`Supply quantity (${s.supplyQty}) exceeds remaining approved quantity (${rem}) for ${s.name}`, 'error');
+                            setLoading(false);
+                            return;
+                          }
+                          const matchedMed = (inventory || []).find(m => m.name && m.name.trim().toLowerCase() === s.name.trim().toLowerCase());
+                          const curStock = matchedMed ? Number(matchedMed.stock || 0) : 0;
+                          if (s.supplyQty > curStock) {
+                            showToast(`Supply quantity (${s.supplyQty}) exceeds available stock (${curStock}) for ${s.name}`, 'error');
+                            setLoading(false);
+                            return;
+                          }
+                        }
+
+                        const response = await api.put(`/indents/${selectedIndent._id}`, { suppliedItems });
+                        const updated = response.data;
+                        setIndents(prev => prev.map(ind => ind._id === selectedIndent._id ? updated : ind));
+                        setSelectedIndent(null);
+                        setShowIndentModal(false);
+                        setSupplyInputMap({});
+                        showToast('Requisition fulfilled successfully!');
+                        if (typeof fetchInventory === 'function') fetchInventory();
+                      } catch (err) {
+                        console.error(err);
+                        showToast(err.response?.data?.error || 'Failed to fulfill requisition', 'error');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    style={{ height: '40px', padding: '0 18px', borderRadius: '8px', border: 'none', background: '#10B981', color: 'white', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    Supply & Fulfill
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {/* MODAL 6: STRUCTURED GRN DETAILS & INSPECTION VIEW */}
+      {selectedGrnDetails && (() => {
+        const detailTotals = (selectedGrnDetails.items || []).reduce((acc, item) => {
+          const qty = Number(item.qtyReceived) || 0;
+          const rate = Number(item.price || item.purchaseRate) || 0;
+          const discPct = Number(item.discountPercent) || 0;
+          const gstRate = item.gst !== undefined ? Number(item.gst) : 12;
+
+          const gross = qty * rate;
+          const discAmt = item.discountAmount !== undefined ? Number(item.discountAmount) : Math.round((gross * (discPct / 100)) * 100) / 100;
+          const taxable = Math.max(0, gross - discAmt);
+          const gstAmt = item.gstAmount !== undefined ? Number(item.gstAmount) : Math.round((taxable * (gstRate / 100)) * 100) / 100;
+          const net = item.netAmount !== undefined ? Number(item.netAmount) : taxable + gstAmt;
+
+          return {
+            subtotal: acc.subtotal + gross,
+            totalDiscount: acc.totalDiscount + discAmt,
+            totalGst: acc.totalGst + gstAmt,
+            grandTotal: acc.grandTotal + net
+          };
+        }, {
+          subtotal: 0,
+          totalDiscount: selectedGrnDetails.totalDiscount || 0,
+          totalGst: selectedGrnDetails.totalGst || 0,
+          grandTotal: selectedGrnDetails.grandTotal || 0
+        });
+
+        const invoiceAmt = Number(selectedGrnDetails.invoiceAmount) || 0;
+        const varianceVal = invoiceAmt > 0 ? Math.round(((selectedGrnDetails.grandTotal || detailTotals.grandTotal) - invoiceAmt) * 100) / 100 : 0;
+
+        return (
+          <div className="modal-overlay" data-lenis-prevent style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }} onClick={() => setSelectedGrnDetails(null)}>
+            <div className="modal-box glass-card" style={{ width: '95%', maxWidth: '980px', maxHeight: '90vh', background: 'white', padding: '24px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', position: 'relative', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+                <div>
+                  <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Goods Receipt Note (GRN) Inspection</h2>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>Verified inspection breakdown and inventory intake record</div>
+                </div>
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }} onClick={() => setSelectedGrnDetails(null)}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                
+                {/* Header Information Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>GRN Identifier</span>
+                    <div style={{ fontSize: '16px', fontWeight: 900, color: '#059669', fontFamily: 'monospace', marginTop: '2px' }}>{selectedGrnDetails.grnId}</div>
+                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Location: {selectedGrnDetails.grnLocation || 'Main Pharmacy Store'}</div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Reference Order</span>
+                    <div style={{ fontSize: '15px', fontWeight: 900, color: '#2563EB', fontFamily: 'monospace', marginTop: '2px' }}>
+                      {selectedGrnDetails.poNumber || 'Direct Purchase'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                      Date: {new Date(selectedGrnDetails.receivedDate || selectedGrnDetails.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Supplier / Vendor</span>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>{selectedGrnDetails.vendorName}</div>
+                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Received By: {selectedGrnDetails.receivedBy || 'Staff'}</div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Supplier Invoice</span>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
+                      {selectedGrnDetails.invoiceNumber ? `No. ${selectedGrnDetails.invoiceNumber}` : (selectedGrnDetails.invoiceUrl ? 'Doc Attached' : '—')}
+                    </div>
+                    {invoiceAmt > 0 && (
+                      <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                        Billed: ₹{invoiceAmt.toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Items Breakdown Table */}
+                <div>
+                  <span style={{ fontSize: '12px', color: '#475569', fontWeight: 800, textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>
+                    Received Items &amp; Quality Specifications
+                  </span>
+                  <div style={{ overflowX: 'auto', border: '1.5px solid #E2E8F0', borderRadius: '10px', background: '#FFFFFF' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left', minWidth: '850px' }}>
+                      <thead>
+                        <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
+                          <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800 }}>Medicine / Item</th>
+                          <th style={{ padding: '8px 8px', color: '#475569', fontWeight: 800 }}>Batch / Expiry</th>
+                          <th style={{ padding: '8px 8px', color: '#475569', fontWeight: 800, textAlign: 'center' }}>Ord. Qty</th>
+                          <th style={{ padding: '8px 8px', color: '#475569', fontWeight: 800, textAlign: 'center' }}>Recv Qty</th>
+                          <th style={{ padding: '8px 8px', color: '#475569', fontWeight: 800, textAlign: 'center' }}>Rej. Qty</th>
+                          <th style={{ padding: '8px 8px', color: '#475569', fontWeight: 800, textAlign: 'right' }}>Rate (₹)</th>
+                          <th style={{ padding: '8px 8px', color: '#475569', fontWeight: 800, textAlign: 'center' }}>Disc %</th>
+                          <th style={{ padding: '8px 8px', color: '#475569', fontWeight: 800, textAlign: 'center' }}>GST</th>
+                          <th style={{ padding: '8px 8px', color: '#475569', fontWeight: 800, textAlign: 'right' }}>Buy Price</th>
+                          <th style={{ padding: '8px 12px', color: '#475569', fontWeight: 800, textAlign: 'right' }}>Net Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(selectedGrnDetails.items || []).map((item, idx) => {
+                          const qty = item.qtyReceived || 0;
+                          const price = Number(item.price || item.purchaseRate) || 0;
+                          const discPct = item.discountPercent || 0;
+                          const gstRate = item.gst !== undefined ? item.gst : 12;
+                          const gross = qty * price;
+                          const discAmt = item.discountAmount !== undefined ? item.discountAmount : (gross * (discPct / 100));
+                          const taxable = Math.max(0, gross - discAmt);
+                          const gstAmt = item.gstAmount !== undefined ? item.gstAmount : (taxable * (gstRate / 100));
+                          const totalAmt = item.netAmount !== undefined ? item.netAmount : (taxable + gstAmt);
+                          const buyRate = item.buyPrice !== undefined ? item.buyPrice : (qty > 0 ? totalAmt / qty : 0);
+
+                          return (
+                            <tr key={`grn-detail-${idx}`} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                              <td style={{ padding: '10px 12px', fontWeight: 700 }}>
+                                <div style={{ color: '#0F172A' }}>{item.name}</div>
+                                <div style={{ fontSize: '11px', color: '#64748B', fontFamily: 'monospace', marginTop: '2px' }}>{item.sku || '—'}</div>
+                              </td>
+                              <td style={{ padding: '10px 8px', fontSize: '11.5px' }}>
+                                <div style={{ fontWeight: 800, color: '#334155' }}>Batch: {item.batchNumber || '—'}</div>
+                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                                  Exp: {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : '—'}
+                                </div>
+                              </td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', color: '#64748B' }}>
+                                {item.qtyOrdered !== undefined ? item.qtyOrdered : '—'}
+                              </td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 800, color: '#059669' }}>
+                                {qty}
+                              </td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: item.rejectedQty > 0 ? '#DC2626' : '#94A3B8' }}>
+                                {item.rejectedQty || 0}
+                              </td>
+                              <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 600 }}>
+                                ₹{price.toFixed(2)}
+                              </td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', color: '#64748B' }}>
+                                {discPct}%
+                              </td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', color: '#64748B' }}>
+                                {gstRate}%
+                              </td>
+                              <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700, color: '#2563EB' }}>
+                                ₹{Number(buyRate).toFixed(2)}
+                              </td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: '#0F172A' }}>
+                                ₹{Number(totalAmt).toFixed(2)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Summary & Inspection Remarks */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                  {selectedGrnDetails.notes && (
+                    <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '14px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Inspection Remarks</span>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#334155', fontStyle: 'italic' }}>"{selectedGrnDetails.notes}"</p>
+                    </div>
+                  )}
+
+                  <div style={{ background: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '14px', marginLeft: 'auto', width: '100%', maxWidth: '360px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>
+                      <span>Subtotal (Gross):</span>
+                      <span>₹{(selectedGrnDetails.grandTotal ? (selectedGrnDetails.grandTotal + (selectedGrnDetails.totalDiscount || 0) - (selectedGrnDetails.totalGst || 0)) : detailTotals.subtotal).toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '12.5px', color: '#16A34A', fontWeight: 700 }}>
+                      <span>Total Discount:</span>
+                      <span>−₹{(selectedGrnDetails.totalDiscount || detailTotals.totalDiscount).toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '12.5px', color: '#EA580C', fontWeight: 700 }}>
+                      <span>Total GST Burden:</span>
+                      <span>+₹{(selectedGrnDetails.totalGst || detailTotals.totalGst).toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1.5px solid #CBD5E1', paddingTop: '6px', marginTop: '4px', fontSize: '15px', fontWeight: 900, color: '#0F172A' }}>
+                      <span>GRN Total:</span>
+                      <span style={{ color: '#2563EB' }}>₹{(selectedGrnDetails.grandTotal || detailTotals.grandTotal).toFixed(2)}</span>
+                    </div>
+                    {invoiceAmt > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '12px', fontWeight: 700, color: varianceVal === 0 ? '#16A34A' : '#D97706' }}>
+                        <span>Billed Invoice:</span>
+                        <span>₹{invoiceAmt.toFixed(2)} {varianceVal !== 0 ? `(Diff: ₹${varianceVal.toFixed(2)})` : '✓'}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
+                {(() => {
+                  const ageMs = Date.now() - new Date(selectedGrnDetails.createdAt || selectedGrnDetails.receivedDate || Date.now()).getTime();
+                  const isEditable = ageMs <= 24 * 60 * 60 * 1000;
+                  return isEditable ? (
+                    <button 
+                      type="button" 
+                      style={{ padding: '8px 20px', borderRadius: '8px', background: '#0EA5E9', color: 'white', fontWeight: 800, cursor: 'pointer', border: 'none' }} 
+                      onClick={() => {
+                        const toEdit = selectedGrnDetails;
+                        setSelectedGrnDetails(null);
+                        handleOpenEditGrn(toEdit);
+                      }}
+                    >
+                      Edit GRN
+                    </button>
+                  ) : (
+                    <button 
+                      type="button" 
+                      style={{ padding: '8px 20px', borderRadius: '8px', background: '#F1F5F9', color: '#94A3B8', fontWeight: 700, cursor: 'not-allowed', border: '1px solid #CBD5E1' }} 
+                      disabled
+                      title="Editing period expired (24 hours from creation)"
+                    >
+                      Editing Period Expired
+                    </button>
+                  );
+                })()}
+                <button 
+                  type="button" 
+                  style={{ padding: '8px 20px', borderRadius: '8px', background: '#10B981', color: 'white', fontWeight: 800, cursor: 'pointer', border: 'none' }} 
+                  onClick={() => printGRN(selectedGrnDetails, currentUser?.tenantName || 'CUROXA HEALTHCARE')}
+                >
+                  Download PDF
+                </button>
+                <button type="button" className="btn btn-secondary" style={{ padding: '8px 20px', borderRadius: '8px', background: '#334155', color: 'white', fontWeight: 800, cursor: 'pointer', border: 'none' }} onClick={() => setSelectedGrnDetails(null)}>
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 };

@@ -160,6 +160,18 @@ const SearchableDropdown = ({
               value={search}
               onChange={e => setSearch(e.target.value)}
               onClick={e => e.stopPropagation()}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (filteredOptions.length > 0) {
+                    onChange(filteredOptions[0].value);
+                    setIsOpen(false);
+                    setSearch('');
+                  }
+                } else if (e.key === 'Escape') {
+                  setIsOpen(false);
+                }
+              }}
               style={{
                 width: '100%',
                 height: '34px',

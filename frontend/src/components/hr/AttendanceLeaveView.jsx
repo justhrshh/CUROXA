@@ -303,27 +303,241 @@ export default function AttendanceLeaveView({
       {activeSubTab === 'Attendance' && (
         <div className="space-y-6">
           
-          {/* Quick numbers row */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-xs">
-              <span className="text-[10px] text-slate-400 block font-bold">TOTAL STAFF ROSTERED</span>
-              <span className="text-xl font-display font-bold text-slate-800 mt-1 block">{employees.length}</span>
+          {/* 5 KPI CARDS ROW MATCHING DASHBOARD VISUAL LANGUAGE */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full mb-6">
+            {/* Card 1: Total Staff Rostered (Electric Blue Gradient with Bottom-Right Radial Glow) */}
+            <div
+              className="p-4 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+              style={{
+                background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)'
+              }}
+              title="Total staff rostered for today"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+                <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">Total Rostered</span>
+              </div>
+
+              <div className="mt-3 flex items-end justify-between">
+                <div>
+                  <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{employees.length}</div>
+                  <div className="text-xs text-blue-700 font-bold mt-1.5 truncate">
+                    Active workforce
+                  </div>
+                </div>
+
+                {/* Blue Mini Sparkline */}
+                <div className="w-16 h-8 shrink-0 relative">
+                  <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                    <defs>
+                      <linearGradient id="attBlueGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
+                        <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
+                      </linearGradient>
+                    </defs>
+                    <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#attBlueGrad)" />
+                    <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Half Gradient Accent Line Beneath Card */}
+              <div 
+                className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                style={{
+                  background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)'
+                }}
+              />
             </div>
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-xs">
-              <span className="text-[10px] text-slate-400 block font-bold">PRESENT TODAY</span>
-              <span className="text-xl font-display font-bold text-emerald-600 mt-1 block">{presentCount}</span>
+
+            {/* Card 2: Present Today (Emerald Gradient with Top-Right Radial Glow) */}
+            <div
+              className="p-4 rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+              style={{
+                background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)'
+              }}
+              title="Verified staff present today"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                </div>
+                <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider">Present Today</span>
+              </div>
+
+              <div className="mt-3 flex items-end justify-between">
+                <div>
+                  <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{presentCount}</div>
+                  <div className="text-xs text-emerald-700 font-bold mt-1.5 truncate">
+                    On duty & verified
+                  </div>
+                </div>
+
+                {/* Emerald Mini Sparkline */}
+                <div className="w-16 h-8 shrink-0 relative">
+                  <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                    <defs>
+                      <linearGradient id="attGreenGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#059669" stopOpacity="0.45"/>
+                        <stop offset="100%" stopColor="#059669" stopOpacity="0.05"/>
+                      </linearGradient>
+                    </defs>
+                    <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#attGreenGrad)" />
+                    <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#059669" strokeWidth="2.4" strokeLinecap="round" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Half Gradient Accent Line Beneath Card */}
+              <div 
+                className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                style={{
+                  background: 'linear-gradient(90deg, transparent 0%, #059669 100%)'
+                }}
+              />
             </div>
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-xs">
-              <span className="text-[10px] text-slate-400 block font-bold">LATE ARRIVALS</span>
-              <span className="text-xl font-display font-bold text-orange-500 mt-1 block">{lateCount}</span>
+
+            {/* Card 3: Late Arrivals (Amber Gradient with Top-Left Radial Glow) */}
+            <div
+              className="p-4 rounded-2xl border border-amber-200/90 shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+              style={{
+                background: 'radial-gradient(circle at 0% 0%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)'
+              }}
+              title="Staff who clocked in after grace period"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/25">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+                </div>
+                <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">Late Arrivals</span>
+              </div>
+
+              <div className="mt-3 flex items-end justify-between">
+                <div>
+                  <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{lateCount}</div>
+                  <div className="text-xs text-amber-700 font-bold mt-1.5 truncate">
+                    Shift grace exceeded
+                  </div>
+                </div>
+
+                {/* Amber Mini Sparkline */}
+                <div className="w-16 h-8 shrink-0 relative">
+                  <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                    <defs>
+                      <linearGradient id="attAmberGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#D97706" stopOpacity="0.45"/>
+                        <stop offset="100%" stopColor="#D97706" stopOpacity="0.05"/>
+                      </linearGradient>
+                    </defs>
+                    <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22 L 64 32 L 0 32 Z" fill="url(#attAmberGrad)" />
+                    <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22" fill="none" stroke="#D97706" strokeWidth="2.4" strokeLinecap="round" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Half Gradient Accent Line Beneath Card */}
+              <div 
+                className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                style={{
+                  background: 'linear-gradient(90deg, transparent 0%, #D97706 100%)'
+                }}
+              />
             </div>
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-xs">
-              <span className="text-[10px] text-slate-400 block font-bold">HALF DAYS ACTIVE</span>
-              <span className="text-xl font-display font-bold text-amber-500 mt-1 block">{halfDayCount}</span>
+
+            {/* Card 4: Half Days Active (Purple Gradient with Bottom-Left Radial Glow) */}
+            <div
+              className="p-4 rounded-2xl border border-purple-200/90 shadow-[0_12px_28px_rgba(139,92,246,0.08)] hover:shadow-[0_16px_36px_rgba(139,92,246,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+              style={{
+                background: 'radial-gradient(circle at 0% 100%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)'
+              }}
+              title="Staff active on half day shift"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/25">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20z"/></svg>
+                </div>
+                <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider">Half Days Active</span>
+              </div>
+
+              <div className="mt-3 flex items-end justify-between">
+                <div>
+                  <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{halfDayCount}</div>
+                  <div className="text-xs text-purple-700 font-bold mt-1.5 truncate">
+                    Partial shift logged
+                  </div>
+                </div>
+
+                {/* Purple Mini Sparkline */}
+                <div className="w-16 h-8 shrink-0 relative">
+                  <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                    <defs>
+                      <linearGradient id="attPurpleGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.45"/>
+                        <stop offset="100%" stopColor="#7C3AED" stopOpacity="0.05"/>
+                      </linearGradient>
+                    </defs>
+                    <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#attPurpleGrad)" />
+                    <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#7C3AED" strokeWidth="2.4" strokeLinecap="round" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Half Gradient Accent Line Beneath Card */}
+              <div 
+                className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                style={{
+                  background: 'linear-gradient(90deg, transparent 0%, #7C3AED 100%)'
+                }}
+              />
             </div>
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-xs col-span-2 md:col-span-1">
-              <span className="text-[10px] text-slate-400 block font-bold">UNEXCUSED ABSENCES</span>
-              <span className="text-xl font-display font-bold text-red-500 mt-1 block">{absentCount > 0 ? absentCount : 0}</span>
+
+            {/* Card 5: Unexcused Absences (Crimson Gradient with Bottom-Right Radial Glow) */}
+            <div
+              className="p-4 rounded-2xl border border-red-200/90 shadow-[0_12px_28px_rgba(239,68,68,0.08)] hover:shadow-[0_16px_36px_rgba(239,68,68,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+              style={{
+                background: 'radial-gradient(circle at 100% 100%, rgba(239, 68, 68, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FEF2F2 50%, #FEE2E2 100%)'
+              }}
+              title="Staff absent without leave approval"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-red-600 to-rose-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-red-500/25">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                </div>
+                <span className="text-[10px] font-extrabold text-red-900 uppercase tracking-wider">Unexcused Absences</span>
+              </div>
+
+              <div className="mt-3 flex items-end justify-between">
+                <div>
+                  <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{absentCount > 0 ? absentCount : 0}</div>
+                  <div className="text-xs text-red-700 font-bold mt-1.5 truncate">
+                    No punch / unapproved
+                  </div>
+                </div>
+
+                {/* Red Mini Sparkline */}
+                <div className="w-16 h-8 shrink-0 relative">
+                  <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                    <defs>
+                      <linearGradient id="attRedGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#EF4444" stopOpacity="0.45"/>
+                        <stop offset="100%" stopColor="#EF4444" stopOpacity="0.05"/>
+                      </linearGradient>
+                    </defs>
+                    <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#attRedGrad)" />
+                    <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#EF4444" strokeWidth="2.4" strokeLinecap="round" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Half Gradient Accent Line Beneath Card */}
+              <div 
+                className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                style={{
+                  background: 'linear-gradient(90deg, transparent 0%, #EF4444 100%)'
+                }}
+              />
             </div>
           </div>
 

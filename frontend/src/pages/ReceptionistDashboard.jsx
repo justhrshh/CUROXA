@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useRealTimeSync } from '../hooks/useRealTimeSync';
 import HRPayroll from './HRPayroll';
+import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
 
 const permissionNames = {
   'dr-consult': 'Patient consultation notes',
@@ -135,10 +136,20 @@ const ReceptionistDashboard = () => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        const userName = JSON.parse(localStorage.getItem('user') || '{}').name || '';
-        if (parsed[userName]) return parsed[userName];
-        const matchKey = Object.keys(parsed).find(k => k.toLowerCase().trim() === userName.toLowerCase().trim());
-        return matchKey ? parsed[matchKey] : {};
+        const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+        const possibleKeys = [
+          userObj.name,
+          userObj.username,
+          userObj.staff_id,
+          userObj.email,
+          userObj.id,
+          userObj._id
+        ].filter(Boolean).map(k => String(k).toLowerCase().trim());
+        for (const [key, val] of Object.entries(parsed)) {
+          if (possibleKeys.includes(key.toLowerCase().trim())) {
+            return val || {};
+          }
+        }
       } catch (e) {}
     }
     return {};
@@ -238,36 +249,42 @@ const ReceptionistDashboard = () => {
   // Restrict activeTab for cover users based on active coverage permissions
   useEffect(() => {
     const isCoverUser = currentUser?.role !== 'receptionist';
-    if (!isCoverUser) return;
-    if (!coverageState || Object.keys(coverageState).length === 0) return;
+    if (isCoverUser) {
+      if (!coverageState || Object.keys(coverageState).length === 0) return;
 
-    let isPermitted = false;
-    if (activeTab === 'dash') {
-      isPermitted = true;
-    } else if (['patients', 'patient-details'].includes(activeTab)) {
-      isPermitted = !!(coverageState['rc-register']?.on || coverageState['rc-upload']?.on || coverageState['rc-queue']?.on);
-    } else if (activeTab === 'appointments') {
-      isPermitted = !!coverageState['rc-appt']?.on;
-    } else if (activeTab === 'staff') {
-      isPermitted = false;
-    } else if (activeTab === 'billing') {
-      isPermitted = !!coverageState['rc-billing']?.on;
-    } else if (activeTab === 'indent') {
-      isPermitted = !!coverageState['rc-reorder']?.on;
-    } else {
-      isPermitted = true;
-    }
-
-    if (!isPermitted) {
-      if (coverageState['rc-register']?.on || coverageState['rc-upload']?.on || coverageState['rc-queue']?.on) {
-        setActiveTab('patients');
-      } else if (coverageState['rc-appt']?.on) {
-        setActiveTab('appointments');
-      } else if (coverageState['rc-billing']?.on) {
-        setActiveTab('billing');
-      } else if (coverageState['rc-reorder']?.on) {
-        setActiveTab('indent');
+      let isPermitted = false;
+      if (activeTab === 'dash') {
+        isPermitted = true;
+      } else if (['patients', 'patient-details'].includes(activeTab)) {
+        isPermitted = !!(coverageState['rc-register']?.on || coverageState['rc-upload']?.on || coverageState['rc-queue']?.on);
+      } else if (activeTab === 'appointments') {
+        isPermitted = !!coverageState['rc-appt']?.on;
+      } else if (activeTab === 'staff') {
+        isPermitted = false;
+      } else if (activeTab === 'billing') {
+        isPermitted = !!coverageState['rc-billing']?.on;
+      } else if (activeTab === 'indent' || activeTab === 'new-indent') {
+        isPermitted = !!coverageState['rc-reorder']?.on;
       } else {
+        isPermitted = true;
+      }
+
+      if (!isPermitted) {
+        if (coverageState['rc-register']?.on || coverageState['rc-upload']?.on || coverageState['rc-queue']?.on) {
+          setActiveTab('patients');
+        } else if (coverageState['rc-appt']?.on) {
+          setActiveTab('appointments');
+        } else if (coverageState['rc-billing']?.on) {
+          setActiveTab('billing');
+        } else if (coverageState['rc-reorder']?.on) {
+          setActiveTab('indent');
+        } else {
+          setActiveTab('dash');
+        }
+      }
+    } else {
+      // For receptionist, utility request tabs are strictly gated by rc-reorder permission
+      if (['indent', 'new-indent'].includes(activeTab) && !coverageState?.['rc-reorder']?.on) {
         setActiveTab('dash');
       }
     }
@@ -312,13 +329,24 @@ const ReceptionistDashboard = () => {
   }, [activeTab, coverageState]);
 
   useEffect(() => {
-    const userName = user.name || '';
+    const userObj = currentUser || JSON.parse(localStorage.getItem('user') || '{}');
+    const possibleKeys = [
+      userObj.name,
+      userObj.username,
+      userObj.staff_id,
+      userObj.email,
+      userObj.id,
+      userObj._id
+    ].filter(Boolean).map(k => String(k).toLowerCase().trim());
 
     const findUserCoverage = (allState) => {
-      if (!allState || !userName) return {};
-      if (allState[userName]) return allState[userName];
-      const matchKey = Object.keys(allState).find(k => k.toLowerCase().trim() === userName.toLowerCase().trim());
-      return matchKey ? allState[matchKey] : {};
+      if (!allState || typeof allState !== 'object') return {};
+      for (const [key, val] of Object.entries(allState)) {
+        if (possibleKeys.includes(key.toLowerCase().trim())) {
+          return val || {};
+        }
+      }
+      return {};
     };
 
     const syncFromLocalStorage = () => {
@@ -334,6 +362,7 @@ const ReceptionistDashboard = () => {
     };
 
     window.addEventListener('storage', syncFromLocalStorage);
+    window.addEventListener('curoxa_pmState_changed', syncFromLocalStorage);
 
     const fetchBackendCoverage = async () => {
       try {
@@ -349,13 +378,11 @@ const ReceptionistDashboard = () => {
     };
     fetchBackendCoverage();
 
-    const pollInterval = setInterval(fetchBackendCoverage, 5000);
-
     return () => {
       window.removeEventListener('storage', syncFromLocalStorage);
-      clearInterval(pollInterval);
+      window.removeEventListener('curoxa_pmState_changed', syncFromLocalStorage);
     };
-  }, [user.name]);
+  }, [currentUser]);
 
   // Notifications states
   const [notifications, setNotifications] = useState([]);
@@ -364,6 +391,8 @@ const ReceptionistDashboard = () => {
   const prevCoverageKeysRef = useRef(null);
   const notificationRef = useRef(null);
   const globalSearchContainerRef = useRef(null);
+  const sidebarRef = useRef(null);
+  const sidebarNavRef = useRef(null);
   const medicineSearchContainerRef = useRef(null);
   const symptomDropdownRef = useRef(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -1867,14 +1896,18 @@ const ReceptionistDashboard = () => {
     });
   };
 
+  const fetchIndents = async () => {
+    try {
+      const res = await api.get('/indents');
+      const sortedIndents = (res.data || []).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      setIndents(sortedIndents);
+    } catch (err) {
+      console.error("Failed to fetch indents:", err);
+    }
+  };
+
   useEffect(() => {
     fetchData();
-    // Poll data and coverage data every 5 seconds for real-time updates
-    const pollInterval = setInterval(() => {
-      fetchData();
-      fetchCoverageData();
-    }, 5000);
-    return () => clearInterval(pollInterval);
   }, []);
 
   useEffect(() => {
@@ -1883,12 +1916,24 @@ const ReceptionistDashboard = () => {
       console.log('[SOCKET] ReceptionistDashboard received sync event for:', type);
       if (type === 'coverage') {
         fetchCoverageData();
-      } else {
+      } else if (type === 'indents' || type === 'indent') {
+        fetchIndents();
+      } else if (type === 'all' || !type) {
         fetchData();
       }
     };
     window.addEventListener('curoxa_sync', handleSync);
     return () => window.removeEventListener('curoxa_sync', handleSync);
+  }, []);
+
+  // Fallback polling: refresh indent data every 8s so the Utility Requests
+  // table stays current even if the socket event is dropped or the connection
+  // was temporarily lost. Lightweight — only fetches /api/indents.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchIndents();
+    }, 8000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -2958,116 +3003,499 @@ const ReceptionistDashboard = () => {
           padding: 0 !important;
         }
 
-        /* SIDEBAR MODERN DESIGN */
-        .sidebar {
-          width: 256px !important;
-          background: #FFFFFF !important;
-          border-right: 1px solid #E2E8F0 !important;
-          box-shadow: none !important;
-          padding: 24px 0 16px 0 !important;
-          height: calc(100vh / 0.9) !important;
-          position: fixed !important;
-          top: 0 !important;
-          left: 0 !important;
-          display: flex !important;
-          flex-direction: column !important;
-          z-index: 100 !important;
+        /* ADMIN SIDEBAR LIGHT THEME PIXEL-PERFECT STYLES */
+        .admin-sidebar {
+          width: 260px;
+          background: rgba(255, 255, 255, 0.94);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          color: #0F172A;
+          display: flex;
+          flex-direction: column;
+          position: fixed;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          z-index: 1000;
+          border-right: 1px solid rgba(226, 232, 240, 0.85);
+          border-top-right-radius: 28px;
+          border-bottom-right-radius: 28px;
+          box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.04);
+          overscroll-behavior: contain;
+          transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .sidebar-logo {
-          padding: 0 24px 28px !important;
+
+        .admin-sidebar.collapsed {
+          width: 76px;
+        }
+        .admin-sidebar.collapsed .sidebar-brand-text,
+        .admin-sidebar.collapsed .sidebar-brand-subtitle,
+        .admin-sidebar.collapsed .sidebar-group-title,
+        .admin-sidebar.collapsed .sidebar-link-text,
+        .admin-sidebar.collapsed .sidebar-link span,
+        .admin-sidebar.collapsed .profile-info,
+        .admin-sidebar.collapsed .profile-chevron {
+          display: none !important;
+        }
+        .admin-sidebar.collapsed .sidebar-brand {
+          justify-content: center !important;
+          padding: 16px 8px 14px !important;
+        }
+        .admin-sidebar.collapsed .sidebar-nav-container {
+          padding: 10px 6px !important;
+        }
+        .admin-sidebar.collapsed .sidebar-link {
+          justify-content: center !important;
+          padding: 6px !important;
+        }
+        .admin-sidebar.collapsed .sidebar-zone {
+          padding: 4px 2px !important;
+          background: transparent !important;
+        }
+        .admin-sidebar.collapsed .sidebar-profile {
+          margin: 0 auto !important;
+          padding: 6px !important;
+          justify-content: center !important;
+          width: 44px !important;
+          height: 44px !important;
+        }
+        
+        /* Mobile sidebar styles */
+        .admin-sidebar.mobile-open {
+          transform: translateX(0);
+          box-shadow: 4px 0 24px rgba(0, 0, 0, 0.08);
+        }
+        @media (max-width: 1024px) {
+          .admin-sidebar {
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.08);
+          }
+        }
+
+        .sidebar-brand-wrapper {
+          position: relative;
+          overflow: visible;
+        }
+
+        .sidebar-brand {
+          padding: 24px 20px 16px 20px;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          position: relative;
+          z-index: 10;
+        }
+
+        .sidebar-nav-container {
+          flex: 1;
+          overflow-y: auto;
+          padding: 8px 12px 14px 12px;
+          overscroll-behavior: contain;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .sidebar-nav-container::-webkit-scrollbar {
+          display: none;
+          width: 0;
+          height: 0;
+        }
+
+        .sidebar-group {
+          margin-bottom: 14px;
+        }
+
+        .sidebar-group-title {
+          font-size: 12px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.07em;
+          line-height: 1.25;
+          margin-bottom: 8px;
+          padding: 4px 8px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          user-select: none;
+        }
+
+        .sidebar-zone-clinic {
+          background: linear-gradient(180deg, rgba(240, 253, 250, 0.75) 0%, rgba(236, 254, 255, 0.45) 100%);
+          border-radius: 18px;
+          padding: 10px 8px;
+          margin-top: 14px;
+          margin-bottom: 14px;
+          transition: all 0.25s ease;
+        }
+
+        .sidebar-zone-finance {
+          background: linear-gradient(180deg, rgba(255, 247, 237, 0.8) 0%, rgba(254, 242, 242, 0.35) 100%);
+          border-radius: 18px;
+          padding: 10px 8px;
+          margin-top: 14px;
+          margin-bottom: 14px;
+          transition: all 0.25s ease;
+        }
+
+        .sidebar-link {
+          position: relative;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 5px 8px;
+          border-radius: 14px;
+          color: #0F172A;
+          text-decoration: none;
+          font-weight: 600;
+          font-size: 14px;
+          line-height: 1.25;
+          transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+          margin-bottom: 3px;
+          cursor: pointer;
+          user-select: none;
+          border: 1px solid transparent;
+        }
+
+        .sidebar-link-text {
+          line-height: 1.25;
+          font-size: 13.5px;
+          font-weight: 600;
+          color: #0F172A;
+          transition: all 0.2s ease;
+        }
+
+        .sidebar-link:hover:not(.active) {
+          background-color: rgba(241, 245, 249, 0.85);
+          transform: translateX(2px);
+        }
+
+        /* 3D POPPED-OUT ACTIVE STATE WITH RICH DEPTH & SHADOWS */
+        .sidebar-link.active {
+          background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+          border: 1px solid rgba(219, 234, 254, 0.95) !important;
+          box-shadow: 
+            0 10px 24px -3px rgba(37, 99, 235, 0.18),
+            0 4px 10px -2px rgba(15, 23, 42, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.04),
+            inset 0 1px 0 #FFFFFF !important;
+          transform: translateY(-1.5px) !important;
+          z-index: 5 !important;
+        }
+
+        .sidebar-link.active .sidebar-link-text {
+          color: #2563EB !important;
+          font-weight: 800 !important;
+          letter-spacing: -0.01em !important;
+        }
+
+        .sidebar-link.active .sidebar-link-icon {
+          transform: scale(1.04) !important;
+          box-shadow: 0 5px 15px -1px rgba(37, 99, 235, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* Clinic zone active 3D pop */
+        .sidebar-zone-clinic .sidebar-link.active {
+          border-color: rgba(153, 246, 228, 0.95) !important;
+          box-shadow: 
+            0 10px 24px -3px rgba(13, 148, 136, 0.2),
+            0 4px 10px -2px rgba(15, 23, 42, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.04),
+            inset 0 1px 0 #FFFFFF !important;
+        }
+        .sidebar-zone-clinic .sidebar-link.active .sidebar-link-text {
+          color: #0D9488 !important;
+        }
+        .sidebar-zone-clinic .sidebar-link.active .sidebar-link-icon {
+          box-shadow: 0 5px 15px -1px rgba(13, 148, 136, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* Finance zone active 3D pop */
+        .sidebar-zone-finance .sidebar-link.active {
+          border-color: rgba(254, 215, 170, 0.95) !important;
+          box-shadow: 
+            0 10px 24px -3px rgba(234, 88, 12, 0.2),
+            0 4px 10px -2px rgba(15, 23, 42, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.04),
+            inset 0 1px 0 #FFFFFF !important;
+        }
+        .sidebar-zone-finance .sidebar-link.active .sidebar-link-text {
+          color: #EA580C !important;
+        }
+        .sidebar-zone-finance .sidebar-link.active .sidebar-link-icon {
+          box-shadow: 0 5px 15px -1px rgba(234, 88, 12, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+        }
+
+        .sidebar-link-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 11px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          transition: all 0.2s ease;
+        }
+
+        .sidebar-profile-footer {
+          position: relative;
+          padding: 8px 10px 12px 10px;
+          background: #FFFFFF;
+          border-bottom-right-radius: 28px;
+          flex-shrink: 0;
+          z-index: 20;
+        }
+        .admin-sidebar.collapsed .sidebar-profile-footer {
+          padding: 8px 6px 12px 6px;
+        }
+        .sidebar-profile-fade-top {
+          position: absolute;
+          top: -16px;
+          left: 0;
+          right: 0;
+          height: 16px;
+          background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.45) 50%, rgba(255, 255, 255, 0.9) 100%);
+          pointer-events: none;
+          backdrop-filter: blur(0.75px);
+          -webkit-backdrop-filter: blur(0.75px);
+          z-index: 15;
+        }
+
+        .sidebar-profile {
+          margin: 0 !important;
+          padding: 7px 10px !important;
+          border-radius: 14px !important;
+          background: linear-gradient(135deg, #EEF4FF 0%, #F5F8FF 45%, #FFFFFF 100%) !important;
+          border: 1px solid rgba(219, 234, 254, 0.8) !important;
           display: flex !important;
           align-items: center !important;
           gap: 10px !important;
-          font-size: 22px !important;
-          font-weight: 900 !important;
-          color: #2563EB !important;
-          letter-spacing: -0.5px !important;
-        }
-        .sidebar-logo i, .sidebar-logo svg {
-          color: #2563EB !important;
-          width: 24px !important;
-          height: 24px !important;
-        }
-        .sidebar nav {
-          display: flex !important;
-          flex-direction: column !important;
-          gap: 4px !important;
-          height: calc(100% - 140px) !important;
-          overflow-y: auto !important;
-        }
-        .sidebar .nav-link {
-          display: flex !important;
-          align-items: center !important;
-          gap: 12px !important;
-          padding: 12px 18px !important;
-          margin: 0 16px !important;
-          border-radius: 12px !important;
-          color: #64748B !important;
-          font-weight: 600 !important;
-          text-decoration: none !important;
-          transition: all 0.2s ease !important;
-          border-left: none !important;
-          font-size: 14px !important;
-        }
-        .sidebar .nav-link:hover {
-          background: #F8FAFC !important;
-          color: #0F172A !important;
-        }
-        .sidebar .nav-link.active {
-          background: #EFF6FF !important;
-          color: #2563EB !important;
-          font-weight: 700 !important;
-        }
-        .sidebar .nav-link i, .sidebar .nav-link svg {
-          width: 18px !important;
-          height: 18px !important;
-          color: inherit !important;
-        }
-        .sidebar-user {
-          margin: auto 16px 16px !important;
-          padding: 12px !important;
-          border-radius: 16px !important;
-          background: #F8FAFC !important;
-          border: 1px solid #E2E8F0 !important;
-          display: flex !important;
-          align-items: center !important;
-          gap: 12px !important;
           cursor: pointer !important;
           transition: all 0.2s ease !important;
           position: relative !important;
+          box-shadow: 0 4px 14px -2px rgba(30, 58, 138, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+          line-height: 1.2 !important;
+          user-select: none !important;
         }
-        .sidebar-user:hover {
-          background: #F1F5F9 !important;
+        .sidebar-profile:hover {
+          background: linear-gradient(135deg, #E0E7FF 0%, #EEF2FF 50%, #FFFFFF 100%) !important;
+          border-color: #C7D2FE !important;
+          box-shadow: 0 6px 18px -2px rgba(30, 58, 138, 0.1) !important;
         }
-        .user-avatar {
-          width: 40px !important;
-          height: 40px !important;
+        .profile-avatar-wrap {
+          position: relative !important;
+          flex-shrink: 0 !important;
+          display: inline-flex !important;
+        }
+        .profile-avatar-status-dot {
+          position: absolute !important;
+          bottom: -1px !important;
+          right: -1px !important;
+          width: 9px !important;
+          height: 9px !important;
+          border-radius: 50% !important;
+          background: #22C55E !important;
+          border: 2px solid #FFFFFF !important;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+        }
+        .profile-avatar {
+          width: 36px !important;
+          height: 36px !important;
           border-radius: 50% !important;
           object-fit: cover !important;
-          border: 2px solid #60A5FA !important;
+          border: 1.5px solid #818CF8 !important;
         }
-        .user-info {
+        .profile-avatar-initials {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 50% !important;
+          background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important;
+          color: #FFFFFF !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          font-weight: 800 !important;
+          font-size: 13px !important;
+          box-shadow: 0 3px 8px rgba(245, 158, 11, 0.3) !important;
+        }
+        .profile-info {
           display: flex !important;
           flex-direction: column !important;
+          flex: 1 !important;
+          min-width: 0 !important;
         }
-        .user-info .name {
+        .profile-name {
           font-size: 13.5px !important;
           font-weight: 800 !important;
           color: #0F172A !important;
+          line-height: 1.2 !important;
+          white-space: nowrap !important;
+          text-overflow: ellipsis !important;
+          overflow: hidden !important;
         }
-        .user-info .role {
+        .profile-role {
           font-size: 11px !important;
-          font-weight: 600 !important;
           color: #64748B !important;
+          font-weight: 600 !important;
+          line-height: 1.2 !important;
+          margin-top: 1px !important;
+          white-space: nowrap !important;
+          text-overflow: ellipsis !important;
+          overflow: hidden !important;
+        }
+        .profile-chevron {
+          color: #2563EB !important;
+          display: flex !important;
+          align-items: center !important;
+          transition: transform 0.25s ease !important;
+          flex-shrink: 0 !important;
         }
 
-        /* TOP NAV OVERRIDES */
+        /* Profile Floating Popover Menu */
+        .sidebar-profile-popover-card {
+          position: absolute !important;
+          bottom: 66px !important;
+          left: 8px !important;
+          width: 236px !important;
+          z-index: 3000 !important;
+          background: #FFFFFF !important;
+          border-radius: 16px !important;
+          border: 1px solid rgba(226, 232, 240, 0.9) !important;
+          box-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.18), 0 0 1px 1px rgba(0, 0, 0, 0.04) !important;
+          overflow: hidden !important;
+          animation: slideUpFade 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        .admin-sidebar.collapsed .sidebar-profile-popover-card {
+          left: 76px !important;
+          bottom: 10px !important;
+        }
+        @keyframes slideUpFade {
+          from {
+            opacity: 0;
+            transform: translateY(8px) scale(0.98);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        .profile-popover-header {
+          padding: 14px 14px 12px 14px !important;
+          background: linear-gradient(90deg, #FFFFFF 0%, #EEF4FF 35%, #93C5FD 75%, #3B82F6 100%) !important;
+          border-bottom: 1px solid #E2E8F0 !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 10px !important;
+          position: relative !important;
+          overflow: hidden !important;
+        }
+        .profile-popover-header-glow {
+          position: absolute !important;
+          top: -20px !important;
+          right: -20px !important;
+          width: 90px !important;
+          height: 90px !important;
+          background: radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 70%) !important;
+          pointer-events: none !important;
+        }
+        .profile-popover-header-name {
+          font-size: 13.5px !important;
+          font-weight: 800 !important;
+          color: #0F172A !important;
+          line-height: 1.2 !important;
+          white-space: nowrap !important;
+          text-overflow: ellipsis !important;
+          overflow: hidden !important;
+        }
+        .profile-popover-header-role {
+          font-size: 11px !important;
+          font-weight: 600 !important;
+          color: #475569 !important;
+          line-height: 1.2 !important;
+          margin-top: 2px !important;
+          white-space: nowrap !important;
+          text-overflow: ellipsis !important;
+          overflow: hidden !important;
+        }
+        .profile-popover-body {
+          padding: 6px 6px 8px 6px !important;
+          background: #FFFFFF !important;
+        }
+        .profile-popover-item {
+          padding: 7px 10px !important;
+          border-radius: 10px !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 10px !important;
+          cursor: pointer !important;
+          transition: background 0.15s ease !important;
+          user-select: none !important;
+        }
+        .profile-popover-item:hover {
+          background: #F4F7FF !important;
+        }
+        .profile-popover-item.logout-item:hover {
+          background: #FEF2F2 !important;
+        }
+        .profile-popover-item-icon {
+          width: 28px !important;
+          height: 28px !important;
+          border-radius: 8px !important;
+          background: #F8FAFC !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          flex-shrink: 0 !important;
+          color: #475569 !important;
+          transition: all 0.15s ease !important;
+        }
+        .profile-popover-item:hover .profile-popover-item-icon {
+          background: #EEF4FF !important;
+          color: #2563EB !important;
+        }
+        .profile-popover-item.logout-item .profile-popover-item-icon {
+          background: #FEF2F2 !important;
+          color: #EF4444 !important;
+        }
+        .profile-popover-item.logout-item:hover .profile-popover-item-icon {
+          background: #FEE2E2 !important;
+          color: #DC2626 !important;
+        }
+        .profile-popover-item-texts {
+          display: flex !important;
+          flex-direction: column !important;
+          min-width: 0 !important;
+          flex: 1 !important;
+        }
+        .profile-popover-item-title {
+          font-size: 12.5px !important;
+          font-weight: 700 !important;
+          color: #0F172A !important;
+          line-height: 1.2 !important;
+        }
+        .profile-popover-item.logout-item .profile-popover-item-title {
+          color: #DC2626 !important;
+        }
+        .profile-popover-item-sub {
+          font-size: 10.5px !important;
+          font-weight: 500 !important;
+          color: #94A3B8 !important;
+          line-height: 1.2 !important;
+          margin-top: 1px !important;
+        }
+        .profile-popover-item.logout-item .profile-popover-item-sub {
+          color: #F87171 !important;
+        }
+
+        /* TOP COMMAND BAR & CANVAS STYLING */
         .top-nav {
-          margin-left: 256px !important;
-          height: 56px !important;
-          padding: 0 20px !important;
-          border-bottom: 1px solid #F1F5F9 !important;
-          background: #ffffff !important;
+          margin-left: 260px !important;
+          height: 76px !important;
+          padding: 0 24px !important;
+          border-bottom: 1px solid rgba(226, 232, 240, 0.85) !important;
+          background: rgba(255, 255, 255, 0.94) !important;
+          backdrop-filter: blur(16px) !important;
+          -webkit-backdrop-filter: blur(16px) !important;
           display: flex !important;
           align-items: center !important;
           justify-content: space-between !important;
@@ -3075,15 +3503,51 @@ const ReceptionistDashboard = () => {
           top: 0 !important;
           right: 0 !important;
           left: 0 !important;
-          z-index: 99 !important;
+          z-index: 900 !important;
+          box-shadow: 0 4px 20px -5px rgba(15, 23, 42, 0.03) !important;
+          transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+
+        .top-nav.collapsed {
+          margin-left: 76px !important;
+        }
+
+        @media (max-width: 1024px) {
+          .top-nav {
+            margin-left: 0 !important;
+            padding: 0 16px !important;
+          }
         }
 
         .main-content {
-          margin-left: 256px !important;
-          margin-top: 56px !important;
-          padding: 16px !important;
+          margin-left: 260px !important;
+          margin-top: 76px !important;
+          min-height: calc(100vh - 76px) !important;
+          padding: 24px 28px 90px 28px !important;
           background-color: #F8FAFC !important;
+          background-image: 
+            radial-gradient(at 0% 0%, rgba(219, 234, 254, 0.6) 0px, transparent 50%),
+            radial-gradient(at 100% 0%, rgba(237, 233, 254, 0.55) 0px, transparent 45%),
+            radial-gradient(at 50% 50%, rgba(240, 249, 255, 0.5) 0px, transparent 60%),
+            radial-gradient(at 100% 100%, rgba(224, 242, 254, 0.5) 0px, transparent 50%),
+            radial-gradient(at 0% 100%, rgba(243, 232, 255, 0.45) 0px, transparent 50%),
+            linear-gradient(135deg, #F5F8FF 0%, #F8F7FF 45%, #F3FBFA 100%) !important;
+          background-attachment: fixed !important;
+          transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          overflow-x: hidden !important;
         }
+
+        .main-content.collapsed {
+          margin-left: 76px !important;
+        }
+
+        @media (max-width: 1024px) {
+          .main-content {
+            margin-left: 0 !important;
+            padding: 16px 14px 90px 14px !important;
+          }
+        }
+
         .tab-content {
           padding: 0px !important;
         }
@@ -3434,373 +3898,867 @@ const ReceptionistDashboard = () => {
         </div>
       )}
 
-      {/* Modern Pinned Sidebar */}
+      {/* 1. Light Theme Sidebar Navigation: Pixel-Perfect Reference Match */}
       {activeTab !== 'hr-payroll' && (
-        <div className={"sidebar " + (isSidebarCollapsed ? "collapsed " : "") + (mobileSidebarOpen ? "mobile-open" : "")} data-lenis-prevent>
-        <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative', width: '100%' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '22px', borderRadius: '2px', background: 'var(--primary)', color: '#FFFFFF', fontWeight: 900, fontSize: '14px', boxShadow: '0 0 15px rgba(59, 113, 254, 0.15)', flexShrink: 0 }}>
-            C
-          </div>
-          <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 900, color: '#2563EB', letterSpacing: '-0.02em' }}>Curoxa</span>
-          <button 
-            className="sidebar-collapse-toggle desktop-only-flex"
-            onClick={(e) => {
-              e.stopPropagation();
-              const newState = !isSidebarCollapsed;
-              setIsSidebarCollapsed(newState);
-              localStorage.setItem('curoxa_sidebar_collapsed', String(newState));
-            }}
-            style={{
-              transform: isSidebarCollapsed ? 'rotate(180deg)' : 'none'
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          </button>
-        </div>
-        <nav>
-          <a href="#" className={`nav-link ${activeTab === 'dash' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); switchTab('dash'); }}><i data-lucide="layout-grid"></i> Dashboard</a>
-          {(currentUser?.role === 'receptionist' || (coverageState['rc-register']?.on || coverageState['rc-upload']?.on || coverageState['rc-queue']?.on)) && (
-            <a href="#" className={`nav-link ${['patients', 'patient-details'].includes(activeTab) ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); switchTab('patients'); }}><i data-lucide="users"></i> Patient Management</a>
-          )}
-          {(currentUser?.role === 'receptionist' || coverageState['rc-appt']?.on) && (
-            <a href="#" className={`nav-link ${activeTab === 'appointments' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); switchTab('appointments'); }}><i data-lucide="calendar"></i> Appointments</a>
-          )}
-          {currentUser?.role === 'receptionist' && (
-            <a href="#" className={`nav-link ${activeTab === 'staff' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); switchTab('staff'); }}><i data-lucide="user-cog"></i> Staff Management</a>
-          )}
-          {(currentUser?.role === 'receptionist' || coverageState['rc-billing']?.on) && (
-            <a href="#" className={`nav-link ${activeTab === 'billing' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); switchTab('billing'); }}><i data-lucide="wallet"></i> Finance &amp; Billing</a>
-          )}
-          {(currentUser?.role === 'receptionist' || coverageState['rc-reorder']?.on) && tenantModules.inventory?.enabled !== false && (
-            <a href="#" className={`nav-link ${activeTab === 'indent' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); switchTab('indent'); }}><i data-lucide="clipboard-list"></i> Indent</a>
-          )}
-
-          {/* DYNAMIC COVERAGE INTEGRATION LINKS */}
-          {(Object.keys(coverageState || {}).some(k => (k.startsWith('dr-') || k.startsWith('doc-')) && coverageState[k]?.on)) && tenantModules.doctor?.enabled !== false && (
-            <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); window.open('/doctor', '_blank'); setMobileSidebarOpen(false); }} style={{ color: '#E11D48', fontWeight: 800 }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', flexShrink: 0 }}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-              Doctor Cover
-            </a>
-          )}
-          {(Object.keys(coverageState || {}).some(k => k.startsWith('lt-') && coverageState[k]?.on)) && tenantModules.laboratory?.enabled !== false && (
-            <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); window.open('/lab', '_blank'); setMobileSidebarOpen(false); }} style={{ color: '#059669', fontWeight: 800 }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', flexShrink: 0 }}><path d="M6 18H18"/><path d="M10 14H14"/><path d="M12 2v20"/><path d="M18 10H6"/></svg>
-              Lab Cover
-            </a>
-          )}
-          {(Object.keys(coverageState || {}).some(k => k.startsWith('ph-') && coverageState[k]?.on)) && tenantModules.pharmacy?.enabled !== false && (
-            <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); window.open('/pharmacy', '_blank'); setMobileSidebarOpen(false); }} style={{ color: '#2563EB', fontWeight: 800 }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', flexShrink: 0 }}><path d="M12 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-              Pharmacy Cover
-            </a>
-          )}
-        </nav>
-
-        {/* User profile card at the bottom of the sidebar with modern Popover Dropdown */}
-        <div className="sidebar-user" onClick={(e) => { e.stopPropagation(); setShowProfileMenu(!showProfileMenu); }}>
-          {currentUser.avatar ? (
-            <img src={currentUser.avatar} className="user-avatar" alt="Avatar" style={{ objectFit: 'cover', border: '2px solid #BFDBFE' }} />
-          ) : (
-            <div className="sidebar-user-avatar-initials" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '12px', marginRight: '10px', flexShrink: 0 }}>
-              {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'RC'}
-            </div>
-          )}
-          <div className="user-info">
-            <div className="name">{currentUser.name || 'Roshni'}</div>
-            <div className="role">Receptionist</div>
-          </div>
-          <i data-lucide="chevron-down" style={{ marginLeft: 'auto', width: '16px', color: '#94A3B8', transition: '0.3s', transform: showProfileMenu ? 'rotate(180deg)' : 'none' }}></i>
-
-          {showProfileMenu && (
-            <div 
-              className="glass-card sidebar-profile-popover" 
+        <div 
+          className={`admin-sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${mobileSidebarOpen ? 'mobile-open' : ''}`} 
+          ref={sidebarRef}
+          onClick={() => setMobileSidebarOpen(false)}
+          data-lenis-prevent
+        >
+          {/* Top Branding & Decorative Waves */}
+          <div className="sidebar-brand-wrapper">
+            {/* Subtle flowing background waves */}
+            <svg 
+              className="sidebar-wave-bg" 
+              viewBox="0 0 280 130" 
+              fill="none" 
               style={{ 
                 position: 'absolute', 
-                bottom: '72px', 
-                left: '0px', 
-                width: '208px', 
-                zIndex: 3000, 
-                padding: '8px', 
-                boxShadow: '0 -10px 40px rgba(0,0,0,0.06)', 
-                background: 'white',
-                borderRadius: '4px',
-                border: '1px solid #F1F5F9',
-                animation: 'slideUp 0.2s ease-out'
+                top: 0, 
+                left: 0, 
+                width: '100%', 
+                height: '130px', 
+                pointerEvents: 'none', 
+                zIndex: 0,
+                opacity: isSidebarCollapsed ? 0 : 0.95,
+                transition: 'opacity 0.2s'
               }}
-              onClick={e => e.stopPropagation()}
             >
-              <div style={{ padding: '10px 12px', borderBottom: '1px solid #F1F5F9', marginBottom: '6px' }}>
-                <div style={{ fontWeight: 800, fontSize: '12px', color: '#0F172A' }}>{currentUser.name || 'Roshni'}</div>
-                <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Front Desk Manager</div>
-              </div>
-              <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '2px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#334155', 
-                  cursor: 'pointer',
-                  transition: 'background 0.2s',
-                  marginBottom: '4px'
+              <path d="M0,0 L280,0 L280,65 C215,100 155,70 85,105 C40,120 15,110 0,100 Z" fill="url(#curoxaWaveGrad1)" />
+              <path d="M0,0 L280,0 L280,40 C195,80 135,50 55,90 C20,102 0,92 0,92 Z" fill="url(#curoxaWaveGrad2)" opacity="0.65" />
+              <defs>
+                <linearGradient id="curoxaWaveGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#DBEAFE" stopOpacity="0.85" />
+                  <stop offset="50%" stopColor="#E0E7FF" stopOpacity="0.6" />
+                  <stop offset="100%" stopColor="#F3E8FF" stopOpacity="0.2" />
+                </linearGradient>
+                <linearGradient id="curoxaWaveGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#BAE6FD" stopOpacity="0.75" />
+                  <stop offset="100%" stopColor="#DDD6FE" stopOpacity="0.15" />
+                </linearGradient>
+              </defs>
+            </svg>
+
+            <div className="sidebar-brand">
+              <img 
+                src={curoxaSidebarLogo} 
+                alt="CUROXA" 
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  objectFit: 'contain',
+                  flexShrink: 0,
+                  filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.08))'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={() => {
-                  setShowProfileEditModal(true);
-                  setShowProfileMenu(false);
+              />
+              <div className="sidebar-brand-text-group" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                <span className="sidebar-brand-text" style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif", fontWeight: 900, fontSize: '18px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1 }}>
+                  CUROXA
+                </span>
+                <span className="sidebar-brand-subtitle" style={{ fontSize: '11px', color: '#64748B', fontWeight: 500, letterSpacing: '-0.01em', marginTop: '3px', lineHeight: 1 }}>
+                  Health Management
+                </span>
+              </div>
+              <button 
+                className="sidebar-collapse-toggle desktop-only-flex"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const newState = !isSidebarCollapsed;
+                  setIsSidebarCollapsed(newState);
+                  localStorage.setItem('curoxa_sidebar_collapsed', String(newState));
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '-12px',
+                  top: '26px',
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '50%',
+                  background: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  zIndex: 100,
+                  transition: 'transform 0.3s ease',
+                  transform: isSidebarCollapsed ? 'rotate(180deg)' : 'none'
                 }}
               >
-                <i data-lucide="user" style={{ width: '16px', height: '16px' }}></i> Edit Profile
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div className="sidebar-nav-container" ref={sidebarNavRef}>
+            {/* SECTION 1: OVERVIEW GROUP */}
+            <div className="sidebar-group">
+              <div className="sidebar-group-title" style={{ color: '#2563EB' }}>
+                <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> OVERVIEW
               </div>
+              
               <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '2px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#334155', 
-                  cursor: 'pointer',
-                  transition: 'background 0.2s',
-                  marginBottom: '4px'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={() => {
-                  setActiveTab('hr-payroll');
-                  setShowProfileMenu(false);
-                }}
+                className={`sidebar-link ${activeTab === 'dash' ? 'active' : ''}`}
+                onClick={() => switchTab('dash')}
               >
-                <i data-lucide="credit-card" style={{ width: '16px', height: '16px' }}></i> HR & Payroll
-              </div>
-              <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '2px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#DC2626', 
-                  cursor: 'pointer',
-                  transition: 'background 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#FEF2F2'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={handleLogout}
-              >
-                <i data-lucide="log-out" style={{ width: '16px', height: '16px' }}></i> Logout
+                {activeTab === 'dash' && (
+                  <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
+                )}
+                <div className="sidebar-link-icon" style={{
+                  background: activeTab === 'dash' ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#EFF6FF',
+                  color: activeTab === 'dash' ? '#FFFFFF' : '#2563EB',
+                  boxShadow: activeTab === 'dash' ? '0 3px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="7" x="3" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="14" rx="1.5"/><rect width="7" height="7" x="3" y="14" rx="1.5"/></svg>
+                </div>
+                <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'dash' ? 700 : 600, color: activeTab === 'dash' ? '#2563EB' : '#0F172A', letterSpacing: '-0.01em' }}>
+                  Dashboard
+                </span>
               </div>
             </div>
-          )}
+
+            {/* SECTION 2: CLINICAL / PATIENT SERVICES GROUP */}
+            <div className="sidebar-zone sidebar-zone-clinic">
+              <div 
+                className="sidebar-group-title"
+                style={{ color: '#0D9488' }}
+              >
+                <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> PATIENT SERVICES
+              </div>
+              
+              {(currentUser?.role === 'receptionist' || (coverageState['rc-register']?.on || coverageState['rc-upload']?.on || coverageState['rc-queue']?.on)) && (
+                <div 
+                  className={`sidebar-link ${['patients', 'patient-details'].includes(activeTab) ? 'active' : ''}`}
+                  onClick={() => switchTab('patients')}
+                >
+                  {['patients', 'patient-details'].includes(activeTab) && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: ['patients', 'patient-details'].includes(activeTab) ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                    color: ['patients', 'patient-details'].includes(activeTab) ? '#FFFFFF' : '#0D9488',
+                    boxShadow: ['patients', 'patient-details'].includes(activeTab) ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                  }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  </div>
+                  <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: ['patients', 'patient-details'].includes(activeTab) ? 700 : 600, color: ['patients', 'patient-details'].includes(activeTab) ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
+                    Patient Management
+                  </span>
+                </div>
+              )}
+
+              {(currentUser?.role === 'receptionist' || coverageState['rc-appt']?.on) && (
+                <div 
+                  className={`sidebar-link ${activeTab === 'appointments' ? 'active' : ''}`}
+                  onClick={() => switchTab('appointments')}
+                >
+                  {activeTab === 'appointments' && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: activeTab === 'appointments' ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                    color: activeTab === 'appointments' ? '#FFFFFF' : '#0D9488',
+                    boxShadow: activeTab === 'appointments' ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                  }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                  </div>
+                  <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'appointments' ? 700 : 600, color: activeTab === 'appointments' ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
+                    Appointments
+                  </span>
+                </div>
+              )}
+
+              {currentUser?.role === 'receptionist' && (
+                <div 
+                  className={`sidebar-link ${activeTab === 'staff' ? 'active' : ''}`}
+                  onClick={() => switchTab('staff')}
+                >
+                  {activeTab === 'staff' && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: activeTab === 'staff' ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                    color: activeTab === 'staff' ? '#FFFFFF' : '#0D9488',
+                    boxShadow: activeTab === 'staff' ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                  }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 11v6"/><path d="M22 14h-6"/></svg>
+                  </div>
+                  <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'staff' ? 700 : 600, color: activeTab === 'staff' ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
+                    Staff Management
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 3: FINANCE & OPERATIONS GROUP */}
+            <div className="sidebar-zone sidebar-zone-finance">
+              <div 
+                className="sidebar-group-title"
+                style={{ color: '#EA580C' }}
+              >
+                <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> OPERATIONS &amp; BILLING
+              </div>
+
+              {(currentUser?.role === 'receptionist' || coverageState['rc-billing']?.on) && (
+                <div 
+                  className={`sidebar-link ${activeTab === 'billing' ? 'active' : ''}`}
+                  onClick={() => switchTab('billing')}
+                >
+                  {activeTab === 'billing' && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#EA580C' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: activeTab === 'billing' ? 'linear-gradient(135deg, #EA580C 0%, #F97316 100%)' : '#FFEDD5',
+                    color: activeTab === 'billing' ? '#FFFFFF' : '#EA580C',
+                    boxShadow: activeTab === 'billing' ? '0 3px 10px rgba(234, 88, 12, 0.25)' : 'none'
+                  }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  </div>
+                  <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'billing' ? 700 : 600, color: activeTab === 'billing' ? '#EA580C' : '#0F172A', letterSpacing: '-0.01em' }}>
+                    Finance &amp; Billing
+                  </span>
+                </div>
+              )}
+
+              {coverageState?.['rc-reorder']?.on && (
+                <div 
+                  className={`sidebar-link ${['indent', 'new-indent'].includes(activeTab) ? 'active' : ''}`}
+                  onClick={() => switchTab('indent')}
+                >
+                  {['indent', 'new-indent'].includes(activeTab) && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#EA580C' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: ['indent', 'new-indent'].includes(activeTab) ? 'linear-gradient(135deg, #EA580C 0%, #F97316 100%)' : '#FFEDD5',
+                    color: ['indent', 'new-indent'].includes(activeTab) ? '#FFFFFF' : '#EA580C',
+                    boxShadow: ['indent', 'new-indent'].includes(activeTab) ? '0 3px 10px rgba(234, 88, 12, 0.25)' : 'none'
+                  }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/></svg>
+                  </div>
+                  <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: ['indent', 'new-indent'].includes(activeTab) ? 700 : 600, color: ['indent', 'new-indent'].includes(activeTab) ? '#EA580C' : '#0F172A', letterSpacing: '-0.01em' }}>
+                    Utility Requests
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 4: ACTIVE COVERAGES GROUP */}
+            {(Object.keys(coverageState || {}).some(k => coverageState[k]?.on)) && (
+              <div className="sidebar-group">
+                <div className="sidebar-group-title" style={{ color: '#EF4444' }}>
+                  <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> ACTIVE COVERAGES
+                </div>
+                {(Object.keys(coverageState || {}).some(k => (k.startsWith('dr-') || k.startsWith('doc-')) && coverageState[k]?.on)) && tenantModules.doctor?.enabled !== false && (
+                  <div 
+                    className="sidebar-link"
+                    onClick={() => window.open('/doctor', '_blank')}
+                    style={{ color: '#E11D48', fontWeight: 800 }}
+                    title="Doctor Cover"
+                  >
+                    <div className="sidebar-link-icon" style={{ background: '#FFE4E6', color: '#E11D48' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    </div>
+                    <span className="sidebar-link-text">Doctor Cover</span>
+                  </div>
+                )}
+                {(Object.keys(coverageState || {}).some(k => k.startsWith('lt-') && coverageState[k]?.on)) && tenantModules.laboratory?.enabled !== false && (
+                  <div 
+                    className="sidebar-link"
+                    onClick={() => window.open('/lab', '_blank')}
+                    style={{ color: '#059669', fontWeight: 800 }}
+                    title="Lab Cover"
+                  >
+                    <div className="sidebar-link-icon" style={{ background: '#D1FAE5', color: '#059669' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18H18"/><path d="M10 14H14"/><path d="M12 2v20"/><path d="M18 10H6"/></svg>
+                    </div>
+                    <span className="sidebar-link-text">Lab Cover</span>
+                  </div>
+                )}
+                {(Object.keys(coverageState || {}).some(k => k.startsWith('ph-') && coverageState[k]?.on)) && tenantModules.pharmacy?.enabled !== false && (
+                  <div 
+                    className="sidebar-link"
+                    onClick={() => window.open('/pharmacy', '_blank')}
+                    style={{ color: '#2563EB', fontWeight: 800 }}
+                    title="Pharmacy Cover"
+                  >
+                    <div className="sidebar-link-icon" style={{ background: '#DBEAFE', color: '#2563EB' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    </div>
+                    <span className="sidebar-link-text">Pharmacy Cover</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Profile Section */}
+          <div className="sidebar-profile-footer">
+            <div className="sidebar-profile-fade-top" />
+            <div className="sidebar-profile" onClick={(e) => { e.stopPropagation(); setShowProfileMenu(!showProfileMenu); }}>
+              <div className="profile-avatar-wrap">
+                {currentUser.avatar ? (
+                  <img 
+                    src={currentUser.avatar} 
+                    alt="Avatar" 
+                    className="profile-avatar"
+                  />
+                ) : (
+                  <div className="profile-avatar-initials" style={{ background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)' }}>
+                    {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'RC'}
+                  </div>
+                )}
+                <span className="profile-avatar-status-dot" />
+              </div>
+              <div className="profile-info">
+                <div className="profile-name">
+                  {currentUser.name || 'Roshni'}
+                </div>
+                <div className="profile-role">
+                  Receptionist
+                </div>
+              </div>
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="14" 
+                height="14" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2.5" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                className="profile-chevron" 
+                style={{ 
+                  marginLeft: 'auto', 
+                  transform: showProfileMenu ? 'rotate(180deg)' : 'none' 
+                }}
+              >
+                <path d="m18 15-6-6-6 6"/>
+              </svg>
+
+              {showProfileMenu && (
+                <div 
+                  className="sidebar-profile-popover-card" 
+                  onClick={e => e.stopPropagation()}
+                >
+                  {/* Gradient Profile Header */}
+                  <div className="profile-popover-header">
+                    <div className="profile-popover-header-glow" />
+                    <div className="profile-avatar-wrap">
+                      {currentUser.avatar ? (
+                        <img 
+                          src={currentUser.avatar} 
+                          alt="Avatar" 
+                          className="profile-avatar"
+                          style={{ border: '1.5px solid rgba(255,255,255,0.7)' }}
+                        />
+                      ) : (
+                        <div 
+                          className="profile-avatar-initials"
+                          style={{ 
+                            background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                            border: '1.5px solid rgba(255,255,255,0.7)'
+                          }}
+                        >
+                          {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'RC'}
+                        </div>
+                      )}
+                      <span className="profile-avatar-status-dot" style={{ borderColor: '#FFFFFF' }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0, zIndex: 1 }}>
+                      <div className="profile-popover-header-name">
+                        {currentUser.name || 'Roshni'}
+                      </div>
+                      <div className="profile-popover-header-role">
+                        Front Desk Manager
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* White Menu Body */}
+                  <div className="profile-popover-body">
+                    <div 
+                      className="profile-popover-item"
+                      onClick={() => {
+                        switchTab('dash');
+                        setShowProfileMenu(false);
+                      }}
+                    >
+                      <div className="profile-popover-item-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="10" rx="1"/><rect width="7" height="5" x="3" y="14" rx="1"/></svg>
+                      </div>
+                      <div className="profile-popover-item-texts">
+                        <span className="profile-popover-item-title">Dashboard</span>
+                        <span className="profile-popover-item-sub">Front desk overview</span>
+                      </div>
+                    </div>
+
+                    <div 
+                      className="profile-popover-item"
+                      onClick={() => {
+                        setShowProfileEditModal(true);
+                        setShowProfileMenu(false);
+                      }}
+                    >
+                      <div className="profile-popover-item-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      </div>
+                      <div className="profile-popover-item-texts">
+                        <span className="profile-popover-item-title">Edit Profile</span>
+                        <span className="profile-popover-item-sub">Update profile details</span>
+                      </div>
+                    </div>
+
+                    <div 
+                      className="profile-popover-item"
+                      onClick={() => {
+                        setActiveTab('hr-payroll');
+                        setShowProfileMenu(false);
+                      }}
+                    >
+                      <div className="profile-popover-item-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                      </div>
+                      <div className="profile-popover-item-texts">
+                        <span className="profile-popover-item-title">HR &amp; Payroll</span>
+                        <span className="profile-popover-item-sub">Manage payroll</span>
+                      </div>
+                    </div>
+
+                    <div className="profile-popover-divider" style={{ height: '1px', background: '#F1F5F9', margin: '4px 6px' }} />
+
+                    <div 
+                      className="profile-popover-item logout-item"
+                      onClick={handleLogout}
+                    >
+                      <div className="profile-popover-item-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                      </div>
+                      <div className="profile-popover-item-texts">
+                        <span className="profile-popover-item-title">Logout</span>
+                        <span className="profile-popover-item-sub">Exit session</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
-    )}
+      )}
 
       {/* Mobile Sidebar Backdrop Overlay */}
       {mobileSidebarOpen && (
         <div className="mobile-backdrop" onClick={() => setMobileSidebarOpen(false)} />
       )}
 
-      {/* Modern Top Nav */}
+      {/* Modern Top Command Bar */}
       {activeTab !== 'hr-payroll' && (
-        <div className={"top-nav " + (isSidebarCollapsed ? "collapsed" : "")} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {/* Hamburger Mobile Menu Toggle Button */}
-        <button 
-          className="mobile-menu-toggle"
-          onClick={(e) => {
-            e.stopPropagation();
-            setMobileSidebarOpen(!mobileSidebarOpen);
-          }}
-          style={{
-            display: 'none',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: '#475569',
-            padding: '8px',
-            borderRadius: '2px',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'background-color 0.2s',
-            marginRight: '8px'
-          }}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
-        </button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, maxWidth: '560px' }}>
-          <div ref={globalSearchContainerRef} className="desktop-only-flex" style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <i data-lucide="search" style={{ position: 'absolute', left: '16px', color: '#64748B', width: '16px' }}></i>
-            <input 
-              type="text" 
-              className="search-input" 
-              placeholder="Search patient by mobile/ID" 
-              style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', paddingLeft: '44px', height: '40px', width: '100%', borderRadius: '2px', fontSize: '13px', fontWeight: 600, outline: 'none' }} 
-              value={globalSearchQuery}
-              onChange={(e) => {
-                setGlobalSearchQuery(e.target.value);
-                setShowGlobalDropdown(true);
+        <div className={"top-nav " + (isSidebarCollapsed ? "collapsed" : "")}>
+          {/* Left: Command Center Title & Medical Shield Icon */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Hamburger Mobile Menu Toggle Button */}
+            <button 
+              className="mobile-menu-toggle"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileSidebarOpen(!mobileSidebarOpen);
               }}
-              onFocus={() => setShowGlobalDropdown(true)}
-            />
-            {showGlobalDropdown && globalSearchQuery.trim() !== '' && (
-              <div 
-                style={{ 
-                  position: 'absolute', 
-                  top: 'calc(100% + 8px)', 
-                  left: 0, 
-                  width: '100%', 
-                  background: 'white', 
-                  borderRadius: '4px', 
-                  border: '1px solid #E2E8F0', 
-                  boxShadow: '0 10px 30px rgba(0,0,0,0.1)', 
-                  zIndex: 99999, 
-                  padding: '8px', 
-                  maxHeight: '300px', 
-                  overflowY: 'auto'
-                }}
-              >
-                {(() => {
-                  const query = globalSearchQuery.toLowerCase().trim();
-                  const matches = patientsList.filter(p => 
-                    (p.name || '').toLowerCase().includes(query) || 
-                    (p.contact || '').toLowerCase().includes(query) ||
-                    (p._id || '').toLowerCase().includes(query) ||
-                    getFormattedPatientId(p._id).toLowerCase().includes(query)
-                  );
-                  
-                  if (matches.length === 0) {
-                    return (
-                      <div style={{ padding: '12px', textAlign: 'center', color: '#94A3B8', fontSize: '12.5px', fontWeight: 600 }}>
-                        No matching patients found
-                      </div>
-                    );
-                  }
-                  
-                  return matches.map(p => (
-                    <div 
-                      key={p._id} 
-                      onClick={() => {
-                        handleOpenPatientProfile(p);
-                        setGlobalSearchQuery('');
-                        setShowGlobalDropdown(false);
-                      }} 
-                      style={{ 
-                        padding: '10px 12px', 
-                        borderRadius: '2px', 
-                        cursor: 'pointer', 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center',
-                        transition: 'background 0.2s',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: '13px', color: '#1E293B' }}>{p.name}</div>
-                        <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>ID: {getFormattedPatientId(p._id)} | Mob: {p.contact || 'N/A'}</div>
-                      </div>
-                      <i data-lucide="chevron-right" style={{ width: '14px', color: '#94A3B8' }}></i>
-                    </div>
-                  ));
-                })()}
-              </div>
-            )}
-          </div>
-        </div>
-        
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
-          <button 
-            className="btn" 
-            style={{ border: '1.5px solid #EF4444', color: '#EF4444', background: 'white', borderRadius: '2px', padding: '8px 16px', fontWeight: 850, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', height: '40px' }}
-          >
-            <i data-lucide="alert-circle" style={{ width: '16px', height: '16px' }}></i> Emergency
-          </button>
-          
-          {/* Notification Bell with Action Indicator */}
-          <div 
-            ref={notificationRef}
-            style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '2px', border: '1px solid #E2E8F0', color: '#64748B' }}
-            onClick={() => {
-              setShowNotifications(!showNotifications);
-              setUnreadCount(0);
-            }}
-          >
-            <i data-lucide="bell" style={{ width: '18px', height: '18px' }}></i>
-            {unreadCount > 0 && (
-              <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#EF4444', color: 'white', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
-                {unreadCount}
-              </span>
-            )}
+              style={{
+                display: 'none',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#475569',
+                padding: '8px',
+                borderRadius: '8px',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background-color 0.2s',
+                marginRight: '4px'
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+            </button>
 
-            {showNotifications && (
-              <div data-lenis-prevent 
+            {/* Purple/Blue Command Shield Icon */}
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 14px rgba(79, 70, 229, 0.28)',
+              flexShrink: 0
+            }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            </div>
+
+            {/* Title & Status */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '17px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.3px', lineHeight: 1.2 }}>
+                  Front Desk Command Center
+                </span>
+                <span style={{
+                  fontSize: '9.5px',
+                  fontWeight: 850,
+                  color: '#059669',
+                  background: '#ECFDF5',
+                  border: '1px solid #A7F3D0',
+                  padding: '2px 7px',
+                  borderRadius: '10px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  letterSpacing: '0.03em'
+                }}>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#10B981' }} />
+                  SYSTEM ACTIVE
+                </span>
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550, marginTop: '2px', letterSpacing: '-0.01em' }}>
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {currentUser.name || 'receptionist-1'}
+              </div>
+            </div>
+          </div>
+
+          {/* Center: Live Platform Telemetry & Shortcuts */}
+          <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '14px' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: '20px',
+              background: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              fontSize: '12px',
+              fontWeight: 650,
+              color: '#334155'
+            }}>
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 0 2px rgba(16,185,129,0.2)' }} />
+              <span>Network Status</span>
+            </div>
+
+            <button
+              onClick={() => switchTab('appointments')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#64748B',
+                fontSize: '12.5px',
+                fontWeight: 650,
+                cursor: 'pointer',
+                padding: '6px 8px',
+                borderRadius: '6px',
+                transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#2563EB'}
+              onMouseLeave={e => e.currentTarget.style.color = '#64748B'}
+            >
+              Logs
+            </button>
+
+            <button
+              onClick={() => setShowDashboardDateFilter(!showDashboardDateFilter)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#64748B',
+                fontSize: '12.5px',
+                fontWeight: 650,
+                cursor: 'pointer',
+                padding: '6px 8px',
+                borderRadius: '6px',
+                transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#2563EB'}
+              onMouseLeave={e => e.currentTarget.style.color = '#64748B'}
+            >
+              Analytics
+            </button>
+          </div>
+
+          {/* Right: Search, Notifications, Shortcuts, Avatar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Compact Search Input */}
+            <div ref={globalSearchContainerRef} className="desktop-only-flex" style={{ position: 'relative', width: '220px' }}>
+              <i data-lucide="search" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', width: '14px', height: '14px' }}></i>
+              <input 
+                type="text" 
+                className="search-input" 
+                placeholder="Search patient..." 
                 style={{
-                  position: 'absolute',
-                  top: '48px',
-                  right: '0',
-                  width: '320px',
-                  background: 'rgba(255, 255, 255, 0.95)',
-                  backdropFilter: 'blur(8px)',
-                  borderRadius: '4px',
+                  background: '#F8FAFC',
                   border: '1px solid #E2E8F0',
-                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                  zIndex: 1000,
-                  padding: '16px',
-                  maxHeight: '400px',
-                  overflowY: 'auto'
+                  paddingLeft: '34px',
+                  paddingRight: '12px',
+                  height: '38px',
+                  width: '100%',
+                  borderRadius: '10px',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  outline: 'none',
+                  transition: 'all 0.2s'
+                }} 
+                value={globalSearchQuery}
+                onChange={(e) => {
+                  setGlobalSearchQuery(e.target.value);
+                  setShowGlobalDropdown(true);
                 }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
-                  <span style={{ fontWeight: 800, fontSize: '12px', color: '#0F172A' }}>Notifications</span>
-                  <button 
-                    style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
-                    onClick={() => {
-                      const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
-                      const clearedKey = `curoxa_cleared_notifications_${userKey}`;
-                      const clearedIds = JSON.parse(localStorage.getItem(clearedKey) || '[]');
-                      const newClearedIds = [...clearedIds, ...notifications.map(n => n.id)];
-                      localStorage.setItem(clearedKey, JSON.stringify(newClearedIds));
-                      setNotifications([]);
-                      setUnreadCount(0);
-                    }}
-                  >
-                    Clear all
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {notifications.map(n => (
-                    <div key={n.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px', borderRadius: '2px', background: n.isNew ? '#EFF6FF' : '#F8FAFC', borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #E2E8F0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#1E293B' }}>{n.title}</span>
-                        <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>{n.time}</span>
+                onFocus={() => setShowGlobalDropdown(true)}
+              />
+              {showGlobalDropdown && globalSearchQuery.trim() !== '' && (
+                <div 
+                  style={{ 
+                    position: 'absolute', 
+                    top: 'calc(100% + 8px)', 
+                    left: 0, 
+                    width: '300px', 
+                    background: 'white', 
+                    borderRadius: '12px', 
+                    border: '1px solid #E2E8F0', 
+                    boxShadow: '0 12px 36px rgba(15,23,42,0.12)', 
+                    zIndex: 99999, 
+                    padding: '8px', 
+                    maxHeight: '300px', 
+                    overflowY: 'auto'
+                  }}
+                >
+                  {(() => {
+                    const query = globalSearchQuery.toLowerCase().trim();
+                    const matches = patientsList.filter(p => 
+                      (p.name || '').toLowerCase().includes(query) || 
+                      (p.contact || '').toLowerCase().includes(query) ||
+                      (p._id || '').toLowerCase().includes(query) ||
+                      getFormattedPatientId(p._id).toLowerCase().includes(query)
+                    );
+                    
+                    if (matches.length === 0) {
+                      return (
+                        <div style={{ padding: '12px', textAlign: 'center', color: '#94A3B8', fontSize: '12.5px', fontWeight: 600 }}>
+                          No matching patients found
+                        </div>
+                      );
+                    }
+                    
+                    return matches.map(p => (
+                      <div 
+                        key={p._id} 
+                        onClick={() => {
+                          handleOpenPatientProfile(p);
+                          setGlobalSearchQuery('');
+                          setShowGlobalDropdown(false);
+                        }} 
+                        style={{ 
+                          padding: '10px 12px', 
+                          borderRadius: '8px', 
+                          cursor: 'pointer', 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          transition: 'background 0.2s',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '13px', color: '#1E293B' }}>{p.name}</div>
+                          <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 550 }}>ID: {getFormattedPatientId(p._id)} | Mob: {p.contact || 'N/A'}</div>
+                        </div>
+                        <i data-lucide="chevron-right" style={{ width: '14px', color: '#94A3B8' }}></i>
                       </div>
-                      <span style={{ fontSize: '12px', color: '#475569', fontWeight: 550, lineHeight: 1.4 }}>{n.message}</span>
-                    </div>
-                  ))}
-                  {notifications.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: '20px 0', color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
-                      No notifications
-                    </div>
-                  )}
+                    ));
+                  })()}
                 </div>
+              )}
+            </div>
+
+            {/* Notification Bell */}
+            <div 
+              ref={notificationRef}
+              style={{
+                position: 'relative',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                background: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                color: '#64748B',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                transition: 'all 0.15s'
+              }}
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                setUnreadCount(0);
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+            >
+              <i data-lucide="bell" style={{ width: '16px', height: '16px' }}></i>
+              {unreadCount > 0 && (
+                <span style={{ position: 'absolute', top: '-3px', right: '-3px', background: '#EF4444', color: 'white', borderRadius: '50%', width: '17px', height: '17px', fontSize: '9.5px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
+                  {unreadCount}
+                </span>
+              )}
+
+              {showNotifications && (
+                <div data-lenis-prevent 
+                  style={{
+                    position: 'absolute',
+                    top: '46px',
+                    right: '0',
+                    width: '320px',
+                    background: 'rgba(255, 255, 255, 0.98)',
+                    backdropFilter: 'blur(16px)',
+                    borderRadius: '14px',
+                    border: '1px solid #E2E8F0',
+                    boxShadow: '0 16px 36px -8px rgba(15, 23, 42, 0.18)',
+                    zIndex: 1000,
+                    padding: '16px',
+                    maxHeight: '400px',
+                    overflowY: 'auto'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
+                    <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#0F172A' }}>Notifications</span>
+                    <button 
+                      style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                      onClick={() => {
+                        const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
+                        const clearedKey = `curoxa_cleared_notifications_${userKey}`;
+                        const clearedIds = JSON.parse(localStorage.getItem(clearedKey) || '[]');
+                        const newClearedIds = [...clearedIds, ...notifications.map(n => n.id)];
+                        localStorage.setItem(clearedKey, JSON.stringify(newClearedIds));
+                        setNotifications([]);
+                        setUnreadCount(0);
+                      }}
+                    >
+                      Clear all
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {notifications.map(n => (
+                      <div key={n.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px', borderRadius: '8px', background: n.isNew ? '#EFF6FF' : '#F8FAFC', borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #E2E8F0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 800, fontSize: '12px', color: '#1E293B' }}>{n.title}</span>
+                          <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>{n.time}</span>
+                        </div>
+                        <span style={{ fontSize: '11.5px', color: '#475569', fontWeight: 550, lineHeight: 1.4 }}>{n.message}</span>
+                      </div>
+                    ))}
+                    {notifications.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '20px 0', color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
+                        No notifications
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Help Button (?) */}
+            <div 
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                background: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                color: '#64748B',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: 800,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                transition: 'all 0.15s'
+              }}
+              title="Help &amp; Front Desk Guide"
+              onClick={() => window.open('https://curoxa.com/support', '_blank')}
+              onMouseEnter={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+            </div>
+
+            {/* Grid / Module Switcher (::) */}
+            <div 
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                background: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                color: '#64748B',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                transition: 'all 0.15s'
+              }}
+              title="Modules"
+              onClick={() => switchTab('patients')}
+              onMouseEnter={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+            </div>
+
+            {/* User Avatar Pill */}
+            <div 
+              onClick={(e) => { e.stopPropagation(); setShowProfileMenu(!showProfileMenu); }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '3px 10px 3px 3px',
+                borderRadius: '24px',
+                background: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#93C5FD'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = '#BFDBFE'}
+            >
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #2563EB 0%, #7C3AED 100%)',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 800,
+                fontSize: '11.5px',
+                flexShrink: 0
+              }}>
+                {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'RC'}
               </div>
-            )}
+              <span className="desktop-only-flex" style={{ fontSize: '12px', fontWeight: 800, color: '#1E40AF' }}>
+                {currentUser.name || 'Receptionist'}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
 
       <div className={"main-content " + (activeTab === 'hr-payroll' ? "fullscreen-portal" : (isSidebarCollapsed ? "collapsed" : ""))} data-lenis-prevent>
         {activeTab === 'hr-payroll' && (
@@ -3941,53 +4899,163 @@ const ReceptionistDashboard = () => {
               );
             })()}
 
-            {/* High-fidelity Dashboard Title Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div>
-                <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: '0 0 4px 0' }}>Welcome, {user.name || 'Roshni'}</h1>
-                <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 700 }}>Today is {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+            {/* 1. FRONT-DESK COMMAND CENTER HERO BANNER */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(243, 244, 255, 0.92) 50%, rgba(238, 248, 255, 0.95) 100%)',
+              border: '1px solid rgba(219, 234, 254, 0.9)',
+              borderRadius: '20px',
+              padding: '24px 28px',
+              boxShadow: '0 4px 20px -4px rgba(37, 99, 235, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '18px',
+              marginBottom: '22px',
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              {/* Subtle background ambient mesh glow */}
+              <div style={{
+                position: 'absolute',
+                top: '-40px',
+                right: '-40px',
+                width: '180px',
+                height: '180px',
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(168, 85, 247, 0.05) 50%, transparent 70%)',
+                pointerEvents: 'none'
+              }} />
+
+              {/* Left: Welcome Title & Context */}
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '3px' }}>
+                  WELCOME BACK,
+                </div>
+                <h1 style={{
+                  fontSize: '28px',
+                  fontWeight: 900,
+                  margin: '0 0 4px 0',
+                  letterSpacing: '-0.5px',
+                  background: 'linear-gradient(135deg, #1E40AF 0%, #4338CA 50%, #7C3AED 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  lineHeight: 1.15
+                }}>
+                  {user.name || currentUser.name || 'receptionist-1'}
+                </h1>
+                <div style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
+                  Here's what's happening at your front desk today.
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+
+              {/* Right: Quick Action Buttons */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
                 <button 
-                  className="btn btn-primary" 
-                  style={{ height: '26px', padding: '0 16px', fontWeight: 700, borderRadius: '2px', background: '#2563EB', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }} 
+                  className="btn" 
+                  style={{
+                    height: '42px',
+                    padding: '0 18px',
+                    fontWeight: 800,
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    boxShadow: '0 4px 14px rgba(37, 99, 235, 0.28)',
+                    transition: 'all 0.18s ease'
+                  }} 
                   onClick={() => {
                     resetRegistrationForm();
                     setBookingType('opd');
                     switchTab('registration-form');
                   }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1.5px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(37, 99, 235, 0.38)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(37, 99, 235, 0.28)'; }}
                 >
                   <i data-lucide="plus" style={{ width: '16px', strokeWidth: 3 }}></i> Create Appointment
                 </button>
                 <button 
-                  className="btn btn-primary" 
-                  style={{ height: '26px', padding: '0 16px', fontWeight: 700, borderRadius: '2px', background: '#059669', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }} 
+                  className="btn" 
+                  style={{
+                    height: '42px',
+                    padding: '0 18px',
+                    fontWeight: 800,
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    boxShadow: '0 4px 14px rgba(5, 150, 105, 0.28)',
+                    transition: 'all 0.18s ease'
+                  }} 
                   onClick={() => {
                     resetRegistrationForm();
                     setBookingType('lab');
                     switchTab('registration-form');
                   }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1.5px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(5, 150, 105, 0.38)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(5, 150, 105, 0.28)'; }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                   Book Lab Test
                 </button>
                 <button 
-                  className="btn btn-primary" 
-                  style={{ height: '26px', padding: '0 16px', fontWeight: 700, borderRadius: '2px', background: '#7C3AED', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }} 
+                  className="btn" 
+                  style={{
+                    height: '42px',
+                    padding: '0 18px',
+                    fontWeight: 800,
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    boxShadow: '0 4px 14px rgba(124, 58, 237, 0.28)',
+                    transition: 'all 0.18s ease'
+                  }} 
                   onClick={() => {
                     resetRegistrationForm();
                     setBookingType('service');
                     switchTab('registration-form');
                   }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1.5px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(124, 58, 237, 0.38)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(124, 58, 237, 0.28)'; }}
                 >
                   <i data-lucide="sparkles" style={{ width: '16px', height: '16px' }}></i>
                   Book Direct Service
                 </button>
                 <button 
-                  className="btn btn-secondary" 
-                  style={{ width: '38px', height: '26px', padding: 0, borderRadius: '2px', background: showDashboardDateFilter ? '#2563EB' : '#EFF6FF', color: showDashboardDateFilter ? '#FFFFFF' : '#2563EB', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
+                  className="btn" 
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    padding: 0,
+                    borderRadius: '12px',
+                    background: showDashboardDateFilter ? '#2563EB' : '#FFFFFF',
+                    color: showDashboardDateFilter ? '#FFFFFF' : '#475569',
+                    border: '1px solid #CBD5E1',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                  }}
                   onClick={() => setShowDashboardDateFilter(!showDashboardDateFilter)}
-                  title="Filter dashboard analytics by date / date range"
+                  title="Filter dashboard by date / date range"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -3999,21 +5067,21 @@ const ReceptionistDashboard = () => {
               </div>
             </div>
 
-            {/* Dashboard Date Filter Bar (For viewing stats of that day / date range without redirecting) */}
+            {/* Dashboard Date Filter Bar */}
             {showDashboardDateFilter && (
-              <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '4px', padding: '16px 20px', marginBottom: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', animation: 'slideDown 0.25s ease-out' }}>
+              <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '16px 20px', marginBottom: '20px', boxShadow: '0 4px 16px rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', animation: 'slideDown 0.25s ease-out' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '2px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                   </div>
                   <div>
-                    <div style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A' }}>Dashboard Date Range Filter</div>
-                    <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Filter metrics, patient visits, and revenue totals by date without leaving dashboard</div>
+                    <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>Dashboard Date Range Filter</div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550 }}>Filter live queue, schedule, and revenue metrics by date</div>
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', background: '#F8FAFC', padding: '4px', borderRadius: '2px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', background: '#F8FAFC', padding: '3px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
                     {[
                       { key: 'today', label: 'Today' },
                       { key: '7days', label: 'Last 7 Days' },
@@ -4043,7 +5111,7 @@ const ReceptionistDashboard = () => {
                         }}
                         style={{
                           padding: '6px 12px',
-                          borderRadius: '7px',
+                          borderRadius: '6px',
                           border: 'none',
                           background: dashboardFilterPreset === p.key ? '#2563EB' : 'transparent',
                           color: dashboardFilterPreset === p.key ? '#FFFFFF' : '#64748B',
@@ -4064,14 +5132,14 @@ const ReceptionistDashboard = () => {
                         type="date"
                         value={dashboardFilterStartDate}
                         onChange={e => setDashboardFilterStartDate(e.target.value)}
-                        style={{ height: '36px', border: '1px solid #CBD5E1', borderRadius: '2px', padding: '0 10px', fontSize: '12px', fontWeight: 600, outline: 'none', background: 'white' }}
+                        style={{ height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', fontSize: '12px', fontWeight: 600, outline: 'none', background: 'white' }}
                       />
                       <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 700 }}>to</span>
                       <input
                         type="date"
                         value={dashboardFilterEndDate}
                         onChange={e => setDashboardFilterEndDate(e.target.value)}
-                        style={{ height: '36px', border: '1px solid #CBD5E1', borderRadius: '2px', padding: '0 10px', fontSize: '12px', fontWeight: 600, outline: 'none', background: 'white' }}
+                        style={{ height: '34px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', fontSize: '12px', fontWeight: 600, outline: 'none', background: 'white' }}
                       />
                     </div>
                   )}
@@ -4079,287 +5147,901 @@ const ReceptionistDashboard = () => {
               </div>
             )}
 
-            {/* 4 KPI Cards Grid */}
-            <div className="kpi-card-container semantic-card-info">
-              
-              {/* Card 1: Total Appointments */}
-              <div className="modern-kpi-card semantic-card-info" onClick={() => switchTab('appointments')}>
-                <div className="modern-kpi-icon" style={{ background: '#FFF7ED', color: '#EA580C' }}>
-                  <i data-lucide="calendar"></i>
-                </div>
-                <div>
-                  <div className="modern-kpi-lbl">Total Appointments</div>
-                  <div className="modern-kpi-val">{filteredAppointments.length}</div>
-                </div>
-              </div>
+            {/* 2. 4 VISUALLY DISTINCT KPI COMMAND CARDS */}
+            {(() => {
+              const completedAppts = filteredAppointments.filter(a => a.status === 'Completed' || a.status === 'Paid');
+              const waitingAppts = filteredAppointments.filter(a => a.status === 'Waiting' || a.status === 'Checked In' || a.status === 'Pending' || a.status === 'Pending Approval' || (!['Completed', 'Paid', 'Cancelled'].includes(a.status)));
+              const availableDocs = doctors.filter(d => !d.isWeeklyOff && !d.isOnLeave && d.available !== false);
+              const paidBills = filteredBills.filter(b => b.status === 'Paid');
+              const totalRevenueToday = paidBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+              const completionPercent = filteredAppointments.length > 0 ? Math.round((completedAppts.length / filteredAppointments.length) * 100) : 0;
 
-              {/* Card 2: Total Visits */}
-              <div className="modern-kpi-card semantic-card-info" onClick={() => switchTab('patients')}>
-                <div className="modern-kpi-icon" style={{ background: '#EFF6FF', color: '#2563EB' }}>
-                  <i data-lucide="users"></i>
-                </div>
-                <div>
-                  <div className="modern-kpi-lbl">Total Visits</div>
-                  <div className="modern-kpi-val">{totalVisitsCount}</div>
-                </div>
-              </div>
-
-              {/* Card 3: Total Doctors */}
-              <div className="modern-kpi-card semantic-card-info" onClick={() => switchTab('staff')}>
-                <div className="modern-kpi-icon" style={{ background: '#F5F3FF', color: '#7C3AED' }}>
-                  <i data-lucide="stethoscope"></i>
-                </div>
-                <div>
-                  <div className="modern-kpi-lbl">Total Doctors</div>
-                  <div className="modern-kpi-val">{doctors.length}</div>
-                </div>
-              </div>
-
-              {/* Card 4: Total Revenue */}
-              <div className="modern-kpi-card semantic-card-info" onClick={() => switchTab('billing')}>
-                <div className="modern-kpi-icon" style={{ background: '#FDF2F8', color: '#DB2777' }}>
-                  <i data-lucide="wallet"></i>
-                </div>
-                <div>
-                  <div className="modern-kpi-lbl">Total Revenue</div>
-                  <div className="modern-kpi-val">₹{filteredBills.filter(b => b.status === 'Paid').reduce((sum, b) => sum + (b.totalAmount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Grid Split: Left Bar Chart vs Right Doctor's Availability */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '32px', marginBottom: '16px' }} className="mobile-stack">
-              
-              {/* Left Column: Patient Visits Card */}
-              <div className="glass-card" style={{ padding: '32px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <h3 style={{ fontSize: '14px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Patient Visits</h3>
-                    <div className="chart-legend-inline" style={{ display: 'flex', gap: '8px' }}>
-                      <div className="legend-item-small" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#64748B' }}>
-                        <div className="legend-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#7C3AED' }}></div>
-                        Walk-ins
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full mb-6">
+                  {/* Card 1: Today's Appointments (Electric Blue Gradient) */}
+                  <div 
+                    className="p-5 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                    style={{
+                      background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)'
+                    }}
+                    onClick={() => switchTab('appointments')}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                       </div>
-                      <div className="legend-item-small" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#64748B' }}>
-                        <div className="legend-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB' }}></div>
-                        Online
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">Today's Appointments</span>
                       </div>
                     </div>
-                  </div>
-                  <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', background: '#F1F5F9', border: 'none', color: '#475569', fontWeight: 800, cursor: 'pointer' }} onClick={() => switchTab('patients')}>View All</button>
-                </div>
-                
-                <div className="table-responsive" style={{ height: '220px', position: 'relative', marginBottom: '12px', overflowY: 'visible', overflowX: 'auto' }}>
-                  <div className="chart-glow-bg"></div>
-                  <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '180px', pointerEvents: 'none' }}>
-                    <div style={{ height: '33.3%', borderBottom: '1px solid #F1F5F9' }}></div>
-                    <div style={{ height: '33.3%', borderBottom: '1px solid #F1F5F9' }}></div>
-                    <div style={{ height: '33.3%', borderBottom: '1px solid #F1F5F9' }}></div>
-                  </div>
-
-                  <div className="bar-chart-container" style={{ minWidth: '500px' }}>
-                    {weeklyData.map((day, idx) => {
-                       const walkinPercent = Math.max((day.walkin / maxCount) * 100, 5);
-                       const onlinePercent = Math.max((day.online / maxCount) * 100, 5);
-                       
-                       return (
-                         <div key={idx} className="bar-group">
-                           <div className="bar-pair">
-                             <div className="chart-bar walkin" style={{ height: `${walkinPercent}%` }} onClick={() => switchTab('billing')}>
-                               <div className="bar-tooltip">{day.walkin} Walk-ins</div>
-                             </div>
-                             <div className="chart-bar online" style={{ height: `${onlinePercent}%` }} onClick={() => switchTab('billing')}>
-                               <div className="bar-tooltip">{day.online} Online</div>
-                             </div>
-                           </div>
-                           <div className="bar-label" style={{ marginTop: '12px' }}>{day.label}</div>
-                         </div>
-                       )
-                    })}
-                  </div>
-                </div>
-
-                <div className="mobile-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderTop: '1px solid #F1F5F9', paddingTop: '24px', gap: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '2px', background: '#F0F4FF', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><i data-lucide="user" style={{ width: '16px' }}></i></div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ fontWeight: 900, fontSize: '12px', color: '#1A1D23' }}>Walk-In</span>
-                        <span style={{ fontWeight: 800, fontSize: '12px', color: 'var(--primary)' }}>{overallWalkinPercent}%</span>
-                      </div>
-                      <div style={{ fontSize: '10px', color: walkinTrend >= 0 ? '#10B981' : '#EF4444', fontWeight: 800 }}>
-                        {walkinTrend >= 0 ? `+${walkinTrend}%` : `${walkinTrend}%`} Trend
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '2px', background: '#F5F3FF', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><i data-lucide="globe" style={{ width: '16px' }}></i></div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ fontWeight: 900, fontSize: '12px', color: '#1A1D23' }}>Online</span>
-                        <span style={{ fontWeight: 800, fontSize: '12px', color: '#7C3AED' }}>{overallOnlinePercent}%</span>
-                      </div>
-                      <div style={{ fontSize: '10px', color: onlineTrend >= 0 ? '#10B981' : '#EF4444', fontWeight: 800 }}>
-                        {onlineTrend >= 0 ? `+${onlineTrend}%` : `${onlineTrend}%`} Trend
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Doctor's availability Card */}
-              <div className="glass-card" style={{ padding: '32px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h3 style={{ fontSize: '14px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Doctor's availability</h3>
-                  <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', background: '#F1F5F9', border: 'none', color: '#475569', fontWeight: 800, cursor: 'pointer' }} onClick={() => switchTab('staff')}>View All</button>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {doctors && doctors.length > 0 ? (
-                    doctors.map((doc, idx) => (
-                      <div key={doc._id || idx} className="doctor-avail-item">
-                        <div className="doctor-info-box">
-                          <div className="doctor-avatar-circle" style={{
-                            width: '40px',
-                            height: '40px',
-                            borderRadius: '50%',
-                            background: '#EFF6FF',
-                            color: '#2563EB',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontWeight: 700,
-                            fontSize: '12px',
-                            border: '1px solid #E2E8F0'
-                          }}>
-                            {doc.name ? doc.name.split(' ').map(p => p[0]).join('').substring(0, 2).toUpperCase() : 'DR'}
-                          </div>
-                          <div>
-                            <div className="doctor-name-text">{doc.name}</div>
-                            <div className="doctor-spec-text">{doc.specialty || 'General Medicine'}</div>
-                          </div>
+                    
+                    <div className="mt-4 flex items-end justify-between">
+                      <div>
+                        <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{filteredAppointments.length}</div>
+                        <div className="text-xs text-blue-700 font-bold mt-2 truncate">
+                          {completedAppts.length} completed · {filteredAppointments.length - completedAppts.length} pending ({completionPercent}% Done)
                         </div>
-                        {doc.isWeeklyOff ? (
-                          <span className="badge-premium red" style={{ background: '#FEF3C7', color: '#D97706', border: '1px solid #FCD34D' }}>
-                            Weekoff
-                          </span>
-                        ) : doc.isOnLeave ? (
-                          <span className="badge-premium red" style={{ background: '#FEE2E2', color: '#DC2626', border: '1px solid #FCA5A5' }}>
-                            On Leave
-                          </span>
-                        ) : doc.available === false ? (
-                          <span className="badge-premium red" style={{ background: '#FEE2E2', color: '#DC2626', border: '1px solid #FCA5A5' }}>
-                            Unavailable
-                          </span>
-                        ) : (
-                          <span className="badge-premium green">
-                            Available
-                          </span>
-                        )}
                       </div>
-                    ))
-                  ) : (
-                    <div style={{ textAlign: 'center', padding: '16px', color: '#64748B', fontSize: '13px', fontWeight: 600 }}>
-                      No doctors registered.
+
+                      {/* Blue Mini Sparkline */}
+                      <div className="w-16 h-8 shrink-0 relative">
+                        <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                          <defs>
+                            <linearGradient id="kpiBlueGradRec" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
+                              <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
+                            </linearGradient>
+                          </defs>
+                          <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiBlueGradRec)" />
+                          <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      </div>
                     </div>
-                  )}
+
+                    {/* Half Gradient Accent Line Beneath Card */}
+                    <div 
+                      className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                      style={{
+                        background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)'
+                      }}
+                    />
+                  </div>
+
+                  {/* Card 2: Waiting in Queue (Purple/Violet Gradient) */}
+                  <div 
+                    className="p-5 rounded-2xl border border-purple-200/90 shadow-[0_12px_28px_rgba(139,92,246,0.08)] hover:shadow-[0_16px_36px_rgba(139,92,246,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                    style={{
+                      background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)'
+                    }}
+                    onClick={() => switchTab('appointments')}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/25">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      </div>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider">Waiting in Queue</span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 flex items-end justify-between">
+                      <div>
+                        <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{waitingAppts.length}</div>
+                        <div className="text-xs text-purple-700 font-bold mt-2 truncate">
+                          Active Room Intake · ~12m avg wait
+                        </div>
+                      </div>
+
+                      {/* Purple Mini Sparkline */}
+                      <div className="w-16 h-8 shrink-0 relative">
+                        <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                          <defs>
+                            <linearGradient id="kpiPurpleGradRec" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.45"/>
+                              <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.05"/>
+                            </linearGradient>
+                          </defs>
+                          <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiPurpleGradRec)" />
+                          <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#8B5CF6" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    {/* Half Gradient Accent Line Beneath Card */}
+                    <div 
+                      className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                      style={{
+                        background: 'linear-gradient(90deg, transparent 0%, #8B5CF6 100%)'
+                      }}
+                    />
+                  </div>
+
+                  {/* Card 3: Collected Today (Emerald Green Gradient) */}
+                  <div 
+                    className="p-5 rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                    style={{
+                      background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)'
+                    }}
+                    onClick={() => switchTab('billing')}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
+                        <span className="text-base font-black font-sans leading-none">₹</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider">Collected Today</span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 flex items-end justify-between">
+                      <div>
+                        <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
+                          ₹{totalRevenueToday.toLocaleString('en-IN')}
+                        </div>
+                        <div className="text-xs text-emerald-700 font-bold mt-2 truncate">
+                          {paidBills.length} receipts settled · 100% cleared
+                        </div>
+                      </div>
+
+                      {/* Green Mini Sparkline */}
+                      <div className="w-16 h-8 shrink-0 relative">
+                        <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                          <defs>
+                            <linearGradient id="kpiGreenGradRec" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#10B981" stopOpacity="0.45"/>
+                              <stop offset="100%" stopColor="#10B981" stopOpacity="0.05"/>
+                            </linearGradient>
+                          </defs>
+                          <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#kpiGreenGradRec)" />
+                          <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#10B981" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    {/* Half Gradient Accent Line Beneath Card */}
+                    <div 
+                      className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                      style={{
+                        background: 'linear-gradient(90deg, transparent 0%, #10B981 100%)'
+                      }}
+                    />
+                  </div>
+
+                  {/* Card 4: Doctors Available (Amber / Orange Gradient) */}
+                  <div 
+                    className="p-5 rounded-2xl border border-amber-200/90 shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                    style={{
+                      background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)'
+                    }}
+                    onClick={() => switchTab('staff')}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/25">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></svg>
+                      </div>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">Doctors Available</span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 flex items-end justify-between">
+                      <div>
+                        <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
+                          {availableDocs.length} <span className="text-sm font-bold text-amber-800">/ {doctors.length}</span>
+                        </div>
+                        <div className="text-xs text-amber-700 font-bold mt-2 truncate">
+                          {doctors.length - availableDocs.length > 0 ? `${doctors.length - availableDocs.length} off duty / on leave` : '100% on duty'}
+                        </div>
+                      </div>
+
+                      {/* Amber Mini Sparkline */}
+                      <div className="w-16 h-8 shrink-0 relative">
+                        <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                          <defs>
+                            <linearGradient id="kpiAmberGradRec" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.45"/>
+                              <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.05"/>
+                            </linearGradient>
+                          </defs>
+                          <path d="M 0 28 Q 18 28, 28 26 T 44 18 T 56 6 T 64 8 L 64 32 L 0 32 Z" fill="url(#kpiAmberGradRec)" />
+                          <path d="M 0 28 Q 18 28, 28 26 T 44 18 T 56 6 T 64 8" fill="none" stroke="#F59E0B" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    {/* Half Gradient Accent Line Beneath Card */}
+                    <div 
+                      className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                      style={{
+                        background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)'
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
+              );
+            })()}
 
-            </div>
+            {/* 3. MAIN ASYMMETRIC DASHBOARD GRID */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '24px', alignItems: 'start', marginBottom: '24px' }}>
+              
+              {/* LEFT COLUMN: TODAY'S SCHEDULE & WAITING QUEUE */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minWidth: 0 }}>
+                
+                {/* Panel 1: TODAY'S SCHEDULE (TIMELINE) */}
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '18px', padding: '24px 26px', boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <i data-lucide="calendar" style={{ width: '17px', height: '17px' }}></i>
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '15.5px', fontWeight: 850, color: '#0F172A', margin: 0 }}>Today's Schedule</h3>
+                        <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550 }}>Live appointment timeline &amp; clinical consultations</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => switchTab('appointments')}
+                      style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#2563EB', fontSize: '11.5px', fontWeight: 750, padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', transition: 'all 0.15s' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.borderColor = '#BFDBFE'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                    >
+                      View All <i data-lucide="arrow-right" style={{ width: '13px', height: '13px' }}></i>
+                    </button>
+                  </div>
 
-            {/* Bottom Row: Latest Appointments Card Table */}
-            <div className="glass-card" style={{ padding: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '0 8px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Latest Appointments</h3>
-                <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', border: '1px solid #E2E8F0', background: 'transparent', color: '#475569', fontWeight: 700, cursor: 'pointer' }} onClick={() => switchTab('appointments')}>View All</button>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table className="premium-table">
-                  <thead>
-                    <tr>
-                      <th>Patient ID</th>
-                      <th>Patient Name</th>
-                      <th>Doctor Name</th>
-                      <th>Status</th>
-                      <th>Date & Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {getLatestAppointmentsList().length > 0 ? (
-                      getLatestAppointmentsList().map((app, idx) => (
-                        <tr key={idx}>
-                          <td style={{ fontWeight: 800, color: '#2563EB' }}>
-                            {app.patientId._id}
-                          </td>
-                          <td>
-                            <div 
-                              style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
-                              onClick={() => handleOpenPatientProfile(app.rawObj?.patientId)}
-                              onMouseEnter={(e) => { e.currentTarget.querySelector('.patient-name-span').style.color = '#2563EB'; }}
-                              onMouseLeave={(e) => { e.currentTarget.querySelector('.patient-name-span').style.color = '#0F172A'; }}
-                            >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {filteredAppointments.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '36px 16px', color: '#64748B', background: 'linear-gradient(135deg, #F8FAFC 0%, #EEF2FF 100%)', borderRadius: '14px', border: '1px dashed #CBD5E1' }}>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#FFFFFF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px auto', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.12)' }}>
+                          <i data-lucide="calendar-check" style={{ width: '24px', height: '24px' }}></i>
+                        </div>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: '#1E293B' }}>No appointments scheduled for this view</div>
+                        <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px' }}>Click "+ Create Appointment" to schedule an OPD patient slot</div>
+                      </div>
+                    ) : (
+                      filteredAppointments.slice(0, 5).map((app, idx) => {
+                        const isCompleted = app.status === 'Completed' || app.status === 'Paid';
+                        const isCancelled = app.status === 'Cancelled';
+                        const isPending = !isCompleted && !isCancelled;
+                        const patientName = app.patientId?.name || 'Walk-in Patient';
+                        const doctorName = app.doctorId?.name || 'Assigned Specialist';
+                        const specialty = app.doctorId?.specialty || 'General Medicine';
+                        const timeSlot = app.time || '09:30 AM';
+
+                        return (
+                          <div
+                            key={app._id || idx}
+                            onClick={() => openDetailsModal(app)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '12px 16px',
+                              borderRadius: '12px',
+                              background: idx === 0 && isPending ? '#F0F9FF' : '#FAFBFD',
+                              border: idx === 0 && isPending ? '1px solid #BAE6FD' : '1px solid #F1F5F9',
+                              transition: 'all 0.15s ease',
+                              cursor: 'pointer',
+                              gap: '12px'
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(15,23,42,0.06)'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = idx === 0 && isPending ? '#F0F9FF' : '#FAFBFD'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = idx === 0 && isPending ? '#BAE6FD' : '#F1F5F9'; }}
+                          >
+                            {/* Time & Dot */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '100px' }}>
+                              <span style={{
+                                width: '9px',
+                                height: '9px',
+                                borderRadius: '50%',
+                                background: isCompleted ? '#10B981' : isCancelled ? '#EF4444' : '#2563EB',
+                                boxShadow: isPending ? '0 0 0 3px rgba(37,99,235,0.15)' : 'none',
+                                flexShrink: 0
+                              }} />
+                              <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', fontVariantNumeric: 'tabular-nums' }}>
+                                {timeSlot}
+                              </span>
+                            </div>
+
+                            {/* Patient Info */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
                               <div style={{
-                                width: '28px',
-                                height: '28px',
+                                width: '32px',
+                                height: '32px',
                                 borderRadius: '50%',
                                 background: '#EFF6FF',
                                 color: '#2563EB',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                fontWeight: 700,
+                                fontWeight: 800,
                                 fontSize: '11px',
-                                border: '1px solid #E2E8F0'
+                                flexShrink: 0,
+                                border: '1px solid #DBEAFE'
                               }}>
-                                {app.patientId.name ? app.patientId.name.split(' ').map(p => p[0]).join('').substring(0, 2).toUpperCase() : 'PT'}
+                                {patientName.split(' ').map(p => p[0]).join('').substring(0, 2).toUpperCase()}
                               </div>
-                              <span className="patient-name-span" style={{ fontWeight: 800, color: '#0F172A', transition: 'color 0.2s' }}>{app.patientId.name}</span>
-                            </div>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <div style={{
-                                width: '28px',
-                                height: '28px',
-                                borderRadius: '50%',
-                                background: '#F5F3FF',
-                                color: '#7C3AED',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontWeight: 700,
-                                fontSize: '11px',
-                                border: '1px solid #E2E8F0'
-                              }}>
-                                {app.doctorId.name ? app.doctorId.name.split(' ').map(p => p[0]).join('').substring(0, 2).toUpperCase() : 'DR'}
+                              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {patientName}
+                                </span>
+                                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 550 }}>
+                                  ID: {getFormattedPatientId(app.patientId?._id || app.patientId)}
+                                </span>
                               </div>
-                              <span style={{ fontWeight: 700, color: '#334155' }}>{app.doctorId.name}</span>
                             </div>
-                          </td>
-                          <td>
-                            <span className="badge-premium green">
-                              {app.status}
+
+                            {/* Doctor info */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: '140px' }} className="desktop-only-flex">
+                              <span style={{ fontSize: '12px', fontWeight: 750, color: '#334155' }}>
+                                Dr. {doctorName.replace(/^Dr\.\s*/i, '')}
+                              </span>
+                              <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>
+                                {specialty}
+                              </span>
+                            </div>
+
+                            {/* Status badge */}
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: 800,
+                              padding: '3px 9px',
+                              borderRadius: '20px',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.4px',
+                              background: isCompleted ? '#D1FAE5' : isCancelled ? '#FEE2E2' : '#DBEAFE',
+                              color: isCompleted ? '#065F46' : isCancelled ? '#991B1B' : '#1E40AF',
+                              border: `1px solid ${isCompleted ? '#A7F3D0' : isCancelled ? '#FECACA' : '#BFDBFE'}`,
+                              flexShrink: 0
+                            }}>
+                              {app.status || 'Scheduled'}
                             </span>
-                          </td>
-                          <td style={{ fontWeight: 600, color: '#475569' }}>
-                            {getFormattedDate(app.rawObj?.date)}
-                            {app.time}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#64748B', fontSize: '14.5px', fontWeight: 600 }}>
-                          No appointments scheduled.
-                        </td>
-                      </tr>
+                          </div>
+                        );
+                      })
                     )}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                </div>
+
+                {/* Panel 2: WAITING QUEUE (OPERATIONALLY CRITICAL) */}
+                {(() => {
+                  const waitingQueue = filteredAppointments.filter(a => a.status === 'Waiting' || a.status === 'Checked In' || a.status === 'Pending' || a.status === 'Pending Approval' || (!['Completed', 'Paid', 'Cancelled'].includes(a.status)));
+
+                  return (
+                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '18px', padding: '24px 26px', boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <i data-lucide="users" style={{ width: '17px', height: '17px' }}></i>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <h3 style={{ fontSize: '15.5px', fontWeight: 850, color: '#0F172A', margin: 0 }}>Waiting Queue</h3>
+                            <span style={{ fontSize: '10.5px', fontWeight: 800, background: '#FEF3C7', color: '#92400E', padding: '2px 8px', borderRadius: '12px', border: '1px solid #FDE68A' }}>
+                              {waitingQueue.length} Waiting
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => switchTab('appointments')}
+                          style={{ background: '#FFFBEB', border: '1px solid #FCD34D', color: '#B45309', fontSize: '11.5px', fontWeight: 750, padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', transition: 'all 0.15s' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#FEF3C7'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#FFFBEB'; }}
+                        >
+                          Manage Queue <i data-lucide="arrow-right" style={{ width: '13px', height: '13px' }}></i>
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {waitingQueue.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '32px 16px', background: 'linear-gradient(135deg, #F0FDF4 0%, #ECFDF5 100%)', borderRadius: '14px', border: '1px solid #BBF7D0', color: '#15803D' }}>
+                            <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#FFFFFF', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px auto', boxShadow: '0 4px 12px rgba(22, 163, 74, 0.14)' }}>
+                              <i data-lucide="check-circle" style={{ width: '24px', height: '24px' }}></i>
+                            </div>
+                            <div style={{ fontSize: '13.5px', fontWeight: 850, color: '#166534' }}>Waiting Room is Clear</div>
+                            <div style={{ fontSize: '12px', color: '#15803D', marginTop: '3px' }}>All checked-in patients have been attended or none are currently in queue.</div>
+                          </div>
+                        ) : (
+                          waitingQueue.slice(0, 4).map((app, idx) => {
+                            const patientName = app.patientId?.name || 'Walk-in Patient';
+                            const doctorName = app.doctorId?.name || 'Specialist on Duty';
+                            const specialty = app.doctorId?.specialty || 'General Medicine';
+                            const tokenNum = String(idx + 1).padStart(2, '0');
+
+                            return (
+                              <div
+                                key={app._id || idx}
+                                onClick={() => openDetailsModal(app)}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '12px 16px',
+                                  borderRadius: '12px',
+                                  background: '#FFFDF7',
+                                  border: '1px solid #FEF3C7',
+                                  transition: 'all 0.15s ease',
+                                  cursor: 'pointer',
+                                  gap: '12px'
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#F59E0B'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(217,119,6,0.1)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = '#FFFDF7'; e.currentTarget.style.borderColor = '#FEF3C7'; e.currentTarget.style.boxShadow = 'none'; }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                  <div style={{
+                                    width: '34px',
+                                    height: '34px',
+                                    borderRadius: '10px',
+                                    background: '#FEF3C7',
+                                    color: '#B45309',
+                                    fontWeight: 900,
+                                    fontSize: '12px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}>
+                                    #{tokenNum}
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>{patientName}</span>
+                                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 550 }}>Mob: {app.patientId?.contact || 'N/A'}</span>
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }} className="desktop-only-flex">
+                                  <span style={{ fontSize: '12px', fontWeight: 750, color: '#334155' }}>Dr. {doctorName.replace(/^Dr\.\s*/i, '')}</span>
+                                  <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>{specialty}</span>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', fontVariantNumeric: 'tabular-nums' }}>
+                                    {app.time || 'Queue'}
+                                  </span>
+                                  <span style={{ fontSize: '10px', fontWeight: 800, padding: '3px 8px', borderRadius: '20px', background: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D' }}>
+                                    WAITING
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+              </div>{/* END LEFT COLUMN */}
+
+
+              {/* RIGHT COLUMN: QUICK ACTIONS, DOCTOR AVAILABILITY & COLLECTION SNAPSHOT */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minWidth: 0 }}>
+                
+                {/* Panel 1: QUICK ACTIONS PANEL */}
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '18px', padding: '22px 24px', boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                    <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <i data-lucide="zap" style={{ width: '15px', height: '15px' }}></i>
+                    </div>
+                    <h3 style={{ fontSize: '15px', fontWeight: 850, color: '#0F172A', margin: 0 }}>Quick Actions</h3>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    {[
+                      {
+                        title: 'Register Patient',
+                        desc: 'New OPD profile',
+                        icon: 'user-plus',
+                        color: '#2563EB',
+                        bg: '#EFF6FF',
+                        border: '#BFDBFE',
+                        action: () => { resetRegistrationForm(); setBookingType('opd'); switchTab('registration-form'); }
+                      },
+                      {
+                        title: 'Book Appt',
+                        desc: 'Doctor OPD slot',
+                        icon: 'calendar-plus',
+                        color: '#059669',
+                        bg: '#ECFDF5',
+                        border: '#A7F3D0',
+                        action: () => { resetRegistrationForm(); setBookingType('opd'); switchTab('registration-form'); }
+                      },
+                      {
+                        title: 'Check-in',
+                        desc: 'Mark arrived',
+                        icon: 'check-circle-2',
+                        color: '#D97706',
+                        bg: '#FFFBEB',
+                        border: '#FDE68A',
+                        action: () => switchTab('appointments')
+                      },
+                      {
+                        title: 'Collect Payment',
+                        desc: 'Generate receipt',
+                        icon: 'credit-card',
+                        color: '#7C3AED',
+                        bg: '#FAF5FF',
+                        border: '#DDD6FE',
+                        action: () => switchTab('billing')
+                      }
+                    ].map(item => (
+                      <div
+                        key={item.title}
+                        onClick={item.action}
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: '14px',
+                          background: item.bg,
+                          border: `1px solid ${item.border}`,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                          transition: 'all 0.18s ease'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 6px 16px ${item.color}25`; e.currentTarget.style.borderColor = item.color; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = item.border; }}
+                      >
+                        <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: '#FFFFFF', color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                          <i data-lucide={item.icon} style={{ width: '16px', height: '16px' }}></i>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>{item.title}</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 550, marginTop: '2px' }}>{item.desc}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Panel 2: DOCTOR AVAILABILITY */}
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '18px', padding: '22px 24px', boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <i data-lucide="stethoscope" style={{ width: '15px', height: '15px' }}></i>
+                      </div>
+                      <h3 style={{ fontSize: '15px', fontWeight: 850, color: '#0F172A', margin: 0 }}>Doctor Availability</h3>
+                    </div>
+                    <button
+                      onClick={() => switchTab('staff')}
+                      style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11.5px', fontWeight: 750, cursor: 'pointer', padding: 0 }}
+                    >
+                      View All →
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {doctors.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '16px', color: '#64748B', fontSize: '12px' }}>
+                        No doctors registered.
+                      </div>
+                    ) : (
+                      doctors.slice(0, 4).map((doc, idx) => {
+                        const isOff = doc.isWeeklyOff;
+                        const isLeave = doc.isOnLeave;
+                        const isUnavailable = doc.available === false;
+                        const isAvailable = !isOff && !isLeave && !isUnavailable;
+                        
+                        // Derived patient count for doctor today
+                        const docAppts = filteredAppointments.filter(a => String(a.doctorId?._id || a.doctorId) === String(doc._id));
+                        const docPatientsCount = docAppts.length;
+                        const maxTarget = 8;
+                        const utilizationPercent = Math.min(100, Math.round((docPatientsCount / maxTarget) * 100));
+
+                        return (
+                          <div
+                            key={doc._id || idx}
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px',
+                              padding: '10px 12px',
+                              borderRadius: '12px',
+                              background: '#F8FAFC',
+                              border: '1px solid #F1F5F9'
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                <div style={{
+                                  width: '30px',
+                                  height: '30px',
+                                  borderRadius: '50%',
+                                  background: isAvailable ? '#D1FAE5' : '#FEE2E2',
+                                  color: isAvailable ? '#065F46' : '#991B1B',
+                                  fontWeight: 800,
+                                  fontSize: '11px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0
+                                }}>
+                                  {doc.name ? doc.name.split(' ').map(p => p[0]).join('').substring(0, 2).toUpperCase() : 'DR'}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                  <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {doc.name}
+                                  </span>
+                                  <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>
+                                    {doc.specialty || 'General Medicine'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <span style={{
+                                fontSize: '10px',
+                                fontWeight: 800,
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                background: isAvailable ? '#D1FAE5' : isOff ? '#FEF3C7' : '#FEE2E2',
+                                color: isAvailable ? '#065F46' : isOff ? '#92400E' : '#991B1B',
+                                border: `1px solid ${isAvailable ? '#A7F3D0' : isOff ? '#FDE68A' : '#FECACA'}`
+                              }}>
+                                {isAvailable ? 'Available' : isOff ? 'Weekoff' : 'On Leave'}
+                              </span>
+                            </div>
+
+                            {/* Live Utilization Line */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>
+                              <span>Patients today: <strong style={{ color: '#0F172A' }}>{docPatientsCount}</strong></span>
+                              <span>{utilizationPercent}% active</span>
+                            </div>
+                            <div style={{ height: '4px', background: '#E2E8F0', borderRadius: '4px', overflow: 'hidden' }}>
+                              <div style={{ width: `${Math.max(5, utilizationPercent)}%`, height: '100%', background: isAvailable ? '#10B981' : '#94A3B8', borderRadius: '4px' }} />
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Panel 3: COLLECTION SNAPSHOT */}
+                {(() => {
+                  const paidBills = filteredBills.filter(b => b.status === 'Paid');
+                  const totalPaid = paidBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+                  const totalPending = filteredBills.filter(b => b.status !== 'Paid').reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+                  const totalGross = totalPaid + totalPending;
+                  const collectionRate = totalGross > 0 ? Math.round((totalPaid / totalGross) * 100) : 100;
+
+                  // Category Breakdown
+                  const opdRev = filteredBills.reduce((sum, b) => {
+                    const opdItems = (b.items || []).filter(i => !((i.description || '').toLowerCase().includes('lab') || (i.description || '').toLowerCase().includes('pharmacy') || (i.description || '').toLowerCase().includes('procedure')));
+                    return sum + (b.status === 'Paid' ? opdItems.reduce((s, i) => s + (i.amount || i.total || i.price || 0), 0) : 0);
+                  }, 0);
+
+                  const labRev = filteredBills.reduce((sum, b) => {
+                    const labItems = (b.items || []).filter(i => (i.description || '').toLowerCase().includes('lab'));
+                    return sum + (b.status === 'Paid' ? labItems.reduce((s, i) => s + (i.amount || i.total || i.price || 0), 0) : 0);
+                  }, 0);
+
+                  const serviceRev = Math.max(0, totalPaid - (opdRev + labRev));
+
+                  return (
+                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '18px', padding: '22px 24px', boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#FAF5FF', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <i data-lucide="receipt" style={{ width: '15px', height: '15px' }}></i>
+                          </div>
+                          <h3 style={{ fontSize: '15px', fontWeight: 850, color: '#0F172A', margin: 0 }}>Collection Snapshot</h3>
+                        </div>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#7C3AED', background: '#F5F3FF', padding: '2px 8px', borderRadius: '12px', border: '1px solid #DDD6FE' }}>
+                          {collectionRate}% Settled
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: '26px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.5px', marginBottom: '10px' }}>
+                        ₹{totalPaid.toLocaleString()}
+                      </div>
+
+                      {/* Collection Progress Bar */}
+                      <div style={{ height: '6px', background: '#F1F5F9', borderRadius: '6px', overflow: 'hidden', marginBottom: '8px' }}>
+                        <div style={{ width: `${Math.max(5, collectionRate)}%`, height: '100%', background: 'linear-gradient(90deg, #7C3AED 0%, #2563EB 100%)', borderRadius: '6px' }} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#64748B', fontWeight: 600, marginBottom: '14px' }}>
+                        <span>Collected: <strong style={{ color: '#059669' }}>₹{totalPaid.toLocaleString()}</strong></span>
+                        <span>Pending: <strong style={{ color: '#DC2626' }}>₹{totalPending.toLocaleString()}</strong></span>
+                      </div>
+
+                      {/* Department Breakdown Mini Table */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#475569', fontWeight: 600 }}>
+                          <span>OPD Consultation</span>
+                          <span style={{ fontWeight: 800, color: '#0F172A' }}>₹{opdRev > 0 ? opdRev.toLocaleString() : totalPaid.toLocaleString()}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#475569', fontWeight: 600 }}>
+                          <span>Diagnostic Lab</span>
+                          <span style={{ fontWeight: 800, color: '#0F172A' }}>₹{labRev.toLocaleString()}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#475569', fontWeight: 600 }}>
+                          <span>Direct Services &amp; Misc</span>
+                          <span style={{ fontWeight: 800, color: '#0F172A' }}>₹{serviceRev.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+              </div>{/* END RIGHT COLUMN */}
             </div>
 
+
+            {/* 4. RECENT RECEPTION ACTIVITY FEED */}
+            {(() => {
+              // Synthesize recent activities from actual live application events
+              const activities = [];
+
+              // Recent payments
+              filteredBills.filter(b => b.status === 'Paid').slice(0, 3).forEach(b => {
+                activities.push({
+                  id: `bill-${b._id}`,
+                  title: `Payment received from ${b.patientName || b.patientId?.name || 'Walk-in Patient'}`,
+                  subtitle: `Amount: ₹${(b.totalAmount || 0).toLocaleString()} · Method: ${b.paymentMethod || 'Cash'}`,
+                  time: b.createdAt || b.date,
+                  icon: 'credit-card',
+                  color: '#059669',
+                  bg: '#ECFDF5',
+                  border: '#A7F3D0'
+                });
+              });
+
+              // Recent appointments
+              filteredAppointments.slice(0, 3).forEach(a => {
+                activities.push({
+                  id: `appt-${a._id}`,
+                  title: `Appointment booked for ${a.patientId?.name || 'Patient'}`,
+                  subtitle: `With Dr. ${a.doctorId?.name || 'Specialist'} (${a.time || 'Today'})`,
+                  time: a.createdAt || a.date,
+                  icon: 'calendar-check',
+                  color: '#2563EB',
+                  bg: '#EFF6FF',
+                  border: '#BFDBFE'
+                });
+              });
+
+              // Recent patient registrations
+              filteredPatientsList.slice(0, 2).forEach(p => {
+                activities.push({
+                  id: `pat-${p._id}`,
+                  title: `New patient profile registered: ${p.name}`,
+                  subtitle: `ID: ${getFormattedPatientId(p._id)} · Contact: ${p.contact || 'N/A'}`,
+                  time: p.createdAt,
+                  icon: 'user-plus',
+                  color: '#7C3AED',
+                  bg: '#FAF5FF',
+                  border: '#DDD6FE'
+                });
+              });
+
+              // Sort by date/time descending
+              activities.sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
+
+              return (
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '18px', padding: '24px 26px', boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)', marginBottom: '30px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: '#F8FAFC', color: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #E2E8F0' }}>
+                        <i data-lucide="activity" style={{ width: '17px', height: '17px' }}></i>
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '15.5px', fontWeight: 850, color: '#0F172A', margin: 0 }}>Recent Activity</h3>
+                        <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550 }}>Front-desk transaction &amp; operational audit stream</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+                    {activities.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '24px', color: '#64748B', fontSize: '12.5px', gridColumn: '1 / -1' }}>
+                        No recent activity recorded yet today.
+                      </div>
+                    ) : (
+                      activities.slice(0, 4).map((act, idx) => (
+                        <div
+                          key={act.id || idx}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '12px',
+                            padding: '14px 16px',
+                            borderRadius: '14px',
+                            background: '#F8FAFC',
+                            border: `1px solid #E2E8F0`,
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = act.color; e.currentTarget.style.boxShadow = '0 4px 14px rgba(15,23,42,0.06)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = 'none'; }}
+                        >
+                          <div style={{
+                            width: '34px',
+                            height: '34px',
+                            borderRadius: '10px',
+                            background: act.bg,
+                            color: act.color,
+                            border: `1px solid ${act.border}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <i data-lucide={act.icon} style={{ width: '16px', height: '16px' }}></i>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                            <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', lineHeight: 1.3 }}>
+                              {act.title}
+                            </span>
+                            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 550, marginTop: '2px' }}>
+                              {act.subtitle}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 5. FLOATING ACTION DOCK */}
+            <div style={{
+              position: 'fixed',
+              bottom: '20px',
+              left: '50%',
+              transform: isSidebarCollapsed ? 'translateX(-50%)' : 'translateX(calc(-50% + 130px))',
+              zIndex: 1100,
+              background: 'rgba(255, 255, 255, 0.92)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: '1px solid rgba(226, 232, 240, 0.9)',
+              boxShadow: '0 16px 36px -8px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(0, 0, 0, 0.04)',
+              borderRadius: '40px',
+              padding: '6px 14px',
+              display: 'flex',
+              gap: '6px',
+              alignItems: 'center',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}>
+              {[
+                { id: 'help', title: 'Help & Guide', icon: 'help-circle', color: '#2563EB', bg: '#EFF6FF', action: () => window.open('https://curoxa.com/help', '_blank') },
+                { id: 'dash', title: 'Dashboard', icon: 'layout-grid', color: '#7C3AED', bg: '#FAF5FF', action: () => switchTab('dash') },
+                { id: 'patients', title: 'Patients', icon: 'users', color: '#059669', bg: '#ECFDF5', action: () => switchTab('patients') },
+                { id: 'appt', title: 'Appointments', icon: 'calendar', color: '#0284C7', bg: '#F0F9FF', action: () => switchTab('appointments') },
+                { id: 'billing', title: 'Finance & Billing', icon: 'wallet', color: '#EA580C', bg: '#FFF7ED', action: () => switchTab('billing') },
+                { id: 'doctors', title: 'Doctor Roster', icon: 'stethoscope', color: '#10B981', bg: '#ECFDF5', action: () => switchTab('staff') },
+                { id: 'filter', title: 'Date Filter', icon: 'filter', color: '#DB2777', bg: '#FDF2F8', action: () => setShowDashboardDateFilter(prev => !prev) },
+                { id: 'refresh', title: 'Live Sync', icon: 'refresh-cw', color: '#6366F1', bg: '#EEF2FF', action: () => window.location.reload() }
+              ].map(d => (
+                <button
+                  key={d.id}
+                  onClick={d.action}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    border: 'none',
+                    background: d.bg,
+                    color: d.color,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                  }}
+                  title={d.title}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-3px) scale(1.1)';
+                    e.currentTarget.style.boxShadow = `0 6px 16px ${d.color}35`;
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
+                  }}
+                >
+                  <i data-lucide={d.icon} style={{ width: '16px', height: '16px' }}></i>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -7256,9 +8938,7 @@ const ReceptionistDashboard = () => {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════════
-            INDENT TAB
-        ══════════════════════════════════════════════════════════ */}
+        {/* UTILITY REQUESTS TAB */}
         {activeTab === 'indent' && (() => {
           const filtered = indents
             .filter(ind => {
@@ -7282,17 +8962,29 @@ const ReceptionistDashboard = () => {
           const paginated = filtered.slice((indentPage - 1) * INDENT_PAGE_SIZE, indentPage * INDENT_PAGE_SIZE);
 
           const statusStyle = (s) => {
-            if (s === 'Approved') return { color: '#16A34A', fontWeight: 800 };
-            if (s === 'Rejected') return { color: '#DC2626', fontWeight: 800 };
-            if (s === 'Draft') return { color: '#64748B', fontWeight: 800 };
-            return { color: '#D97706', fontWeight: 800 };
+            switch (s) {
+              case 'Pending': return { background: '#FEF3C7', color: '#D97706', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+              case 'Approved': return { background: '#EFF6FF', color: '#2563EB', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+              case 'Awaiting Stock': return { background: '#FEF2F2', color: '#DC2626', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+              case 'Partially Fulfilled': return { background: '#FFF3E0', color: '#E65100', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+              case 'Fulfilled':
+              case 'Received': return { background: '#D1FAE5', color: '#065F46', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+              case 'Rejected':
+              case 'Cannot Fulfill': return { background: '#FEE2E2', color: '#991B1B', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+              default: return { background: '#F1F5F9', color: '#64748B', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+            }
           };
+
           const rowBg = (s) => {
-            if (s === 'Approved') return 'rgba(220,252,231,0.35)';
-            if (s === 'Rejected') return 'rgba(254,226,226,0.35)';
-            if (s === 'Draft') return 'rgba(241,245,249,0.4)';
-            return 'rgba(254,243,199,0.4)';
+            if (s === 'Pending') return 'rgba(254, 243, 199, 0.15)';
+            if (s === 'Approved') return 'rgba(239, 246, 255, 0.25)';
+            if (s === 'Awaiting Stock') return 'rgba(254, 242, 242, 0.25)';
+            if (s === 'Partially Fulfilled') return 'rgba(255, 243, 224, 0.2)';
+            if (s === 'Fulfilled' || s === 'Received') return 'rgba(209, 250, 229, 0.15)';
+            if (s === 'Rejected' || s === 'Cannot Fulfill') return 'rgba(254, 226, 226, 0.2)';
+            return 'transparent';
           };
+
           const avatarColors = ['#EFF6FF','#F0FDF4','#FDF2F8','#FFF7ED','#F5F3FF','#ECFDF5'];
           const avatarText  = ['#2563EB','#16A34A','#DB2777','#EA580C','#7C3AED','#059669'];
 
@@ -7302,19 +8994,19 @@ const ReceptionistDashboard = () => {
               {/* Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
                 <div>
-                  <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: '0 0 4px 0' }}>Purchase Indent Request</h1>
+                  <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: '0 0 4px 0' }}>Utility Requests &amp; Tracking</h1>
                   <div style={{ fontSize: '13px', color: '#94A3B8', fontWeight: 600 }}>
                     <span style={{ color: '#64748B' }}>Home</span>
                     <span style={{ margin: '0 6px', color: '#CBD5E1' }}>»</span>
-                    <span>Indents</span>
+                    <span>Utility Requests</span>
                   </div>
                 </div>
                 <button
                   onClick={() => switchTab('new-indent')}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#2563EB', color: 'white', border: 'none', borderRadius: '2px', padding: '0 20px', height: '26px', fontWeight: 800, fontSize: '12px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#2563EB', color: 'white', border: 'none', borderRadius: '4px', padding: '0 20px', height: '36px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Create New Indent
+                  Create Utility Request
                 </button>
               </div>
 
@@ -7324,22 +9016,22 @@ const ReceptionistDashboard = () => {
                 {/* Card Header: count + search + sort */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #F1F5F9' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 900, color: '#0F172A' }}>Total Purchase Indents</span>
-                    <span style={{ background: '#EF4444', color: 'white', borderRadius: '99px', padding: '2px 10px', fontSize: '12px', fontWeight: 800 }}>{filtered.length}</span>
+                    <span style={{ fontSize: '14px', fontWeight: 900, color: '#0F172A' }}>Total Utility Requests</span>
+                    <span style={{ background: '#2563EB', color: 'white', borderRadius: '99px', padding: '2px 10px', fontSize: '12px', fontWeight: 800 }}>{filtered.length}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '10px' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                       <input
                         type="text"
-                        placeholder="Search"
+                        placeholder="Search requests..."
                         value={indentSearch}
                         onChange={e => { setIndentSearch(e.target.value); setIndentPage(1); }}
-                        style={{ paddingLeft: '32px', paddingRight: '12px', height: '36px', border: '1px solid #E2E8F0', borderRadius: '2px', fontSize: '13px', outline: 'none', width: '180px', background: '#F8FAFC', fontFamily: 'inherit' }}
+                        style={{ paddingLeft: '32px', paddingRight: '12px', height: '36px', border: '1px solid #E2E8F0', borderRadius: '4px', fontSize: '13px', outline: 'none', width: '200px', background: '#F8FAFC', fontFamily: 'inherit' }}
                       />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/></svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/></svg>
                       Sort By :
                       <select value={indentSort} onChange={e => setIndentSort(e.target.value)} style={{ border: 'none', background: 'transparent', fontWeight: 700, fontSize: '12.5px', color: '#0F172A', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
                         <option value="newest">Newest</option>
@@ -7355,7 +9047,7 @@ const ReceptionistDashboard = () => {
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ background: '#F8FAFC' }}>
-                        <th style={{ padding: '14px 20px', width: '40px' }}>
+                        <th style={{ padding: '14px 16px', width: '40px' }}>
                           <input 
                             type="checkbox" 
                             checked={paginated.length > 0 && selectedIndentIds.length === paginated.length}
@@ -7366,26 +9058,40 @@ const ReceptionistDashboard = () => {
                                 setSelectedIndentIds([]);
                               }
                             }}
-                            title="Select All Indents"
+                            title="Select All"
                           />
                         </th>
-                        <th style={{ padding: '14px 20px', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Indent ID ↕</th>
-                        <th style={{ padding: '14px 20px', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Items</th>
-                        <th style={{ padding: '14px 20px', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Priority ↕</th>
-                        <th style={{ padding: '14px 20px', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Total Quantity ↕</th>
-                        <th style={{ padding: '14px 20px', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Status ↕</th>
-                        <th style={{ padding: '14px 20px', width: '40px' }}></th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Request ID</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Items</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Priority</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', whiteSpace: 'nowrap' }}>Requested</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', whiteSpace: 'nowrap' }}>Approved</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', whiteSpace: 'nowrap' }}>Supplied</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', whiteSpace: 'nowrap' }}>Remaining</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Status</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {paginated.length === 0 ? (
-                        <tr><td colSpan={7} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8', fontWeight: 600 }}>No indents found</td></tr>
+                        <tr><td colSpan={10} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8', fontWeight: 600 }}>No utility requests found</td></tr>
                       ) : paginated.map((ind, idx) => {
                         const itemKey = ind._id || ind.indentId || idx;
                         const isSelected = selectedIndentIds.includes(itemKey);
+                        const isPending = ind.status === 'Pending' || ind.status === 'Draft';
+                        const reqTotal = (ind.items || []).reduce((sum, it) => sum + (Number(it.requiredQty) || 0), 0);
+                        const hasApproved = (ind.items || []).some(it => it.approvedQty !== null && it.approvedQty !== undefined);
+                        const appTotal = hasApproved ? (ind.items || []).reduce((sum, it) => (it.approvedQty !== null && it.approvedQty !== undefined ? sum + Number(it.approvedQty) : sum), 0) : null;
+                        const supTotal = (ind.items || []).reduce((sum, it) => sum + (Number(it.suppliedQty) || 0), 0);
+                        const remTotal = hasApproved ? (ind.items || []).reduce((sum, it) => (it.approvedQty !== null && it.approvedQty !== undefined ? sum + Math.max(0, Number(it.approvedQty) - (Number(it.suppliedQty) || 0)) : sum), 0) : null;
+
                         return (
-                          <tr key={itemKey} style={{ background: isSelected ? '#EFF6FF' : rowBg(ind.status), borderBottom: '1px solid rgba(241,245,249,0.8)', cursor: 'pointer' }}>
-                            <td onClick={e => e.stopPropagation()} style={{ padding: '14px 20px' }}>
+                          <tr 
+                            key={itemKey} 
+                            onClick={() => { setSelectedIndent(ind); setShowIndentModal(true); }}
+                            style={{ background: isSelected ? '#EFF6FF' : rowBg(ind.status), borderBottom: '1px solid rgba(241,245,249,0.8)', cursor: 'pointer' }}
+                          >
+                            <td onClick={e => e.stopPropagation()} style={{ padding: '14px 16px' }}>
                               <input 
                                 type="checkbox" 
                                 checked={isSelected}
@@ -7399,29 +9105,45 @@ const ReceptionistDashboard = () => {
                                 }}
                               />
                             </td>
-                            <td onClick={() => { setSelectedIndent(ind); setShowIndentModal(true); }} style={{ padding: '14px 20px', fontWeight: 800, color: '#0F172A', fontSize: '12px' }}>{ind.indentId}</td>
-                            <td onClick={() => { setSelectedIndent(ind); setShowIndentModal(true); }} style={{ padding: '14px 20px' }}>
+                            <td style={{ padding: '14px 16px', fontWeight: 800, color: '#0F172A', fontSize: '13px' }}>{ind.indentId}</td>
+                            <td style={{ padding: '14px 16px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <div style={{ width: '32px', height: '22px', borderRadius: '2px', background: avatarColors[idx % avatarColors.length], color: avatarText[idx % avatarText.length], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 900, flexShrink: 0 }}>
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>
+                                <div style={{ width: '30px', height: '30px', borderRadius: '4px', background: avatarColors[idx % avatarColors.length], color: avatarText[idx % avatarText.length], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 900, flexShrink: 0 }}>
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>
                                 </div>
-                                <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '12px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '300px' }} title={(ind.items || []).map(it => it.name).join(', ')}>
+                                <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '13px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '240px' }} title={(ind.items || []).map(it => it.name).join(', ')}>
                                   {(ind.items || []).map(it => it.name).join(', ') || 'No Items'}
                                 </span>
                               </div>
                             </td>
-                            <td onClick={() => { setSelectedIndent(ind); setShowIndentModal(true); }} style={{ padding: '14px 20px' }}>
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 700, fontSize: '13px', color: ind.priority === 'Urgent' ? '#DC2626' : '#475569' }}>
+                            <td style={{ padding: '14px 16px' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 700, fontSize: '12px', color: ind.priority === 'Urgent' ? '#DC2626' : '#475569' }}>
                                 {ind.priority === 'Urgent' && <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>}
                                 {ind.priority}
                               </span>
                             </td>
-                            <td onClick={() => { setSelectedIndent(ind); setShowIndentModal(true); }} style={{ padding: '14px 20px', fontWeight: 700, color: '#475569', fontSize: '12px' }}>{ind.totalQty}</td>
-                            <td onClick={() => { setSelectedIndent(ind); setShowIndentModal(true); }} style={{ padding: '14px 20px' }}>
+                            <td style={{ padding: '14px 16px', fontWeight: 700, color: '#475569', fontSize: '13px', textAlign: 'center' }}>
+                              {reqTotal}
+                            </td>
+                            <td style={{ padding: '14px 16px', fontWeight: 800, color: '#2563EB', fontSize: '13px', textAlign: 'center' }}>
+                              {isPending || appTotal === null ? '—' : appTotal}
+                            </td>
+                            <td style={{ padding: '14px 16px', fontWeight: 800, color: '#16A34A', fontSize: '13px', textAlign: 'center' }}>
+                              {supTotal}
+                            </td>
+                            <td style={{ padding: '14px 16px', fontWeight: 800, color: remTotal !== null && remTotal > 0 ? '#D97706' : '#64748B', fontSize: '13px', textAlign: 'center' }}>
+                              {isPending || remTotal === null ? '—' : remTotal}
+                            </td>
+                            <td style={{ padding: '14px 16px' }}>
                               <span style={statusStyle(ind.status)}>{ind.status}</span>
                             </td>
-                            <td onClick={e => e.stopPropagation()} style={{ padding: '14px 20px' }}>
-                              <div style={{ cursor: 'pointer', color: '#94A3B8', fontSize: '14px', letterSpacing: '2px', lineHeight: 1, userSelect: 'none' }} title="Actions">⋮</div>
+                            <td onClick={e => e.stopPropagation()} style={{ padding: '14px 16px', textAlign: 'right' }}>
+                              <button
+                                onClick={() => { setSelectedIndent(ind); setShowIndentModal(true); }}
+                                style={{ padding: '5px 12px', background: '#F1F5F9', color: '#334155', border: '1px solid #E2E8F0', borderRadius: '4px', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
+                              >
+                                View Details
+                              </button>
                             </td>
                           </tr>
                         );
@@ -11040,77 +12762,209 @@ const ReceptionistDashboard = () => {
           </div>
         </div>
       )}
-      {/* Indent Order Summary Modal */}
+      {/* Indent Order Summary / Requisition Tracking Modal */}
       {showIndentModal && selectedIndent && (() => {
         const indentStatusStyle = (s) => {
-          if (s === 'Approved') return { color: '#16A34A', fontWeight: 800 };
-          if (s === 'Rejected') return { color: '#DC2626', fontWeight: 800 };
-          if (s === 'Received') return { color: '#0369A1', fontWeight: 800 };
-          if (s === 'Draft') return { color: '#64748B', fontWeight: 800 };
-          return { color: '#D97706', fontWeight: 800 };
+          switch (s) {
+            case 'Pending': return { background: '#FEF3C7', color: '#D97706', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+            case 'Approved': return { background: '#EFF6FF', color: '#2563EB', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+            case 'Awaiting Stock': return { background: '#FEF2F2', color: '#DC2626', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+            case 'Partially Fulfilled': return { background: '#FFF3E0', color: '#E65100', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+            case 'Fulfilled':
+            case 'Received': return { background: '#D1FAE5', color: '#065F46', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+            case 'Rejected':
+            case 'Cannot Fulfill': return { background: '#FEE2E2', color: '#991B1B', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+            default: return { background: '#F1F5F9', color: '#64748B', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 };
+          }
         };
+
+        const getStatusBanner = (status) => {
+          switch (status) {
+            case 'Pending':
+            case 'Draft':
+              return {
+                text: 'Waiting for Admin Approval',
+                bg: '#FEF3C7',
+                color: '#92400E',
+                border: '#FDE68A'
+              };
+            case 'Approved':
+              return {
+                text: 'Approved by Admin — waiting for Pharmacy fulfillment',
+                bg: '#EFF6FF',
+                color: '#1E40AF',
+                border: '#BFDBFE'
+              };
+            case 'Awaiting Stock':
+              return {
+                text: 'Temporarily unavailable — Pharmacy will supply when stock is available.',
+                bg: '#FEF2F2',
+                color: '#991B1B',
+                border: '#FECACA'
+              };
+            case 'Partially Fulfilled':
+              return {
+                text: 'Partially fulfilled — remaining approved quantity is pending.',
+                bg: '#FFF3E0',
+                color: '#9A3412',
+                border: '#FED7AA'
+              };
+            case 'Fulfilled':
+            case 'Received':
+              return {
+                text: 'Requisition complete — all approved units have been supplied.',
+                bg: '#D1FAE5',
+                color: '#065F46',
+                border: '#A7F3D0'
+              };
+            case 'Rejected':
+            case 'Cannot Fulfill':
+              return {
+                text: 'Request rejected by Admin.',
+                bg: '#FEE2E2',
+                color: '#991B1B',
+                border: '#FECACA'
+              };
+            default:
+              return {
+                text: status,
+                bg: '#F8FAFC',
+                color: '#475569',
+                border: '#E2E8F0'
+              };
+          }
+        };
+
+        const banner = getStatusBanner(selectedIndent.status);
+
         return (
           <div onClick={() => { setShowIndentModal(false); setSelectedIndent(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px' }}>
-            <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: '20px', padding: '32px', width: '100%', maxWidth: '600px', boxShadow: '0 24px 64px rgba(0,0,0,0.15)', animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: '20px', padding: '32px', width: '100%', maxWidth: '680px', boxShadow: '0 24px 64px rgba(0,0,0,0.15)', animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
                 <div>
-                  <div style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A' }}>Indent Order Summary</div>
-                  <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>ID: {selectedIndent.indentId}</div>
+                  <div style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A' }}>Utility Requisition Tracking</div>
+                  <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>Request ID: {selectedIndent.indentId}</div>
                 </div>
-                <button onClick={() => { setShowIndentModal(false); setSelectedIndent(null); }} style={{ background: '#F1F5F9', border: 'none', borderRadius: '2px', width: '32px', height: '22px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: '14px', fontWeight: 'bold' }}>✕</button>
+                <button onClick={() => { setShowIndentModal(false); setSelectedIndent(null); }} style={{ background: '#F1F5F9', border: 'none', borderRadius: '4px', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: '14px', fontWeight: 'bold' }}>✕</button>
               </div>
 
-              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', paddingRight: '4px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', paddingRight: '4px' }}>
+                
+                {/* Status Explanation Banner */}
+                <div style={{ padding: '12px 16px', background: banner.bg, color: banner.color, border: `1px solid ${banner.border}`, borderRadius: '8px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <span>{banner.text}</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                   <div>
                     <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Department</span>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B', marginTop: '2px' }}>{selectedIndent.department}</div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B', marginTop: '2px' }}>{selectedIndent.department}</div>
                   </div>
                   <div>
                     <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Requested Date</span>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B', marginTop: '2px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B', marginTop: '2px' }}>
                       {new Date(selectedIndent.createdAt || selectedIndent.requiredDate).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </div>
                   </div>
                   <div>
                     <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Requested By</span>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B', marginTop: '2px' }}>{selectedIndent.requestedBy}</div>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Status</span>
-                    <div style={{ marginTop: '2px' }}>
-                      <span style={indentStatusStyle(selectedIndent.status)}>{selectedIndent.status}</span>
-                    </div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B', marginTop: '2px' }}>{selectedIndent.requestedBy}</div>
                   </div>
                 </div>
 
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Current Status:</span>
+                  <span style={indentStatusStyle(selectedIndent.status)}>{selectedIndent.status}</span>
+                  {selectedIndent.priority === 'Urgent' && (
+                    <span style={{ background: '#FEE2E2', color: '#DC2626', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 }}>⚡ Urgent</span>
+                  )}
+                </div>
+
                 <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
-                  <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Items Ordered</h4>
-                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '2px', overflow: 'hidden' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Requested Items Breakdown</h4>
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', overflow: 'hidden' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                       <thead>
                         <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                          <th style={{ padding: '4px 8px', textAlign: 'left', fontWeight: 700, color: '#475569' }}>Item Name</th>
-                          <th style={{ padding: '4px 8px', textAlign: 'left', fontWeight: 700, color: '#475569' }}>Category</th>
-                          <th style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 700, color: '#475569' }}>Qty</th>
+                          <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#475569' }}>Item Name</th>
+                          <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#475569' }}>Requested</th>
+                          <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: '#2563EB' }}>Approved</th>
+                          <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: '#16A34A' }}>Supplied</th>
+                          <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: '#D97706' }}>Remaining</th>
+                          <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#475569' }}>Item Status</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {(selectedIndent.items || []).map((item, idx) => (
-                          <tr key={idx} style={{ borderBottom: idx === (selectedIndent.items || []).length - 1 ? 'none' : '1px solid #F1F5F9' }}>
-                            <td style={{ padding: '4px 8px', fontWeight: 700, color: '#0F172A' }}>{item.name}</td>
-                            <td style={{ padding: '4px 8px', color: '#64748B' }}>{item.category || 'N/A'}</td>
-                            <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 800, color: '#0F172A' }}>{item.requiredQty} {item.unit || 'Strip'}</td>
-                          </tr>
-                        ))}
+                        {(selectedIndent.items || []).map((item, idx) => {
+                          const isApproved = item.approvedQty !== null && item.approvedQty !== undefined;
+                          const reqQty = Number(item.requiredQty) || 0;
+                          const appQty = isApproved ? Number(item.approvedQty) : null;
+                          const supQty = Number(item.suppliedQty || 0);
+                          const remQty = isApproved ? Math.max(0, appQty - supQty) : null;
+
+                          let itemStatusLabel = 'Pending Approval';
+                          let itemStatusBg = '#FEF3C7';
+                          let itemStatusColor = '#D97706';
+
+                          if (selectedIndent.status === 'Rejected' || selectedIndent.status === 'Cannot Fulfill') {
+                            itemStatusLabel = 'Rejected';
+                            itemStatusBg = '#FEE2E2';
+                            itemStatusColor = '#991B1B';
+                          } else if (isApproved) {
+                            if (supQty >= appQty && appQty > 0) {
+                              itemStatusLabel = '✓ Fulfilled';
+                              itemStatusBg = '#D1FAE5';
+                              itemStatusColor = '#065F46';
+                            } else if (supQty > 0) {
+                              itemStatusLabel = `Partial (${supQty}/${appQty})`;
+                              itemStatusBg = '#FFF3E0';
+                              itemStatusColor = '#E65100';
+                            } else if (selectedIndent.status === 'Awaiting Stock') {
+                              itemStatusLabel = 'Awaiting Stock';
+                              itemStatusBg = '#FEF2F2';
+                              itemStatusColor = '#DC2626';
+                            } else {
+                              itemStatusLabel = 'Approved (Pending Supply)';
+                              itemStatusBg = '#EFF6FF';
+                              itemStatusColor = '#2563EB';
+                            }
+                          }
+
+                          return (
+                            <tr key={idx} style={{ borderBottom: idx === (selectedIndent.items || []).length - 1 ? 'none' : '1px solid #F1F5F9' }}>
+                              <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0F172A' }}>
+                                <div>{item.name}</div>
+                                <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>{item.category || item.unit || 'Strip'}</div>
+                              </td>
+                              <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#475569' }}>
+                                {reqQty}
+                              </td>
+                              <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: '#2563EB' }}>
+                                {appQty !== null ? appQty : '—'}
+                              </td>
+                              <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: '#16A34A' }}>
+                                {supQty}
+                              </td>
+                              <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: remQty !== null && remQty > 0 ? '#D97706' : '#64748B' }}>
+                                {remQty !== null ? remQty : '—'}
+                              </td>
+                              <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                                <span style={{ background: itemStatusBg, color: itemStatusColor, padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 }}>
+                                  {itemStatusLabel}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 </div>
 
                 {selectedIndent.purpose && (
-                  <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
-                    <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Remarks/Purpose</span>
+                  <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '14px' }}>
+                    <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Remarks/Purpose:</span>
                     <div style={{ fontSize: '13px', color: '#475569', marginTop: '4px', fontStyle: 'italic' }}>{selectedIndent.purpose}</div>
                   </div>
                 )}
@@ -11119,37 +12973,10 @@ const ReceptionistDashboard = () => {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '20px 0 0 0', borderTop: '1px solid #F1F5F9', flexShrink: 0, marginTop: '20px' }}>
                 <button 
                   onClick={() => { setShowIndentModal(false); setSelectedIndent(null); }}
-                  style={{ height: '40px', padding: '0 16px', borderRadius: '2px', border: '1px solid #E2E8F0', background: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '13px', color: '#64748B' }}
+                  style={{ height: '40px', padding: '0 20px', borderRadius: '4px', border: '1px solid #CBD5E1', background: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '13px', color: '#475569' }}
                 >
                   Close
                 </button>
-                {selectedIndent.status !== 'Received' && (
-                  <button 
-                    onClick={async () => {
-                      try {
-                        setLoading(true);
-                        const updated = { ...selectedIndent, status: 'Received' };
-                        setIndents(prev => prev.map(ind => ind._id === selectedIndent._id ? updated : ind));
-                        setSelectedIndent(updated);
-                        await api.put(`/indents/${selectedIndent._id}`, { status: 'Received' });
-                        showToast('Indent marked as received!', 'success');
-                        fetchData();
-                      } catch (err) {
-                        console.error(err);
-                        showToast('Failed to update indent status', 'error');
-                        fetchData();
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                    style={{ height: '40px', padding: '0 20px', borderRadius: '2px', border: 'none', background: '#2563EB', color: 'white', cursor: 'pointer', fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                    Done (Received)
-                  </button>
-                )}
               </div>
             </div>
           </div>

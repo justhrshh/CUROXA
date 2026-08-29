@@ -25,29 +25,48 @@ async function getNextPoId(tenantId) {
   const fyStr = getFinancialYearString();
   const prefix = `PO-${fyStr}-`;
 
-  // Find the latest purchase order for this tenant that matches this FY prefix
-  const latestPO = await PurchaseOrder.findOne({
+  // Find all purchase orders matching prefix for this tenant to find true max serial
+  const pos = await PurchaseOrder.find({
     tenantId,
     poId: { $regex: `^${prefix}` }
-  }).sort({ poId: -1 });
+  }, { poId: 1 });
 
-  let nextSerial = 1;
-  if (latestPO && latestPO.poId) {
-    const parts = latestPO.poId.split('-');
-    const lastSerialStr = parts[parts.length - 1];
-    const lastSerial = parseInt(lastSerialStr, 10);
-    if (!isNaN(lastSerial)) {
-      nextSerial = lastSerial + 1;
+  let maxSerial = 0;
+  for (const p of pos) {
+    if (p.poId) {
+      const match = p.poId.match(/PO-\d{4}-\d{2}-(\d+)/);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxSerial) {
+          maxSerial = num;
+        }
+      }
     }
   }
 
+  const nextSerial = maxSerial + 1;
   return `${prefix}${String(nextSerial).padStart(4, '0')}`;
 }
 
-// Get all Purchase Orders (scoped to tenant)
+// Get all Purchase Orders (scoped to tenant & role)
 router.get('/', async (req, res) => {
   try {
-    const pos = await PurchaseOrder.find({ tenantId: req.tenantId }).sort({ createdAt: -1 });
+    const filter = { tenantId: req.tenantId };
+
+    // Server-side Vendor Portal Isolation: Vendors only see their own approved child POs
+    if (req.user && (req.user.role === 'vendor' || req.user.vendorId)) {
+      const vId = req.user.vendorId || req.user.id || req.user._id;
+      filter.vendorId = vId;
+      filter.status = 'Approved';
+      filter.isParent = false;
+    } else {
+      if (req.query.vendorId) filter.vendorId = req.query.vendorId;
+      if (req.query.status) filter.status = req.query.status;
+      if (req.query.parentPOId) filter.parentPOId = req.query.parentPOId;
+      if (req.query.isParent !== undefined) filter.isParent = req.query.isParent === 'true';
+    }
+
+    const pos = await PurchaseOrder.find(filter).sort({ createdAt: -1 });
     res.json(pos);
   } catch (error) {
     console.error("Get purchase orders error:", error);
@@ -66,25 +85,179 @@ router.get('/next-number', async (req, res) => {
   }
 });
 
-// Create a new Purchase Order (scoped to tenant)
-router.post('/', async (req, res) => {
-  const { vendorId, vendorName, items, totalAmount, requestedBy, status, expectedDelivery } = req.body;
+// Get single Purchase Order by ID with role authorization
+router.get('/:id', async (req, res) => {
   try {
-    const generatedPoId = await getNextPoId(req.tenantId);
-    const po = await PurchaseOrder.create({
-      tenantId: req.tenantId,
-      poId: generatedPoId,
-      vendorId,
-      vendorName,
-      items,
-      totalAmount,
-      requestedBy,
-      status: status || 'Draft',
-      expectedDelivery: expectedDelivery ? new Date(expectedDelivery) : null
-    });
+    const filter = { _id: req.params.id, tenantId: req.tenantId };
+    if (req.user && (req.user.role === 'vendor' || req.user.vendorId)) {
+      const vId = req.user.vendorId || req.user.id || req.user._id;
+      filter.vendorId = vId;
+      filter.status = 'Approved';
+      filter.isParent = false;
+    }
+    const po = await PurchaseOrder.findOne(filter);
+    if (!po) return res.status(404).json({ error: 'Purchase Order not found' });
+    res.json(po);
+  } catch (error) {
+    console.error("Get single purchase order error:", error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
-    if (po.status === 'Pending' || po.status === 'Pending Approval') {
-      const Approval = require('../models/Approval');
+// Create a new Consolidated Purchase Order (with automatic Vendor Splitting)
+router.post('/', async (req, res) => {
+  console.log("BACKEND RECEIVED PO req.body:", JSON.stringify(req.body, null, 2));
+  const { items, requestedBy, expectedDelivery, notes } = req.body;
+  try {
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'At least one item is required to create a purchase order' });
+    }
+
+    // 1. Validate Active Vendors and sanitize line items
+    const activeVendors = await Vendor.find({ tenantId: req.tenantId, status: 'Active' });
+    const activeVendorMap = new Map(activeVendors.map(v => [v._id.toString(), v]));
+
+    const vendorGroups = {};
+    const sanitizedItems = [];
+    let grandSubtotal = 0;
+    let grandTaxAmount = 0;
+    let grandTotal = 0;
+
+    for (let idx = 0; idx < items.length; idx++) {
+      const it = items[idx];
+      if (!it.name || !it.name.trim()) {
+        return res.status(400).json({ error: `Item name is required for line #${idx + 1}` });
+      }
+      if (!it.sku || !it.sku.trim()) {
+        return res.status(400).json({ error: `SKU is required for item '${it.name}'` });
+      }
+      
+      const qty = Number(it.requiredQty || it.qty || 0);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        return res.status(400).json({ error: `Quantity must be a positive number for '${it.name}'` });
+      }
+
+      // Determine vendor
+      let vId = it.vendorId ? it.vendorId.toString() : null;
+      let vObj = vId ? activeVendorMap.get(vId) : null;
+
+      if (!vObj) {
+        // Find cheapest active vendor supplying this item if vendorId was not explicitly passed
+        let cheapestVendor = null;
+        let lowestPrice = Infinity;
+        let bestGst = 12;
+
+        for (const v of activeVendors) {
+          const match = (v.medicines || []).find(m => m.sku === it.sku.trim().toUpperCase() && m.available !== false);
+          if (match && Number(match.price) < lowestPrice) {
+            lowestPrice = Number(match.price);
+            bestGst = match.gst !== undefined ? Number(match.gst) : 12;
+            cheapestVendor = v;
+          }
+        }
+
+        if (cheapestVendor) {
+          vObj = cheapestVendor;
+          vId = cheapestVendor._id.toString();
+        } else if (activeVendors.length > 0) {
+          vObj = activeVendors[0];
+          vId = vObj._id.toString();
+        } else {
+          return res.status(400).json({ error: `No Active vendor available to fulfill '${it.name}'` });
+        }
+      }
+
+      // Read vendor rate list to verify authoritative price & GST
+      const medRate = (vObj.medicines || []).find(m => m.sku === it.sku.trim().toUpperCase() && m.available !== false);
+      const unitPrice = medRate ? Number(medRate.price) : (Number(it.price) || 0);
+      const taxRate = medRate && medRate.gst !== undefined ? Number(medRate.gst) : (Number(it.tax) || 12);
+      
+      if (unitPrice <= 0) {
+        return res.status(400).json({ error: `Valid positive purchase price not found for '${it.name}' from vendor '${vObj.name}'` });
+      }
+
+      const lineSubtotal = qty * unitPrice;
+      const lineTax = (lineSubtotal * taxRate) / 100;
+      const lineTotal = lineSubtotal + lineTax;
+
+      grandSubtotal += lineSubtotal;
+      grandTaxAmount += lineTax;
+      grandTotal += lineTotal;
+
+      const sanitizedLine = {
+        itemId: it.itemId || it._id || undefined,
+        name: it.name.trim(),
+        sku: it.sku.trim().toUpperCase(),
+        requiredQty: qty,
+        price: unitPrice,
+        tax: taxRate,
+        total: Math.round(lineTotal * 100) / 100,
+        vendorId: vObj._id,
+        vendorName: vObj.name
+      };
+
+      sanitizedItems.push(sanitizedLine);
+
+      if (!vendorGroups[vId]) {
+        vendorGroups[vId] = {
+          vendor: vObj,
+          items: [],
+          subtotal: 0,
+          taxAmount: 0,
+          totalAmount: 0
+        };
+      }
+      vendorGroups[vId].items.push(sanitizedLine);
+      vendorGroups[vId].subtotal += lineSubtotal;
+      vendorGroups[vId].taxAmount += lineTax;
+      vendorGroups[vId].totalAmount += lineTotal;
+    }
+
+    // 2. Generate Base Master PO Number
+    const parentPoId = await getNextPoId(req.tenantId);
+    const vendorKeys = Object.keys(vendorGroups);
+    const Approval = require('../models/Approval');
+    const childOrders = [];
+
+    // 3. Create Vendor-Specific Child POs
+    const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    for (let i = 0; i < vendorKeys.length; i++) {
+      const vKey = vendorKeys[i];
+      const grp = vendorGroups[vKey];
+      const suffix = LETTERS[i % LETTERS.length];
+      const childPoId = `${parentPoId}-${suffix}`;
+      const childTotal = Math.round(grp.totalAmount * 100) / 100;
+      const childSubtotal = Math.round(grp.subtotal * 100) / 100;
+      const childTax = Math.round(grp.taxAmount * 100) / 100;
+
+      const childPO = await PurchaseOrder.create({
+        tenantId: req.tenantId,
+        poId: childPoId,
+        parentPOId: parentPoId,
+        isParent: false,
+        vendorId: grp.vendor._id,
+        vendorName: grp.vendor.name,
+        items: grp.items,
+        subtotal: childSubtotal,
+        taxAmount: childTax,
+        totalAmount: childTotal,
+        totalItems: grp.items.length,
+        totalVendors: 1,
+        requestedBy: requestedBy || req.user.name || 'Pharmacist',
+        status: 'Pending Approval',
+        expectedDelivery: expectedDelivery ? new Date(expectedDelivery) : null,
+        notes: notes || ''
+      });
+
+      childOrders.push({
+        poId: childPO.poId,
+        vendorId: grp.vendor._id,
+        vendorName: grp.vendor.name,
+        totalAmount: childTotal,
+        status: 'Pending Approval'
+      });
+
+      // Create distinct Admin Approval document per vendor PO
       await Approval.create({
         tenantId: req.tenantId,
         type: 'purchase_order_approval',
@@ -92,26 +265,56 @@ router.post('/', async (req, res) => {
         requesterName: requestedBy || req.user.name || 'Pharmacist',
         requesterRole: req.user.role || 'pharmacist',
         details: {
-          poId: po._id,
-          poNumber: po.poId,
-          vendorId: po.vendorId,
-          vendorName: po.vendorName,
-          items: po.items,
-          totalAmount: po.totalAmount
+          poId: childPO._id,
+          poNumber: childPO.poId,
+          parentPOId: parentPoId,
+          parentPONumber: parentPoId,
+          vendorId: grp.vendor._id,
+          vendorName: grp.vendor.name,
+          items: childPO.items,
+          subtotal: childSubtotal,
+          taxAmount: childTax,
+          totalAmount: childTotal
         },
-        comment: `Purchase Order approval request for ${po.poId}`
+        comment: `Purchase Order approval request for ${childPO.poId} (${grp.vendor.name})`
       });
     }
 
+    // 4. Create Master Parent Consolidated PO
+    const parentPO = await PurchaseOrder.create({
+      tenantId: req.tenantId,
+      poId: parentPoId,
+      parentPOId: null,
+      isParent: true,
+      vendorId: null,
+      vendorName: 'Consolidated Multiple Suppliers',
+      items: sanitizedItems,
+      subtotal: Math.round(grandSubtotal * 100) / 100,
+      taxAmount: Math.round(grandTaxAmount * 100) / 100,
+      totalAmount: Math.round(grandTotal * 100) / 100,
+      totalItems: sanitizedItems.length,
+      totalVendors: vendorKeys.length,
+      vendorOrders: childOrders,
+      requestedBy: requestedBy || req.user.name || 'Pharmacist',
+      status: 'Pending Approval',
+      expectedDelivery: expectedDelivery ? new Date(expectedDelivery) : null,
+      notes: notes || ''
+    });
+
+    // 5. Emit targeted Socket.IO notifications
     const io = req.app.get("io");
     if (io && req.tenantId) {
       io.to(req.tenantId).emit("data_changed", { type: "purchase_orders" });
-      if (po.status === 'Pending' || po.status === 'Pending Approval') {
-        io.to(req.tenantId).emit("data_changed", { type: "approvals" });
-      }
+      io.to(req.tenantId).emit("data_changed", { type: "approvals" });
     }
-    res.status(201).json(po);
+
+    res.status(201).json({
+      message: 'Consolidated purchase order created and split into vendor orders successfully',
+      parentPO,
+      childPOsCount: childOrders.length
+    });
   } catch (error) {
+    console.error("Create purchase order error:", error);
     res.status(400).json({ error: error.message });
   }
 });

@@ -4,6 +4,7 @@ const Medicine = require("../models/Medicine");
 const AuditLog = require("../models/AuditLog");
 const Appointment = require("../models/Appointment");
 const LabRequest = require("../models/LabRequest");
+const { validateAndPlanFEFO, commitFEFOConsumption } = require("../utils/inventoryEngine");
 const { verifyToken } = require("../middleware/authMiddleware");
 const router = express.Router();
 
@@ -33,7 +34,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Create a prescription (scoped to tenant) — with parallel stock reservation
+// Create a prescription (scoped to tenant) — NO premature stock deduction
 router.post("/", async (req, res) => {
   const { patientId, doctorId, items, status, appointmentId } = req.body;
   try {
@@ -42,49 +43,9 @@ router.post("/", async (req, res) => {
       patientId,
       doctorId,
       items,
-      status,
+      status: status || 'Pending',
       appointmentId
     });
-
-    // Pre-deduct stock in parallel based on the actual prescribed quantity
-    if (Array.isArray(prescription.items) && prescription.items.length > 0) {
-      const stockUpdates = prescription.items
-        .filter((item) => item && item.medicine)
-        .map(async (item) => {
-          const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
-          try {
-            // Try exact name match first
-            let med = await Medicine.findOne({
-              name: item.medicine,
-              tenantId: req.tenantId,
-            });
-            if (!med) {
-              // Fallback to regex match of all words in the input name
-              const words = String(item.medicine).split(/\s+/).filter(Boolean);
-              if (words.length > 0) {
-                const conditions = words.map(w => ({
-                  name: { $regex: new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }
-                }));
-                med = await Medicine.findOne({
-                  $and: conditions,
-                  tenantId: req.tenantId,
-                });
-              }
-            }
-            if (med) {
-              med.stock = Math.max(0, med.stock - qty);
-              if (med.stock === 0) med.status = "Out of Stock";
-              else if (med.stock <= 20) med.status = "Low Stock";
-              else med.status = "In Stock";
-              await med.save();
-            }
-          } catch (e) {
-            // best-effort per item
-          }
-        });
-      // Don't block the response on stock updates
-      Promise.all(stockUpdates).catch(() => {});
-    }
 
     // Fire-and-forget audit log
     AuditLog.create({
@@ -103,7 +64,6 @@ router.post("/", async (req, res) => {
     const io = req.app.get("io");
     if (io && req.tenantId) {
       io.to(req.tenantId).emit("data_changed", { type: "prescriptions" });
-      io.to(req.tenantId).emit("data_changed", { type: "medicines" });
     }
     res.status(201).json(prescription);
   } catch (error) {
@@ -125,6 +85,45 @@ router.put("/:id", async (req, res) => {
     if (!previous)
       return res.status(404).json({ error: "Prescription not found" });
 
+    const isDispenseTransition = (status === 'Dispensed' || status === 'Dispensed by Pharmacy');
+    const wasAlreadyDispensed = (previous.status === 'Dispensed' || previous.status === 'Dispensed by Pharmacy');
+
+    // Invariant 1: Prevent double dispensing
+    if (isDispenseTransition && wasAlreadyDispensed) {
+      return res.status(400).json({ error: "Prescription has already been dispensed and cannot be dispensed again." });
+    }
+
+    // Invariant 2: Cannot dispense a cancelled prescription
+    if (isDispenseTransition && previous.status === 'Cancelled') {
+      return res.status(400).json({ error: "Cannot dispense a cancelled prescription." });
+    }
+
+    // Invariant 3: Atomic stock validation and deduction upon dispensing using FEFO
+    let stockModified = false;
+    let fefoAllocationsSummary = [];
+    if (isDispenseTransition && !wasAlreadyDispensed) {
+      const itemsToDispense = items !== undefined ? items : previous.items;
+      if (Array.isArray(itemsToDispense) && itemsToDispense.length > 0) {
+        try {
+          // Step 1: Pre-validate all items across prescription and compute FEFO allocations
+          const fefoPlans = await validateAndPlanFEFO(req.tenantId, itemsToDispense);
+
+          // Step 2: Atomically commit FEFO batch and aggregate Medicine.stock deductions
+          await commitFEFOConsumption(req.tenantId, fefoPlans);
+          stockModified = true;
+
+          fefoAllocationsSummary = fefoPlans.map(p => ({
+            medicine: p.medicineDoc.name,
+            sku: p.medicineDoc.sku,
+            quantity: p.quantity,
+            allocations: p.allocations.map(a => ({ batchNumber: a.batchNumber, quantity: a.quantity }))
+          }));
+        } catch (invErr) {
+          return res.status(400).json({ error: invErr.message });
+        }
+      }
+    }
+
     const updateObj = {};
     if (items !== undefined) updateObj.items = items;
     if (status !== undefined) updateObj.status = status;
@@ -135,6 +134,7 @@ router.put("/:id", async (req, res) => {
       updateObj,
       { returnDocument: "after" }
     ).populate("patientId", "name");
+
     let pharmacistChanged = false;
     let labTechChanged = false;
     const diffDetails = [];
@@ -217,53 +217,13 @@ router.put("/:id", async (req, res) => {
       await Appointment.findByIdAndUpdate(activeAppId, appUpdate);
     }
 
-    // Restore stock if transitioning to Cancelled
-    if (status === "Cancelled" && previous.status !== "Cancelled") {
-      const rxItems = prescription.items || previous.items || [];
-      if (Array.isArray(rxItems) && rxItems.length > 0) {
-        const stockUpdates = rxItems
-          .filter((item) => item && item.medicine)
-          .map(async (item) => {
-            const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
-            try {
-              let med = await Medicine.findOne({
-                name: item.medicine,
-                tenantId: req.tenantId,
-              });
-              if (!med) {
-                const words = String(item.medicine).split(/\s+/).filter(Boolean);
-                if (words.length > 0) {
-                  const conditions = words.map(w => ({
-                    name: { $regex: new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }
-                  }));
-                  med = await Medicine.findOne({
-                    $and: conditions,
-                    tenantId: req.tenantId,
-                  });
-                }
-              }
-              if (med) {
-                med.stock = med.stock + qty;
-                if (med.stock === 0) med.status = "Out of Stock";
-                else if (med.stock <= 20) med.status = "Low Stock";
-                else med.status = "In Stock";
-                await med.save();
-              }
-            } catch (e) {
-              // best-effort per item
-            }
-          });
-        Promise.all(stockUpdates).catch(() => {});
-      }
-    }
-
-    // Audit log for edits or status transitions
+    // Audit log for edits, dispensing, or status transitions
     AuditLog.create({
       tenantId: req.tenantId,
       actor: req.user.staff_id || req.user.id || "system",
       actorName: req.user.name || "",
       actorRole: req.user.role || "",
-      action: pharmacistChanged || labTechChanged ? "prescription_edited" : "prescription_status_changed",
+      action: isDispenseTransition ? "prescription_dispensed" : (pharmacistChanged || labTechChanged ? "prescription_edited" : "prescription_status_changed"),
       target: prescription._id.toString(),
       metadata: { 
         pharmacistChanged,
@@ -277,7 +237,9 @@ router.put("/:id", async (req, res) => {
     const io = req.app.get("io");
     if (io && req.tenantId) {
       io.to(req.tenantId).emit("data_changed", { type: "prescriptions" });
-      io.to(req.tenantId).emit("data_changed", { type: "medicines" });
+      if (stockModified) {
+        io.to(req.tenantId).emit("data_changed", { type: "medicines" });
+      }
       if (labTechChanged) {
         io.to(req.tenantId).emit("data_changed", { type: "labs" });
       }

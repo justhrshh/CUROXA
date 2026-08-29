@@ -11,18 +11,41 @@ export const printPO = (po, clinicName = 'CUROXA HEALTHCARE') => {
   document.body.appendChild(iframe);
 
   const printWindow = iframe.contentWindow;
+
+  // Extract unique vendors for multi-supplier/consolidated orders
+  const vendorList = (() => {
+    const set = new Set();
+    if (po.vendorOrders && Array.isArray(po.vendorOrders)) {
+      po.vendorOrders.forEach(vo => { if (vo.vendorName) set.add(vo.vendorName); });
+    }
+    if (po.items && Array.isArray(po.items)) {
+      po.items.forEach(it => { if (it.vendorName) set.add(it.vendorName); });
+    }
+    if (set.size === 0 && po.vendorName && po.vendorName !== 'Consolidated Multiple Suppliers') {
+      set.add(po.vendorName);
+    }
+    return Array.from(set);
+  })();
+
+  const isMasterPO = Boolean(po.isParent || po.vendorName === 'Consolidated Multiple Suppliers' || vendorList.length > 1);
   
   const itemsHTML = (po.items || []).map((item, idx) => {
-    const qty = item.requiredQty || 0;
+    const qty = item.requiredQty || item.qty || 0;
     const price = item.price || 0;
-    const total = qty * price;
+    const tax = item.tax !== undefined ? item.tax : 12;
+    const subtotal = qty * price;
+    const total = item.total || (subtotal + (subtotal * tax) / 100);
     return `
       <tr>
         <td style="padding: 10px; border-bottom: 1px solid #E2E8F0;">${idx + 1}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-weight: 600;">${item.name}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-weight: 600;">
+          ${item.name}
+          ${(isMasterPO && item.vendorName) ? `<div style="font-size: 11px; color: #2563EB; font-weight: 700; margin-top: 2px;">🏢 Supplier: ${item.vendorName}</div>` : ''}
+        </td>
         <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-family: monospace;">${item.sku || '—'}</td>
         <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: center;">${qty}</td>
         <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right;">₹${price.toFixed(2)}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: center; color: #64748B;">${tax}%</td>
         <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-weight: 600;">₹${total.toFixed(2)}</td>
       </tr>
     `;
@@ -45,7 +68,7 @@ export const printPO = (po, clinicName = 'CUROXA HEALTHCARE') => {
         .meta-val { font-size: 13px; font-weight: 700; color: #1E293B; }
         .items-table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
         .items-table th { background: #F8FAFC; padding: 10px; text-align: left; font-weight: 800; color: #475569; border-bottom: 2px solid #E2E8F0; font-size: 11px; text-transform: uppercase; }
-        .summary-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; width: 250px; margin-left: auto; }
+        .summary-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; width: 270px; margin-left: auto; }
         .summary-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
         .footer { margin-top: 50px; text-align: center; border-top: 1px solid #E2E8F0; padding-top: 15px; font-size: 11px; color: #94A3B8; }
       </style>
@@ -53,24 +76,36 @@ export const printPO = (po, clinicName = 'CUROXA HEALTHCARE') => {
     <body>
       <div class="header">
         <div>
-          <div class="title">Purchase Order</div>
+          <div class="title">${isMasterPO ? 'Master Purchase Order' : 'Purchase Order'}</div>
           <div class="clinic-name">${clinicName}</div>
         </div>
         <div style="text-align: right;">
           <div style="font-size: 16px; font-weight: 800; color: #0F172A; font-family: monospace;">${po.poId}</div>
-          <div style="color: #64748B; font-size: 12px; margin-top: 4px;">Status: <strong>${po.status}</strong></div>
+          ${po.parentPOId ? `<div style="font-size: 11px; color: #2563EB; font-weight: 700; margin-top: 2px;">Master PO: ${po.parentPOId}</div>` : ''}
+          ${isMasterPO 
+            ? `<div style="color: #4F46E5; font-size: 12px; margin-top: 4px; font-weight: 700;">Status: <strong>Consolidated Split (${vendorList.length || po.totalVendors || 2} POs)</strong></div>` 
+            : `<div style="color: #64748B; font-size: 12px; margin-top: 4px;">Status: <strong>${po.status}</strong></div>`}
         </div>
       </div>
 
       <table class="meta-table">
         <tr>
-          <td style="width: 50%;">
-            <span class="meta-label">Supplier / Vendor</span>
-            <span class="meta-val" style="font-size: 15px; color: #2563EB;">${po.vendorName}</span>
+          <td style="width: 55%;">
+            <span class="meta-label">${isMasterPO ? 'Procurement Type & Assigned Suppliers' : 'Supplier / Vendor'}</span>
+            <span class="meta-val" style="font-size: 14.5px; color: #2563EB;">
+              ${isMasterPO 
+                ? `Consolidated (${vendorList.length || po.totalVendors || 2} Vendors)` 
+                : (po.vendorName || 'N/A')}
+            </span>
+            ${isMasterPO && vendorList.length > 0 ? `
+              <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px;">
+                ${vendorList.map(v => `<span style="background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E40AF; padding: 3px 8px; border-radius: 4px; font-size: 11.5px; font-weight: 700;">🏢 ${v}</span>`).join('')}
+              </div>
+            ` : ''}
           </td>
-          <td style="width: 50%; text-align: right;">
+          <td style="width: 45%; text-align: right;">
             <span class="meta-label">Date Raised</span>
-            <span class="meta-val">${new Date(po.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+            <span class="meta-val">${new Date(po.createdAt || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
           </td>
         </tr>
         <tr>
@@ -89,12 +124,13 @@ export const printPO = (po, clinicName = 'CUROXA HEALTHCARE') => {
       <table class="items-table">
         <thead>
           <tr>
-            <th style="width: 50px;">S.No</th>
+            <th style="width: 45px;">S.No</th>
             <th>Item Name</th>
             <th>SKU / Code</th>
-            <th style="width: 80px; text-align: center;">Qty</th>
-            <th style="width: 100px; text-align: right;">Unit Price</th>
-            <th style="width: 120px; text-align: right;">Subtotal</th>
+            <th style="width: 70px; text-align: center;">Qty</th>
+            <th style="width: 90px; text-align: right;">Unit Price</th>
+            <th style="width: 60px; text-align: center;">GST</th>
+            <th style="width: 100px; text-align: right;">Line Total</th>
           </tr>
         </thead>
         <tbody>
@@ -103,8 +139,20 @@ export const printPO = (po, clinicName = 'CUROXA HEALTHCARE') => {
       </table>
 
       <div class="summary-box">
-        <div class="summary-row" style="font-size: 14px; font-weight: 800; color: #0F172A;">
-          <span>Total Amount</span>
+        ${po.subtotal ? `
+          <div class="summary-row" style="color: #64748B;">
+            <span>Subtotal</span>
+            <span>₹${Number(po.subtotal).toFixed(2)}</span>
+          </div>
+        ` : ''}
+        ${po.taxAmount ? `
+          <div class="summary-row" style="color: #64748B;">
+            <span>Estimated GST</span>
+            <span>₹${Number(po.taxAmount).toFixed(2)}</span>
+          </div>
+        ` : ''}
+        <div class="summary-row" style="font-size: 14px; font-weight: 800; color: #0F172A; border-top: 1px dashed #CBD5E1; padding-top: 6px; margin-top: 4px;">
+          <span>Grand Total</span>
           <span>₹${(po.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         </div>
       </div>

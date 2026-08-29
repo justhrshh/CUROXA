@@ -6,7 +6,7 @@ import api from '../utils/api';
 import { 
   LayoutDashboard, Users, Network, CalendarClock, CircleDollarSign, 
   FileText, Settings, Bell, Clock, 
-  Menu, X, Building2, UserCheck
+  Menu, X, Building2, UserCheck, ChevronDown, MessageSquare
 } from 'lucide-react';
 
 // Subviews
@@ -14,6 +14,7 @@ import DashboardView from '../components/hr/DashboardView';
 import EmployeeDirectoryView from '../components/hr/EmployeeDirectoryView';
 import EmployeeProfileView from '../components/hr/EmployeeProfileView';
 import AttendanceLeaveView from '../components/hr/AttendanceLeaveView';
+import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
 
 import ReportsView from '../components/hr/ReportsView';
 import HRPayrollStaff from './HRPayrollStaff';
@@ -167,9 +168,25 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
     }
   };
 
+  const fetchAssets = async () => {
+    if (assets.length > 0) return;
+    try {
+      const res = await api.get('/hr/assets');
+      if (res.data) setAssets(res.data);
+    } catch (err) {
+      console.error('Failed to load assets', err);
+    }
+  };
+
   useEffect(() => {
     setPmGridSearch('');
   }, [pmSelectedStaffId]);
+
+  useEffect(() => {
+    if (activeTab === 'RoleCoverage') {
+      fetchRoleCoverage();
+    }
+  }, [activeTab]);
 
   // Recruitment Sourcing states loaded dynamically from localStorage
   const [jobs, setJobs] = useState(() => {
@@ -235,98 +252,100 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  // Fetch registered users from backend and merge with rich local profile properties
+  // Optimized parallel fetch for core dashboard data with zero sequential blocking
   const fetchData = async (showSpinner = true) => {
     try {
-      if (showSpinner) setLoading(true);
-      const res = await api.get('/admin/users');
-      const backendUsers = res.data;
+      if (showSpinner && employees.length === 0) setLoading(true);
 
-      // Resolve admin's name dynamically to use as default reporting manager
-      const adminUser = backendUsers.find(u => u.role === 'admin');
-      const defaultManagerName = adminUser ? `${adminUser.name} (Administrator)` : (currentUser.role === 'admin' ? `${currentUser.name} (Administrator)` : 'Ishita Jain (Administrator)');
-      const defaultManagerId = adminUser ? (adminUser.staff_id || adminUser._id) : (currentUser.role === 'admin' ? (currentUser.staff_id || currentUser.id) : 'EMP-2026-100');
+      // Fetch all 3 core dashboard endpoints concurrently
+      const [usersRes, leavesRes, attendanceRes] = await Promise.allSettled([
+        api.get('/admin/users'),
+        api.get('/hr/leaves'),
+        api.get('/hr/attendance')
+      ]);
 
-      // Map backend users to Employee interface
-      const mappedBackendEmployees = backendUsers.map(user => {
-        const userId = user._id || user.id || user.staff_id;
+      if (usersRes.status === 'fulfilled' && usersRes.value?.data) {
+        const backendUsers = usersRes.value.data;
 
-        return {
-          id: userId,
-          staff_id: user.staff_id || userId,
-          name: user.name,
-          email: user.email || '',
-          phone: user.phone || '',
-          photoUrl: user.avatar || '',
-          gender: user.gender || '',
-          dob: user.dob || '',
-          bloodGroup: user.bloodGroup || '',
-          address: user.address || '',
-          emergencyContact: user.emergencyContact || { name: '', relation: '', phone: '' },
-          aadhaar: user.aadhaar || '',
-          pan: user.pan || '',
-          department: user.department || user.specialty || (user.role === 'doctor' ? 'General Medicine' : user.role === 'hr' ? 'Hospital Administration' : 'Administration'),
-          designation: user.designation || (user.role === 'doctor' ? 'Consultant Practitioner' : user.role === 'hr' ? 'HR Manager' : user.role.charAt(0).toUpperCase() + user.role.slice(1)),
-          employmentType: user.employmentType || 'Full-Time',
-          joiningDate: user.joiningDate || (user.createdAt ? new Date(user.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
-          reportingManagerId: user.reportingManagerId || defaultManagerId,
-          reportingManagerName: user.reportingManagerName || defaultManagerName,
-          workLocation: user.workLocation || 'Main Wing - Sunrise Clinic',
-          shiftName: user.shiftName || 'Day Rotation',
-          grade: user.grade || 'G3',
-          status: user.status || 'Active',
-          role: user.role || 'doctor',
-          noticePeriodDays: user.noticePeriodDays !== undefined ? user.noticePeriodDays : 30,
-          experienceYears: user.experienceYears !== undefined ? user.experienceYears : 5,
-          assignedRoles: user.assignedRoles || [user.role.charAt(0).toUpperCase() + user.role.slice(1)],
-          permissions: user.permissions || createPermissionsMap(),
-          bankDetails: user.bankDetails || {
-            accountHolder: user.name,
-            accountNumber: '',
-            bankName: '',
-            ifsc: ''
-          },
-          ctcAnnual: user.ctcAnnual !== undefined && user.ctcAnnual !== null && !isNaN(user.ctcAnnual) ? Number(user.ctcAnnual) : 0,
-          pfEnrolled: user.pfEnrolled !== undefined ? user.pfEnrolled : true,
-          esiEnrolled: user.esiEnrolled !== undefined ? user.esiEnrolled : false,
-          taxBracket: user.taxBracket || '20% Bracket',
-          leaveBalance: user.leaveBalance || {
-            sick: 12,
-            casual: 10,
-            annual: 15,
-            maternity: 90,
-            paternity: 14,
-            compOff: 5,
-            lwp: 0
-          },
-          doctorSlots: user.doctorSlots || [],
-          weeklyOff: user.weeklyOff || [],
-          carriedForwardLeaves: user.carriedForwardLeaves || 0,
-          monthlyLeaveAllocation: user.monthlyLeaveAllocation || { sick: 1, casual: 1, annual: 1.25 },
-          documents: user.documents || [],
-          consultationFee: user.consultationFee
-        };
-      });
-      setEmployees(mappedBackendEmployees);
+        // Resolve admin's name dynamically to use as default reporting manager
+        const adminUser = backendUsers.find(u => u.role === 'admin');
+        const defaultManagerName = adminUser ? `${adminUser.name} (Administrator)` : (currentUser.role === 'admin' ? `${currentUser.name} (Administrator)` : 'Ishita Jain (Administrator)');
+        const defaultManagerId = adminUser ? (adminUser.staff_id || adminUser._id) : (currentUser.role === 'admin' ? (currentUser.staff_id || currentUser.id) : 'EMP-2026-100');
 
-      // Fetch leaves
-      const resLeaves = await api.get('/hr/leaves');
-      setLeaveRequests(resLeaves.data);
+        // Map backend users to Employee interface
+        const mappedBackendEmployees = backendUsers.map(user => {
+          const userId = user._id || user.id || user.staff_id;
 
-      // Fetch attendance
-      const resAttendance = await api.get('/hr/attendance');
-      setAttendanceRecords(resAttendance.data);
+          return {
+            id: userId,
+            staff_id: user.staff_id || userId,
+            name: user.name,
+            email: user.email || '',
+            phone: user.phone || '',
+            photoUrl: user.avatar || '',
+            gender: user.gender || '',
+            dob: user.dob || '',
+            bloodGroup: user.bloodGroup || '',
+            address: user.address || '',
+            emergencyContact: user.emergencyContact || { name: '', relation: '', phone: '' },
+            aadhaar: user.aadhaar || '',
+            pan: user.pan || '',
+            department: user.department || user.specialty || (user.role === 'doctor' ? 'General Medicine' : user.role === 'hr' ? 'Hospital Administration' : 'Administration'),
+            designation: user.designation || (user.role === 'doctor' ? 'Consultant Practitioner' : user.role === 'hr' ? 'HR Manager' : user.role.charAt(0).toUpperCase() + user.role.slice(1)),
+            employmentType: user.employmentType || 'Full-Time',
+            joiningDate: user.joiningDate || (user.createdAt ? new Date(user.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
+            reportingManagerId: user.reportingManagerId || defaultManagerId,
+            reportingManagerName: user.reportingManagerName || defaultManagerName,
+            workLocation: user.workLocation || 'Main Wing - Sunrise Clinic',
+            shiftName: user.shiftName || 'Day Rotation',
+            grade: user.grade || 'G3',
+            status: user.status || 'Active',
+            role: user.role || 'doctor',
+            noticePeriodDays: user.noticePeriodDays !== undefined ? user.noticePeriodDays : 30,
+            experienceYears: user.experienceYears !== undefined ? user.experienceYears : 5,
+            assignedRoles: user.assignedRoles || [user.role.charAt(0).toUpperCase() + user.role.slice(1)],
+            permissions: user.permissions || createPermissionsMap(),
+            bankDetails: user.bankDetails || {
+              accountHolder: user.name,
+              accountNumber: '',
+              bankName: '',
+              ifsc: ''
+            },
+            ctcAnnual: user.ctcAnnual !== undefined && user.ctcAnnual !== null && !isNaN(user.ctcAnnual) ? Number(user.ctcAnnual) : 0,
+            pfEnrolled: user.pfEnrolled !== undefined ? user.pfEnrolled : true,
+            esiEnrolled: user.esiEnrolled !== undefined ? user.esiEnrolled : false,
+            taxBracket: user.taxBracket || '20% Bracket',
+            leaveBalance: user.leaveBalance || {
+              sick: 12,
+              casual: 10,
+              annual: 15,
+              maternity: 90,
+              paternity: 14,
+              compOff: 5,
+              lwp: 0
+            },
+            doctorSlots: user.doctorSlots || [],
+            weeklyOff: user.weeklyOff || [],
+            carriedForwardLeaves: user.carriedForwardLeaves || 0,
+            monthlyLeaveAllocation: user.monthlyLeaveAllocation || { sick: 1, casual: 1, annual: 1.25 },
+            documents: user.documents || [],
+            consultationFee: user.consultationFee
+          };
+        });
+        setEmployees(mappedBackendEmployees);
+      }
 
-      // Fetch assets
-      const resAssets = await api.get('/hr/assets');
-      setAssets(resAssets.data);
+      if (leavesRes.status === 'fulfilled' && leavesRes.value?.data) {
+        setLeaveRequests(leavesRes.value.data);
+      }
 
-      // Fetch role coverage
-      await fetchRoleCoverage();
+      if (attendanceRes.status === 'fulfilled' && attendanceRes.value?.data) {
+        setAttendanceRecords(attendanceRes.value.data);
+      }
     } catch (err) {
       console.error('Failed to load HR dashboard data:', err);
     } finally {
-      if (showSpinner) setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -734,97 +753,115 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
         }
       `}</style>
 
-      {/* SIDEBAR NAVIGATION */}
+      {/* SIDEBAR NAVIGATION - True Collapsible & Expandable System */}
       <aside 
         className={`sidebar flex flex-col justify-between z-40 shrink-0 fixed top-0 left-0 ${
           isSidebarCollapsed ? 'collapsed' : ''
         }`}
         style={{ 
-          width: isSidebarCollapsed ? '70px' : '256px', 
-          background: '#FFFFFF', 
-          transition: 'width 0.2s ease', 
+          width: isSidebarCollapsed ? '78px' : '250px', 
+          background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFCFF 50%, #F3F7FD 100%)', 
+          transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 
           borderRight: '1px solid #E2E8F0',
+          boxShadow: '4px 0 24px rgba(30, 58, 138, 0.03)',
           bottom: 0,
           height: 'calc(100vh / 0.9)'
         }}
       >
-        <div className="space-y-6 relative z-10">
+        {/* Dedicated Circular Toggle Button Overlapping Right Edge */}
+        <button 
+          className="absolute -right-3.5 top-6 z-50 w-7 h-7 rounded-full bg-white border border-slate-200/90 shadow-md shadow-blue-600/10 flex items-center justify-center text-blue-600 hover:text-blue-700 hover:scale-110 hover:shadow-lg hover:border-blue-300 transition-all cursor-pointer group"
+          onClick={(e) => {
+            e.stopPropagation();
+            const nextVal = !isSidebarCollapsed;
+            setIsSidebarCollapsed(nextVal);
+            localStorage.setItem('curoxa_sidebar_collapsed', String(nextVal));
+          }}
+          title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          <ChevronDown 
+            className="w-3.5 h-3.5 transition-transform duration-300"
+            style={{
+              transform: isSidebarCollapsed ? 'rotate(-90deg)' : 'rotate(90deg)'
+            }}
+          />
+        </button>
+
+        <div className="space-y-5 relative z-10 pt-1">
           
           {/* Brand/Logo header */}
-          <div className="sidebar-logo p-5 border-b border-slate-100 flex items-center justify-between relative">
-            <div className="flex items-center gap-3 overflow-hidden">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0" style={{ background: '#2563EB' }}>
-                <Building2 className="w-5 h-5" />
+          <div className={`p-4 border-b border-slate-100/80 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-start gap-3.5'} relative transition-all duration-300`}>
+            <img 
+              src={curoxaSidebarLogo} 
+              alt="CUROXA" 
+              className="w-11 h-11 object-contain shrink-0 drop-shadow-sm transition-all" 
+            />
+            {!isSidebarCollapsed && (
+              <div className="logo-text overflow-hidden whitespace-nowrap transition-opacity duration-200">
+                <h2 className="font-black text-blue-600 text-sm leading-none tracking-tight">CUROXA</h2>
+                <span className="text-[9px] font-extrabold uppercase tracking-wider block mt-1 text-slate-400">Hospital HR</span>
               </div>
-              {!isSidebarCollapsed && (
-                <div className="logo-text">
-                  <h2 className="font-display font-black text-blue-600 text-sm leading-none tracking-tight">CUROXA</h2>
-                  <span className="text-[9px] font-bold uppercase tracking-wider block mt-1" style={{ color: '#64748B' }}>Hospital HR</span>
-                </div>
-              )}
-            </div>
-            <button 
-              className="sidebar-collapse-toggle desktop-only-flex"
-              onClick={(e) => {
-                e.stopPropagation();
-                const nextVal = !isSidebarCollapsed;
-                setIsSidebarCollapsed(nextVal);
-                localStorage.setItem('curoxa_sidebar_collapsed', String(nextVal));
-              }}
-              style={{
-                transform: isSidebarCollapsed ? 'rotate(180deg)' : 'none'
-              }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-            </button>
+            )}
           </div>
 
           {/* Navigation Links */}
-          <nav className="px-3 space-y-1">
+          <nav className="px-3 space-y-1.5">
             {sidebarItems.map((item) => {
               const IconComp = item.icon;
               const isSelected = activeTab === item.id && !selectedEmployeeId;
               return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setSelectedEmployeeId(null);
-                    setActiveTab(item.id);
-                    setOpenAddStaffModal(false);
-                  }}
-                  className={`nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors ${isSelected ? 'active' : ''}`}
-                  style={{
-                    background: isSelected ? '#EFF6FF' : 'transparent',
-                    color: isSelected ? '#2563EB' : '#64748B',
-                    borderLeft: isSelected ? '3px solid #2563EB' : '3px solid transparent',
-                    transition: 'all 0.15s ease',
-                    border: '1px solid transparent'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) {
-                      e.currentTarget.style.background = '#F8FAFC';
-                      e.currentTarget.style.color = '#0F172A';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = '#64748B';
-                    }
-                  }}
-                >
-                  <IconComp className="w-4 h-4 shrink-0" style={{ color: isSelected ? '#2563EB' : '#475569' }} />
-                  <span className="nav-link-text truncate">{item.label}</span>
-                </button>
+                <div key={item.id} className="relative group flex justify-center">
+                  <button
+                    onClick={() => {
+                      setSelectedEmployeeId(null);
+                      setActiveTab(item.id);
+                      setOpenAddStaffModal(false);
+                    }}
+                    className={`flex items-center rounded-2xl text-xs transition-all ${
+                      isSidebarCollapsed 
+                        ? 'justify-center w-11 h-11 mx-auto p-0' 
+                        : 'w-full gap-3.5 px-3.5 py-3'
+                    } ${
+                      isSelected 
+                        ? 'font-bold border border-blue-400/30 text-white' 
+                        : 'font-semibold text-slate-600 hover:text-blue-900 hover:bg-blue-50/70 hover:translate-x-0.5'
+                    }`}
+                    style={isSelected ? {
+                      background: 'linear-gradient(135deg, #155EEF 0%, #2563EB 50%, #4F46E5 100%)',
+                      color: '#FFFFFF',
+                      boxShadow: '0 10px 25px -3px rgba(37, 99, 235, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.3)'
+                    } : {}}
+                  >
+                    <IconComp 
+                      className={`w-4.5 h-4.5 shrink-0 transition-colors ${isSelected ? 'text-white' : 'text-slate-500'}`} 
+                      style={{ 
+                        color: isSelected ? '#FFFFFF' : undefined,
+                        stroke: isSelected ? '#FFFFFF' : 'currentColor'
+                      }}
+                      strokeWidth={2.4}
+                    />
+                    {!isSidebarCollapsed && (
+                      <span className="truncate text-left" style={{ color: isSelected ? '#FFFFFF' : 'inherit' }}>{item.label}</span>
+                    )}
+                  </button>
+
+                  {/* Tooltip UX when Collapsed */}
+                  {isSidebarCollapsed && (
+                    <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xl whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-200 border border-slate-700/60 translate-x-1 group-hover:translate-x-0">
+                      {item.label}
+                      <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-900" />
+                    </div>
+                  )}
+                </div>
               );
             })}
           </nav>
         </div>
 
-        {/* User profile capsule bottom */}
-        <div className="p-4 relative z-10" style={{ borderTop: '1px solid #F1F5F9' }}>
+        {/* User profile capsule bottom - Fixed Centering & Zero Clipping */}
+        <div className={`relative z-10 border-t border-slate-100/80 ${isSidebarCollapsed ? 'p-3 flex justify-center items-center' : 'p-3.5'}`}>
           {showProfileDropdown && (
-            <div className="absolute bottom-full mb-2 left-4 right-4 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-1 z-50 animate-fadeIn">
+            <div className={`absolute bottom-full mb-2 ${isSidebarCollapsed ? 'left-14 w-48' : 'left-3 right-3'} bg-white border border-slate-200 rounded-2xl shadow-xl p-2 flex flex-col gap-1 z-50 animate-fadeIn`}>
               <button 
                 onClick={() => {
                   setShowProfileDropdown(false);
@@ -862,33 +899,64 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
               </button>
             </div>
           )}
-          <div 
-            onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-            className={`sidebar-profile flex items-center p-2.5 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors select-none ${
-              isSidebarCollapsed ? 'justify-center' : 'gap-3 overflow-hidden'
-            }`} 
-            style={{ 
-              background: showProfileDropdown ? '#F1F5F9' : '#F8FAFC', 
-              border: '1px solid #E2E8F0' 
-            }}
-          >
-            {matchedEmployee?.photoUrl ? (
-              <img 
-                src={matchedEmployee.photoUrl} 
-                alt={currentUser.name} 
-                className="profile-avatar w-9 h-9 rounded-xl object-cover"
-                style={{ border: '2px solid #60A5FA' }}
-                referrerPolicy="no-referrer"
-              />
+          <div className="relative group w-full flex justify-center">
+            {isSidebarCollapsed ? (
+              <button 
+                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                className="w-11 h-11 rounded-2xl flex items-center justify-center cursor-pointer hover:bg-blue-50/80 transition-all select-none border border-slate-200/90 shadow-sm bg-white relative shrink-0"
+              >
+                {matchedEmployee?.photoUrl ? (
+                  <img 
+                    src={matchedEmployee.photoUrl} 
+                    alt={currentUser.name} 
+                    className="w-8 h-8 rounded-full object-cover border border-blue-200 shadow-sm ring-2 ring-blue-500/20 ring-offset-1"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-700 to-blue-500 text-white font-bold flex items-center justify-center text-xs shrink-0 select-none shadow-md shadow-blue-500/20 ring-2 ring-blue-500/20 ring-offset-1">
+                    <span className="text-[10px] font-black text-white">{(currentUser.name || 'Ishita Ishita').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</span>
+                  </div>
+                )}
+                <span className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+              </button>
             ) : (
-              <div className="w-9 h-9 rounded-xl text-white font-bold flex items-center justify-center text-xs shrink-0 select-none" style={{ background: '#2563EB' }}>
-                {(currentUser.name || 'Staff').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+              <div 
+                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                className="w-full flex items-center justify-between p-2.5 rounded-2xl cursor-pointer hover:bg-blue-50/50 transition-all select-none border border-slate-200/80 shadow-sm bg-white"
+              >
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  {matchedEmployee?.photoUrl ? (
+                    <img 
+                      src={matchedEmployee.photoUrl} 
+                      alt={currentUser.name} 
+                      className="w-8 h-8 rounded-full object-cover border border-blue-200 shadow-sm ring-2 ring-blue-500/20 ring-offset-1 shrink-0"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-700 to-blue-500 text-white font-bold flex items-center justify-center text-xs shrink-0 select-none shadow-md shadow-blue-500/20 ring-2 ring-blue-500/20 ring-offset-1">
+                      <span className="text-[10px] font-black text-white">{(currentUser.name || 'Ishita Ishita').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</span>
+                    </div>
+                  )}
+                  <div className="text-left overflow-hidden">
+                    <h4 className="font-bold text-xs text-slate-900 truncate leading-tight">{currentUser.name || 'Ishita Ishita'}</h4>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <p className="text-[9.5px] font-extrabold truncate uppercase text-slate-400">{currentUser.role || 'ADMIN'}</p>
+                      <span className="flex items-center text-[9.5px] text-emerald-600 font-bold gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Online
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
               </div>
             )}
-            {!isSidebarCollapsed && (
-              <div className="profile-info text-left overflow-hidden">
-                <h4 className="profile-name font-bold text-xs text-slate-900 truncate leading-tight">{currentUser.name || 'Staff User'}</h4>
-                <p className="profile-role text-[9px] font-semibold truncate uppercase mt-0.5" style={{ color: '#64748B' }}>{currentUser.role || 'Practitioner'}</p>
+
+            {/* Profile Tooltip when Collapsed */}
+            {isSidebarCollapsed && (
+              <div className="absolute left-full ml-3 bottom-0 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xl whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-200 border border-slate-700/60 translate-x-1 group-hover:translate-x-0">
+                {currentUser.name || 'Ishita Ishita'} (ADMIN)
+                <div className="absolute right-full bottom-3 border-4 border-transparent border-r-slate-900" />
               </div>
             )}
           </div>
@@ -897,10 +965,12 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
 
       {/* MAIN WORKING CANVAS */}
       <main 
-        className="flex-1 flex flex-col min-w-0 relative z-10"
+        className="flex-1 flex flex-col min-w-0 relative z-10 overflow-x-hidden"
         style={{ 
-          marginLeft: isSidebarCollapsed ? '70px' : '256px', 
-          transition: 'margin-left 0.2s ease',
+          marginLeft: isSidebarCollapsed ? '78px' : '250px', 
+          width: isSidebarCollapsed ? 'calc(100% - 78px)' : 'calc(100% - 250px)',
+          maxWidth: isSidebarCollapsed ? 'calc(100% - 78px)' : 'calc(100% - 250px)',
+          transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           height: 'calc(100vh / 0.9)',
           overflow: 'hidden'
         }}
@@ -909,8 +979,13 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
         {/* Upper Header strip */}
         <header className="top-nav" style={{ 
           marginLeft: 0,
-          background: '#FFFFFF',
-          borderBottom: '1px solid #E2E8F0'
+          background: 'radial-gradient(at 100% 0%, rgba(237, 233, 254, 0.4) 0px, transparent 50%), radial-gradient(at 75% 0%, rgba(219, 234, 254, 0.35) 0px, transparent 50%), #FFFFFF',
+          borderBottom: '1px solid #E2E8F0',
+          padding: '0 24px',
+          height: '60px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
         }}>
           <div className="flex items-center gap-3">
             <button 
@@ -919,15 +994,15 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
                 setIsSidebarCollapsed(nextVal);
                 localStorage.setItem('curoxa_sidebar_collapsed', String(nextVal));
               }}
-              className="p-1.5 rounded-lg" style={{ background: '#F1F5F9', border: '1px solid #E2E8F0' }}
+              className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-colors"
             >
-              <Menu className="w-4 h-4" style={{ color: '#475569' }} />
+              <Menu className="w-4 h-4" />
             </button>
             <div className="hidden sm:block text-left">
-              <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: '#64748B' }}>
-                HR Module
+              <span className="text-[10px] font-bold uppercase tracking-wider block text-slate-500">
+                HR MODULE
               </span>
-              <span className="font-semibold text-xs" style={{ color: '#0F172A' }}>
+              <span className="font-bold text-xs text-slate-800">
                 Workforce Management
               </span>
             </div>
@@ -935,58 +1010,68 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
 
           <div className="flex items-center gap-3">
             {/* Clock widget */}
-            <div className="px-3 py-1.5 rounded-lg flex items-center gap-2 font-semibold text-xs font-mono" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#334155' }}>
-              <Clock className="w-4 h-4" style={{ color: '#2563EB' }} />
+            <div className="px-3.5 py-1.5 rounded-xl flex items-center gap-2 font-semibold text-xs font-mono bg-white border border-slate-200/90 text-slate-700 shadow-sm">
+              <Clock className="w-3.5 h-3.5 text-blue-600" />
               <span>{formatDateStr(currentTime)} &bull; {formatTimeStr(currentTime)}</span>
             </div>
 
             <button 
               onClick={() => showFeedback('No unread operational notifications.', 'success')}
-              className="p-2 rounded-lg relative" style={{ background: '#F1F5F9', border: '1px solid #E2E8F0', color: '#475569' }}
+              className="p-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200/90 text-slate-600 transition-colors relative shadow-sm"
             >
               <Bell className="w-4 h-4" />
-              <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white" />
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white">
+                3
+              </span>
             </button>
 
             <button 
               onClick={handleGoBack}
-              className="px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 shrink-0"
-              style={{ border: '1px solid #EF4444', color: '#EF4444', background: '#FEF2F2' }}
+              className="px-3.5 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1 shrink-0 border border-slate-200 bg-white text-slate-600 hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-all shadow-sm"
             >
               Exit HR
             </button>
           </div>
         </header>
 
-        {/* Dynamic content workspace canvas */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 relative" data-lenis-prevent style={{ background: '#F8FAFC' }}>
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" style={{ borderColor: '#3B82F6' }}></div>
-            </div>
-          ) : (
-            <div 
-              key={isProfileWorkspace ? `profile-${profileTargetEmployee?.id}` : `tab-${activeTab}`}
-              style={{ animation: 'adminFadeIn 0.15s ease-out' }}
-            >
-              {isProfileWorkspace ? (
-                <EmployeeProfileView 
-                  employee={profileTargetEmployee}
-                  allLeaveRequests={leaveRequests}
-                  allAttendanceRecords={attendanceRecords}
-                  allAssets={assets}
-                  onBack={isAdminOrHR ? () => setSelectedEmployeeId(null) : null}
-                  onUpdateEmployee={handleUpdateEmployee}
-                  isAdminOrHR={isAdminOrHR}
-                />
-              ) : (
-                <>
-                  {activeTab === 'Dashboard' && (
-                    <DashboardView 
-                      employees={employees}
-                      leaveRequests={leaveRequests}
-                      attendanceRecords={attendanceRecords}
-                      notifications={notifications}
+        {/* Dynamic content workspace canvas with Soft Luminous Near-White Canvas */}
+        <div 
+          className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6 relative max-w-full w-full" 
+          data-lenis-prevent 
+          style={{ 
+            backgroundColor: '#F8FAFC',
+            backgroundImage: `
+              radial-gradient(at 0% 0%, rgba(219, 234, 254, 0.45) 0px, transparent 50%),
+              radial-gradient(at 100% 0%, rgba(237, 233, 254, 0.35) 0px, transparent 50%),
+              radial-gradient(at 50% 50%, rgba(240, 249, 255, 0.3) 0px, transparent 50%),
+              radial-gradient(at 100% 100%, rgba(254, 242, 242, 0.25) 0px, transparent 50%),
+              radial-gradient(at 0% 100%, rgba(236, 253, 245, 0.25) 0px, transparent 50%)
+            `
+          }}
+        >
+          <div 
+            key={isProfileWorkspace ? `profile-${profileTargetEmployee?.id}` : `tab-${activeTab}`}
+            style={{ animation: 'adminFadeIn 0.15s ease-out' }}
+          >
+            {isProfileWorkspace ? (
+              <EmployeeProfileView 
+                employee={profileTargetEmployee}
+                allLeaveRequests={leaveRequests}
+                allAttendanceRecords={attendanceRecords}
+                allAssets={assets}
+                onBack={isAdminOrHR ? () => setSelectedEmployeeId(null) : null}
+                onUpdateEmployee={handleUpdateEmployee}
+                isAdminOrHR={isAdminOrHR}
+              />
+            ) : (
+              <>
+                {activeTab === 'Dashboard' && (
+                  <DashboardView 
+                    isLoading={loading && employees.length === 0}
+                    employees={employees}
+                    leaveRequests={leaveRequests}
+                    attendanceRecords={attendanceRecords}
+                    notifications={notifications}
                       onApproveLeave={handleApproveLeave}
                       onRejectLeave={handleRejectLeave}
                       onApproveAttendance={handleApproveAttendanceCorrection}
@@ -1450,9 +1535,18 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
                 </>
               )}
             </div>
-          )}
         </div>
       </main>
+
+      {/* Floating Chat Support Action Button */}
+      <button 
+        onClick={() => showFeedback('HR Support & Assistant online.', 'success')}
+        className="fixed bottom-6 right-6 w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-xl shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all z-40"
+      >
+        <MessageSquare className="w-5 h-5 fill-white/20" />
+        <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white" />
+      </button>
+
       {/* Toast Feedback Messages */}
       {success && (
         <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-lg font-semibold text-xs z-50 flex items-center gap-2 animate-slideUp">

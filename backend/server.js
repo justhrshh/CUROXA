@@ -5,6 +5,7 @@ const helmet = require("helmet");
 const mongoSanitize = require("express-mongo-sanitize");
 const rateLimit = require("express-rate-limit");
 require("dotenv").config();
+// Backend updated for Pharmacy Procurement Phase 1B
 
 const connectDB = require("./config/db");
 
@@ -31,6 +32,8 @@ const emrRoutes = require("./routes/emrRoutes");
 const labTestRoutes = require("./routes/labTestRoutes");
 const pharmacyTicketRoutes = require("./routes/pharmacyTicketRoutes");
 const clinicalServiceRoutes = require("./routes/clinicalServiceRoutes");
+const pharmacySaleRoutes = require("./routes/pharmacySaleRoutes");
+const inventoryExpiryRoutes = require("./routes/inventoryExpiryRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -216,6 +219,8 @@ app.use("/api/superadmin", superAdminRoutes);
 app.use("/api/emr", checkModule("doctor"), emrRoutes);
 app.use("/api/clinical-services", clinicalServiceRoutes);
 app.use("/api/pharmacy-tickets", pharmacyTicketRoutes);
+app.use("/api/pharmacy-sales", checkModule("pharmacy"), pharmacySaleRoutes);
+app.use("/api/inventory-expiry", checkModule(["pharmacy", "inventory"]), inventoryExpiryRoutes);
 
 // Create HTTP server and initialize socket.io
 const http = require("http").createServer(app);

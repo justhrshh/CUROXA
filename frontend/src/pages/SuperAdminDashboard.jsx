@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { socket } from '../utils/socket';
 import { handleAutoLogout } from '../utils/api';
+import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
 
 const originalFetch = window.fetch;
 const fetch = async (url, options = {}) => {
@@ -249,6 +250,18 @@ const SuperAdminDashboard = () => {
   };
   
   const isTabAllowed = allowedTabs.includes(getBaseTabId(activeTab));
+
+  // Ensure Super Admin application shell takes full 100% viewport width without 0.9 zoom shrinkage
+  useEffect(() => {
+    const originalHtmlZoom = document.documentElement.style.zoom;
+    const originalBodyZoom = document.body.style.zoom;
+    document.documentElement.style.zoom = '1';
+    document.body.style.zoom = '1';
+    return () => {
+      document.documentElement.style.zoom = originalHtmlZoom;
+      document.body.style.zoom = originalBodyZoom;
+    };
+  }, []);
   
   // Custom Confirmation Modal State (replaces native window.confirm)
   const [confirmModalConfig, setConfirmModalConfig] = useState(null);
@@ -1904,28 +1917,6 @@ const SuperAdminDashboard = () => {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [showProfilePasswords, setShowProfilePasswords] = useState({ current: false, new: false, confirm: false });
 
-  // Vibrant Colorful Component Theme State (Qlik Analytics Inspired)
-  const [isColorfulTheme, setIsColorfulTheme] = useState(() => {
-    return localStorage.getItem('curoxa_colorful_theme') === 'true';
-  });
-
-  const toggleColorfulTheme = () => {
-    const nextState = !isColorfulTheme;
-    setIsColorfulTheme(nextState);
-    localStorage.setItem('curoxa_colorful_theme', String(nextState));
-    
-    // Dispatch local window event & broadcast socket event to all hospital dashboards
-    window.dispatchEvent(new CustomEvent('curoxa_theme_changed', { detail: { enabled: nextState } }));
-    if (socket && socket.connected) {
-      socket.emit('change_global_theme', { enabled: nextState });
-    }
-
-    if (nextState) {
-      showToast("Vibrant Colorful Component Theme Activated Across All Dashboards!", "info");
-    } else {
-      showToast("Default Clean Theme Activated Across All Dashboards!", "info");
-    }
-  };
 
 
   // Load all Super Admin collections from the backend on mount
@@ -4933,16 +4924,50 @@ const SuperAdminDashboard = () => {
   }
 
   return (
-    <div style={styles.container} className={isColorfulTheme ? 'theme-colorful-components' : ''}>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'row',
+      height: '100vh',
+      width: '100%',
+      minWidth: 0,
+      maxWidth: '100%',
+      overflow: 'hidden',
+      background: '#F8FAFC'
+    }}>
       {/* GLOBAL VIEW RESET */}
       <style>{`
-        body, html, #root {
+        html {
+          zoom: 1 !important;
           margin: 0 !important;
           padding: 0 !important;
           overflow: hidden !important;
           height: 100% !important;
+          width: 100% !important;
+          min-width: 100% !important;
+          max-width: 100% !important;
           background: #F8FAFC !important;
           font-family: 'Outfit', 'Inter', sans-serif;
+        }
+        body {
+          zoom: 1 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+          height: 100% !important;
+          width: 100% !important;
+          min-width: 100% !important;
+          max-width: 100% !important;
+          background: #F8FAFC !important;
+          font-family: 'Outfit', 'Inter', sans-serif;
+        }
+        #root {
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+          height: 100% !important;
+          width: 100% !important;
+          min-width: 100% !important;
+          max-width: 100% !important;
         }
         * { box-sizing: border-box; }
         @keyframes toastSlideUp {
@@ -5010,341 +5035,356 @@ const SuperAdminDashboard = () => {
           box-shadow: 0 15px 30px -10px rgba(15, 23, 42, 0.06) !important;
           border-color: #BFDBFE !important;
         }
-
-        /* VIBRANT COLORFUL COMPONENT THEME OVERRIDES (Qlik Analytics Inspired) */
-        .theme-colorful-components .kpi-card-interactive:nth-child(1) {
-          background: #F3E8FF !important;
-          border: 1.5px solid #DDD6FE !important;
-          box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08) !important;
-        }
-        .theme-colorful-components .kpi-card-interactive:nth-child(1) span,
-        .theme-colorful-components .kpi-card-interactive:nth-child(1) div {
-          color: #4C1D95 !important;
-        }
-        .theme-colorful-components .kpi-card-interactive:nth-child(2) {
-          background: #ECFDF5 !important;
-          border: 1.5px solid #A7F3D0 !important;
-          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.08) !important;
-        }
-        .theme-colorful-components .kpi-card-interactive:nth-child(2) span,
-        .theme-colorful-components .kpi-card-interactive:nth-child(2) div {
-          color: #065F46 !important;
-        }
-        .theme-colorful-components .kpi-card-interactive:nth-child(3) {
-          background: #FFFBEB !important;
-          border: 1.5px solid #FDE68A !important;
-          box-shadow: 0 4px 12px rgba(245, 158, 11, 0.08) !important;
-        }
-        .theme-colorful-components .kpi-card-interactive:nth-child(3) span,
-        .theme-colorful-components .kpi-card-interactive:nth-child(3) div {
-          color: #78350F !important;
-        }
-        .theme-colorful-components .kpi-card-interactive:nth-child(4) {
-          background: #F0F9FF !important;
-          border: 1.5px solid #BAE6FD !important;
-          box-shadow: 0 4px 12px rgba(2, 132, 199, 0.08) !important;
-        }
-        .theme-colorful-components .kpi-card-interactive:nth-child(4) span,
-        .theme-colorful-components .kpi-card-interactive:nth-child(4) div {
-          color: #075985 !important;
-        }
       `}</style>
 
-      {/* TOP NAVIGATION BAR */}
-      <header style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        height: '60px',
+      {/* 1. LEFT FULL-HEIGHT SIDEBAR NAVIGATION */}
+      <aside style={{
+        ...styles.sidebar,
+        width: '260px',
+        minWidth: '260px',
+        maxWidth: '260px',
+        height: '100vh',
         background: '#FFFFFF',
-        borderBottom: '1px solid #E2E8F0',
-        padding: '0 24px',
-        zIndex: 100
+        borderRight: '1px solid #E2E8F0',
+        display: 'flex',
+        flexDirection: 'column',
+        flexShrink: 0,
+        zIndex: 90
       }}>
-        {/* Left Global Search */}
-        <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-          <LucideIcon name="search" style={{ position: 'absolute', left: '12px', width: '16px', height: '16px', color: '#94A3B8' }} />
-          <input
-            type="text"
-            placeholder="Global Search..."
+        {/* Logo Group */}
+        <div style={{ padding: '16px 20px 14px', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid #F1F5F9' }}>
+          <img 
+            src={curoxaSidebarLogo} 
+            alt="CUROXA" 
             style={{
-              height: '36px',
-              width: '280px',
-              padding: '0 12px 0 36px',
-              border: '1px solid #E2E8F0',
-              borderRadius: '8px',
-              fontSize: '12px',
-              background: '#F8FAFC',
-              outline: 'none',
-              fontWeight: 500
+              width: '42px',
+              height: '42px',
+              objectFit: 'contain',
+              flexShrink: 0,
+              filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.08))'
             }}
           />
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <span style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif", fontWeight: 900, fontSize: '17px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1 }}>
+              CUROXA
+            </span>
+            <span style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.6px', marginTop: '3px', lineHeight: 1 }}>
+              Enterprise Admin
+            </span>
+          </div>
         </div>
 
-        {/* Center Nav Links */}
-        <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
-          <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, cursor: 'pointer', transition: 'color 0.2s' }} onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }} onMouseEnter={e => e.currentTarget.style.color = '#2563EB'} onMouseLeave={e => e.currentTarget.style.color = '#64748B'}>Network Status</span>
-          <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, cursor: 'pointer', transition: 'color 0.2s' }} onClick={() => { setActiveTab('platform-audits'); }} onMouseEnter={e => e.currentTarget.style.color = '#2563EB'} onMouseLeave={e => e.currentTarget.style.color = '#64748B'}>Logs</span>
-          <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, cursor: 'pointer', transition: 'color 0.2s' }} onClick={() => { setActiveTab('bi-reports'); setBiSubTab('bi-dashboard'); }} onMouseEnter={e => e.currentTarget.style.color = '#2563EB'} onMouseLeave={e => e.currentTarget.style.color = '#64748B'}>Analytics</span>
+        {/* Workspace Production status card */}
+        <div style={{
+          margin: '12px 14px 16px',
+          padding: '12px 14px',
+          background: 'linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          boxShadow: '0 1px 3px rgba(15,23,42,0.03)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+            <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Workspace</span>
+            <span style={{
+              fontSize: '9px',
+              fontWeight: 850,
+              background: '#D1FAE5',
+              color: '#065F46',
+              border: '1px solid #A7F3D0',
+              padding: '1px 6px',
+              borderRadius: '6px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.4px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px'
+            }}>
+              <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#059669' }} />
+              Production
+            </span>
+          </div>
+          <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.2px' }}>Curoxa Global</div>
+          <div style={{ fontSize: '10px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>Enterprise Master License</div>
         </div>
 
-        {/* Right Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          {/* Vibrant Colorful Theme Switcher Toggle (Qlik Analytics Inspired) */}
+        {/* Scroll Area of menu items */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 10px 20px' }}>
+          {filteredMenuGroups.map((group, groupIdx) => (
+            <div key={group.group || groupIdx} style={{ marginBottom: '14px' }}>
+              {group.group && (
+                <div style={{
+                  fontSize: '9.5px',
+                  fontWeight: 800,
+                  color: '#94A3B8',
+                  textTransform: 'uppercase',
+                  padding: '6px 12px 4px',
+                  letterSpacing: '0.6px'
+                }}>
+                  {group.group}
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {group.items.map(item => {
+                  const isActive = activeTab === item.id || 
+                    (item.id === 'customer-support' && activeTab === 'support-success') ||
+                    (item.id === 'finance' && activeTab === 'finance-mgmt') ||
+                    (item.id === 'employees' && activeTab === 'hr-mgmt') ||
+                    (item.id === 'reports' && activeTab === 'bi-reports') ||
+                    (item.id === 'settings' && activeTab === 'platform-control');
+                  
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => { 
+                        if (item.id === 'customer-support') {
+                          setActiveTab('support-success');
+                          setSupportSubTab('support-dashboard');
+                        } else if (item.id === 'finance') {
+                          setActiveTab('finance-mgmt');
+                          setFinSubTab('finance-dashboard');
+                        } else if (item.id === 'employees') {
+                          setActiveTab('hr-mgmt');
+                          setHrSubTab('employees-list');
+                        } else if (item.id === 'reports') {
+                          setActiveTab('bi-reports');
+                          setBiSubTab('bi-dashboard');
+                        } else if (item.id === 'settings') {
+                          setActiveTab('platform-control');
+                          setCtrlSubTab('platform-dashboard');
+                        } else {
+                          setActiveTab(item.id); 
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        width: '100%',
+                        height: '36px',
+                        border: 'none',
+                        background: isActive ? 'linear-gradient(135deg, #2563EB 0%, #6366F1 100%)' : 'transparent',
+                        borderRadius: '9px',
+                        cursor: 'pointer',
+                        padding: '0 12px',
+                        gap: '10px',
+                        color: isActive ? '#FFFFFF' : '#475569',
+                        fontWeight: isActive ? 750 : 550,
+                        fontSize: '12px',
+                        textAlign: 'left',
+                        boxShadow: isActive ? '0 4px 12px rgba(37, 99, 235, 0.28)' : 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={e => { if(!isActive) e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+                      onMouseLeave={e => { if(!isActive) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    >
+                      <LucideIcon name={item.icon} style={{ width: '15px', height: '15px', color: isActive ? '#FFFFFF' : '#64748B' }} />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Logout Button */}
+        <div style={{ padding: '12px', borderTop: '1px solid #F1F5F9' }}>
           <button
-            type="button"
-            onClick={toggleColorfulTheme}
-            title="Switch between Default Clean and Vibrant Colorful Component Theme"
+            onClick={() => {
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+              navigate('/login');
+            }}
             style={{
+              display: 'flex', alignItems: 'center', width: '100%', height: '36px',
+              border: 'none', background: 'none', borderRadius: '8px', cursor: 'pointer',
+              color: '#EF4444', fontWeight: 700, padding: '0 12px', gap: '10px',
+              fontSize: '12px', textAlign: 'left'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+          >
+            <LucideIcon name="log-out" style={{ width: '15px', height: '15px', color: '#EF4444' }} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* 2. RIGHT MAIN VIEWPORT (TOPBAR + CONTENT) */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        width: 'calc(100% - 260px)',
+        minWidth: 0,
+        height: '100vh',
+        overflow: 'hidden'
+      }}>
+        {/* TOPBAR */}
+        <header style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          height: '60px',
+          width: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box',
+          background: '#FFFFFF',
+          borderBottom: '1px solid #E2E8F0',
+          padding: '0 24px',
+          flexShrink: 0,
+          zIndex: 80
+        }}>
+          {/* Left: Platform Headline & System Status */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+              color: '#FFFFFF',
+              width: '34px',
+              height: '34px',
+              borderRadius: '9px',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              borderRadius: '20px',
-              border: isColorfulTheme ? '1.5px solid #8B5CF6' : '1px solid #CBD5E1',
-              background: isColorfulTheme ? 'linear-gradient(135deg, #F3E8FF 0%, #E9D5FF 100%)' : '#F8FAFC',
-              color: isColorfulTheme ? '#6B21A8' : '#475569',
-              fontSize: '12px',
-              fontWeight: 800,
-              cursor: 'pointer',
-              transition: 'all 0.25s ease',
-              boxShadow: isColorfulTheme ? '0 4px 12px rgba(139, 92, 246, 0.25)' : 'none'
-            }}
-          >
-            <span style={{ fontSize: '13px' }}>🎨</span>
-            <span>{isColorfulTheme ? 'Colorful Theme: ON' : 'Colorful Theme: OFF'}</span>
-          </button>
-
-          <button style={{ ...styles.iconButtonBadge, position: 'relative' }} onClick={() => setIsNotificationOpen(true)}>
-            <LucideIcon name="bell" style={{ width: '18px', height: '18px', color: '#64748B' }} />
-            {notifications.filter(n => !n.isRead).length > 0 && (
+              justifyContent: 'center',
+              flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(79,70,229,0.25)'
+            }}>
+              <LucideIcon name="shield-check" style={{ width: '18px', height: '18px', color: '#FFFFFF' }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+              <h1 style={{ fontSize: '15px', fontWeight: 850, color: '#0F172A', margin: 0, letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>
+                Curoxa Global Platform Command Center
+              </h1>
               <span style={{
-                position: 'absolute', top: '-2px', right: '-2px',
-                background: '#EF4444', color: '#FFFFFF', fontSize: '9px', fontWeight: 800,
-                borderRadius: '50%', width: '15px', height: '15px', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', border: '2px solid #FFFFFF'
-              }}>{notifications.filter(n => !n.isRead).length}</span>
-            )}
-          </button>
-          
-          <button style={styles.iconButtonBadge} onClick={() => setActiveTab('support-success')}>
-            <LucideIcon name="help-circle" style={{ width: '18px', height: '18px', color: '#64748B' }} />
-          </button>
-
-          <button style={styles.iconButtonBadge} onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }}>
-            <LucideIcon name="layout-grid" style={{ width: '18px', height: '18px', color: '#64748B' }} />
-          </button>
-
-          <div style={{ position: 'relative' }}>
-            <button style={{ ...styles.profileTrigger, border: 'none', background: 'none', padding: 0, cursor: 'pointer' }} onClick={() => setIsProfileOpen(!isProfileOpen)}>
-              <div style={{
-                width: '32px', height: '32px', borderRadius: '50%',
-                background: '#2563EB', color: '#FFFFFF', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800
+                fontSize: '9px',
+                fontWeight: 800,
+                color: '#059669',
+                background: '#D1FAE5',
+                border: '1px solid #A7F3D0',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap'
               }}>
-                SU
-              </div>
+                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#059669', display: 'inline-block' }} />
+                System Active
+              </span>
+            </div>
+          </div>
+
+          {/* Right Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button style={{ ...styles.iconButtonBadge, position: 'relative' }} onClick={() => setIsNotificationOpen(true)}>
+              <LucideIcon name="bell" style={{ width: '18px', height: '18px', color: '#64748B' }} />
+              {notifications.filter(n => !n.isRead).length > 0 && (
+                <span style={{
+                  position: 'absolute', top: '-2px', right: '-2px',
+                  background: '#EF4444', color: '#FFFFFF', fontSize: '9px', fontWeight: 800,
+                  borderRadius: '50%', width: '15px', height: '15px', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', border: '2px solid #FFFFFF'
+                }}>{notifications.filter(n => !n.isRead).length}</span>
+              )}
+            </button>
+            
+            <button style={styles.iconButtonBadge} onClick={() => setActiveTab('support-success')}>
+              <LucideIcon name="help-circle" style={{ width: '18px', height: '18px', color: '#64748B' }} />
             </button>
 
-            {/* Profile Dropdown */}
-            {isProfileOpen && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
-                width: '220px', background: '#FFFFFF', borderRadius: '10px',
-                border: '1px solid #E2E8F0', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
-                zIndex: 300, overflow: 'hidden'
-              }}>
-                <div style={{ padding: '14px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>{currentUser.name}</div>
-                  <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>{currentUser.email || 'super.admin@curoxa.com'}</div>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: '#2563EB', marginTop: '4px', textTransform: 'uppercase' }}>Platform Super Admin</div>
-                </div>
-                <div style={{ padding: '6px' }}>
-                  <button
-                    onClick={() => {
-                      setProfileForm({
-                        name: currentUser.name || 'Platform Admin',
-                        email: currentUser.email || 'super.admin@curoxa.com',
-                        currentPassword: '',
-                        newPassword: '',
-                        confirmPassword: ''
-                      });
-                      setProfileError('');
-                      setIsProfileModalOpen(true);
-                      setIsProfileOpen(false);
-                    }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
-                      padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
-                      fontSize: '12px', color: '#2563EB', fontWeight: 700, cursor: 'pointer', textAlign: 'left'
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#EFF6FF'; }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                  >
-                    <LucideIcon name="user-cog" style={{ width: '15px', height: '15px', color: '#2563EB' }} />
-                    Profile & Password Settings
-                  </button>
-                  <button
-                    onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); setIsProfileOpen(false); }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
-                      padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
-                      fontSize: '12px', color: '#475569', cursor: 'pointer', textAlign: 'left'
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                  >
-                    <LucideIcon name="settings" style={{ width: '15px', height: '15px', color: '#64748B' }} />
-                    Platform Settings
-                  </button>
-                  <button
-                    onClick={() => {
-                      localStorage.removeItem('token');
-                      localStorage.removeItem('user');
-                      navigate('/login');
-                    }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
-                      padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
-                      fontSize: '12px', color: '#EF4444', fontWeight: 700, cursor: 'pointer', textAlign: 'left'
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                  >
-                    <LucideIcon name="log-out" style={{ width: '15px', height: '15px', color: '#EF4444' }} />
-                    Sign Out
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* CORE WORKSPACE LIMIT LAYOUT */}
-      <div style={styles.workspace}>
-        {/* LEFT SIDEBAR NAVIGATION */}
-        <aside style={{
-          ...styles.sidebar,
-          width: '260px',
-          height: '100%',
-          zIndex: 90
-        }}>
-          {/* Logo Group */}
-          <div style={{ padding: '20px 24px 8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                </svg>
-              </div>
-              <span style={{ fontSize: '16px', fontWeight: 800, color: '#1E293B', letterSpacing: '-0.5px' }}>Curoxa Global</span>
-            </div>
-            <span style={{ fontSize: '9px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '1px', marginLeft: '38px' }}>Enterprise Admin</span>
-          </div>
-
-          {/* Workspace Production status card */}
-          <div style={{ margin: '14px 20px', padding: '12px 14px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <span style={{ fontSize: '9px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Workspace</span>
-              <span style={{ fontSize: '9px', fontWeight: 850, background: '#D1FAE5', color: '#065F46', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>Production</span>
-            </div>
-            <div style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A' }}>Curoxa Global</div>
-            <div style={{ fontSize: '10px', color: '#64748B', fontWeight: 550, marginTop: '2px' }}>Enterprise License</div>
-          </div>
-
-          {/* Scroll Area of menu items */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px 20px' }}>
-            {filteredMenuGroups.map((group, groupIdx) => (
-              <div key={group.group || groupIdx} style={{ marginBottom: '14px' }}>
-                {group.group && <div style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', padding: '8px 12px 4px', letterSpacing: '0.5px' }}>{group.group}</div>}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  {group.items.map(item => {
-                    const isActive = activeTab === item.id || 
-                      (item.id === 'customer-support' && activeTab === 'support-success') ||
-                      (item.id === 'finance' && activeTab === 'finance-mgmt') ||
-                      (item.id === 'employees' && activeTab === 'hr-mgmt') ||
-                      (item.id === 'reports' && activeTab === 'bi-reports') ||
-                      (item.id === 'settings' && activeTab === 'platform-control');
-                    
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => { 
-                          if (item.id === 'customer-support') {
-                            setActiveTab('support-success');
-                            setSupportSubTab('support-dashboard');
-                          } else if (item.id === 'finance') {
-                            setActiveTab('finance-mgmt');
-                            setFinSubTab('finance-dashboard');
-                          } else if (item.id === 'employees') {
-                            setActiveTab('hr-mgmt');
-                            setHrSubTab('employees-list');
-                          } else if (item.id === 'reports') {
-                            setActiveTab('bi-reports');
-                            setBiSubTab('bi-dashboard');
-                          } else if (item.id === 'settings') {
-                            setActiveTab('platform-control');
-                            setCtrlSubTab('platform-dashboard');
-                          } else {
-                            setActiveTab(item.id); 
-                          }
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          width: '100%',
-                          height: '36px',
-                          border: 'none',
-                          background: isActive ? '#EFF6FF' : 'transparent',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          padding: '0 12px',
-                          gap: '10px',
-                          borderLeft: isActive ? '4px solid #2563EB' : '4px solid transparent',
-                          color: isActive ? '#2563EB' : '#475569',
-                          fontWeight: isActive ? 700 : 500,
-                          fontSize: '12px',
-                          textAlign: 'left'
-                        }}
-                        onMouseEnter={e => { if(!isActive) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-                        onMouseLeave={e => { if(!isActive) e.currentTarget.style.backgroundColor = 'transparent'; }}
-                      >
-                        <LucideIcon name={item.icon} style={{ width: '15px', height: '15px', color: isActive ? '#2563EB' : '#64748B' }} />
-                        <span>{item.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Logout Button */}
-          <div style={{ padding: '12px', borderTop: '1px solid #F1F5F9' }}>
-            <button
-              onClick={() => {
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                navigate('/login');
-              }}
-              style={{
-                display: 'flex', alignItems: 'center', width: '100%', height: '36px',
-                border: 'none', background: 'none', borderRadius: '8px', cursor: 'pointer',
-                color: '#EF4444', fontWeight: 700, padding: '0 12px', gap: '10px',
-                fontSize: '12px', textAlign: 'left'
-              }}
-              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
-              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-            >
-              <LucideIcon name="log-out" style={{ width: '15px', height: '15px', color: '#EF4444' }} />
-              <span>Logout</span>
+            <button style={styles.iconButtonBadge} onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }}>
+              <LucideIcon name="layout-grid" style={{ width: '18px', height: '18px', color: '#64748B' }} />
             </button>
+
+            <div style={{ position: 'relative' }}>
+              <button style={{ ...styles.profileTrigger, border: 'none', background: 'none', padding: 0, cursor: 'pointer' }} onClick={() => setIsProfileOpen(!isProfileOpen)}>
+                <div style={{
+                  width: '32px', height: '32px', borderRadius: '50%',
+                  background: '#2563EB', color: '#FFFFFF', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800
+                }}>
+                  SU
+                </div>
+              </button>
+
+              {/* Profile Dropdown */}
+              {isProfileOpen && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+                  width: '220px', background: '#FFFFFF', borderRadius: '10px',
+                  border: '1px solid #E2E8F0', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
+                  zIndex: 300, overflow: 'hidden'
+                }}>
+                  <div style={{ padding: '14px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>{currentUser.name}</div>
+                    <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>{currentUser.email || 'super.admin@curoxa.com'}</div>
+                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#2563EB', marginTop: '4px', textTransform: 'uppercase' }}>Platform Super Admin</div>
+                  </div>
+                  <div style={{ padding: '6px' }}>
+                    <button
+                      onClick={() => {
+                        setProfileForm({
+                          name: currentUser.name || 'Platform Admin',
+                          email: currentUser.email || 'super.admin@curoxa.com',
+                          currentPassword: '',
+                          newPassword: '',
+                          confirmPassword: ''
+                        });
+                        setProfileError('');
+                        setIsProfileModalOpen(true);
+                        setIsProfileOpen(false);
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                        padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
+                        fontSize: '12px', color: '#2563EB', fontWeight: 700, cursor: 'pointer', textAlign: 'left'
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#EFF6FF'; }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    >
+                      <LucideIcon name="user-cog" style={{ width: '15px', height: '15px', color: '#2563EB' }} />
+                      Profile & Password Settings
+                    </button>
+                    <button
+                      onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); setIsProfileOpen(false); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                        padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
+                        fontSize: '12px', color: '#475569', cursor: 'pointer', textAlign: 'left'
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    >
+                      <LucideIcon name="settings" style={{ width: '15px', height: '15px', color: '#64748B' }} />
+                      Platform Settings
+                    </button>
+                    <button
+                      onClick={() => {
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('user');
+                        navigate('/login');
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                        padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
+                        fontSize: '12px', color: '#EF4444', fontWeight: 700, cursor: 'pointer', textAlign: 'left'
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    >
+                      <LucideIcon name="log-out" style={{ width: '15px', height: '15px', color: '#EF4444' }} />
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </aside>
+        </header>
 
         {/* WORKSPACE CENTRAL CANVAS & RIGHT SIDEBAR PANEL */}
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flex: 1, width: '100%', minWidth: 0, overflow: 'hidden' }}>
           {/* CENTRAL APP PORT */}
           <main style={styles.mainCanvas}>
 
@@ -5516,107 +5556,216 @@ const SuperAdminDashboard = () => {
 
             {/* SCREEN LAYOUT CONSISTENCY: MAIN SAAS OVERVIEW (STEP 2) */}
             {isTabAllowed && activeTab === 'dashboard' && (
-              <div style={{ ...styles.pageBodyScroll, gap: '24px' }}>
-                {/* Platform Overview Control Header (Light Theme) */}
+              <div style={{ ...styles.pageBodyScroll, gap: '22px', position: 'relative', paddingBottom: '90px' }}>
+                {/* Ambient background atmosphere glows */}
                 <div style={{
-                  background: '#FFFFFF',
-                  borderRadius: '12px',
-                  padding: '20px 24px',
-                  border: '1px solid #E2E8F0',
-                  boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
+                  position: 'absolute',
+                  top: '-20px',
+                  left: '10%',
+                  width: '600px',
+                  height: '300px',
+                  background: 'radial-gradient(ellipse at center, rgba(99, 102, 241, 0.035) 0%, transparent 70%)',
+                  pointerEvents: 'none',
+                  zIndex: 0
+                }} />
+                <div style={{
+                  position: 'absolute',
+                  top: '-20px',
+                  right: '10%',
+                  width: '500px',
+                  height: '260px',
+                  background: 'radial-gradient(ellipse at center, rgba(13, 148, 136, 0.025) 0%, transparent 70%)',
+                  pointerEvents: 'none',
+                  zIndex: 0
+                }} />
+
+                {/* 1. HERO / PLATFORM COMMAND SEARCH & ACTIONS BAR */}
+                <div style={{
+                  background: 'linear-gradient(135deg, #EEF2FF 0%, #F8FAFC 50%, #FAF5FF 100%)',
+                  borderRadius: '18px',
+                  padding: '18px 24px',
+                  minHeight: '84px',
+                  flexShrink: 0,
+                  boxSizing: 'border-box',
+                  border: '1px solid #C7D2FE',
+                  boxShadow: '0 2px 8px rgba(79,70,229,0.05)',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   flexWrap: 'wrap',
-                  gap: '16px'
+                  gap: '16px',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  zIndex: 1
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  {/* Subtle telemetry circle accents */}
+                  <div style={{ position: 'absolute', top: '-40px', right: '320px', width: '160px', height: '160px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.07) 0%, transparent 70%)', pointerEvents: 'none' }} />
+                  <div style={{ position: 'absolute', bottom: '-30px', right: '120px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(124,58,237,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
+
+                  {/* Left: Prominent Global Search Bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: '280px', maxWidth: '520px', position: 'relative' }}>
+                    <LucideIcon name="search" style={{ position: 'absolute', left: '14px', width: '17px', height: '17px', color: '#6366F1', zIndex: 1 }} />
+                    <input
+                      type="text"
+                      placeholder="Search hospitals, tickets, telemetry, logs, reports..."
+                      style={{
+                        height: '42px',
+                        width: '100%',
+                        padding: '0 46px 0 42px',
+                        border: '1px solid #C7D2FE',
+                        borderRadius: '12px',
+                        fontSize: '13px',
+                        background: '#FFFFFF',
+                        outline: 'none',
+                        fontWeight: 500,
+                        color: '#1E293B',
+                        boxShadow: '0 1px 3px rgba(79,70,229,0.06)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onFocus={e => { e.currentTarget.style.borderColor = '#4F46E5'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(79,70,229,0.12)'; }}
+                      onBlur={e => { e.currentTarget.style.borderColor = '#C7D2FE'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(79,70,229,0.06)'; }}
+                      onClick={() => setIsSearchModalOpen(true)}
+                    />
                     <div style={{
-                      background: '#EEF2FF',
-                      color: '#4F46E5',
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '10px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0
+                      position: 'absolute',
+                      right: '10px',
+                      padding: '2px 7px',
+                      background: '#F1F5F9',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '6px',
+                      fontSize: '10.5px',
+                      fontWeight: 700,
+                      color: '#64748B',
+                      pointerEvents: 'none'
                     }}>
-                      <LucideIcon name="shield" style={{ width: '20px', height: '20px' }} />
-                    </div>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.5px' }}>
-                          Platform Overview Control
-                        </h2>
-                        <span style={{
-                          fontSize: '9px',
-                          fontWeight: 800,
-                          color: '#059669',
-                          background: '#D1FAE5',
-                          padding: '2px 8px',
-                          borderRadius: '10px',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px'
-                        }}>
-                          Active
-                        </span>
-                      </div>
-                      <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 0 0', fontWeight: 550 }}>
-                        Live platform orchestration, telemetry monitoring, and database management.
-                      </p>
+                      ⌘K
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <button 
-                      onClick={handleTriggerBackup}
+
+                  {/* Right: Action Buttons Grouped Together */}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
+                    <button
+                      onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }}
                       style={{
                         background: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        color: '#334155',
-                        padding: '8px 16px',
-                        borderRadius: '8px',
-                        fontSize: '12.5px',
+                        border: '1px solid #C7D2FE',
+                        color: '#4338CA',
+                        padding: '8px 14px',
+                        height: '38px',
+                        borderRadius: '10px',
+                        fontSize: '12px',
                         fontWeight: 700,
                         cursor: 'pointer',
                         transition: 'all 0.15s',
-                        display: 'flex',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '6px'
+                        gap: '6px',
+                        boxShadow: '0 1px 3px rgba(79,70,229,0.04)'
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.background = '#F8FAFC';
-                        e.currentTarget.style.borderColor = '#CBD5E1';
+                        e.currentTarget.style.borderColor = '#818CF8';
+                        e.currentTarget.style.boxShadow = '0 4px 10px rgba(79,70,229,0.1)';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.background = '#FFFFFF';
-                        e.currentTarget.style.borderColor = '#E2E8F0';
+                        e.currentTarget.style.borderColor = '#C7D2FE';
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(79,70,229,0.04)';
                       }}
                     >
-                      <LucideIcon name="database" style={{ width: '14px', height: '14px' }} />
+                      <LucideIcon name="activity" style={{ width: '14px', height: '14px', color: '#4F46E5' }} />
+                      Network Status
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab('platform-audits')}
+                      style={{
+                        background: '#FFFFFF',
+                        border: '1px solid #C7D2FE',
+                        color: '#4338CA',
+                        padding: '8px 14px',
+                        height: '38px',
+                        borderRadius: '10px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 3px rgba(79,70,229,0.04)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#F8FAFC';
+                        e.currentTarget.style.borderColor = '#818CF8';
+                        e.currentTarget.style.boxShadow = '0 4px 10px rgba(79,70,229,0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#FFFFFF';
+                        e.currentTarget.style.borderColor = '#C7D2FE';
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(79,70,229,0.04)';
+                      }}
+                    >
+                      <LucideIcon name="file-text" style={{ width: '14px', height: '14px', color: '#4F46E5' }} />
+                      Logs
+                    </button>
+
+                    <button
+                      onClick={handleTriggerBackup}
+                      style={{
+                        background: '#FFFFFF',
+                        border: '1px solid #C7D2FE',
+                        color: '#4338CA',
+                        padding: '8px 14px',
+                        height: '38px',
+                        borderRadius: '10px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 3px rgba(79,70,229,0.04)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#F8FAFC';
+                        e.currentTarget.style.borderColor = '#818CF8';
+                        e.currentTarget.style.boxShadow = '0 4px 10px rgba(79,70,229,0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#FFFFFF';
+                        e.currentTarget.style.borderColor = '#C7D2FE';
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(79,70,229,0.04)';
+                      }}
+                    >
+                      <LucideIcon name="database" style={{ width: '14px', height: '14px', color: '#4F46E5' }} />
                       Backup Database
                     </button>
-                    <button 
+
+                    <button
                       onClick={() => {
                         setActiveTab('bi-reports');
                         setBiSubTab('bi-dashboard');
                       }}
                       style={{
-                        background: '#4F46E5',
+                        background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
                         border: 'none',
                         color: '#FFFFFF',
                         padding: '8px 16px',
-                        borderRadius: '8px',
-                        fontSize: '12.5px',
-                        fontWeight: 700,
+                        height: '38px',
+                        borderRadius: '10px',
+                        fontSize: '12px',
+                        fontWeight: 750,
                         cursor: 'pointer',
                         transition: 'all 0.15s',
-                        display: 'flex',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '6px'
+                        gap: '6px',
+                        boxShadow: '0 4px 12px rgba(79,70,229,0.25)'
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#4338CA'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = '#4F46E5'}
+                      onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.92'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'none'; }}
                     >
                       <LucideIcon name="bar-chart-2" style={{ width: '14px', height: '14px' }} />
                       Analytics Desk
@@ -5624,60 +5773,63 @@ const SuperAdminDashboard = () => {
                   </div>
                 </div>
 
-                {/* KPI Cards Grid */}
+
+                {/* 2. UNIFIED PREMIUM KPI COMMAND STRIP */}
                 <div style={{
+                  background: '#FFFFFF',
+                  borderRadius: '16px',
+                  border: '1px solid #E2E8F0',
+                  boxShadow: '0 1px 4px rgba(15,23,42,0.04)',
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                  gap: '20px'
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  zIndex: 1
                 }}>
                   {[
-                    { 
-                      label: 'TOTAL HOSPITALS', 
-                      val: hospitals.length, 
-                      growth: '+4.2%', 
-                      desc: 'vs last month', 
-                      color: '#4F46E5', 
-                      icon: 'building', 
-                      tab: 'hospitals',
-                      bgGradient: 'linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%)',
-                      accentColor: '#6366F1'
+                    {
+                      label: 'TOTAL HOSPITALS',
+                      val: hospitals.length,
+                      growth: '+4.2%',
+                      desc: 'vs last month',
+                      color: '#2563EB',
+                      accentLight: '#EFF6FF',
+                      icon: 'building-2',
+                      tab: 'hospitals'
                     },
-                    { 
-                      label: 'ACTIVE HOSPITALS', 
-                      val: hospitals.filter(h => h.status === 'Active').length, 
-                      growth: '+3.8%', 
-                      desc: 'vs last month', 
-                      color: '#0D9488', 
-                      icon: 'activity', 
-                      tab: 'hospitals',
-                      bgGradient: 'linear-gradient(135deg, #F0FDFA 0%, #CCFBF1 100%)',
-                      accentColor: '#14B8A6'
+                    {
+                      label: 'ACTIVE HOSPITALS',
+                      val: hospitals.filter(h => h.status === 'Active').length,
+                      growth: '+3.8%',
+                      desc: 'vs last month',
+                      color: '#0D9488',
+                      accentLight: '#F0FDFA',
+                      icon: 'activity',
+                      tab: 'hospitals'
                     },
-                    { 
-                      label: 'OPEN TICKETS', 
-                      val: tickets.filter(t => t.status === 'Open').length, 
-                      growth: 'SLA OK', 
-                      desc: 'Active support requests', 
-                      color: '#DC2626', 
-                      icon: 'ticket', 
-                      tab: 'customer-support',
-                      bgGradient: 'linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%)',
-                      accentColor: '#F87171'
+                    {
+                      label: 'OPEN TICKETS',
+                      val: tickets.filter(t => t.status === 'Open').length,
+                      growth: 'SLA OK',
+                      desc: 'Active support requests',
+                      color: '#E11D48',
+                      accentLight: '#FFF1F2',
+                      icon: 'ticket',
+                      tab: 'customer-support'
                     },
-                    { 
-                      label: 'MONTHLY RECURRING REVENUE', 
-                      val: `₹${invoices.reduce((acc, inv) => acc + (inv.status === 'Paid' ? inv.amount : 0), 0).toLocaleString()}`, 
-                      growth: '+12.4%', 
-                      desc: 'Current Month MRR', 
-                      color: '#0891B2', 
-                      icon: 'credit-card', 
-                      tab: 'finance',
-                      bgGradient: 'linear-gradient(135deg, #ECFEFF 0%, #CFFAFE 100%)',
-                      accentColor: '#06B6D4'
+                    {
+                      label: 'MONTHLY RECURRING REVENUE',
+                      val: `₹${invoices.reduce((acc, inv) => acc + (inv.status === 'Paid' ? inv.amount : 0), 0).toLocaleString()}`,
+                      growth: '+12.4%',
+                      desc: 'Current Month MRR',
+                      color: '#7C3AED',
+                      accentLight: '#F5F3FF',
+                      icon: 'trending-up',
+                      tab: 'finance'
                     }
-                  ].map(kpi => (
-                    <div 
-                      key={kpi.label} 
+                  ].map((kpi, idx) => (
+                    <div
+                      key={kpi.label}
                       onClick={() => {
                         if (kpi.tab === 'finance') {
                           setActiveTab('finance-mgmt');
@@ -5690,60 +5842,69 @@ const SuperAdminDashboard = () => {
                         }
                       }}
                       style={{
-                        background: '#FFFFFF',
-                        borderRadius: '14px',
-                        padding: '20px',
-                        border: '1px solid #E2E8F0',
+                        padding: '22px 24px',
+                        borderRight: idx < 3 ? '1px solid #F1F5F9' : 'none',
                         cursor: 'pointer',
-                        transition: 'all 0.2s ease-in-out',
+                        transition: 'all 0.15s ease',
                         position: 'relative',
-                        overflow: 'hidden',
-                        boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)'
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        background: '#FFFFFF'
                       }}
-                      className="kpi-card-interactive"
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.05)';
-                        e.currentTarget.style.borderColor = kpi.accentColor;
+                        e.currentTarget.style.backgroundColor = '#F8FAFC';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'none';
-                        e.currentTarget.style.boxShadow = '0 1px 3px 0 rgba(0, 0, 0, 0.05)';
-                        e.currentTarget.style.borderColor = '#E2E8F0';
+                        e.currentTarget.style.backgroundColor = '#FFFFFF';
                       }}
                     >
-                      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: kpi.accentColor }} />
-                      
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                        <div>
-                          <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', letterSpacing: '1px', textTransform: 'uppercase' }}>
-                            {kpi.label}
-                          </span>
-                          <div style={{ fontSize: '24px', fontWeight: 850, color: '#0F172A', marginTop: '6px', letterSpacing: '-0.5px' }}>
-                            {kpi.val}
-                          </div>
-                        </div>
+                      {/* Top micro accent bar on cell */}
+                      <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: '3px',
+                        background: kpi.color,
+                        opacity: 0.85
+                      }} />
+
+                      {/* Header line: label and icon */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                          {kpi.label}
+                        </span>
                         <div style={{
-                          background: kpi.bgGradient,
+                          background: kpi.accentLight,
                           color: kpi.color,
-                          padding: '8px',
-                          borderRadius: '10px',
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center'
+                          justifyContent: 'center',
+                          flexShrink: 0
                         }}>
-                          <LucideIcon name={kpi.icon} style={{ width: '18px', height: '18px' }} />
+                          <LucideIcon name={kpi.icon} style={{ width: '16px', height: '16px' }} />
                         </div>
                       </div>
-                      
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+
+                      {/* Big metric value */}
+                      <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', letterSpacing: '-1px', lineHeight: 1.1, marginBottom: '10px' }}>
+                        {kpi.val}
+                      </div>
+
+                      {/* Growth pill & subtext */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <span style={{
                           fontSize: '10px',
                           fontWeight: 800,
-                          padding: '2px 6px',
-                          borderRadius: '6px',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
                           background: kpi.growth.includes('+') || kpi.growth.includes('OK') ? '#D1FAE5' : '#FEE2E2',
-                          color: kpi.growth.includes('+') || kpi.growth.includes('OK') ? '#065F46' : '#991B1B'
+                          color: kpi.growth.includes('+') || kpi.growth.includes('OK') ? '#065F46' : '#991B1B',
+                          border: `1px solid ${kpi.growth.includes('+') || kpi.growth.includes('OK') ? '#A7F3D0' : '#FECACA'}`
                         }}>
                           {kpi.growth}
                         </span>
@@ -5755,129 +5916,173 @@ const SuperAdminDashboard = () => {
                   ))}
                 </div>
 
-                {/* Main Content Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '24px', alignItems: 'start' }}>
-                  {/* LEFT COLUMN */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    {/* Recent System Events */}
+
+                {/* 3. MAIN CONTENT ASYMMETRIC GRID (LEFT ~66% / RIGHT ~34%) */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.85fr) minmax(0, 1fr)', gap: '22px', alignItems: 'start', position: 'relative', zIndex: 1 }}>
+                  {/* LEFT COLUMN: RECENT SYSTEM EVENTS & TELEMETRY TIMELINE */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div style={{
                       background: '#FFFFFF',
                       border: '1px solid #E2E8F0',
                       borderRadius: '16px',
-                      padding: '24px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
+                      padding: '22px 24px',
+                      boxShadow: '0 1px 4px rgba(15,23,42,0.04)'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                         <div>
-                          <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Recent System Events & Logs</h3>
-                          <span style={{ fontSize: '11.5px', color: '#64748B' }}>Audit logs stream of platform administrator operations</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }} />
+                            <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Recent System Events &amp; Logs</h3>
+                          </div>
+                          <span style={{ fontSize: '11.5px', color: '#64748B', marginTop: '3px', display: 'block' }}>Audit log stream — platform administrator operations</span>
                         </div>
-                        <button 
+                        <button
                           onClick={() => setActiveTab('platform-audits')}
                           style={{
-                            background: 'transparent',
-                            border: 'none',
+                            background: '#EEF2FF',
+                            border: '1px solid #C7D2FE',
                             color: '#4F46E5',
-                            fontSize: '12px',
-                            fontWeight: 700,
+                            fontSize: '11.5px',
+                            fontWeight: 750,
                             cursor: 'pointer',
-                            display: 'flex',
+                            display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '4px'
+                            gap: '5px',
+                            padding: '6px 13px',
+                            borderRadius: '8px',
+                            transition: 'all 0.15s',
+                            whiteSpace: 'nowrap'
                           }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#E0E7FF'; e.currentTarget.style.borderColor = '#818CF8'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#EEF2FF'; e.currentTarget.style.borderColor = '#C7D2FE'; }}
                         >
                           View Full Log <LucideIcon name="arrow-right" style={{ width: '13px', height: '13px' }} />
                         </button>
                       </div>
 
-                      <div style={{ position: 'relative', paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <div style={{ position: 'relative', paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        {/* Vertical Timeline Guide Line */}
                         <div style={{
                           position: 'absolute',
-                          left: '4px',
-                          top: '10px',
-                          bottom: '10px',
+                          left: '8px',
+                          top: '12px',
+                          bottom: '12px',
                           width: '2px',
-                          background: '#E2E8F0'
+                          background: 'linear-gradient(180deg, #6366F1 0%, #CBD5E1 100%)'
                         }} />
 
                         {auditLogs.length === 0 ? (
-                          <div style={{ textAlign: 'center', padding: '30px 10px', color: '#64748B', fontSize: '12px' }}>
+                          <div style={{ textAlign: 'center', padding: '36px 10px', color: '#64748B', fontSize: '12.5px' }}>
+                            <LucideIcon name="activity" style={{ width: '28px', height: '28px', color: '#CBD5E1', margin: '0 auto 8px auto' }} />
                             No recent operational events detected.
                           </div>
                         ) : (
                           auditLogs.slice(0, 4).map((log, index) => {
+                            // Semantic color mapping
+                            let markerColor = '#64748B';
                             let badgeBg = '#F1F5F9';
                             let badgeColor = '#475569';
-                            if (log.action.includes('invoice') || log.action.includes('payment') || log.action.includes('billing')) {
+                            let badgeBorder = '#E2E8F0';
+                            let eventLabel = log.action;
+
+                            const act = (log.action || '').toLowerCase();
+                            if (act.includes('invoice') || act.includes('payment') || act.includes('billing')) {
+                              markerColor = '#10B981';
                               badgeBg = '#D1FAE5';
                               badgeColor = '#065F46';
-                            } else if (log.action.includes('hospital') || log.action.includes('create')) {
-                              badgeBg = '#E0F2FE';
-                              badgeColor = '#0369A1';
-                            } else if (log.action.includes('ticket') || log.action.includes('support')) {
+                              badgeBorder = '#A7F3D0';
+                              eventLabel = 'CREATE_INVOICE';
+                            } else if (act.includes('hospital') || act.includes('create') || act.includes('onboard')) {
+                              markerColor = '#2563EB';
+                              badgeBg = '#DBEAFE';
+                              badgeColor = '#1E40AF';
+                              badgeBorder = '#BFDBFE';
+                              eventLabel = 'UPDATE_HOSPITAL';
+                            } else if (act.includes('system') || act.includes('database') || act.includes('backup') || act.includes('purge')) {
+                              markerColor = '#7C3AED';
+                              badgeBg = '#EDE9FE';
+                              badgeColor = '#5B21B6';
+                              badgeBorder = '#DDD6FE';
+                              eventLabel = 'SYSTEM';
+                            } else if (act.includes('ticket') || act.includes('support')) {
+                              markerColor = '#F59E0B';
                               badgeBg = '#FEF3C7';
                               badgeColor = '#78350F';
-                            } else if (log.action.includes('delete') || log.action.includes('purge')) {
+                              badgeBorder = '#FDE68A';
+                              eventLabel = 'WARNING';
+                            } else if (act.includes('delete') || act.includes('error')) {
+                              markerColor = '#EF4444';
                               badgeBg = '#FEE2E2';
                               badgeColor = '#991B1B';
+                              badgeBorder = '#FECACA';
+                              eventLabel = 'ERROR';
                             }
 
                             return (
-                              <div key={log._id || log.id} style={{ display: 'flex', gap: '16px', position: 'relative' }}>
+                              <div key={log._id || log.id || index} style={{ display: 'flex', gap: '12px', position: 'relative' }}>
+                                {/* Timeline Connected Node */}
                                 <div style={{
                                   position: 'absolute',
-                                  left: '-16px',
-                                  top: '6px',
-                                  width: '10px',
-                                  height: '10px',
+                                  left: '-22px',
+                                  top: '12px',
+                                  width: '12px',
+                                  height: '12px',
                                   borderRadius: '50%',
-                                  background: '#FFFFFF',
-                                  border: `2px solid ${index === 0 ? '#4F46E5' : '#94A3B8'}`
+                                  background: markerColor,
+                                  border: '2px solid #FFFFFF',
+                                  boxShadow: `0 0 0 2px ${markerColor}35`,
+                                  flexShrink: 0
                                 }} />
 
                                 <div style={{
-                                  background: '#F8FAFC',
+                                  background: index === 0 ? '#F8FAFC' : '#FAFBFD',
                                   borderRadius: '12px',
-                                  padding: '14px 18px',
+                                  padding: '12px 16px',
                                   flex: 1,
                                   display: 'flex',
                                   justifyContent: 'space-between',
-                                  alignItems: 'center',
-                                  border: '1px solid #F1F5F9',
-                                  transition: 'all 0.15s ease-in-out'
+                                  alignItems: 'flex-start',
+                                  border: index === 0 ? '1px solid #E2E8F0' : '1px solid #F1F5F9',
+                                  borderLeft: index === 0 ? `3px solid ${markerColor}` : '1px solid #F1F5F9',
+                                  transition: 'all 0.15s ease-in-out',
+                                  gap: '12px'
                                 }}
                                 onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = '#F1F5F9';
-                                  e.currentTarget.style.borderColor = '#CBD5E1';
+                                  e.currentTarget.style.background = '#FFFFFF';
+                                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(15,23,42,0.06)';
+                                  e.currentTarget.style.borderColor = markerColor + '60';
                                 }}
                                 onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = '#F8FAFC';
-                                  e.currentTarget.style.borderColor = '#F1F5F9';
+                                  e.currentTarget.style.background = index === 0 ? '#F8FAFC' : '#FAFBFD';
+                                  e.currentTarget.style.boxShadow = 'none';
+                                  e.currentTarget.style.borderColor = index === 0 ? '#E2E8F0' : '#F1F5F9';
                                 }}
                                 >
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                       <span style={{
-                                        fontSize: '9px',
+                                        fontSize: '9.5px',
                                         fontWeight: 800,
                                         padding: '2px 8px',
-                                        borderRadius: '12px',
+                                        borderRadius: '6px',
                                         background: badgeBg,
                                         color: badgeColor,
+                                        border: `1px solid ${badgeBorder}`,
                                         textTransform: 'uppercase',
-                                        letterSpacing: '0.5px'
+                                        letterSpacing: '0.5px',
+                                        whiteSpace: 'nowrap'
                                       }}>
-                                        {log.action}
+                                        {eventLabel}
                                       </span>
-                                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#475569' }}>
-                                        By: {log.user}
+                                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>
+                                        {log.user || 'superadmin'}
                                       </span>
                                     </div>
-                                    <span style={{ fontSize: '12.5px', color: '#1E293B', fontWeight: 500, lineHeight: '1.4' }}>
+                                    <span style={{ fontSize: '12.5px', color: '#1E293B', fontWeight: 550, lineHeight: '1.4' }}>
                                       {log.details}
                                     </span>
                                   </div>
-                                  <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 650, whiteSpace: 'nowrap', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                                     {log.time || new Date(log.createdAt).toLocaleTimeString()}
                                   </span>
                                 </div>
@@ -5887,176 +6092,148 @@ const SuperAdminDashboard = () => {
                         )}
                       </div>
                     </div>
+                  </div>{/* END LEFT COLUMN */}
 
-                    {/* Quick Operations Links */}
+
+                  {/* RIGHT COLUMN: PLATFORM HEALTH & STORAGE ALLOCATION */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {/* Platform Health Infrastructure Monitor */}
                     <div style={{
                       background: '#FFFFFF',
                       border: '1px solid #E2E8F0',
                       borderRadius: '16px',
-                      padding: '24px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
+                      padding: '22px 24px',
+                      boxShadow: '0 1px 4px rgba(15,23,42,0.04)'
                     }}>
-                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: '0 0 4px 0' }}>Platform Operational Services</h3>
-                      <span style={{ fontSize: '11.5px', color: '#64748B', display: 'block', marginBottom: '16px' }}>Quick actions to manage platform components</span>
-                      
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                        {[
-                          { title: 'Onboard Hospital', desc: 'Register a new tenant node', icon: 'plus-circle', action: () => setActiveTab('hospital-onboarding'), color: '#3B82F6', bg: '#EFF6FF' },
-                          { title: 'Pricing Settings', desc: 'Update SaaS subscription pricing', icon: 'settings', action: () => setActiveTab('subscription-mgmt'), color: '#8B5CF6', bg: '#F5F3FF' },
-                          { title: 'Broadcast Alerts', desc: 'Notify all tenant dashboards', icon: 'megaphone', action: () => setActiveTab('broadcast-center'), color: '#F59E0B', bg: '#FEF3C7' },
-                          { title: 'Customer Support Desk', desc: 'Resolve open SLA tickets', icon: 'users', action: () => setActiveTab('customer-support'), color: '#EC4899', bg: '#FDF2F8' }
-                        ].map(item => (
-                          <div 
-                            key={item.title}
-                            onClick={item.action}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '14px',
-                              padding: '14px',
-                              borderRadius: '12px',
-                              border: '1px solid #E2E8F0',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease-in-out',
-                              background: '#FFFFFF'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = '#F8FAFC';
-                              e.currentTarget.style.borderColor = item.color;
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = '#FFFFFF';
-                              e.currentTarget.style.borderColor = '#E2E8F0';
-                            }}
-                          >
-                            <div style={{
-                              background: item.bg,
-                              color: item.color,
-                              padding: '10px',
-                              borderRadius: '8px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}>
-                              <LucideIcon name={item.icon} style={{ width: '16px', height: '16px' }} />
-                            </div>
-                            <div>
-                              <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>{item.title}</h4>
-                              <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#64748B', fontWeight: 500 }}>{item.desc}</p>
-                            </div>
-                          </div>
-                        ))}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#0D9488', display: 'inline-block' }} />
+                        <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Platform Health</h3>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* RIGHT COLUMN */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    {/* Platform Health Monitor */}
-                    <div style={{
-                      background: '#FFFFFF',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '16px',
-                      padding: '24px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
-                    }}>
-                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: '0 0 4px 0' }}>Infrastructure Performance</h3>
-                      <span style={{ fontSize: '11.5px', color: '#64748B', display: 'block', marginBottom: '20px' }}>Real-time telemetry and resource checks</span>
+                      <span style={{ fontSize: '11.5px', color: '#64748B', display: 'block', marginBottom: '20px' }}>Real-time infrastructure telemetry &amp; resource checks</span>
                       
-                      <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', marginBottom: '24px' }}>
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ position: 'relative', width: '70px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <svg width="70" height="70" viewBox="0 0 36 36">
+                      {/* Telemetry Gauge Rings */}
+                      <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', marginBottom: '22px' }}>
+                        {/* CPU Load Gauge */}
+                        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <div style={{ position: 'relative', width: '82px', height: '82px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <svg width="82" height="82" viewBox="0 0 36 36">
                               <path
                                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                                 fill="none"
-                                stroke="#E2E8F0"
-                                strokeWidth="2.5"
+                                stroke="#F1F5F9"
+                                strokeWidth="3.2"
                               />
                               <path
                                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                                 fill="none"
-                                stroke="#4F46E5"
+                                stroke="url(#cpuGrad)"
                                 strokeDasharray={`${telemetryCpu}, 100`}
-                                strokeWidth="2.5"
+                                strokeWidth="3.2"
                                 strokeLinecap="round"
                               />
+                              <defs>
+                                <linearGradient id="cpuGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                  <stop offset="0%" stopColor="#4F46E5" />
+                                  <stop offset="100%" stopColor="#7C3AED" />
+                                </linearGradient>
+                              </defs>
                             </svg>
-                            <div style={{ position: 'absolute', fontSize: '12px', fontWeight: 800, color: '#1E293B' }}>{telemetryCpu}%</div>
+                            <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                              <span style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.5px' }}>{telemetryCpu}%</span>
+                            </div>
                           </div>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'block', marginTop: '6px' }}>CPU Load</span>
+                          <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748B', marginTop: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>CPU Load</span>
                         </div>
 
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ position: 'relative', width: '70px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <svg width="70" height="70" viewBox="0 0 36 36">
+                        {/* Memory Gauge */}
+                        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <div style={{ position: 'relative', width: '82px', height: '82px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <svg width="82" height="82" viewBox="0 0 36 36">
                               <path
                                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                                 fill="none"
-                                stroke="#E2E8F0"
-                                strokeWidth="2.5"
+                                stroke="#F1F5F9"
+                                strokeWidth="3.2"
                               />
                               <path
                                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                                 fill="none"
-                                stroke="#06B6D4"
+                                stroke="url(#memGrad)"
                                 strokeDasharray={`${telemetryMem}, 100`}
-                                strokeWidth="2.5"
+                                strokeWidth="3.2"
                                 strokeLinecap="round"
                               />
+                              <defs>
+                                <linearGradient id="memGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                  <stop offset="0%" stopColor="#06B6D4" />
+                                  <stop offset="100%" stopColor="#0D9488" />
+                                </linearGradient>
+                              </defs>
                             </svg>
-                            <div style={{ position: 'absolute', fontSize: '12px', fontWeight: 800, color: '#1E293B' }}>{telemetryMem}%</div>
+                            <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                              <span style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.5px' }}>{telemetryMem}%</span>
+                            </div>
                           </div>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'block', marginTop: '6px' }}>Memory</span>
+                          <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748B', marginTop: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Memory</span>
                         </div>
 
+                        {/* SLA Rate Gauge */}
                         {(() => {
                           const totalTickets = tickets.length;
                           const breachedTickets = tickets.filter(t => t.slaStatus === 'Breached').length;
                           const slaRate = totalTickets > 0 ? Math.round(((totalTickets - breachedTickets) / totalTickets) * 100) : 100;
                           
                           return (
-                            <div style={{ textAlign: 'center' }}>
-                              <div style={{ position: 'relative', width: '70px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <svg width="70" height="70" viewBox="0 0 36 36">
+                            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                              <div style={{ position: 'relative', width: '82px', height: '82px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <svg width="82" height="82" viewBox="0 0 36 36">
                                   <path
                                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                                     fill="none"
-                                    stroke="#E2E8F0"
-                                    strokeWidth="2.5"
+                                    stroke="#F1F5F9"
+                                    strokeWidth="3.2"
                                   />
                                   <path
                                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                                     fill="none"
-                                    stroke="#10B981"
+                                    stroke="url(#slaGrad)"
                                     strokeDasharray={`${slaRate}, 100`}
-                                    strokeWidth="2.5"
+                                    strokeWidth="3.2"
                                     strokeLinecap="round"
                                   />
+                                  <defs>
+                                    <linearGradient id="slaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                      <stop offset="0%" stopColor="#10B981" />
+                                      <stop offset="100%" stopColor="#059669" />
+                                    </linearGradient>
+                                  </defs>
                                 </svg>
-                                <div style={{ position: 'absolute', fontSize: '12px', fontWeight: 800, color: '#1E293B' }}>{slaRate}%</div>
+                                <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.5px' }}>{slaRate}%</span>
+                                </div>
                               </div>
-                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'block', marginTop: '6px' }}>SLA Rate</span>
+                              <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748B', marginTop: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>SLA Rate</span>
                             </div>
                           );
                         })()}
                       </div>
 
+                      {/* Database Connection telemetry pill */}
                       <div style={{
-                        background: '#FAF9F6',
-                        borderRadius: '10px',
+                        background: '#F8FAFC',
+                        borderRadius: '12px',
                         padding: '12px 16px',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        border: '1px solid #F1F5F9'
+                        border: '1px solid #E2E8F0'
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <span style={{
                             position: 'relative',
                             display: 'inline-flex',
-                            height: '8px',
-                            width: '8px',
+                            height: '9px',
+                            width: '9px',
                             borderRadius: '50%',
                             background: telemetryDbStatus === 'Healthy' ? '#10B981' : '#EF4444'
                           }}>
@@ -6071,13 +6248,25 @@ const SuperAdminDashboard = () => {
                               animation: 'ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite'
                             }} />
                           </span>
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>Database Connection</span>
+                          <span style={{ fontSize: '12.5px', fontWeight: 750, color: '#334155' }}>Database Connection</span>
                         </div>
-                        <span style={{ fontSize: '11px', fontWeight: 800, color: telemetryDbStatus === 'Healthy' ? '#065F46' : '#991B1B', background: telemetryDbStatus === 'Healthy' ? '#D1FAE5' : '#FEE2E2', padding: '2px 8px', borderRadius: '12px' }}>{telemetryDbStatus}</span>
+                        <span style={{
+                          fontSize: '10.5px',
+                          fontWeight: 800,
+                          color: telemetryDbStatus === 'Healthy' ? '#065F46' : '#991B1B',
+                          background: telemetryDbStatus === 'Healthy' ? '#D1FAE5' : '#FEE2E2',
+                          border: `1px solid ${telemetryDbStatus === 'Healthy' ? '#A7F3D0' : '#FECACA'}`,
+                          padding: '3px 10px',
+                          borderRadius: '20px',
+                          letterSpacing: '0.4px',
+                          textTransform: 'uppercase'
+                        }}>
+                          {telemetryDbStatus}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Storage Allocation Usage */}
+                    {/* Storage Allocation Subordinate Panel */}
                     {(() => {
                       const totalStorageLimit = hospitals.reduce((sum, h) => sum + (h.limits?.storageLimit || 50), 0);
                       const totalStorageUsed = hospitals.reduce((sum, h) => sum + (h.limits?.storageUsed || 0), 0);
@@ -6088,36 +6277,144 @@ const SuperAdminDashboard = () => {
                           background: '#FFFFFF',
                           border: '1px solid #E2E8F0',
                           borderRadius: '16px',
-                          padding: '24px',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
+                          padding: '20px 24px',
+                          boxShadow: '0 1px 4px rgba(15,23,42,0.04)'
                         }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Storage Allocation</h3>
-                            <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#6366F1' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                            <h3 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Storage Allocation</h3>
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              color: storagePercent > 85 ? '#DC2626' : '#4F46E5',
+                              background: storagePercent > 85 ? '#FEF2F2' : '#EEF2FF',
+                              border: `1px solid ${storagePercent > 85 ? '#FECACA' : '#C7D2FE'}`,
+                              padding: '2px 8px',
+                              borderRadius: '20px'
+                            }}>
                               {storagePercent.toFixed(1)}% Capacity
                             </span>
                           </div>
-                          <span style={{ fontSize: '11.5px', color: '#64748B', display: 'block', marginBottom: '16px' }}>
+                          <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginBottom: '14px' }}>
                             Cumulative tenant storage usage across active nodes
                           </span>
 
-                          <div style={{ height: '8px', background: '#E2E8F0', borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}>
+                          <div style={{ height: '8px', background: '#F1F5F9', borderRadius: '10px', overflow: 'hidden', marginBottom: '10px' }}>
                             <div style={{
                               width: `${Math.min(100, Math.max(5, storagePercent))}%`,
                               height: '100%',
-                              background: 'linear-gradient(90deg, #6366F1 0%, #06B6D4 100%)',
-                              borderRadius: '10px'
+                              background: storagePercent > 85 
+                                ? 'linear-gradient(90deg, #F59E0B 0%, #EF4444 100%)'
+                                : 'linear-gradient(90deg, #4F46E5 0%, #06B6D4 100%)',
+                              borderRadius: '10px',
+                              transition: 'width 0.4s ease'
                             }} />
                           </div>
 
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 700, color: '#475569' }}>
-                            <span>{totalStorageUsed.toFixed(1)} GB Used</span>
-                            <span>of {totalStorageLimit} GB Limit</span>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 700, color: '#64748B' }}>
+                            <span><strong>{totalStorageUsed.toFixed(1)} GB</strong> Used</span>
+                            <span>of <strong>{totalStorageLimit} GB</strong> Limit</span>
                           </div>
                         </div>
                       );
                     })()}
                   </div>
+                </div>
+
+                {/* 4. FLOATING PLATFORM OPERATIONS COMMAND DOCK */}
+                <div style={{
+                  position: 'fixed',
+                  bottom: '22px',
+                  left: 'calc(260px + (100vw - 260px) / 2)',
+                  transform: 'translateX(-50%)',
+                  zIndex: 150,
+                  background: 'rgba(255, 255, 255, 0.92)',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(203, 213, 225, 0.85)',
+                  borderRadius: '24px',
+                  padding: '6px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 12px 32px -4px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.04)'
+                }}>
+                  {[
+                    { title: 'Onboard Hospital', desc: 'Register tenant', icon: 'hospital', action: () => setActiveTab('hospital-onboarding'), color: '#2563EB', bg: '#EFF6FF' },
+                    { title: 'Pricing Settings', desc: 'Subscriptions', icon: 'layers', action: () => setActiveTab('subscription-mgmt'), color: '#7C3AED', bg: '#F5F3FF' },
+                    { title: 'Broadcast Alerts', desc: 'Notify tenants', icon: 'megaphone', action: () => setActiveTab('broadcast-center'), color: '#D97706', bg: '#FEF3C7' },
+                    { title: 'Customer Support', desc: 'SLA tickets', icon: 'headset', action: () => { setActiveTab('support-success'); setSupportSubTab('support-dashboard'); }, color: '#DB2777', bg: '#FDF2F8' },
+                    { title: 'Finance & Billing', desc: 'Invoices', icon: 'wallet', action: () => { setActiveTab('finance-mgmt'); setFinSubTab('finance-dashboard'); }, color: '#059669', bg: '#F0FDF4' },
+                    { title: 'Employees & HR', desc: 'Staff directory', icon: 'users-2', action: () => { setActiveTab('hr-mgmt'); setHrSubTab('employees-list'); }, color: '#0D9488', bg: '#F0FDFA' },
+                    { title: 'Analytics Reports', desc: 'BI telemetry', icon: 'bar-chart-3', action: () => { setActiveTab('bi-reports'); setBiSubTab('bi-dashboard'); }, color: '#4F46E5', bg: '#EEF2FF' }
+                  ].map(item => (
+                    <button
+                      key={item.title}
+                      onClick={item.action}
+                      title={`${item.title} — ${item.desc}`}
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '12px',
+                        border: '1px solid transparent',
+                        background: 'transparent',
+                        color: item.color,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.18s ease-in-out',
+                        position: 'relative'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = item.bg;
+                        e.currentTarget.style.borderColor = item.color + '40';
+                        e.currentTarget.style.transform = 'translateY(-2px) scale(1.06)';
+                        e.currentTarget.style.boxShadow = `0 4px 10px ${item.color}25`;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.borderColor = 'transparent';
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      <LucideIcon name={item.icon} style={{ width: '17px', height: '17px' }} />
+                    </button>
+                  ))}
+
+                  {/* Dock Divider */}
+                  <div style={{ width: '1px', height: '22px', background: '#E2E8F0', margin: '0 4px' }} />
+
+                  {/* Platform Settings Button in Dock */}
+                  <button
+                    onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }}
+                    title="Platform Control — System telemetry & configuration"
+                    style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '12px',
+                      border: '1px solid transparent',
+                      background: 'transparent',
+                      color: '#475569',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.18s ease-in-out'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#F1F5F9';
+                      e.currentTarget.style.borderColor = '#CBD5E1';
+                      e.currentTarget.style.transform = 'translateY(-2px) scale(1.06)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.borderColor = 'transparent';
+                      e.currentTarget.style.transform = 'none';
+                    }}
+                  >
+                    <LucideIcon name="settings-2" style={{ width: '17px', height: '17px' }} />
+                  </button>
                 </div>
               </div>
             )}
@@ -12006,8 +12303,8 @@ const menuGroups = [
 
 // INTERFACE STYLING
 const styles = {
-  container: { display: 'flex', flexDirection: 'column', height: '100vh', width: '100%', maxWidth: '100%', overflow: 'hidden', background: '#F8FAFC' },
-  topNav: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '56px', background: '#FFFFFF', borderBottom: '1px solid #E2E8F0', padding: '0 16px', zIndex: 100 },
+  container: { display: 'flex', flexDirection: 'row', height: '100vh', width: '100vw', minWidth: 0, maxWidth: '100vw', overflow: 'hidden', background: '#F8FAFC' },
+  topNav: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '60px', width: '100%', minWidth: 0, boxSizing: 'border-box', background: '#FFFFFF', borderBottom: '1px solid #E2E8F0', padding: '0 24px', flexShrink: 0, zIndex: 80 },
   topNavLeft: { display: 'flex', alignItems: 'center', gap: '16px' },
   logoContainer: { display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' },
   logoIcon: { width: '30px', height: '30px', borderRadius: '8px', background: '#2563EB', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 },
@@ -12030,16 +12327,16 @@ const styles = {
   profileMeta: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start' },
   profileName: { fontSize: '12px', fontWeight: 700, color: '#0F172A', lineHeight: '1.2' },
   profileRole: { fontSize: '9.5px', color: '#64748B', fontWeight: 500 },
-  workspace: { display: 'flex', flex: 1, height: 'calc(100vh - 60px)', overflow: 'hidden' },
-  sidebar: { background: '#FFFFFF', borderRight: '1px solid #E2E8F0', height: '100%', transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)', display: 'flex', flexDirection: 'column' },
+  workspace: { display: 'flex', flex: 1, width: '100%', minWidth: 0, height: '100vh', overflow: 'hidden' },
+  sidebar: { width: '260px', minWidth: '260px', maxWidth: '260px', height: '100vh', background: '#FFFFFF', borderRight: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', flexShrink: 0, zIndex: 90 },
   sidebarScrollArea: { flex: 1, overflowY: 'auto', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: '16px' },
   menuGroupContainer: { display: 'flex', flexDirection: 'column', gap: '4px' },
   menuGroupTitle: { fontSize: '10px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.7px', paddingLeft: '16px', marginBottom: '4px' },
   menuItemBtn: { display: 'flex', alignItems: 'center', height: '38px', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s' },
   menuItemLabel: { fontSize: '12.5px', fontWeight: 700 },
   menuDivider: { height: '1px', background: '#F1F5F9', margin: '8px 0' },
-  mainCanvas: { flex: 1, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '20px' },
-  pageBodyScroll: { flex: 1, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '20px' },
+  mainCanvas: { flex: 1, width: '100%', minWidth: 0, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '24px', boxSizing: 'border-box' },
+  pageBodyScroll: { flex: 1, width: '100%', minWidth: 0, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '24px', boxSizing: 'border-box' },
   subNavbar: { display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexShrink: 0 },
   subNavbarBtn: { border: 'none', background: 'none', fontSize: '12.5px', fontWeight: 650, color: '#64748B', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' },
   subNavbarBtnActive: { border: 'none', background: '#EFF6FF', fontSize: '12.5px', fontWeight: 800, color: '#2563EB', padding: '6px 12px', borderRadius: '6px', cursor: 'default' },
