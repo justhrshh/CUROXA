@@ -325,4 +325,19 @@ router.post('/:batchId/write-off', async (req, res) => {
   }
 });
 
+// GET /api/inventory-expiry/write-offs — List all write-offs (tenant-scoped)
+router.get('/write-offs', async (req, res) => {
+  try {
+    const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit, 10) || 500));
+    const records = await InventoryWriteOff.find({ tenantId: req.tenantId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    res.json({ writeOffs: records, count: records.length });
+  } catch (error) {
+    console.error('Get write-offs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

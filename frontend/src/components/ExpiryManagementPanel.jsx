@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../utils/api';
 import { socket } from '../utils/socket';
+import ExportModal from './export/ExportModal';
+import { expiryExportColumns } from '../utils/exportEngine';
 
 function ExpiryManagementPanel({ showToast, onStockUpdated }) {
   const [summary, setSummary] = useState({
@@ -17,6 +19,7 @@ function ExpiryManagementPanel({ showToast, onStockUpdated }) {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [page, setPage] = useState(1);
 
+  const [showExportModal, setShowExportModal] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showWriteOffModal, setShowWriteOffModal] = useState(false);
@@ -608,6 +611,16 @@ function ExpiryManagementPanel({ showToast, onStockUpdated }) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
             REFRESH
           </button>
+
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowExportModal(true)}
+            style={{ padding: '8px 16px', fontSize: '12.5px', borderRadius: '10px', background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#334155', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+            title="Export filtered expiry batches"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            EXPORT
+          </button>
         </div>
       </div>
 
@@ -1051,6 +1064,26 @@ function ExpiryManagementPanel({ showToast, onStockUpdated }) {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Expiry Management Export Modal */}
+      {showExportModal && (
+        <ExportModal
+          dataset="Expiry Management"
+          data={filteredBatches}
+          columns={expiryExportColumns}
+          dateField="expiryDate"
+          currentFilters={{
+            risk: riskFilter,
+            category: categoryFilter,
+            search: searchQuery
+          }}
+          clinicName={localStorage.getItem('tenantName') || 'CUROXA HEALTHCARE'}
+          onClose={() => setShowExportModal(false)}
+          onSuccess={(result) => {
+            if (showToast) showToast(`Exported ${result.recordCount} batch records to ${result.fileName}!`, 'success');
+          }}
+        />
       )}
     </div>
   );

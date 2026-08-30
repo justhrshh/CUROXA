@@ -3,6 +3,69 @@ import * as jsPDFModule from 'jspdf';
 const jsPDF = jsPDFModule.jsPDF || jsPDFModule.default || jsPDFModule;
 import autoTable from 'jspdf-autotable';
 import api from './api.js';
+import { convertPdfToImage } from './pdfHelper.js';
+
+/**
+ * Letterhead cache to eliminate duplicate network overhead during multi-export sessions.
+ */
+let cachedLetterheadConfig = null;
+let lastLetterheadFetchTime = 0;
+
+/**
+ * Authoritative letterhead loader. Fetches active clinic letterhead image and standard template margins.
+ * Multi-tenant safe: uses caller's authenticated session / tenant token.
+ */
+export async function fetchLetterheadConfig(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && cachedLetterheadConfig && (now - lastLetterheadFetchTime < 60000)) {
+    return cachedLetterheadConfig;
+  }
+
+  try {
+    const res = await api.get('/admin/letterhead');
+    const letterheadUrl = res.data?.letterheadUrl || '';
+    const templates = res.data?.prescriptionTemplates || [];
+    const activeTemplate = templates.find(t => t.isStandard) || templates[0] || null;
+
+    let letterheadImg = null;
+    if (letterheadUrl) {
+      if (typeof window !== 'undefined' && typeof window.document !== 'undefined') {
+        letterheadImg = await convertPdfToImage(letterheadUrl);
+      } else {
+        letterheadImg = letterheadUrl;
+      }
+    }
+
+    const config = {
+      hasLetterhead: !!letterheadImg,
+      letterheadImg,
+      activeTemplate,
+      activeTemplateName: activeTemplate?.name || (letterheadImg ? 'Standard Letterhead' : null),
+      margins: {
+        left: Number(activeTemplate?.xLeft) || (letterheadImg ? 15 : 14),
+        right: Number(activeTemplate?.xRight) || (letterheadImg ? 15 : 14),
+        top: Number(activeTemplate?.yTop) || (letterheadImg ? 38 : 14),
+        bottom: Number(activeTemplate?.yBottom) || (letterheadImg ? 28 : 16)
+      }
+    };
+
+    cachedLetterheadConfig = config;
+    lastLetterheadFetchTime = now;
+    return config;
+  } catch (err) {
+    console.warn('[EXPORT ENGINE] Letterhead config fetch fallback:', err.message);
+    const fallback = {
+      hasLetterhead: false,
+      letterheadImg: null,
+      activeTemplate: null,
+      activeTemplateName: null,
+      margins: { left: 14, right: 14, top: 14, bottom: 16 }
+    };
+    cachedLetterheadConfig = fallback;
+    lastLetterheadFetchTime = now;
+    return fallback;
+  }
+}
 
 /**
  * Resolves a date range into start and end Date objects.
@@ -28,6 +91,9 @@ export function resolveDateBounds(dateRange = {}) {
   } else if (rangeType === 'This Month') {
     startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
     endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  } else if (rangeType === 'All Time') {
+    startDate = new Date(0);
+    endDate = new Date(now.getFullYear() + 20, 11, 31, 23, 59, 59, 999);
   } else if (rangeType === 'Custom Range') {
     if (!dateRange.startDate || !dateRange.endDate) {
       throw new Error('Please specify both Start Date and End Date for Custom Range.');
@@ -210,16 +276,78 @@ export async function generateExcelFile({ dataset, rows, columns, dateRangeText,
 }
 
 /**
- * Generates a genuine tabular .pdf document and triggers download.
+ * Generates a clean, UTF-8 encoded comma-separated CSV file and triggers download.
+ * Properly quotes and escapes fields containing commas, double quotes, and line breaks.
  */
+export async function generateCsvFile({ dataset, rows, columns, fileName }) {
+  const headers = columns.map(c => c.header || c.key);
+  const escapeCsv = (val) => {
+    if (val === null || val === undefined) return '';
+    const str = String(val);
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  const csvRows = [
+    headers.map(escapeCsv).join(','),
+    ...rows.map(row => headers.map(h => escapeCsv(row[h] !== undefined ? row[h] : '')).join(','))
+  ];
+  const csvContent = csvRows.join('\r\n');
+
+  if (typeof window !== 'undefined' && typeof window.document !== 'undefined') {
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } else {
+    try {
+      const fsMod = 'node:fs';
+      const fs = await import(/* @vite-ignore */ fsMod);
+      fs.writeFileSync(fileName, '\uFEFF' + csvContent, 'utf-8');
+    } catch (err) {
+      console.warn('[EXPORT ENGINE] Node CSV write fallback warning:', err.message);
+    }
+  }
+}
+
 /**
  * Renders a structured, multi-section hospital Goods Receipt Note (GRN) report.
  * Solves the wide-table horizontal overflow problem by generating structured cards
  * and dedicated, highly legible tables per GRN.
+ * Letterhead-aware: renders letterhead background & respects custom safe margins.
  */
-function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName) {
+function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName, letterheadConfig) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
+
+  const hasLetterhead = letterheadConfig && letterheadConfig.hasLetterhead && !!letterheadConfig.letterheadImg;
+  const margins = letterheadConfig?.margins || { left: 14, right: 14, top: 14, bottom: 16 };
+  const safeLeft = margins.left;
+  const safeRight = margins.right;
+  const safeTop = margins.top;
+  const safeBottom = margins.bottom;
+  const safeWidth = pageWidth - safeLeft - safeRight;
+
+  const drawLetterheadBg = () => {
+    if (hasLetterhead && letterheadConfig.letterheadImg) {
+      try {
+        doc.addImage(letterheadConfig.letterheadImg, 'JPEG', 0, 0, pageWidth, pageHeight);
+      } catch {
+        try {
+          doc.addImage(letterheadConfig.letterheadImg, 'PNG', 0, 0, pageWidth, pageHeight);
+        } catch (imgErr) {
+          console.warn('[EXPORT ENGINE] Failed to stamp GRN letterhead background:', imgErr.message);
+        }
+      }
+    }
+  };
 
   // Group items by unique GRN ID
   const grnGroups = {};
@@ -239,83 +367,111 @@ function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName) {
       doc.addPage();
     }
 
+    if (hasLetterhead) {
+      drawLetterheadBg();
+    }
+
     const items = grnGroups[grnId];
     const first = items[0] || {};
 
-    // 1. Hospital Header Banner
-    doc.setFillColor(37, 99, 235); // #2563EB Royal Blue
-    doc.rect(0, 0, pageWidth, 20, 'F');
+    let currentY = safeTop;
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(255, 255, 255);
-    doc.text(clinicName || 'CUROXA HEALTHCARE', 14, 9);
+    if (hasLetterhead) {
+      // Clean header within safe area
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(15, 23, 42); // Slate 900
+      doc.text(`GOODS RECEIPT NOTE (GRN) — ${grnId}`, safeLeft, currentY + 4);
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(219, 234, 254); // #DBEAFE
-    doc.text('Goods Receipt Note (GRN) — Verified Stock Intake Report', 14, 15);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text(`Stock Intake Report  |  Date Range: ${dateRangeText}`, safeLeft, currentY + 9);
+      doc.text(`Clinic: ${clinicName || 'CUROXA HEALTHCARE'}`, pageWidth - safeRight, currentY + 9, { align: 'right' });
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(255, 255, 255);
-    doc.text(`GRN Number: ${grnId}`, pageWidth - 14, 12, { align: 'right' });
+      currentY += 13;
+    } else {
+      // Fallback Hospital Header Banner
+      doc.setFillColor(37, 99, 235); // Royal Blue
+      doc.rect(0, 0, pageWidth, 20, 'F');
 
-    // 2. Structured Metadata Card (GRN, PO, Supplier, Invoice)
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(255, 255, 255);
+      doc.text(clinicName || 'CUROXA HEALTHCARE', 14, 9);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(219, 234, 254);
+      doc.text('Goods Receipt Note (GRN) — Verified Stock Intake Report', 14, 15);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.text(`GRN Number: ${grnId}`, pageWidth - 14, 12, { align: 'right' });
+
+      currentY = 23;
+    }
+
+    // Structured Metadata Card (GRN, PO, Supplier, Invoice)
     doc.setFillColor(248, 250, 252); // #F8FAFC
     doc.setDrawColor(226, 232, 240); // #E2E8F0
-    doc.roundedRect(14, 23, pageWidth - 28, 26, 2, 2, 'FD');
+    doc.roundedRect(safeLeft, currentY, safeWidth, 24, 2, 2, 'FD');
 
     // Section 1: GRN & PO (Left Column)
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(30, 41, 59);
-    doc.text('GRN & PO INFORMATION', 18, 29);
+    doc.text('GRN & PO INFORMATION', safeLeft + 4, currentY + 5.5);
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
     doc.setTextColor(71, 85, 105);
-    doc.text(`GRN Date: ${first['GRN Date'] || '--'}`, 18, 35);
-    doc.text(`Location: ${first['GRN Location'] || 'Main Pharmacy Store'}`, 18, 40);
-    doc.text(`Status: ${first['Status'] || 'Verified/Completed'}`, 18, 45);
+    doc.text(`GRN Date: ${first['GRN Date'] || '--'}`, safeLeft + 4, currentY + 10.5);
+    doc.text(`Location: ${first['GRN Location'] || 'Main Pharmacy Store'}`, safeLeft + 4, currentY + 15);
+    doc.text(`Status: ${first['Status'] || 'Verified/Completed'}`, safeLeft + 4, currentY + 19.5);
 
-    doc.text(`PO Number: ${first['PO Number'] || 'Direct Purchase'}`, 78, 35);
-    doc.text(`PO Date: ${first['PO Date'] || '--'}`, 78, 40);
-    doc.text(`Received By: ${first['Received By'] || 'Store In-Charge'}`, 78, 45);
+    const col2X = safeLeft + (safeWidth * 0.28);
+    doc.text(`PO Number: ${first['PO Number'] || 'Direct Purchase'}`, col2X, currentY + 10.5);
+    doc.text(`PO Date: ${first['PO Date'] || '--'}`, col2X, currentY + 15);
+    doc.text(`Received By: ${first['Received By'] || 'Store In-Charge'}`, col2X, currentY + 19.5);
 
     // Vertical Divider
+    const dividerX = safeLeft + (safeWidth * 0.52);
     doc.setDrawColor(203, 213, 225);
-    doc.line(138, 25, 138, 47);
+    doc.line(dividerX, currentY + 2, dividerX, currentY + 22);
 
     // Section 2: Supplier & Invoice (Right Column)
+    const col3X = dividerX + 5;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(30, 41, 59);
-    doc.text('SUPPLIER & INVOICE DETAILS', 144, 29);
+    doc.text('SUPPLIER & INVOICE DETAILS', col3X, currentY + 5.5);
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
     doc.setTextColor(71, 85, 105);
-    doc.text(`Vendor: ${first['Vendor'] || '--'}`, 144, 35);
-    doc.text(`Vendor Code: ${first['Vendor Code'] || '--'}`, 144, 40);
+    doc.text(`Vendor: ${first['Vendor'] || '--'}`, col3X, currentY + 10.5);
+    doc.text(`Vendor Code: ${first['Vendor Code'] || '--'}`, col3X, currentY + 15);
 
-    doc.text(`Invoice No: ${first['Invoice Number'] || '--'}`, 210, 35);
-    doc.text(`Invoice Date: ${first['Invoice Date'] || '--'}`, 210, 40);
+    const col4X = safeLeft + (safeWidth * 0.76);
+    doc.text(`Invoice No: ${first['Invoice Number'] || '--'}`, col4X, currentY + 10.5);
+    doc.text(`Invoice Date: ${first['Invoice Date'] || '--'}`, col4X, currentY + 15);
     const invoiceAmtStr = first['Invoice Amount'] !== undefined && first['Invoice Amount'] !== '' ? Number(first['Invoice Amount'] || 0).toFixed(2) : '0.00';
-    doc.text(`Invoice Amount: Rs. ${invoiceAmtStr}`, 210, 45);
+    doc.text(`Invoice Amount: Rs. ${invoiceAmtStr}`, col4X, currentY + 19.5);
 
-    let currentY = 52;
+    currentY += 28;
 
     const printSectionHeading = (title, countText) => {
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8.5);
+      doc.setFontSize(8);
       doc.setTextColor(30, 41, 59);
-      doc.text(title, 14, currentY + 3);
+      doc.text(title, safeLeft, currentY + 3);
       if (countText) {
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
+        doc.setFontSize(7);
         doc.setTextColor(100, 116, 139);
-        doc.text(countText, pageWidth - 14, currentY + 3, { align: 'right' });
+        doc.text(countText, pageWidth - safeRight, currentY + 3, { align: 'right' });
       }
       currentY += 5;
     };
@@ -347,15 +503,21 @@ function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName) {
       },
       bodyStyles: { fontSize: 7, textColor: [30, 41, 59], cellPadding: 1.8 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
-      margin: { left: 14, right: 14 }
+      margin: { left: safeLeft, right: safeRight, top: safeTop, bottom: safeBottom },
+      willDrawPage: (data) => {
+        if (hasLetterhead && data.pageNumber > 1) {
+          drawLetterheadBg();
+        }
+      }
     });
 
     currentY = doc.lastAutoTable.finalY + 4;
 
     // Check if new page is needed for Table 2
-    if (currentY + 28 > pageHeight - 15) {
+    if (currentY + 28 > pageHeight - safeBottom) {
       doc.addPage();
-      currentY = 16;
+      if (hasLetterhead) drawLetterheadBg();
+      currentY = safeTop + 2;
     }
 
     // 4. TABLE 2: QUANTITY RECONCILIATION
@@ -385,15 +547,21 @@ function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName) {
       },
       bodyStyles: { fontSize: 7, textColor: [30, 41, 59], cellPadding: 1.8 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
-      margin: { left: 14, right: 14 }
+      margin: { left: safeLeft, right: safeRight, top: safeTop, bottom: safeBottom },
+      willDrawPage: (data) => {
+        if (hasLetterhead && data.pageNumber > 1) {
+          drawLetterheadBg();
+        }
+      }
     });
 
     currentY = doc.lastAutoTable.finalY + 4;
 
     // Check if new page is needed for Table 3
-    if (currentY + 28 > pageHeight - 15) {
+    if (currentY + 28 > pageHeight - safeBottom) {
       doc.addPage();
-      currentY = 16;
+      if (hasLetterhead) drawLetterheadBg();
+      currentY = safeTop + 2;
     }
 
     // 5. TABLE 3: FINANCIAL DETAILS
@@ -424,37 +592,43 @@ function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName) {
       },
       bodyStyles: { fontSize: 7, textColor: [30, 41, 59], cellPadding: 1.8 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
-      margin: { left: 14, right: 14 }
+      margin: { left: safeLeft, right: safeRight, top: safeTop, bottom: safeBottom },
+      willDrawPage: (data) => {
+        if (hasLetterhead && data.pageNumber > 1) {
+          drawLetterheadBg();
+        }
+      }
     });
 
     currentY = doc.lastAutoTable.finalY + 4;
 
     // Check if summary box fits
-    if (currentY + 18 > pageHeight - 15) {
+    if (currentY + 16 > pageHeight - safeBottom) {
       doc.addPage();
-      currentY = 16;
+      if (hasLetterhead) drawLetterheadBg();
+      currentY = safeTop + 2;
     }
 
     // 6. TOTALS & INVOICE RECONCILIATION SUMMARY BOX
     doc.setFillColor(241, 245, 249); // #F1F5F9 Slate 100
     doc.setDrawColor(203, 213, 225); // #CBD5E1 Slate 300
-    doc.roundedRect(14, currentY, pageWidth - 28, 14, 2, 2, 'FD');
+    doc.roundedRect(safeLeft, currentY, safeWidth, 13, 2, 2, 'FD');
 
     const totalDiscStr = first['Total Discount'] !== undefined && first['Total Discount'] !== '' ? Number(first['Total Discount'] || 0).toFixed(2) : '0.00';
     const totalGstStr = first['Total GST'] !== undefined && first['Total GST'] !== '' ? Number(first['Total GST'] || 0).toFixed(2) : '0.00';
     const grandTotalStr = first['Grand Total'] !== undefined && first['Grand Total'] !== '' ? Number(first['Grand Total'] || 0).toFixed(2) : '0.00';
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(71, 85, 105);
-    doc.text(`Total Discount: Rs. ${totalDiscStr}`, 20, currentY + 5.5);
-    doc.text(`Total GST: Rs. ${totalGstStr}`, 75, currentY + 5.5);
-    doc.text(`Invoice Ref: ${first['Invoice Number'] || '--'} (Rs. ${invoiceAmtStr})`, 130, currentY + 5.5);
+    doc.text(`Total Discount: Rs. ${totalDiscStr}`, safeLeft + 4, currentY + 5);
+    doc.text(`Total GST: Rs. ${totalGstStr}`, safeLeft + (safeWidth * 0.32), currentY + 5);
+    doc.text(`Invoice Ref: ${first['Invoice Number'] || '--'} (Rs. ${invoiceAmtStr})`, safeLeft + (safeWidth * 0.58), currentY + 5);
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setTextColor(30, 64, 175); // Dark Blue
-    doc.text(`GRN Grand Total: Rs. ${grandTotalStr}`, pageWidth - 22, currentY + 9, { align: 'right' });
+    doc.text(`GRN Grand Total: Rs. ${grandTotalStr}`, pageWidth - safeRight - 4, currentY + 9, { align: 'right' });
   });
 
   // 7. Stamp Page Footers on all pages
@@ -462,21 +636,45 @@ function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName) {
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
     doc.setTextColor(148, 163, 184); // #94A3B8
-    doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 6, { align: 'center' });
-    doc.text('CUROXA HEALTHCARE — Confidential Authorized Hospital Document', 14, pageHeight - 6);
-    doc.text(`Date Range: ${dateRangeText}`, pageWidth - 14, pageHeight - 6, { align: 'right' });
+    const footerY = pageHeight - Math.max(safeBottom - 8, 5);
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, footerY, { align: 'center' });
+    doc.text('CUROXA HEALTHCARE — Confidential Authorized Hospital Document', safeLeft, footerY);
+    doc.text(`Date Range: ${dateRangeText}`, pageWidth - safeRight, footerY, { align: 'right' });
   }
 }
 
 /**
  * Renders structured Prescription Multi-Page Report.
  * Groups prescribed medicines under their respective prescription header blocks.
+ * Letterhead-aware: renders letterhead background & respects custom safe margins.
  */
-export function renderPrescriptionStructuredPdf(doc, rows = [], dateRangeText, clinicName) {
+export function renderPrescriptionStructuredPdf(doc, rows = [], dateRangeText, clinicName, letterheadConfig) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
+
+  const hasLetterhead = letterheadConfig && letterheadConfig.hasLetterhead && !!letterheadConfig.letterheadImg;
+  const margins = letterheadConfig?.margins || { left: 14, right: 14, top: 14, bottom: 16 };
+  const safeLeft = margins.left;
+  const safeRight = margins.right;
+  const safeTop = margins.top;
+  const safeBottom = margins.bottom;
+  const safeWidth = pageWidth - safeLeft - safeRight;
+
+  const drawLetterheadBg = () => {
+    if (hasLetterhead && letterheadConfig.letterheadImg) {
+      try {
+        doc.addImage(letterheadConfig.letterheadImg, 'JPEG', 0, 0, pageWidth, pageHeight);
+      } catch {
+        try {
+          doc.addImage(letterheadConfig.letterheadImg, 'PNG', 0, 0, pageWidth, pageHeight);
+        } catch (imgErr) {
+          console.warn('[EXPORT ENGINE] Failed to stamp Prescription letterhead background:', imgErr.message);
+        }
+      }
+    }
+  };
 
   // Group flattened rows by Prescription ID
   const rxGroups = {};
@@ -506,33 +704,57 @@ export function renderPrescriptionStructuredPdf(doc, rows = [], dateRangeText, c
   const rxList = Object.values(rxGroups);
   const totalMedicines = rows.length;
 
-  let currentY = 14;
+  let currentY = safeTop;
 
   const drawPageHeader = (isFirstPage = false) => {
-    doc.setFillColor(37, 99, 235); // #2563EB Royal Blue
-    doc.rect(0, 0, pageWidth, 24, 'F');
+    if (hasLetterhead) {
+      drawLetterheadBg();
+      if (isFirstPage) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(15, 23, 42);
+        doc.text('OFFICIAL DATA EXPORT — PRESCRIPTIONS', safeLeft, safeTop + 4);
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(255, 255, 255);
-    doc.text(clinicName || 'CUROXA HEALTHCARE', 14, 10);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(71, 85, 105);
+        const generatedOn = `Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`;
+        doc.text(`${generatedOn}  |  Date Range: ${dateRangeText}`, safeLeft, safeTop + 9);
+        doc.text(`Prescriptions: ${rxList.length}  |  Medicine Lines: ${totalMedicines}`, pageWidth - safeRight, safeTop + 9, { align: 'right' });
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(219, 234, 254);
-    doc.text('OFFICIAL DATA EXPORT — PRESCRIPTIONS', 14, 17);
-
-    if (isFirstPage) {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(71, 85, 105);
-      const generatedOn = `Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`;
-      doc.text(generatedOn, 14, 30);
-      doc.text(`Selected Date Range: ${dateRangeText}`, 14, 35);
-      doc.text(`Prescriptions: ${rxList.length}  |  Medicine Lines: ${totalMedicines}`, pageWidth - 14, 30, { align: 'right' });
-      currentY = 40;
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.3);
+        doc.line(safeLeft, safeTop + 12, pageWidth - safeRight, safeTop + 12);
+        currentY = safeTop + 16;
+      } else {
+        currentY = safeTop + 2;
+      }
     } else {
-      currentY = 28;
+      doc.setFillColor(37, 99, 235); // #2563EB Royal Blue
+      doc.rect(0, 0, pageWidth, 24, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(255, 255, 255);
+      doc.text(clinicName || 'CUROXA HEALTHCARE', 14, 10);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(219, 234, 254);
+      doc.text('OFFICIAL DATA EXPORT — PRESCRIPTIONS', 14, 17);
+
+      if (isFirstPage) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(71, 85, 105);
+        const generatedOn = `Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`;
+        doc.text(generatedOn, 14, 30);
+        doc.text(`Selected Date Range: ${dateRangeText}`, 14, 35);
+        doc.text(`Prescriptions: ${rxList.length}  |  Medicine Lines: ${totalMedicines}`, pageWidth - 14, 30, { align: 'right' });
+        currentY = 40;
+      } else {
+        currentY = 28;
+      }
     }
   };
 
@@ -540,7 +762,7 @@ export function renderPrescriptionStructuredPdf(doc, rows = [], dateRangeText, c
 
   rxList.forEach((rx, index) => {
     // Check if new page is needed before starting a prescription block
-    if (currentY + 45 > pageHeight - 15) {
+    if (currentY + 45 > pageHeight - safeBottom) {
       doc.addPage();
       drawPageHeader(false);
     }
@@ -548,23 +770,23 @@ export function renderPrescriptionStructuredPdf(doc, rows = [], dateRangeText, c
     // Prescription Header Banner Card
     doc.setFillColor(241, 245, 249); // #F1F5F9 Slate 100
     doc.setDrawColor(203, 213, 225); // #CBD5E1 Slate 300
-    doc.roundedRect(14, currentY, pageWidth - 28, 16, 2, 2, 'FD');
+    doc.roundedRect(safeLeft, currentY, safeWidth, 15, 2, 2, 'FD');
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
+    doc.setFontSize(8);
     doc.setTextColor(15, 23, 42); // Slate 900
-    doc.text(`Prescription: ${rx.prescriptionId}`, 18, currentY + 6);
+    doc.text(`Prescription: ${rx.prescriptionId}`, safeLeft + 4, currentY + 5.5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(71, 85, 105);
-    doc.text(`Date: ${rx.date}`, 80, currentY + 6);
-    doc.text(`Status: ${rx.status}`, pageWidth - 18, currentY + 6, { align: 'right' });
+    doc.text(`Date: ${rx.date}`, safeLeft + (safeWidth * 0.45), currentY + 5.5);
+    doc.text(`Status: ${rx.status}`, pageWidth - safeRight - 4, currentY + 5.5, { align: 'right' });
 
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(30, 41, 59);
-    doc.text(`Patient: ${rx.patientName} (${rx.patientId})`, 18, currentY + 12);
-    doc.text(`Doctor: ${rx.doctorName} [${rx.department}]`, 120, currentY + 12);
+    doc.text(`Patient: ${rx.patientName} (${rx.patientId})`, safeLeft + 4, currentY + 11);
+    doc.text(`Doctor: ${rx.doctorName} [${rx.department}]`, safeLeft + (safeWidth * 0.55), currentY + 11);
 
-    currentY += 18;
+    currentY += 17;
 
     // Prescribed Medicines Table
     const tableBody = rx.items.map((it, i) => [
@@ -584,12 +806,12 @@ export function renderPrescriptionStructuredPdf(doc, rows = [], dateRangeText, c
       headStyles: {
         fillColor: [30, 41, 59], // Slate 800
         textColor: [255, 255, 255],
-        fontSize: 8,
+        fontSize: 7.5,
         fontStyle: 'bold',
         cellPadding: 2
       },
       bodyStyles: {
-        fontSize: 7.5,
+        fontSize: 7,
         textColor: [30, 41, 59],
         cellPadding: 1.8
       },
@@ -598,26 +820,32 @@ export function renderPrescriptionStructuredPdf(doc, rows = [], dateRangeText, c
       },
       columnStyles: {
         0: { cellWidth: 10, halign: 'center' },
-        1: { cellWidth: 65 },
-        2: { cellWidth: 32 },
-        3: { cellWidth: 28 },
-        4: { cellWidth: 15, halign: 'center' },
+        1: { cellWidth: safeWidth * 0.35 },
+        2: { cellWidth: safeWidth * 0.18 },
+        3: { cellWidth: safeWidth * 0.15 },
+        4: { cellWidth: 14, halign: 'center' },
         5: { cellWidth: 'auto' }
       },
-      margin: { left: 14, right: 14 }
+      margin: { left: safeLeft, right: safeRight, top: safeTop, bottom: safeBottom },
+      willDrawPage: (data) => {
+        if (hasLetterhead && data.pageNumber > 1) {
+          drawLetterheadBg();
+        }
+      }
     });
 
-    currentY = doc.lastAutoTable.finalY + 8;
+    currentY = doc.lastAutoTable.finalY + 6;
   });
 
   // Footer page numbering on all pages
   const totalPages = doc.internal.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184);
-    doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
-    doc.text('Confidential — Authorized Hospital Records', 14, pageHeight - 8);
+    const footerY = pageHeight - Math.max(safeBottom - 8, 6);
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, footerY, { align: 'center' });
+    doc.text('Confidential — Authorized Hospital Records', safeLeft, footerY);
   }
 }
 
@@ -625,89 +853,163 @@ export function renderPrescriptionStructuredPdf(doc, rows = [], dateRangeText, c
  * Generates a polished PDF file using jsPDF and jspdf-autotable.
  * Supports structured reports for complex multi-section records (e.g. GRNs)
  * and generic tabular layouts for other datasets.
+ * Automatically integrates active clinic letterhead and custom safe margins.
  */
-export function generatePdfFile({ dataset, rows, columns, dateRangeText, clinicName, fileName }) {
-  const isLandscape = columns.length > 5;
+export async function generatePdfFile({ dataset, rows, columns, dateRangeText, clinicName, fileName, letterheadConfig: passedConfig }) {
+  const letterheadConfig = passedConfig || await fetchLetterheadConfig();
+  const hasLetterhead = letterheadConfig && letterheadConfig.hasLetterhead && !!letterheadConfig.letterheadImg;
+  const margins = letterheadConfig?.margins || { left: 14, right: 14, top: 14, bottom: 16 };
+
   const doc = new jsPDF({
-    orientation: isLandscape ? 'landscape' : 'portrait',
+    orientation: 'portrait',
     unit: 'mm',
     format: 'a4'
   });
 
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  const safeLeft = margins.left;
+  const safeRight = margins.right;
+  const safeTop = margins.top;
+  const safeBottom = margins.bottom;
+
+  const drawLetterheadBg = () => {
+    if (hasLetterhead && letterheadConfig.letterheadImg) {
+      try {
+        doc.addImage(letterheadConfig.letterheadImg, 'JPEG', 0, 0, pageWidth, pageHeight);
+      } catch {
+        try {
+          doc.addImage(letterheadConfig.letterheadImg, 'PNG', 0, 0, pageWidth, pageHeight);
+        } catch (imgErr) {
+          console.warn('[EXPORT ENGINE] Failed to render letterhead background on page:', imgErr.message);
+        }
+      }
+    }
+  };
+
   if (dataset === 'GRNs') {
-    renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName);
+    renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName, letterheadConfig);
     doc.save(fileName);
     return;
   }
   if (dataset === 'Prescriptions') {
-    renderPrescriptionStructuredPdf(doc, rows, dateRangeText, clinicName);
+    renderPrescriptionStructuredPdf(doc, rows, dateRangeText, clinicName, letterheadConfig);
     doc.save(fileName);
     return;
   }
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-
-  // Header Banner styling
-  doc.setFillColor(37, 99, 235); // #2563EB Curoxa Royal Blue
-  doc.rect(0, 0, pageWidth, 24, 'F');
-
-  // Clinic Brand
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(255, 255, 255);
-  doc.text(clinicName || 'CUROXA HEALTHCARE', 14, 11);
-
-  // Subtitle: Dataset Report
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(219, 234, 254); // #DBEAFE
-  if (dataset === 'Inventory') {
-    doc.text('Official Data Export — Inventory (Current Stock Snapshot)', 14, 18);
+  // Draw Page 1 background
+  if (hasLetterhead) {
+    drawLetterheadBg();
   } else {
-    doc.text(`Official Data Export — ${dataset}`, 14, 18);
+    // Fallback: Blue header banner
+    doc.setFillColor(37, 99, 235); // #2563EB Curoxa Royal Blue
+    doc.rect(0, 0, pageWidth, 24, 'F');
+
+    // Clinic Brand
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text(clinicName || 'CUROXA HEALTHCARE', 14, 11);
+
+    // Subtitle: Dataset Report
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(219, 234, 254); // #DBEAFE
+    if (dataset === 'Inventory') {
+      doc.text('Official Data Export — Inventory (Current Stock Snapshot)', 14, 18);
+    } else {
+      doc.text(`Official Data Export — ${dataset}`, 14, 18);
+    }
   }
 
-  // Metadata block
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(71, 85, 105); // #475569
-  const generatedOnText = `Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`;
-  
-  if (dataset === 'Inventory') {
-    const inStock = rows.filter(r => r['Stock Status'] === 'In Stock').length;
-    const lowStock = rows.filter(r => r['Stock Status'] === 'Low Stock').length;
-    const outOfStock = rows.filter(r => r['Stock Status'] === 'Out of Stock').length;
-    doc.text(generatedOnText, 14, 31);
-    doc.text(`Status Breakdown: In Stock (${inStock})  |  Low Stock (${lowStock})  |  Out of Stock (${outOfStock})`, 14, 36);
-    doc.text(`Total Items: ${rows.length}`, pageWidth - 14, 31, { align: 'right' });
+  let currentY = hasLetterhead ? (safeTop + 2) : 31;
+
+  // Metadata & Title inside Safe Area
+  if (hasLetterhead) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42); // Slate 900
+    const reportTitleText = dataset === 'Inventory' 
+      ? 'OFFICIAL INVENTORY REPORT (CURRENT STOCK SNAPSHOT)' 
+      : `OFFICIAL DATA EXPORT — ${dataset.toUpperCase()}`;
+    doc.text(reportTitleText, safeLeft, currentY);
+
+    currentY += 4.5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105); // Slate 600
+    const generatedOnText = `Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`;
+    
+    if (dataset === 'Inventory') {
+      const inStock = rows.filter(r => r['Stock Status'] === 'In Stock').length;
+      const lowStock = rows.filter(r => r['Stock Status'] === 'Low Stock').length;
+      const outOfStock = rows.filter(r => r['Stock Status'] === 'Out of Stock').length;
+      doc.text(`${generatedOnText}  |  Date Range: ${dateRangeText}`, safeLeft, currentY);
+      doc.text(`Total Items: ${rows.length}  (In Stock: ${inStock}, Low: ${lowStock}, Out: ${outOfStock})`, pageWidth - safeRight, currentY, { align: 'right' });
+    } else {
+      doc.text(`${generatedOnText}  |  Date Range: ${dateRangeText}`, safeLeft, currentY);
+      doc.text(`Total Records: ${rows.length}`, pageWidth - safeRight, currentY, { align: 'right' });
+    }
+
+    currentY += 2.5;
+    doc.setDrawColor(226, 232, 240); // Slate 200
+    doc.setLineWidth(0.3);
+    doc.line(safeLeft, currentY, pageWidth - safeRight, currentY);
+
+    currentY += 3;
   } else {
-    doc.text(generatedOnText, 14, 31);
-    doc.text(`Date Range: ${dateRangeText}`, 14, 36);
-    doc.text(`Total Records: ${rows.length}`, pageWidth - 14, 31, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(71, 85, 105); // #475569
+    const generatedOnText = `Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`;
+    
+    if (dataset === 'Inventory') {
+      const inStock = rows.filter(r => r['Stock Status'] === 'In Stock').length;
+      const lowStock = rows.filter(r => r['Stock Status'] === 'Low Stock').length;
+      const outOfStock = rows.filter(r => r['Stock Status'] === 'Out of Stock').length;
+      doc.text(generatedOnText, 14, 31);
+      doc.text(`Status Breakdown: In Stock (${inStock})  |  Low Stock (${lowStock})  |  Out of Stock (${outOfStock})`, 14, 36);
+      doc.text(`Total Items: ${rows.length}`, pageWidth - 14, 31, { align: 'right' });
+    } else {
+      doc.text(generatedOnText, 14, 31);
+      doc.text(`Date Range: ${dateRangeText}`, 14, 36);
+      doc.text(`Total Records: ${rows.length}`, pageWidth - 14, 31, { align: 'right' });
+    }
+    currentY = 41;
   }
 
   const headers = columns.map(c => c.header || c.key);
   const tableData = rows.map(r => headers.map(h => String(r[h] !== undefined ? r[h] : '')));
 
+  const colCount = columns.length;
+  const tableFontSize = colCount > 9 ? 6.5 : colCount > 7 ? 7 : 7.5;
+  const tableCellPadding = colCount > 9 ? 1.4 : colCount > 7 ? 1.8 : 2;
+
   // Tabular Body via jspdf-autotable
   autoTable(doc, {
-    startY: 41,
+    startY: currentY,
     head: [headers],
     body: tableData,
     theme: 'grid',
+    styles: {
+      overflow: 'linebreak',
+      fontSize: tableFontSize,
+      cellPadding: tableCellPadding
+    },
     headStyles: {
       fillColor: [30, 41, 59], // #1E293B Slate 800
       textColor: [255, 255, 255],
-      fontSize: 8.5,
+      fontSize: tableFontSize + 0.5,
       fontStyle: 'bold',
       halign: 'left',
-      cellPadding: 2.5
+      cellPadding: tableCellPadding + 0.2
     },
     bodyStyles: {
-      fontSize: 8,
+      fontSize: tableFontSize,
       textColor: [30, 41, 59],
-      cellPadding: 2.2
+      cellPadding: tableCellPadding
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252] // #F8FAFC
@@ -722,14 +1024,29 @@ export function generatePdfFile({ dataset, rows, columns, dateRangeText, clinicN
         }
       }
     },
-    margin: { left: 14, right: 14, top: 41, bottom: 16 },
+    margin: {
+      left: safeLeft,
+      right: safeRight,
+      top: safeTop,
+      bottom: safeBottom
+    },
+    willDrawPage: (data) => {
+      // Repeat letterhead background on every subsequent page
+      if (hasLetterhead && data.pageNumber > 1) {
+        drawLetterheadBg();
+      }
+    },
     didDrawPage: (data) => {
-      // Footer page numbering
+      // Footer page numbering inside safe bottom margin
       const str = `Page ${doc.internal.getNumberOfPages()}`;
-      doc.setFontSize(8);
+      doc.setFontSize(7.5);
       doc.setTextColor(148, 163, 184); // #94A3B8
-      doc.text(str, pageWidth / 2, pageHeight - 8, { align: 'center' });
-      doc.text('Confidential — Authorized Hospital Records', 14, pageHeight - 8);
+      const footerY = pageHeight - Math.max(safeBottom - 8, 6);
+      doc.text(str, pageWidth / 2, footerY, { align: 'center' });
+      doc.text('Confidential — Authorized Hospital Records', safeLeft, footerY);
+      if (letterheadConfig?.activeTemplateName) {
+        doc.text(`Template: ${letterheadConfig.activeTemplateName}`, pageWidth - safeRight, footerY, { align: 'right' });
+      }
     }
   });
 
@@ -823,14 +1140,16 @@ export async function executeExport(context) {
   const formatDateStr = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const dateRangeText = isSnapshot
     ? 'Current Stock Snapshot'
-    : (rangeType === 'Custom Range'
-        ? `${formatDateStr(startDate)} - ${formatDateStr(endDate)}`
-        : `${rangeType} (${formatDateStr(startDate)} - ${formatDateStr(endDate)})`);
+    : (rangeType === 'All Time'
+        ? 'All Time Records'
+        : (rangeType === 'Custom Range'
+            ? `${formatDateStr(startDate)} - ${formatDateStr(endDate)}`
+            : `${rangeType} (${formatDateStr(startDate)} - ${formatDateStr(endDate)})`));
 
   // 4. Construct safe, clean file name
   const cleanDatasetName = dataset.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   const timestampStr = new Date().toISOString().slice(0, 10);
-  const ext = format === 'pdf' ? 'pdf' : 'xlsx';
+  const ext = format === 'pdf' ? 'pdf' : (format === 'csv' ? 'csv' : 'xlsx');
   const fileName = `${cleanDatasetName}_export_${timestampStr}.${ext}`;
 
   // 5. Generate and download file
@@ -841,9 +1160,17 @@ export async function executeExport(context) {
       columns,
       dateRangeText,
       clinicName,
+      fileName,
+      letterheadConfig: context?.letterheadConfig
+    });
+  } else if (format === 'csv') {
+    await generateCsvFile({
+      dataset,
+      rows,
+      columns,
       fileName
     });
-  } else if (format === 'excel') {
+  } else if (format === 'excel' || format === 'xlsx') {
     await generateExcelFile({
       dataset,
       rows,
@@ -852,7 +1179,7 @@ export async function executeExport(context) {
       fileName
     });
   } else {
-    throw new Error(`Unsupported export format: "${format}". Supported formats are "excel" and "pdf".`);
+    throw new Error(`Unsupported export format: "${format}". Supported formats are "excel", "csv", and "pdf".`);
   }
 
   // 6. Record event in Audit Log (without raw patient data)
@@ -871,6 +1198,23 @@ export async function executeExport(context) {
     fileName
   };
 }
+
+/**
+ * Explicit Vendor Export Column Definitions
+ */
+export const vendorExportColumns = [
+  { key: 'code', header: 'Vendor Code', extractor: v => v.code || '--' },
+  { key: 'name', header: 'Vendor Name', extractor: v => v.name || '--' },
+  { key: 'type', header: 'Supplier Type', extractor: v => v.type || '--' },
+  { key: 'category', header: 'Category', extractor: v => v.category || (Array.isArray(v.categories) ? v.categories.join(', ') : '--') },
+  { key: 'contactPerson', header: 'Contact Person', extractor: v => v.contactPerson || '--' },
+  { key: 'phone', header: 'Phone / Mobile', extractor: v => v.phone || v.mobile || '--' },
+  { key: 'email', header: 'Email', extractor: v => v.email || '--' },
+  { key: 'city', header: 'City', extractor: v => v.city || '--' },
+  { key: 'state', header: 'State', extractor: v => v.state || '--' },
+  { key: 'gstNumber', header: 'GST Number', extractor: v => v.gstNumber || '--' },
+  { key: 'status', header: 'Status', extractor: v => v.status || 'Active' }
+];
 
 /**
  * Explicit GRN Export Column Definitions
@@ -1082,19 +1426,264 @@ export const staffExportColumns = [
 ];
 
 /**
- * Explicit Inventory Export Column Definitions
+ * Explicit Inventory Summary Export Column Definitions
  * Strictly excludes internal MongoDB identifiers, tenant secrets, and credentials.
  */
 export const inventoryExportColumns = [
   { key: 'sku', header: 'SKU Code', extractor: r => r.sku || '--' },
   { key: 'name', header: 'Medicine Name', extractor: r => r.name || '--' },
   { key: 'category', header: 'Category', extractor: r => r.category || '--' },
-  { key: 'stock', header: 'Current Stock', extractor: r => Number(r.stock) || 0 },
+  { key: 'stock', header: 'Total Sellable Stock', extractor: r => Number(r.sellableStock !== undefined ? r.sellableStock : r.stock) || 0 },
   { key: 'unit', header: 'Unit', extractor: r => r.unit || '--' },
   { key: 'mrp', header: 'MRP (Rs.)', extractor: r => r.mrp ? Number(r.mrp).toFixed(2) : '0.00' },
-  { key: 'status', header: 'Stock Status', extractor: r => r.status || (Number(r.stock) > 20 ? 'In Stock' : Number(r.stock) > 0 ? 'Low Stock' : 'Out of Stock') },
-  { key: 'expiry', header: 'Expiry Date', extractor: r => r.expiry || '--' },
+  { key: 'status', header: 'Stock Status', extractor: r => r.status || (Number(r.sellableStock !== undefined ? r.sellableStock : r.stock) > 20 ? 'In Stock' : Number(r.sellableStock !== undefined ? r.sellableStock : r.stock) > 0 ? 'Low Stock' : 'Out of Stock') },
+  { key: 'batchCount', header: 'Number of Batches', extractor: r => r.batchCount !== undefined ? r.batchCount : '--' },
+  { key: 'nearestExpiry', header: 'Nearest Expiry', extractor: r => r.nearestExpiry || r.expiry || '--' },
+  { key: 'nearestBatch', header: 'Nearest Batch', extractor: r => r.nearestBatch || '--' },
   { key: 'updatedAt', header: 'Last Updated', extractor: r => r.updatedAt ? new Date(r.updatedAt).toLocaleDateString('en-IN') : (r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-IN') : '--') }
+];
+
+/**
+ * Authoritative Batch-Aware Inventory Export Column Definitions
+ * 1 row = 1 distinct batch. Never flattens or merges multiple batches into one.
+ */
+export const batchInventoryExportColumns = [
+  { key: 'medicineName', header: 'Medicine Name', extractor: r => r.medicineName || r.name || '--' },
+  { key: 'sku', header: 'SKU Code', extractor: r => r.sku || '--' },
+  { key: 'category', header: 'Category', extractor: r => r.category || '--' },
+  { key: 'batchNumber', header: 'Batch Number', extractor: r => r.batchNumber || '--' },
+  { key: 'availableQuantity', header: 'Available Quantity', extractor: r => Number(r.availableQuantity ?? r.stock ?? 0) },
+  { key: 'unit', header: 'Unit', extractor: r => r.unit || 'Strip' },
+  { key: 'expiryDate', header: 'Expiry Date', extractor: r => r.expiryDate, formatter: v => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : (r.expiry || '--') },
+  { key: 'daysRemaining', header: 'Days Remaining', extractor: r => (r.daysRemaining !== undefined && r.daysRemaining !== null) ? (r.daysRemaining < 0 ? `${Math.abs(r.daysRemaining)}d ago (Expired)` : `${r.daysRemaining} days`) : '--' },
+  { key: 'risk', header: 'Risk Status', extractor: r => r.risk || (Number(r.availableQuantity ?? r.stock ?? 0) > 0 ? 'SAFE' : 'DEPLETED') },
+  { key: 'purchaseRate', header: 'Purchase Rate (Rs.)', extractor: r => r.purchaseRate ? Number(r.purchaseRate).toFixed(2) : '0.00' },
+  { key: 'stockValue', header: 'Batch Stock Value (Rs.)', extractor: r => (Number(r.availableQuantity ?? r.stock ?? 0) * Number(r.purchaseRate || 0)).toFixed(2) },
+  { key: 'mrp', header: 'MRP (Rs.)', extractor: r => r.mrp ? Number(r.mrp).toFixed(2) : '0.00' },
+  { key: 'status', header: 'Status', extractor: r => r.status || (Number(r.availableQuantity ?? r.stock ?? 0) > 0 ? 'Active' : 'Depleted') }
+];
+
+/**
+ * Flattens inventory medicines into granular batch records for batch-aware exports.
+ * Preserves legacy stock fallback where no MedicineBatch records exist.
+ */
+export function flattenInventoryBatchesForExport(inventoryList = [], skuBatchesMap = {}) {
+  if (!Array.isArray(inventoryList)) return [];
+  const flatRows = [];
+  const now = new Date();
+
+  inventoryList.forEach(med => {
+    const skuKey = String(med.sku || '').toUpperCase();
+    const batches = (skuBatchesMap && skuBatchesMap[skuKey]) ? skuBatchesMap[skuKey] : [];
+
+    if (batches.length > 0) {
+      batches.forEach(b => {
+        const avail = Number(b.availableQuantity) || 0;
+        let daysLeft = null;
+        if (b.expiryDate) {
+          const exp = new Date(b.expiryDate);
+          daysLeft = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+        }
+        flatRows.push({
+          medicineName: med.name,
+          sku: med.sku,
+          category: med.category,
+          unit: med.unit || 'Strip',
+          mrp: med.mrp,
+          batchNumber: b.batchNumber,
+          availableQuantity: avail,
+          expiryDate: b.expiryDate,
+          daysRemaining: b.daysRemaining !== undefined ? b.daysRemaining : daysLeft,
+          risk: b.risk || (b.isExpired ? 'EXPIRED' : (daysLeft !== null && daysLeft <= 30 ? 'CRITICAL' : (daysLeft !== null && daysLeft <= 90 ? 'WARNING' : 'SAFE'))),
+          purchaseRate: b.purchaseRate !== undefined ? b.purchaseRate : (med.purchaseRate || 0),
+          status: b.status || (avail > 0 ? 'Active' : 'Depleted')
+        });
+      });
+    } else {
+      // Legacy unbatched inventory fallback
+      const avail = Number(med.stock) || 0;
+      flatRows.push({
+        medicineName: med.name,
+        sku: med.sku,
+        category: med.category,
+        unit: med.unit || 'Strip',
+        mrp: med.mrp,
+        batchNumber: 'Legacy / Untracked',
+        availableQuantity: avail,
+        expiryDate: med.expiry,
+        daysRemaining: null,
+        risk: avail > 0 ? 'SAFE' : 'DEPLETED',
+        purchaseRate: med.purchaseRate || 0,
+        status: med.status || (avail > 0 ? 'In Stock' : 'Out of Stock')
+      });
+    }
+  });
+
+  return flatRows;
+}
+
+/**
+ * Enriches medicine catalog with authoritative batch aggregation data for summary exports.
+ * ONE ROW = ONE MEDICINE.
+ */
+export function buildMedicineSummaryExportData(inventoryList = [], skuBatchesMap = {}) {
+  if (!Array.isArray(inventoryList)) return [];
+  const now = new Date();
+
+  return inventoryList.map(med => {
+    const skuKey = String(med.sku || '').toUpperCase();
+    const batches = (skuBatchesMap && skuBatchesMap[skuKey]) ? skuBatchesMap[skuKey] : [];
+
+    // Sort batches by FEFO (earliest expiry first)
+    const validBatches = [...batches].sort((a, b) => {
+      if (!a.expiryDate) return 1;
+      if (!b.expiryDate) return -1;
+      return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+    });
+
+    let nearestExp = null;
+    let nearestBatch = null;
+    let validSellable = 0;
+
+    if (validBatches.length > 0) {
+      // Find nearest active batch
+      const firstActive = validBatches.find(b => {
+        const qty = Number(b.availableQuantity) || 0;
+        const isExp = b.isExpired || b.risk === 'EXPIRED' || (b.expiryDate && new Date(b.expiryDate) <= now);
+        return qty > 0 && !isExp;
+      }) || validBatches[0];
+
+      if (firstActive.expiryDate) {
+        const d = new Date(firstActive.expiryDate);
+        nearestExp = isNaN(d.getTime()) ? String(firstActive.expiryDate) : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+      nearestBatch = firstActive.batchNumber || '--';
+
+      validBatches.forEach(b => {
+        const qty = Number(b.availableQuantity) || 0;
+        const isExp = b.isExpired || b.risk === 'EXPIRED' || (b.expiryDate && new Date(b.expiryDate) <= now);
+        if (!isExp) validSellable += qty;
+      });
+    }
+
+    const totalStock = validBatches.length > 0 ? validSellable : (Number(med.stock) || 0);
+    const stockStatus = totalStock > 20 ? 'In Stock' : totalStock > 0 ? 'Low Stock' : 'Out of Stock';
+
+    return {
+      ...med,
+      sku: med.sku || '--',
+      name: med.name || '--',
+      category: med.category || '--',
+      sellableStock: totalStock,
+      unit: med.unit || 'Strip',
+      mrp: med.mrp ? Number(med.mrp).toFixed(2) : '0.00',
+      status: stockStatus,
+      batchCount: validBatches.length > 0 ? validBatches.length : '--',
+      nearestExpiry: nearestExp || (med.expiry ? String(med.expiry) : '--'),
+      nearestBatch: nearestBatch || '--',
+      updatedAt: med.updatedAt || med.createdAt
+    };
+  });
+}
+
+/**
+ * Authoritative Expiry Management Export Column Definitions
+ * Exact alignment with ExpiryManagementPanel.jsx
+ */
+export const expiryExportColumns = [
+  { key: 'medicineName', header: 'Medicine Name', extractor: r => r.name || r.medicineName || '--' },
+  { key: 'sku', header: 'SKU Code', extractor: r => r.sku || '--' },
+  { key: 'batchNumber', header: 'Batch Number', extractor: r => r.batchNumber || '--' },
+  { key: 'expiryDate', header: 'Expiry Date', extractor: r => r.expiryDate, formatter: v => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '--' },
+  { key: 'daysRemaining', header: 'Days Remaining', extractor: r => (r.daysRemaining !== undefined && r.daysRemaining !== null) ? (r.daysRemaining < 0 ? `${Math.abs(r.daysRemaining)}d ago (Expired)` : `${r.daysRemaining} days`) : '--' },
+  { key: 'availableQuantity', header: 'Available Quantity', extractor: r => Number(r.availableQuantity || 0) },
+  { key: 'unit', header: 'Unit', extractor: r => r.unit || 'Strip' },
+  { key: 'purchaseRate', header: 'Purchase Rate (Rs.)', extractor: r => r.purchaseRate ? Number(r.purchaseRate).toFixed(2) : '0.00' },
+  { key: 'stockValue', header: 'Stock Value (Rs.)', extractor: r => (Number(r.availableQuantity || 0) * Number(r.purchaseRate || 0)).toFixed(2) },
+  { key: 'risk', header: 'Risk Level', extractor: r => r.risk || 'SAFE' },
+  { key: 'status', header: 'Status', extractor: r => r.status || (Number(r.availableQuantity || 0) > 0 ? 'Active' : 'Depleted') },
+  { key: 'grnId', header: 'Source / GRN', extractor: r => r.grnId || '--' }
+];
+
+/**
+ * Authoritative Pharmacy Sales / Sales Ledger Summary Export Column Definitions
+ */
+export const pharmacySalesExportColumns = [
+  { key: 'saleId', header: 'Sale ID', extractor: r => r.saleId || '--' },
+  { key: 'date', header: 'Date', extractor: r => r.saleDate || r.createdAt, formatter: v => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '--' },
+  { key: 'saleType', header: 'Sale Type', extractor: r => r.saleType || 'DIRECT' },
+  { key: 'customerName', header: 'Customer / Patient', extractor: r => r.customerName || (r.patientId?.name) || 'Walk-in' },
+  { key: 'patientIdentifier', header: 'Patient ID / UHID', extractor: r => r.patientIdentifier || (r.patientId?.patientId) || '--' },
+  { key: 'prescriptionCode', header: 'Prescription Code', extractor: r => r.prescriptionCode || '--' },
+  { key: 'doctorName', header: 'Doctor', extractor: r => r.doctorName || '--' },
+  { key: 'pharmacistName', header: 'Pharmacist', extractor: r => r.pharmacistName || '--' },
+  { key: 'itemSummary', header: 'Items', extractor: r => Array.isArray(r.items) ? r.items.map(i => `${i.medicineName || i.sku} (${i.quantity})`).join('; ') : '--' },
+  { key: 'subtotal', header: 'Subtotal (Rs.)', extractor: r => Number(r.subtotal || 0).toFixed(2) },
+  { key: 'totalDiscount', header: 'Discount (Rs.)', extractor: r => Number(r.totalDiscount || 0).toFixed(2) },
+  { key: 'totalGst', header: 'GST / Tax (Rs.)', extractor: r => Number(r.totalGst || 0).toFixed(2) },
+  { key: 'grandTotal', header: 'Grand Total (Rs.)', extractor: r => Number(r.grandTotal || 0).toFixed(2) },
+  { key: 'paymentMethod', header: 'Payment Method', extractor: r => r.paymentMethod || 'Cash' },
+  { key: 'transactionRef', header: 'Payment Ref / Txn ID', extractor: r => r.transactionRef || '--' },
+  { key: 'status', header: 'Status', extractor: r => r.status || 'COMPLETED' }
+];
+
+/**
+ * Line-Item Detailed Pharmacy Sales Export Column Definitions
+ */
+export const pharmacySalesDetailExportColumns = [
+  { key: 'saleId', header: 'Sale ID', extractor: r => r.saleId || '--' },
+  { key: 'date', header: 'Date', extractor: r => r.saleDate || r.createdAt, formatter: v => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '--' },
+  { key: 'saleType', header: 'Sale Type', extractor: r => r.saleType || 'DIRECT' },
+  { key: 'customerName', header: 'Customer / Patient', extractor: r => r.customerName || (r.patientId?.name) || 'Walk-in' },
+  { key: 'medicineName', header: 'Medicine Name', extractor: r => r.item?.medicineName || '--' },
+  { key: 'sku', header: 'SKU', extractor: r => r.item?.sku || '--' },
+  { key: 'batchNumber', header: 'Batch Number', extractor: r => r.item?.batchNumber || '--' },
+  { key: 'quantity', header: 'Quantity', extractor: r => Number(r.item?.quantity || 0) },
+  { key: 'unit', header: 'Unit', extractor: r => r.item?.unit || 'Strip' },
+  { key: 'mrp', header: 'MRP (Rs.)', extractor: r => Number(r.item?.mrp || 0).toFixed(2) },
+  { key: 'discountPercent', header: 'Discount %', extractor: r => `${r.item?.discountPercent || 0}%` },
+  { key: 'discountAmount', header: 'Discount (Rs.)', extractor: r => Number(r.item?.discountAmount || 0).toFixed(2) },
+  { key: 'gstPercent', header: 'GST %', extractor: r => `${r.item?.gstPercent || 0}%` },
+  { key: 'gstAmount', header: 'GST (Rs.)', extractor: r => Number(r.item?.gstAmount || 0).toFixed(2) },
+  { key: 'netAmount', header: 'Net Amount (Rs.)', extractor: r => Number(r.item?.netAmount || 0).toFixed(2) },
+  { key: 'paymentMethod', header: 'Payment Method', extractor: r => r.paymentMethod || 'Cash' },
+  { key: 'status', header: 'Status', extractor: r => r.status || 'COMPLETED' }
+];
+
+/**
+ * Flattens Pharmacy Sales into line-item rows for detailed sales export.
+ */
+export function flattenSalesForExport(salesList = []) {
+  if (!Array.isArray(salesList)) return [];
+  const flatRows = [];
+  salesList.forEach(sale => {
+    const items = Array.isArray(sale.items) && sale.items.length > 0 ? sale.items : [null];
+    items.forEach(item => {
+      flatRows.push({
+        ...sale,
+        item
+      });
+    });
+  });
+  return flatRows;
+}
+
+/**
+ * Authoritative Write-Off Export Column Definitions
+ */
+export const writeOffExportColumns = [
+  { key: 'writeOffId', header: 'Write-Off ID', extractor: r => r.writeOffId || '--' },
+  { key: 'createdAt', header: 'Write-Off Date', extractor: r => r.createdAt, formatter: v => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '--' },
+  { key: 'medicineName', header: 'Medicine Name', extractor: r => r.medicineName || '--' },
+  { key: 'sku', header: 'SKU Code', extractor: r => r.sku || '--' },
+  { key: 'batchNumber', header: 'Batch Number', extractor: r => r.batchNumber || '--' },
+  { key: 'expiryDate', header: 'Expiry Date', extractor: r => r.expiryDate, formatter: v => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '--' },
+  { key: 'quantity', header: 'Quantity Written Off', extractor: r => Number(r.quantity || 0) },
+  { key: 'unitCost', header: 'Purchase Rate (Rs.)', extractor: r => Number(r.unitCost || 0).toFixed(2) },
+  { key: 'totalValue', header: 'Write-Off Value (Rs.)', extractor: r => Number(r.totalValue || (r.quantity * r.unitCost) || 0).toFixed(2) },
+  { key: 'reason', header: 'Reason', extractor: r => r.reason || 'Expired' },
+  { key: 'detectedBy', header: 'Written Off By', extractor: r => r.approvedBy || r.detectedBy || 'Pharmacist' },
+  { key: 'status', header: 'Status', extractor: r => r.status || 'Written Off' }
 ];
 
 /**
@@ -1193,7 +1782,10 @@ export function flattenPrescriptionsForExport(prescriptions = []) {
           duration: item?.duration || '--',
           quantity: item?.quantity ?? 1,
           instructions: item?.instructions || '--'
-        }
+        },
+        linkedSaleId: p.saleId || p.pharmacySaleId || (p.sale?.saleId) || (p.dispensedSaleId) || '--',
+        dispenseDate: p.dispensedAt || p.sale?.saleDate || p.dispensedDate || null,
+        saleGrandTotal: p.saleGrandTotal ?? p.sale?.grandTotal ?? null
       });
     });
   });
@@ -1202,7 +1794,7 @@ export function flattenPrescriptionsForExport(prescriptions = []) {
 }
 
 /**
- * Explicit Prescription Export Column Definitions (12 Whitelist Columns)
+ * Explicit Prescription Export Column Definitions (with Linked Pharmacy Sale support)
  * Strictly excludes sensitive medical histories, Aadhaar/PAN, banking, and credentials.
  */
 export const prescriptionExportColumns = [
@@ -1266,6 +1858,23 @@ export const prescriptionExportColumns = [
     key: 'instructions', 
     header: 'Instructions', 
     extractor: r => r.item?.instructions || (Array.isArray(r.items) ? r.items.map(i => i.instructions).filter(Boolean).join('; ') : '--') 
+  },
+  { 
+    key: 'linkedSaleId', 
+    header: 'Linked Sale ID', 
+    extractor: r => r.linkedSaleId || r.saleId || r.pharmacySaleId || (r.rawPrescription?.saleId) || '--' 
+  },
+  { 
+    key: 'dispenseDate', 
+    header: 'Dispense Date', 
+    extractor: r => r.dispenseDate || r.rawPrescription?.dispensedAt || r.rawPrescription?.sale?.saleDate, 
+    formatter: v => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '--' 
+  },
+  { 
+    key: 'saleGrandTotal', 
+    header: 'Sale Total (Rs.)', 
+    extractor: r => r.saleGrandTotal ?? r.rawPrescription?.saleGrandTotal ?? r.rawPrescription?.sale?.grandTotal, 
+    formatter: v => (v !== undefined && v !== null && v !== '--') ? Number(v || 0).toFixed(2) : '--' 
   }
 ];
 

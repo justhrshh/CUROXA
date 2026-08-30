@@ -8,7 +8,16 @@ import { convertPdfToImage } from '../utils/pdfHelper';
 import { printPO, printGRN } from '../utils/printDocHelper';
 import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
 import ExportModal from '../components/export/ExportModal';
-import { inventoryExportColumns, prescriptionExportColumns } from '../utils/exportEngine';
+import { 
+  inventoryExportColumns, 
+  batchInventoryExportColumns, 
+  flattenInventoryBatchesForExport, 
+  buildMedicineSummaryExportData,
+  prescriptionExportColumns,
+  pharmacySalesExportColumns,
+  pharmacySalesDetailExportColumns,
+  flattenSalesForExport
+} from '../utils/exportEngine';
 
 const permissionNames = {
   'dr-consult': 'Patient consultation notes',
@@ -1253,6 +1262,9 @@ const PharmacyDashboard = () => {
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('All');
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState('All');
   const [showInventoryExportModal, setShowInventoryExportModal] = useState(false);
+  const [showSalesExportModal, setShowSalesExportModal] = useState(false);
+  const [salesExportData, setSalesExportData] = useState([]);
+  const [isLoadingSalesExport, setIsLoadingSalesExport] = useState(false);
   const [skuBatchRiskMap, setSkuBatchRiskMap] = useState({});
   const [skuBatchAggMap, setSkuBatchAggMap] = useState({});
   const [skuBatchesMap, setSkuBatchesMap] = useState({});
@@ -1329,6 +1341,25 @@ const PharmacyDashboard = () => {
       return matchesSearch && matchesCategory && matchesStatus;
     });
   }, [inventory, inventorySearch, inventoryCategoryFilter, inventoryStatusFilter, getMedicineSellableInfo]);
+
+  const inventoryExportModes = useMemo(() => [
+    {
+      id: 'batch',
+      label: 'Batch Inventory (Detailed)',
+      dataset: 'Batch Inventory',
+      data: flattenInventoryBatchesForExport(filteredInventory, skuBatchesMap),
+      columns: batchInventoryExportColumns,
+      dateField: null
+    },
+    {
+      id: 'summary',
+      label: 'Medicine Summary',
+      dataset: 'Inventory',
+      data: buildMedicineSummaryExportData(filteredInventory, skuBatchesMap),
+      columns: inventoryExportColumns,
+      dateField: null
+    }
+  ], [filteredInventory, skuBatchesMap]);
 
   const [indents, setIndents] = useState([]);
   const [selectedIndent, setSelectedIndent] = useState(null);
@@ -2029,42 +2060,75 @@ const PharmacyDashboard = () => {
     }, 500);
   };
 
-  const handleExportSalesCSV = () => {
-    if (!prescriptions || prescriptions.length === 0) {
-      showToast("No transaction records to export.");
-      return;
+  const handleOpenSalesExport = async () => {
+    // Open immediately with current in-memory sales so the modal pops up with 0ms delay
+    setSalesExportData(pharmacySales || []);
+    setShowSalesExportModal(true);
+
+    try {
+      setIsLoadingSalesExport(true);
+      const params = { limit: 2000 };
+      if (salesFilterType && salesFilterType !== 'ALL') params.saleType = salesFilterType;
+      if (salesFilterStatus && salesFilterStatus !== 'ALL') params.status = salesFilterStatus;
+      if (salesFilterPaymentMethod && salesFilterPaymentMethod !== 'ALL') params.paymentMethod = salesFilterPaymentMethod;
+      if (salesSearchQuery && salesSearchQuery.trim()) params.search = salesSearchQuery.trim();
+      if (salesFilterDateRange === 'Today') {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        params.startDate = start.toISOString();
+        params.endDate = end.toISOString();
+      } else if (salesFilterDateRange === 'This Week') {
+        const now = new Date();
+        const day = now.getDay();
+        const diffToMonday = (day === 0 ? -6 : 1) - day;
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday, 0, 0, 0, 0);
+        const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59, 999);
+        params.startDate = start.toISOString();
+        params.endDate = end.toISOString();
+      } else if (salesFilterDateRange === 'This Month') {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        params.startDate = start.toISOString();
+        params.endDate = end.toISOString();
+      } else if (salesFilterDateRange === 'Custom Range' && salesCustomStartDate && salesCustomEndDate) {
+        const start = new Date(salesCustomStartDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(salesCustomEndDate);
+        end.setHours(23, 59, 59, 999);
+        params.startDate = start.toISOString();
+        params.endDate = end.toISOString();
+      }
+      const res = await api.get('/pharmacy-sales', { params });
+      if (res.data?.sales) {
+        setSalesExportData(res.data.sales);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch full unpaginated sales for export, using cached sales:', err);
+    } finally {
+      setIsLoadingSalesExport(false);
     }
-
-    const headers = ["Prescription ID", "Patient Name", "Patient ID", "Doctor Name", "Date & Time", "Total Items", "Total Amount", "Status"];
-
-    const rows = prescriptions.map((p, index) => {
-      const pId = p._id ? `RX-${p._id.substring(p._id.length - 6).toUpperCase()}` : `RX-00${index}`;
-      const patientName = p.patientId?.name || 'Unknown Patient';
-      const patientIdVal = p.patientId?._id ? `MDC-${p.patientId._id.toString().substring(18).toUpperCase()}` : 'N/A';
-      const docName = p.doctorId?.name || 'Dr. Self';
-      const dateTime = p.createdAt ? `${new Date(p.createdAt).toLocaleDateString()} ${new Date(p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'N/A';
-      const enrichedItems = enrichItemsWithPrice(p.items);
-      const amountVal = enrichedItems.reduce((acc, curr) => acc + curr.lineTotal, 0);
-      const amount = `₹${amountVal.toFixed(2)}`;
-      const status = p.status === 'Pending Pharmacy Dispatch' ? 'Pending' : p.status;
-
-      return [pId, patientName, patientIdVal, docName, dateTime, itemsCount, amount, status]
-        .map(val => `"${String(val || '').replace(/"/g, '""')}"`).join(",");
-    });
-
-    const csvContent = [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `pharmacy_sales_export_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-    showToast("Transaction report exported successfully as CSV");
   };
+
+  const salesExportModes = useMemo(() => [
+    {
+      id: 'summary',
+      label: 'Sales Transactions (Summary)',
+      dataset: 'Pharmacy Sales',
+      data: salesExportData,
+      columns: pharmacySalesExportColumns,
+      dateField: 'createdAt'
+    },
+    {
+      id: 'detail',
+      label: 'Line Items (Detailed)',
+      dataset: 'Pharmacy Sales Line Items',
+      data: flattenSalesForExport(salesExportData),
+      columns: pharmacySalesDetailExportColumns,
+      dateField: 'createdAt'
+    }
+  ], [salesExportData]);
 
   const handleExportInventoryCSV = () => {
     if (!inventory || inventory.length === 0) {
@@ -6758,13 +6822,9 @@ const PharmacyDashboard = () => {
                                 ? '4px solid #EF4444'
                                 : isLowStock
                                   ? '4px solid #F59E0B'
-                                  : hasExpired
-                                    ? '4px solid #DC2626'
-                                    : hasCritical
-                                      ? '4px solid #F97316'
-                                      : hasWarning
-                                        ? '4px solid #FBBF24'
-                                        : '4px solid transparent';
+                                  : isExpanded
+                                    ? '4px solid #2563EB'
+                                    : '4px solid transparent';
 
                               return (
                                 <React.Fragment key={inv._id}>
@@ -6785,7 +6845,7 @@ const PharmacyDashboard = () => {
                                     onMouseLeave={e => e.currentTarget.style.background = defaultBg}
                                   >
                                     {/* Medicine Name with Expand Arrow & Nearest Expiry */}
-                                    <td style={{ padding: '14px 18px' }}>
+                                    <td style={{ padding: '12px 18px' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         {batchesForMed.length > 0 ? (
                                           <button
@@ -6820,22 +6880,24 @@ const PharmacyDashboard = () => {
                                         <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>{inv.name}</span>
                                         {batchesForMed.length > 0 && (
                                           <span style={{
-                                            fontSize: '11px',
-                                            fontWeight: 700,
-                                            color: '#475569',
-                                            background: '#F1F5F9',
-                                            border: '1px solid #E2E8F0',
-                                            padding: '1px 6px',
-                                            borderRadius: '5px'
+                                            fontSize: '10.5px',
+                                            fontWeight: 800,
+                                            color: '#1E40AF',
+                                            background: '#EFF6FF',
+                                            border: '1px solid #BFDBFE',
+                                            padding: '2px 7px',
+                                            borderRadius: '5px',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.04em'
                                           }}>
-                                            {batchesForMed.length} batch{batchesForMed.length > 1 ? 'es' : ''}
+                                            {batchesForMed.length} BATCH{batchesForMed.length > 1 ? 'ES' : ''}
                                           </span>
                                         )}
                                       </div>
 
                                       {/* Nearest Expiry Sub-line */}
                                       {nearestBatch && (
-                                        <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '5px', display: 'flex', alignItems: 'center', gap: '5px', paddingLeft: '30px', flexWrap: 'wrap' }}>
+                                        <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px', paddingLeft: '30px', flexWrap: 'wrap' }}>
                                           <span style={{ color: '#64748B', fontWeight: 600 }}>Nearest expiry:</span>
                                           <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#0F172A', background: '#F1F5F9', padding: '1px 5px', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
                                             {nearestBatch.batchNumber}
@@ -6852,19 +6914,19 @@ const PharmacyDashboard = () => {
                                             padding: '1px 6px',
                                             borderRadius: '4px'
                                           }}>
-                                            {nearestBatch.daysRemaining !== null ? (nearestBatch.daysRemaining < 0 ? `${Math.abs(nearestBatch.daysRemaining)}d expired` : `${nearestBatch.daysRemaining}d left (${nearestBatch.risk})`) : nearestBatch.risk}
+                                            {nearestBatch.daysRemaining !== null ? (nearestBatch.daysRemaining < 0 ? `${Math.abs(nearestBatch.daysRemaining)}d expired` : `${nearestBatch.daysRemaining} days left · ${nearestBatch.risk}`) : nearestBatch.risk}
                                           </span>
                                         </div>
                                       )}
                                     </td>
 
                                     {/* Category */}
-                                    <td style={{ padding: '14px 18px', fontWeight: 600, color: '#64748B', fontSize: '13px' }}>
+                                    <td style={{ padding: '12px 18px', fontWeight: 600, color: '#64748B', fontSize: '13px' }}>
                                       {inv.category}
                                     </td>
 
                                     {/* SKU Code */}
-                                    <td style={{ padding: '14px 18px' }}>
+                                    <td style={{ padding: '12px 18px' }}>
                                       <span style={{
                                         display: 'inline-block',
                                         padding: '3px 8px',
@@ -6881,15 +6943,15 @@ const PharmacyDashboard = () => {
                                     </td>
 
                                     {/* Stock Quantity */}
-                                    <td style={{ padding: '14px 18px' }}>
+                                    <td style={{ padding: '12px 18px' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <span style={{ 
-                                          fontSize: '15px', 
+                                          fontSize: '14.5px', 
                                           fontWeight: 900, 
                                           fontFamily: "'Outfit', sans-serif",
                                           color: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#059669' 
                                         }}>
-                                          {sellableStock}
+                                          {sellableStock} units
                                         </span>
                                         {isLowStock && (
                                           <span style={{ 
@@ -7181,6 +7243,8 @@ const PharmacyDashboard = () => {
             {showInventoryExportModal && (
               <ExportModal
                 dataset="Inventory"
+                modes={inventoryExportModes}
+                initialMode="batch"
                 data={filteredInventory}
                 columns={inventoryExportColumns}
                 dateField={null}
@@ -7425,7 +7489,8 @@ const PharmacyDashboard = () => {
 
                 <button 
                   className="btn btn-secondary" 
-                  onClick={handleExportSalesCSV} 
+                  onClick={handleOpenSalesExport} 
+                  disabled={isLoadingSalesExport}
                   style={{ 
                     padding: '9px 16px', 
                     fontSize: '13px', 
@@ -7434,14 +7499,14 @@ const PharmacyDashboard = () => {
                     border: '1px solid #CBD5E1', 
                     color: '#334155', 
                     fontWeight: 700, 
-                    cursor: 'pointer',
+                    cursor: isLoadingSalesExport ? 'wait' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px'
                   }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                  Export Report
+                  {isLoadingSalesExport ? 'Loading...' : 'Export Report'}
                 </button>
               </div>
             </div>
@@ -8163,6 +8228,30 @@ const PharmacyDashboard = () => {
                 </div>
               )}
             </div>
+
+            {/* Sales Export Modal */}
+            {showSalesExportModal && (
+              <ExportModal
+                dataset="Pharmacy Sales"
+                modes={salesExportModes}
+                initialMode="summary"
+                initialRangeType={salesFilterDateRange || 'All Time'}
+                data={salesExportData}
+                columns={pharmacySalesExportColumns}
+                dateField="createdAt"
+                currentFilters={{
+                  type: salesFilterType,
+                  status: salesFilterStatus,
+                  paymentMethod: salesFilterPaymentMethod,
+                  search: salesSearchQuery
+                }}
+                clinicName={localStorage.getItem('tenantName') || 'CUROXA HEALTHCARE'}
+                onClose={() => setShowSalesExportModal(false)}
+                onSuccess={(result) => {
+                  showToast(`Exported ${result.recordCount} sales records to ${result.fileName}!`, 'success');
+                }}
+              />
+            )}
 
           </div>
         )}

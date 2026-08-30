@@ -4,7 +4,7 @@ import api from '../utils/api';
 import { printPO, printGRN } from '../utils/printDocHelper';
 import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
 import ExportModal from '../components/export/ExportModal';
-import { grnExportColumns, poExportColumns, flattenGrnForExport, flattenPoForExport } from '../utils/exportEngine';
+import { grnExportColumns, poExportColumns, flattenGrnForExport, flattenPoForExport, vendorExportColumns } from '../utils/exportEngine';
 
 const ProcurementDashboard = () => {
   const [activeTab, setActiveTab] = useState('vendors'); // 'dashboard', 'vendors', 'pos', 'grn', 'payments'
@@ -25,6 +25,7 @@ const ProcurementDashboard = () => {
   const [showGRNModal, setShowGRNModal] = useState(false);
   const [showGrnExportModal, setShowGrnExportModal] = useState(false);
   const [showPoExportModal, setShowPoExportModal] = useState(false);
+  const [showVendorExportModal, setShowVendorExportModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedVendorProfile, setSelectedVendorProfile] = useState(null);
   const [selectedVendorPriceList, setSelectedVendorPriceList] = useState(null);
@@ -4254,29 +4255,7 @@ const ProcurementDashboard = () => {
                       <p className="proc-subtitle">Manage suppliers, contracts and price lists.</p>
                     </div>
                     <div style={{ display: 'flex', gap: '12px' }}>
-                      <button className="proc-btn proc-btn-secondary" onClick={() => {
-                        const headers = ['Code', 'Name', 'Type', 'Contact', 'Phone', 'City', 'State', 'GST', 'Status'];
-                        const rows = getDisplayVendors().map(v => [
-                          v.code || '',
-                          v.name || '',
-                          v.type || '',
-                          v.contactPerson || '',
-                          v.phone || '',
-                          v.city || '',
-                          v.state || '',
-                          v.gstNumber || '',
-                          v.status || ''
-                        ]);
-                        const csvContent = "data:text/csv;charset=utf-8," 
-                          + [headers.join(','), ...rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(','))].join('\n');
-                        const encodedUri = encodeURI(csvContent);
-                        const link = document.createElement("a");
-                        link.setAttribute("href", encodedUri);
-                        link.setAttribute("download", `vendors_export_${new Date().toISOString().split('T')[0]}.csv`);
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                      }}>
+                      <button className="proc-btn proc-btn-secondary" onClick={() => setShowVendorExportModal(true)}>
                         <i data-lucide="download"></i> Export
                       </button>
                       <button className="proc-btn proc-btn-primary" onClick={() => {
@@ -12621,6 +12600,22 @@ const ProcurementDashboard = () => {
           </div>
         );
       })()}
+
+      {/* Vendor Unified Export Modal */}
+      {showVendorExportModal && (
+        <ExportModal
+          dataset="Vendors"
+          data={getDisplayVendors()}
+          columns={vendorExportColumns}
+          dateField={null}
+          currentFilters={{}}
+          clinicName={localStorage.getItem('tenantName') || 'CUROXA HEALTHCARE'}
+          onClose={() => setShowVendorExportModal(false)}
+          onSuccess={(result) => {
+            showToast(`Exported ${result.recordCount} vendor(s) to ${result.fileName}!`, 'success');
+          }}
+        />
+      )}
 
       {/* GRN Unified Export Modal */}
       {showGrnExportModal && (() => {
