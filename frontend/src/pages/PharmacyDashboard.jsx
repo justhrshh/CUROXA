@@ -1152,17 +1152,18 @@ const PharmacyDashboard = () => {
     };
   }, [user.name]);
 
-  // Notifications states
-  const [notifications, setNotifications] = useState([]);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  // Expiry alerts states (replaces notification bell)
+  const [expiryBatches, setExpiryBatches] = useState([]);
+  const [showExpiryAlerts, setShowExpiryAlerts] = useState(false);
+  const alertsWidgetRef = useRef(null);
   const prevCoverageKeysRef = useRef(null);
-  const notificationRef = useRef(null);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
-        setShowNotifications(false);
+      if (alertsWidgetRef.current && !alertsWidgetRef.current.contains(event.target)) {
+        setShowExpiryAlerts(false);
       }
       if (!event.target.closest('.sidebar-user') && !event.target.closest('.sidebar-profile-card') && !event.target.closest('.sidebar-profile')) {
         setShowProfileMenu(false);
@@ -1256,6 +1257,18 @@ const PharmacyDashboard = () => {
   const [skuBatchAggMap, setSkuBatchAggMap] = useState({});
   const [skuBatchesMap, setSkuBatchesMap] = useState({});
   const [expandedSku, setExpandedSku] = useState(null);
+
+  const criticalAndWarningBatches = useMemo(() => {
+    return (expiryBatches || [])
+      .filter(b => Number(b.availableQuantity) > 0 && ['CRITICAL', 'WARNING', 'EXPIRED'].includes(b.risk))
+      .sort((a, b) => {
+        const timeA = a.expiryDate ? new Date(a.expiryDate).getTime() : Infinity;
+        const timeB = b.expiryDate ? new Date(b.expiryDate).getTime() : Infinity;
+        return timeA - timeB;
+      });
+  }, [expiryBatches]);
+
+  const expiryAlertsCount = criticalAndWarningBatches.length;
 
   const formatBatchDisplayDate = useCallback((dateVal) => {
     if (!dateVal) return '--';
@@ -1777,6 +1790,7 @@ const PharmacyDashboard = () => {
         setSkuBatchRiskMap(riskMap);
         setSkuBatchAggMap(batchAggMap);
         setSkuBatchesMap(batchesMap);
+        setExpiryBatches(batches);
       } catch (e) {
         // Expiry route silent fallback
       }
@@ -3568,6 +3582,28 @@ const PharmacyDashboard = () => {
           gap: 14px !important;
         }
 
+        /* Header Alerts Widget matching Admin Portal Top Bar */
+        .header-alerts-widget {
+          position: relative;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          background: linear-gradient(135deg, #FFFFFF 0%, #FFF8F8 60%, #FFEFEF 100%);
+          border: 1px solid rgba(254, 226, 226, 0.9);
+          border-radius: 14px;
+          padding: 6px 20px 6px 12px;
+          height: 38px;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 4px 16px -2px rgba(252, 165, 165, 0.28), 0 1px 3px rgba(0, 0, 0, 0.02);
+          user-select: none;
+        }
+        .header-alerts-widget:hover {
+          transform: translateY(-1.5px);
+          box-shadow: 0 8px 22px -2px rgba(252, 165, 165, 0.45);
+          border-color: rgba(253, 164, 175, 1);
+        }
+
         .main-content {
           margin-left: 260px !important;
           margin-top: 64px !important;
@@ -4527,75 +4563,197 @@ const PharmacyDashboard = () => {
               </span>
             </div>
 
-            {/* Notification Bell */}
+            {/* Medicine Expiry Alerts Button matching Admin Portal Top Bar */}
             <div 
-              ref={notificationRef}
-              style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '38px', height: '38px', borderRadius: '10px', border: '1px solid #E2E8F0', color: '#64748B', background: 'white', transition: 'all 0.2s' }}
-              onClick={() => {
-                setShowNotifications(!showNotifications);
-                setUnreadCount(0);
-              }}
+              ref={alertsWidgetRef}
+              style={{ position: 'relative' }}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-              {unreadCount > 0 && (
-                <span style={{ position: 'absolute', top: '-3px', right: '-3px', background: '#EF4444', color: 'white', borderRadius: '50%', width: '17px', height: '17px', fontSize: '10px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
-                  {unreadCount}
-                </span>
-              )}
+              <div 
+                className="header-alerts-widget" 
+                onClick={() => setShowExpiryAlerts(prev => !prev)}
+                title="Medicine Expiry Alerts"
+              >
+                {/* Bottom Right Organic Light Pastel Coral Wave */}
+                <svg 
+                  viewBox="0 0 75 55" 
+                  fill="none" 
+                  xmlns="http://www.w3.org/2000/svg"
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    bottom: 0,
+                    width: '48px',
+                    height: '36px',
+                    pointerEvents: 'none',
+                    zIndex: 1
+                  }}
+                >
+                  <path d="M8 55 C22 48 34 30 46 13 C54 2 64 0 75 0 L75 55 Z" fill="url(#alertCoralWaveLightPharm)" opacity="0.65" />
+                  <path d="M20 55 C34 49 44 34 54 20 C60 9 67 3 75 2 L75 55 Z" fill="url(#alertCoralWaveAccentPharm)" opacity="0.4" />
+                  <path d="M8 55 C22 48 34 30 46 13 C54 2 64 0 75 0" stroke="rgba(255, 255, 255, 0.65)" strokeWidth="0.8" />
+                  <path d="M20 55 C34 49 44 34 54 20 C60 9 67 3 75 2" stroke="rgba(255, 255, 255, 0.45)" strokeWidth="0.8" />
+                  <defs>
+                    <linearGradient id="alertCoralWaveLightPharm" x1="8" y1="0" x2="75" y2="55" gradientUnits="userSpaceOnUse">
+                      <stop stopColor="#FECDD3" stopOpacity="0.85" />
+                      <stop offset="0.5" stopColor="#FDA4AF" stopOpacity="0.9" />
+                      <stop offset="1" stopColor="#F87171" />
+                    </linearGradient>
+                    <linearGradient id="alertCoralWaveAccentPharm" x1="20" y1="0" x2="75" y2="55" gradientUnits="userSpaceOnUse">
+                      <stop stopColor="#FFE4E6" stopOpacity="0.6" />
+                      <stop offset="1" stopColor="#FB7185" stopOpacity="0.8" />
+                    </linearGradient>
+                  </defs>
+                </svg>
 
-              {showNotifications && (
-                <div data-lenis-prevent 
+                {/* Left Warning Triangle Icon */}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, position: 'relative', zIndex: 2 }}>
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+
+                {/* Vertical Divider */}
+                <div style={{ width: '1px', height: '20px', background: 'rgba(254, 205, 211, 0.95)', margin: '0 9px 0 8px', flexShrink: 0, position: 'relative', zIndex: 2 }} />
+
+                {/* Text Block */}
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, paddingRight: '6px', position: 'relative', zIndex: 2 }}>
+                  <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', lineHeight: 1.15, letterSpacing: '-0.01em', fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}>
+                    {expiryAlertsCount} Alert{expiryAlertsCount === 1 ? '' : 's'}
+                  </span>
+                  <span 
+                    style={{ fontSize: '11px', fontWeight: 700, color: '#EF4444', lineHeight: 1.15, marginTop: '1px', cursor: 'pointer' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTab('expiry');
+                      setShowExpiryAlerts(false);
+                    }}
+                  >
+                    View all
+                  </span>
+                </div>
+              </div>
+
+              {/* Dropdown for Expiry Alerts */}
+              {showExpiryAlerts && (
+                <div 
+                  data-lenis-prevent 
                   style={{
                     position: 'absolute',
                     top: '46px',
                     right: '0',
-                    width: '320px',
+                    width: '350px',
                     background: 'rgba(255, 255, 255, 0.98)',
-                    backdropFilter: 'blur(10px)',
-                    borderRadius: '14px',
+                    backdropFilter: 'blur(12px)',
+                    borderRadius: '16px',
                     border: '1px solid #E2E8F0',
-                    boxShadow: '0 12px 28px rgba(0, 0, 0, 0.08)',
-                    zIndex: 1000,
+                    boxShadow: '0 20px 40px -5px rgba(15, 23, 42, 0.16), 0 8px 20px -2px rgba(0, 0, 0, 0.08)',
+                    zIndex: 99999,
                     padding: '16px',
-                    maxHeight: '400px',
+                    maxHeight: '440px',
                     overflowY: 'auto'
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 800, fontSize: '14px', color: '#0F172A' }}>Notifications</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '15px' }}>⚠️</span>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '13px', color: '#0F172A' }}>Medicine Expiry Alerts</div>
+                        <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>Batches approaching expiry / at-risk</div>
+                      </div>
+                    </div>
                     <button 
-                      style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                      type="button"
+                      style={{
+                        background: '#EFF6FF',
+                        border: '1px solid #DBEAFE',
+                        color: '#2563EB',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s'
+                      }}
                       onClick={() => {
-                        const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
-                        const clearedKey = `curoxa_cleared_notifications_${userKey}`;
-                        const clearedIds = JSON.parse(localStorage.getItem(clearedKey) || '[]');
-                        const newClearedIds = [...clearedIds, ...notifications.map(n => n.id)];
-                        localStorage.setItem(clearedKey, JSON.stringify(newClearedIds));
-                        setNotifications([]);
-                        setUnreadCount(0);
+                        setActiveTab('expiry');
+                        setShowExpiryAlerts(false);
                       }}
                     >
-                      Clear all
+                      View all →
                     </button>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {notifications.map(n => (
-                      <div key={n.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 10px', borderRadius: '8px', background: n.isNew ? '#EFF6FF' : '#F8FAFC', borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #E2E8F0' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#1E293B' }}>{n.title}</span>
-                          <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>{n.time}</span>
+                  {criticalAndWarningBatches.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '24px 0', color: '#64748B' }}>
+                      <div style={{ fontSize: '24px', marginBottom: '6px' }}>✅</div>
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>No Expiry Alerts</div>
+                      <div style={{ fontSize: '11.5px', color: '#94A3B8' }}>All medicine batches are within safe shelf-life limits.</div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {criticalAndWarningBatches.slice(0, 8).map((b, idx) => (
+                        <div 
+                          key={b._id || b.batchNumber + idx}
+                          style={{
+                            padding: '9px 12px',
+                            borderRadius: '10px',
+                            background: b.risk === 'EXPIRED' ? '#FEF2F2' : b.risk === 'CRITICAL' ? '#FFF7ED' : '#FEFCE8',
+                            borderLeft: b.risk === 'EXPIRED' ? '3px solid #DC2626' : b.risk === 'CRITICAL' ? '3px solid #EA580C' : '3px solid #CA8A04',
+                            borderTop: '1px solid rgba(0,0,0,0.04)',
+                            borderRight: '1px solid rgba(0,0,0,0.04)',
+                            borderBottom: '1px solid rgba(0,0,0,0.04)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '3px',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => {
+                            setActiveTab('expiry');
+                            setShowExpiryAlerts(false);
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#0F172A' }}>{b.name}</span>
+                            <span style={{
+                              fontSize: '9.5px',
+                              fontWeight: 800,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              background: b.risk === 'EXPIRED' ? '#FEE2E2' : b.risk === 'CRITICAL' ? '#FFEDD5' : '#FEF9C3',
+                              color: b.risk === 'EXPIRED' ? '#DC2626' : b.risk === 'CRITICAL' ? '#C2410C' : '#854D0E',
+                              textTransform: 'uppercase'
+                            }}>
+                              {b.risk}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#475569' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#334155' }}>{b.batchNumber}</span>
+                              <span>•</span>
+                              <span>{b.availableQuantity} units</span>
+                            </div>
+                            <span style={{ fontWeight: 700, color: b.risk === 'EXPIRED' ? '#DC2626' : b.risk === 'CRITICAL' ? '#C2410C' : '#854D0E' }}>
+                              {b.daysRemaining !== null ? (b.daysRemaining < 0 ? `${Math.abs(b.daysRemaining)}d expired` : `${b.daysRemaining} days left`) : ''}
+                            </span>
+                          </div>
                         </div>
-                        <span style={{ fontSize: '11.5px', color: '#475569', fontWeight: 550, lineHeight: 1.4 }}>{n.message}</span>
-                      </div>
-                    ))}
-                    {notifications.length === 0 && (
-                      <div style={{ textAlign: 'center', padding: '20px 0', color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
-                        No notifications
-                      </div>
-                    )}
-                  </div>
+                      ))}
+                      {criticalAndWarningBatches.length > 8 && (
+                        <div style={{ textAlign: 'center', paddingTop: '6px' }}>
+                          <span 
+                            style={{ fontSize: '11.5px', color: '#2563EB', fontWeight: 700, cursor: 'pointer' }}
+                            onClick={() => {
+                              setActiveTab('expiry');
+                              setShowExpiryAlerts(false);
+                            }}
+                          >
+                            + {criticalAndWarningBatches.length - 8} more batches in Expiry Management →
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
