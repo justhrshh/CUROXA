@@ -6225,6 +6225,9 @@ const AdminDashboard = () => {
           box-shadow: 0 6px 18px rgba(15, 23, 42, 0.07);
           border-color: #CBD5E1;
         }
+        .alert-op-card.sev-alert {
+          border-left: 4px solid #3B82F6;
+        }
         .alert-op-card.sev-critical {
           border-left: 4px solid #EF4444;
         }
@@ -6261,6 +6264,7 @@ const AdminDashboard = () => {
           flex-shrink: 0;
           margin-top: 1px;
         }
+        .alert-card-icon-box.sev-alert { background: #EFF6FF; color: #2563EB; }
         .alert-card-icon-box.sev-critical { background: #FEF2F2; color: #EF4444; }
         .alert-card-icon-box.sev-high { background: #FFFBEB; color: #D97706; }
         .alert-card-icon-box.sev-medium { background: #EFF6FF; color: #2563EB; }
@@ -6302,6 +6306,7 @@ const AdminDashboard = () => {
           padding: 3px 8px;
           border-radius: 6px;
         }
+        .alert-card-severity-pill.sev-alert { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
         .alert-card-severity-pill.sev-critical { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; }
         .alert-card-severity-pill.sev-high { background: #FFFBEB; color: #D97706; border: 1px solid #FDE68A; }
         .alert-card-severity-pill.sev-medium { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
@@ -13364,7 +13369,7 @@ const AdminDashboard = () => {
                         search: staffSearchQuery,
                         role: selectedStaffRoleFilter,
                         department: selectedStaffDeptFilter,
-                        status: selectedStaffStatusFilter
+                                      status: selectedStaffStatusFilter
                       }}
                       clinicName={currentUser?.tenantName || subscription?.name || 'CUROXA HEALTHCARE'}
                       onClose={() => setShowStaffExportModal(false)}
@@ -13387,20 +13392,17 @@ const AdminDashboard = () => {
               const totalActiveAlertsCount = enterpriseAlerts.length;
               const totalActiveTasksCount = pendingApprovals.filter(a => a.status === 'Pending').length;
               const totalActiveTotal = totalActiveAlertsCount + totalActiveTasksCount;
-              const criticalCount = enterpriseCriticalCount + criticalAlerts.length;
-              const highCount = enterpriseHighCount + warningAlerts.length;
-              const mediumCount = enterpriseMediumCount;
               const resolvedTotal = resolvedCount + approvedTodayCount;
 
               return (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 w-full mb-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full mb-5">
                   {/* Card 1: Active (Electric Blue Gradient with Bottom-Right Radial Glow) */}
                   <div
-                    className={`p-4 rounded-2xl border ${alertSeverityFilter === 'all' ? 'border-blue-400 ring-2 ring-blue-500/20' : 'border-blue-200/90'} shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer`}
+                    className={`p-4 rounded-2xl border ${alertViewType === 'all' && alertStatusDropdown !== 'resolved' ? 'border-blue-400 ring-2 ring-blue-500/20' : 'border-blue-200/90'} shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer`}
                     style={{
                       background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)'
                     }}
-                    onClick={() => { setAlertSeverityFilter('all'); setAlertPriorityDropdown('all'); setAlertStatusDropdown('all'); }}
+                    onClick={() => { setAlertViewType('all'); setAlertStatusDropdown('all'); setAlertSeverityFilter('all'); }}
                     title="Filter by all active alerts & tasks"
                   >
                     <div className="flex items-center gap-2">
@@ -13444,43 +13446,45 @@ const AdminDashboard = () => {
                     />
                   </div>
 
-                  {/* Card 2: Critical (Crimson Red Gradient with Top-Right Radial Glow) */}
+                  {/* Card 2: Alerts (Rose/Red Gradient with Top-Right Radial Glow) */}
                   <div
-                    className={`p-4 rounded-2xl border ${alertSeverityFilter === 'critical' ? 'border-red-400 ring-2 ring-red-500/20' : 'border-red-200/90'} shadow-[0_12px_28px_rgba(239,68,68,0.08)] hover:shadow-[0_16px_36px_rgba(239,68,68,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer`}
+                    className={`p-4 rounded-2xl border ${alertViewType === 'alerts' && alertStatusDropdown !== 'resolved' ? 'border-rose-400 ring-2 ring-rose-500/20' : 'border-rose-200/90'} shadow-[0_12px_28px_rgba(244,63,94,0.08)] hover:shadow-[0_16px_36px_rgba(244,63,94,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer`}
                     style={{
-                      background: 'radial-gradient(circle at 100% 0%, rgba(239, 68, 68, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FEF2F2 50%, #FEE2E2 100%)'
+                      background: 'radial-gradient(circle at 100% 0%, rgba(244, 63, 94, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFF1F2 50%, #FFE4E6 100%)'
                     }}
-                    onClick={() => { setAlertSeverityFilter('critical'); setAlertPriorityDropdown('critical'); }}
-                    title="Filter by critical alerts"
+                    onClick={() => { setAlertViewType('alerts'); setAlertStatusDropdown('all'); setAlertSeverityFilter('all'); }}
+                    title="View live system alerts"
                   >
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-red-700 to-rose-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-red-500/25">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-rose-600 to-rose-400 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-500/25">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+                        </svg>
                       </div>
-                      <span className="text-[10px] font-extrabold text-red-900 uppercase tracking-wider">Critical</span>
+                      <span className="text-[10px] font-extrabold text-rose-900 uppercase tracking-wider">Alerts</span>
                     </div>
 
                     <div className="mt-3 flex items-end justify-between">
                       <div>
                         <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
-                          {String(criticalCount).padStart(2, '0')}
+                          {String(totalActiveAlertsCount).padStart(2, '0')}
                         </div>
-                        <div className="text-xs text-red-700 font-bold mt-1.5 truncate">
-                          immediate action
+                        <div className="text-xs text-rose-700 font-bold mt-1.5 truncate">
+                          system & clinical
                         </div>
                       </div>
 
-                      {/* Red Mini Sparkline */}
+                      {/* Rose Mini Sparkline */}
                       <div className="w-14 h-7 shrink-0 relative">
                         <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                           <defs>
-                            <linearGradient id="alertRedGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#DC2626" stopOpacity="0.45"/>
-                              <stop offset="100%" stopColor="#DC2626" stopOpacity="0.05"/>
+                            <linearGradient id="alertRoseGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#E11D48" stopOpacity="0.45"/>
+                              <stop offset="100%" stopColor="#E11D48" stopOpacity="0.05"/>
                             </linearGradient>
                           </defs>
-                          <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#alertRedGrad)" />
-                          <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#DC2626" strokeWidth="2.4" strokeLinecap="round" />
+                          <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#alertRoseGrad)" />
+                          <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#E11D48" strokeWidth="2.4" strokeLinecap="round" />
                         </svg>
                       </div>
                     </div>
@@ -13489,34 +13493,34 @@ const AdminDashboard = () => {
                     <div 
                       className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
                       style={{
-                        background: 'linear-gradient(90deg, transparent 0%, #DC2626 100%)'
+                        background: 'linear-gradient(90deg, transparent 0%, #E11D48 100%)'
                       }}
                     />
                   </div>
 
-                  {/* Card 3: High Priority (Amber Gradient with Bottom-Left Radial Glow) */}
+                  {/* Card 3: Tasks (Amber Gradient with Bottom-Left Radial Glow) */}
                   <div
-                    className={`p-4 rounded-2xl border ${alertSeverityFilter === 'high' ? 'border-amber-400 ring-2 ring-amber-500/20' : 'border-amber-200/90'} shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer`}
+                    className={`p-4 rounded-2xl border ${alertViewType === 'tasks' && alertStatusDropdown !== 'resolved' ? 'border-amber-400 ring-2 ring-amber-500/20' : 'border-amber-200/90'} shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer`}
                     style={{
                       background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)'
                     }}
-                    onClick={() => { setAlertSeverityFilter('high'); setAlertPriorityDropdown('high'); }}
-                    title="Filter by high priority items"
+                    onClick={() => { setAlertViewType('tasks'); setAlertStatusDropdown('all'); setAlertSeverityFilter('all'); }}
+                    title="View pending tasks & approvals"
                   >
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/25">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                       </div>
-                      <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">High</span>
+                      <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">Tasks</span>
                     </div>
 
                     <div className="mt-3 flex items-end justify-between">
                       <div>
                         <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
-                          {String(highCount).padStart(2, '0')}
+                          {String(totalActiveTasksCount).padStart(2, '0')}
                         </div>
                         <div className="text-xs text-amber-700 font-bold mt-1.5 truncate">
-                          priority action
+                          pending approvals
                         </div>
                       </div>
 
@@ -13544,63 +13548,13 @@ const AdminDashboard = () => {
                     />
                   </div>
 
-                  {/* Card 4: Medium (Purple/Indigo Gradient with Top-Left Radial Glow) */}
+                  {/* Card 4: Resolved (Emerald Gradient with Bottom-Right Radial Glow) */}
                   <div
-                    className={`p-4 rounded-2xl border ${alertSeverityFilter === 'medium' ? 'border-purple-400 ring-2 ring-purple-500/20' : 'border-purple-200/90'} shadow-[0_12px_28px_rgba(139,92,246,0.08)] hover:shadow-[0_16px_36px_rgba(139,92,246,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer`}
-                    style={{
-                      background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)'
-                    }}
-                    onClick={() => { setAlertSeverityFilter('medium'); setAlertPriorityDropdown('medium'); }}
-                    title="Filter by medium priority items"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/25">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
-                      </div>
-                      <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider">Medium</span>
-                    </div>
-
-                    <div className="mt-3 flex items-end justify-between">
-                      <div>
-                        <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
-                          {String(mediumCount).padStart(2, '0')}
-                        </div>
-                        <div className="text-xs text-purple-700 font-bold mt-1.5 truncate">
-                          monitor & review
-                        </div>
-                      </div>
-
-                      {/* Purple Mini Sparkline */}
-                      <div className="w-14 h-7 shrink-0 relative">
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                          <defs>
-                            <linearGradient id="alertPurpleGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.45"/>
-                              <stop offset="100%" stopColor="#7C3AED" stopOpacity="0.05"/>
-                            </linearGradient>
-                          </defs>
-                          <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#alertPurpleGrad)" />
-                          <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#7C3AED" strokeWidth="2.4" strokeLinecap="round" />
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Half Gradient Accent Line Beneath Card */}
-                    <div 
-                      className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
-                      style={{
-                        background: 'linear-gradient(90deg, transparent 0%, #7C3AED 100%)'
-                      }}
-                    />
-                  </div>
-
-                  {/* Card 5: Resolved (Emerald Gradient with Bottom-Right Radial Glow) */}
-                  <div
-                    className={`p-4 rounded-2xl border ${alertSeverityFilter === 'resolved' ? 'border-emerald-400 ring-2 ring-emerald-500/20' : 'border-emerald-200/90'} shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer`}
+                    className={`p-4 rounded-2xl border ${alertStatusDropdown === 'resolved' ? 'border-emerald-400 ring-2 ring-emerald-500/20' : 'border-emerald-200/90'} shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer`}
                     style={{
                       background: 'radial-gradient(circle at 100% 100%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)'
                     }}
-                    onClick={() => { setAlertSeverityFilter('resolved'); setAlertStatusDropdown('resolved'); }}
+                    onClick={() => { setAlertStatusDropdown('resolved'); setAlertSeverityFilter('resolved'); }}
                     title="Filter by resolved items"
                   >
                     <div className="flex items-center gap-2">
@@ -13866,28 +13820,8 @@ const AdminDashboard = () => {
                     </div>
                   </div>
 
-                  {/* Right Side: Priority & Status Select Dropdowns */}
+                  {/* Right Side: Status Select Dropdown */}
                   <div className="flex items-center gap-2">
-                    <div className="relative inline-flex items-center">
-                      <select
-                        className="h-9 pl-3 pr-8 bg-white border border-slate-200/90 rounded-xl text-xs font-bold text-slate-700 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer hover:border-slate-300 transition-colors appearance-none"
-                        value={alertPriorityDropdown}
-                        onChange={(e) => {
-                          setAlertPriorityDropdown(e.target.value);
-                          if (e.target.value === 'all') setAlertSeverityFilter('all');
-                          else setAlertSeverityFilter(e.target.value);
-                        }}
-                      >
-                        <option value="all">All Priorities</option>
-                        <option value="critical">Critical Only</option>
-                        <option value="high">High Priority</option>
-                        <option value="medium">Medium Priority</option>
-                      </select>
-                      <svg className="absolute right-2.5 w-3.5 h-3.5 text-slate-500 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="m6 9 6 6 6-6"/>
-                      </svg>
-                    </div>
-
                     <div className="relative inline-flex items-center">
                       <select
                         className="h-9 pl-3 pr-8 bg-white border border-slate-200/90 rounded-xl text-xs font-bold text-slate-700 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer hover:border-slate-300 transition-colors appearance-none"
@@ -13917,11 +13851,7 @@ const AdminDashboard = () => {
               // Filter live alerts
               const filteredAlerts = enterpriseAlerts.filter(alert => {
                 if (alertCategoryFilter !== 'all' && alert.category !== alertCategoryFilter) return false;
-                if (alertSeverityFilter === 'critical' && alert.priority !== 'critical') return false;
-                if (alertSeverityFilter === 'high' && alert.priority !== 'high') return false;
-                if (alertSeverityFilter === 'medium' && alert.priority !== 'medium') return false;
                 if (alertSeverityFilter === 'resolved') return false;
-                if (alertPriorityDropdown !== 'all' && alert.priority !== alertPriorityDropdown) return false;
                 if (alertStatusDropdown === 'resolved' || alertStatusDropdown === 'pending') return false;
                 return true;
               });
@@ -13933,7 +13863,6 @@ const AdminDashboard = () => {
                 if (alertCategoryFilter === 'department' && !['leave'].includes(task.category)) return false;
                 if (alertCategoryFilter === 'additional' && !['billing', 'vendor_onboarding', 'item_price_update'].includes(task.category)) return false;
 
-                if (alertSeverityFilter === 'critical' || alertSeverityFilter === 'high' || alertSeverityFilter === 'medium') return false;
                 if (alertSeverityFilter === 'resolved' && task.status.toLowerCase() !== 'approved') return false;
                 if (alertStatusDropdown === 'active' && task.status.toLowerCase() !== 'pending') return false;
                 if (alertStatusDropdown === 'pending' && task.status.toLowerCase() !== 'pending') return false;
@@ -13969,22 +13898,17 @@ const AdminDashboard = () => {
 
                       <div className="alerts-panel-body">
                         {filteredAlerts.map((alert) => {
-                          const priorityClass = `sev-${alert.priority || 'medium'}`;
                           const isResolving = !!resolvingAlertIds[alert.id];
 
                           return (
-                            <div key={alert.id} className={`alert-op-card ${priorityClass}`}>
+                            <div key={alert.id} className="alert-op-card sev-alert">
                               {/* Card Top Row: Icon + Title/Description + Severity Badge */}
                               <div className="alert-card-top-row">
                                 <div className="alert-card-header-left">
-                                  <div className={`alert-card-icon-box ${priorityClass}`}>
-                                    {alert.priority === 'critical' ? (
-                                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                                    ) : alert.priority === 'high' ? (
-                                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
-                                    ) : (
-                                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                                    )}
+                                  <div className="alert-card-icon-box sev-alert">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+                                    </svg>
                                   </div>
 
                                   <div className="alert-card-text-block">
@@ -13994,8 +13918,8 @@ const AdminDashboard = () => {
                                 </div>
 
                                 <div className="alert-card-header-right">
-                                  <span className={`alert-card-severity-pill ${priorityClass}`}>
-                                    {alert.priority}
+                                  <span className="alert-card-severity-pill sev-alert">
+                                    Alert
                                   </span>
                                 </div>
                               </div>

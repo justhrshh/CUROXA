@@ -26,7 +26,10 @@ router.use(verifyToken);
 // Get all visits for a patient (scoped to tenant & consent check)
 router.get('/visits/patient/:patientId', checkPatientConsent('treatment'), async (req, res) => {
   try {
-    const visits = await Visit.find({ patientId: req.params.patientId, tenantId: req.tenantId }).populate('doctorId', 'name').sort({ arrivalTimestamp: -1 });
+    const query = req.user?.role === 'patient'
+      ? { patientId: req.params.patientId }
+      : { patientId: req.params.patientId, tenantId: req.tenantId };
+    const visits = await Visit.find(query).populate('doctorId', 'name').sort({ arrivalTimestamp: -1 });
     await writeAudit(req, req.params.patientId, 'VIEW_VISITS', 'Visit History', { count: visits.length });
     res.json(visits);
   } catch (error) {
@@ -101,7 +104,10 @@ router.put('/visits/:id', restrictEMRRole(['doctor', 'nurse', 'receptionist']), 
 // Get vitals history for a patient
 router.get('/vitals/patient/:patientId', checkPatientConsent('treatment'), restrictEMRRole(['doctor', 'nurse', 'patient', 'receptionist', 'lab', 'admin']), async (req, res) => {
   try {
-    const vitals = await Vital.find({ patientId: req.params.patientId, tenantId: req.tenantId }).populate('recordedBy', 'name').sort({ createdAt: -1 });
+    const query = req.user?.role === 'patient'
+      ? { patientId: req.params.patientId }
+      : { patientId: req.params.patientId, tenantId: req.tenantId };
+    const vitals = await Vital.find(query).populate('recordedBy', 'name').sort({ createdAt: -1 });
     await writeAudit(req, req.params.patientId, 'VIEW_VITALS', 'Vitals History', { count: vitals.length });
     res.json(vitals);
   } catch (error) {
@@ -155,7 +161,10 @@ router.post('/vitals', checkPatientConsent('treatment'), restrictEMRRole(['docto
 // Get SOAP notes history
 router.get('/clinical-notes/patient/:patientId', checkPatientConsent('treatment'), restrictEMRRole(['doctor', 'patient']), async (req, res) => {
   try {
-    const notes = await ClinicalNote.find({ patientId: req.params.patientId, tenantId: req.tenantId }).populate('doctorId', 'name').sort({ createdAt: -1 });
+    const query = req.user?.role === 'patient'
+      ? { patientId: req.params.patientId }
+      : { patientId: req.params.patientId, tenantId: req.tenantId };
+    const notes = await ClinicalNote.find(query).populate('doctorId', 'name').sort({ createdAt: -1 });
     await writeAudit(req, req.params.patientId, 'VIEW_CLINICAL_NOTES', 'Clinical SOAP Notes', { count: notes.length });
     res.json(notes);
   } catch (error) {
@@ -263,7 +272,9 @@ router.get('/consent/patient/:patientId', async (req, res) => {
       return res.status(403).json({ error: 'Access denied to consent records' });
     }
 
-    let consent = await Consent.findOne({ patientId: req.params.patientId, tenantId: req.tenantId });
+    let consent = await (req.user?.role === 'patient'
+      ? Consent.findOne({ patientId: req.params.patientId })
+      : Consent.findOne({ patientId: req.params.patientId, tenantId: req.tenantId }));
     if (!consent) {
       // Return default empty consent
       consent = {
@@ -516,7 +527,10 @@ router.put('/consent/dpdp-request/:requestId', restrictEMRRole(['admin']), async
 // Get procedures history
 router.get('/procedures/patient/:patientId', checkPatientConsent('treatment'), restrictEMRRole(['doctor', 'patient']), async (req, res) => {
   try {
-    const procedures = await Procedure.find({ patientId: req.params.patientId, tenantId: req.tenantId }).populate('doctorId', 'name').sort({ createdAt: -1 });
+    const query = req.user?.role === 'patient'
+      ? { patientId: req.params.patientId }
+      : { patientId: req.params.patientId, tenantId: req.tenantId };
+    const procedures = await Procedure.find(query).populate('doctorId', 'name').sort({ createdAt: -1 });
     await writeAudit(req, req.params.patientId, 'VIEW_PROCEDURES', 'Procedures History', { count: procedures.length });
     res.json(procedures);
   } catch (error) {
@@ -565,7 +579,10 @@ router.post('/procedures', checkPatientConsent('treatment'), restrictEMRRole(['d
 // Get clinical documents
 router.get('/documents/patient/:patientId', checkPatientConsent('treatment'), restrictEMRRole(['doctor', 'patient']), async (req, res) => {
   try {
-    const docs = await ClinicalDocument.find({ patientId: req.params.patientId, tenantId: req.tenantId }).populate('uploadedBy', 'name').sort({ createdAt: -1 });
+    const query = req.user?.role === 'patient'
+      ? { patientId: req.params.patientId }
+      : { patientId: req.params.patientId, tenantId: req.tenantId };
+    const docs = await ClinicalDocument.find(query).populate('uploadedBy', 'name').sort({ createdAt: -1 });
     await writeAudit(req, req.params.patientId, 'VIEW_CLINICAL_DOCUMENTS', 'Clinical Documents Vault', { count: docs.length });
     res.json(docs);
   } catch (error) {
@@ -654,7 +671,10 @@ router.get('/audits/patient/:patientId', async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const audits = await AuditLog.find({ target: req.params.patientId, tenantId: req.tenantId }).sort({ timestamp: -1 });
+    const query = isPatientSelf
+      ? { target: req.params.patientId }
+      : { target: req.params.patientId, tenantId: req.tenantId };
+    const audits = await AuditLog.find(query).sort({ timestamp: -1 });
     res.json(audits);
   } catch (error) {
     res.status(500).json({ error: error.message });

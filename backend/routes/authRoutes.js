@@ -634,6 +634,51 @@ router.get("/doctors/universal", verifyToken, async (req, res) => {
   }
 });
 
+// Get all active onboarded hospitals for patient portal discovery
+router.get("/hospitals/universal", verifyToken, async (req, res) => {
+  try {
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+    const hospitals = await SuperAdminHospital.find(
+      { 
+        status: 'Active',
+        code: { $not: /^tenant-/i }
+      },
+      'name code logo letterheadUrl address modules limits status isGstVerified isLicenseVerified plan'
+    ).sort({ createdAt: -1 }).lean();
+
+    const results = [];
+    for (const h of hospitals) {
+      const doctorUsers = await User.find(
+        { tenantId: h.code, role: 'doctor' },
+        'name specialty department'
+      ).lean();
+      const specialties = Array.from(new Set(doctorUsers.map(d => d.specialty || d.department).filter(Boolean)));
+      const enabledMods = Object.keys(h.modules || {}).filter(k => h.modules[k]?.enabled);
+
+      results.push({
+        _id: h._id,
+        code: h.code,
+        name: h.name,
+        logo: h.logo || '',
+        letterheadUrl: h.letterheadUrl || '',
+        address: h.address || '',
+        status: h.status,
+        isGstVerified: Boolean(h.isGstVerified),
+        isLicenseVerified: Boolean(h.isLicenseVerified),
+        plan: h.plan || '',
+        doctorCount: doctorUsers.length,
+        specialties: specialties,
+        modules: enabledMods
+      });
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error("Universal hospitals fetch error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Update profile (e.g. for first time setup, scoped to tenant)
 // SECURITY: requires auth, and a user may only edit their own profile unless
 // they are an admin. Previously this endpoint had no verifyToken, so anyone

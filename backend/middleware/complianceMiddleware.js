@@ -59,15 +59,15 @@ const checkPatientConsent = (purpose) => {
         return res.status(400).json({ error: 'Patient ID is required for consent validation' });
       }
 
-      // 1. Check if patient has a legal hold (bypasses deletion and always allows clinical review)
-      const patient = await Patient.findOne({ _id: patientId, tenantId: req.tenantId });
-      if (!patient) {
-        return res.status(404).json({ error: 'Patient not found' });
-      }
-
       // Patients can always access their own records
       if (req.user?.role === 'patient') {
         return next();
+      }
+
+      // 1. Check if patient has a legal hold (bypasses deletion and always allows clinical review)
+      const patient = await Patient.findById(patientId) || await Patient.findOne({ _id: patientId, tenantId: req.tenantId });
+      if (!patient) {
+        return res.status(404).json({ error: 'Patient not found' });
       }
 
       // Check if doctor is using Emergency Override

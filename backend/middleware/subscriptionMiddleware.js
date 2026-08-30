@@ -9,6 +9,11 @@ const checkModule = (moduleName) => {
         return next();
       }
 
+      // 2. Patients accessing their own records bypass subscription checks
+      if (req.user && req.user.role === 'patient') {
+        return next();
+      }
+
       const tenantId = req.tenantId || 'city_hospital';
 
       // 2. Fetch hospital plan settings
