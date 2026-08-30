@@ -104,7 +104,7 @@ router.get('/', async (req, res) => {
     const search = String(req.query.search || '').trim();
     const riskFilter = String(req.query.risk || 'ALL_RISKS').toUpperCase();
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit, 10) || 50));
 
     const batches = await MedicineBatch.find({ tenantId: req.tenantId })
       .populate('medicineId', 'category unit mrp')

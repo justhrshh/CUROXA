@@ -333,6 +333,7 @@ const PharmacyDashboard = () => {
   const [poDraftItems, setPoDraftItems] = useState([{ name: '', sku: '', qty: 100 }]);
   const [poSplitSummary, setPoSplitSummary] = useState([]);
   const [showGRNModal, setShowGRNModal] = useState(false);
+  const [isSubmittingGRN, setIsSubmittingGRN] = useState(false);
   const [grnFlowType, setGrnFlowType] = useState('po'); // 'po' or 'direct'
   const [grnSelectedPOId, setGrnSelectedPOId] = useState('');
   const [grnDirectVendorId, setGrnDirectVendorId] = useState('');
@@ -745,7 +746,11 @@ const PharmacyDashboard = () => {
       const res = await api.post('/purchase-orders', payload);
       await fetchProcurementData();
       setShowCreatePOModal(false);
-      showToast(`Consolidated PO sent to Admin! Split into ${res.data?.childPOsCount || 'vendor'} orders.`);
+      if (res.data?.childPOsCount > 1) {
+        showToast(`Master PO sent to Admin! Split into ${res.data.childPOsCount} vendor orders.`, 'success');
+      } else {
+        showToast(`Purchase Order ${res.data?.parentPO?.poId || ''} created and sent to Admin!`, 'success');
+      }
     } catch (err) {
       console.error(err);
       showToast(err.response?.data?.error || 'Failed to submit Purchase Orders', 'error');
@@ -877,6 +882,7 @@ const PharmacyDashboard = () => {
 
   const handleSaveGRN = async (e, statusParam = 'Verified/Completed') => {
     if (e) e.preventDefault();
+    if (isSubmittingGRN) return;
     
     const today = new Date().toISOString().split('T')[0];
     
@@ -912,6 +918,7 @@ const PharmacyDashboard = () => {
       return;
     }
 
+    setIsSubmittingGRN(true);
     try {
       const grnId = editingGrn ? editingGrn.grnId : `GRN-2026-${Math.floor(100000 + Math.random() * 900000)}`;
       let vendorId = '';
@@ -985,11 +992,9 @@ const PharmacyDashboard = () => {
         await api.post('/goods-receipts', payload);
       }
 
-      await fetchProcurementData();
-      await fetchInventory();
-      await fetchSales();
-      await fetchOverviewSales();
+      // Close GRN dialog box immediately and reset form
       setShowGRNModal(false);
+      setEditingGrn(null);
       setGrnSelectedPOId('');
       setGrnDirectVendorId('');
       setGrnItems([]);
@@ -999,11 +1004,20 @@ const PharmacyDashboard = () => {
       setGrnInvoiceFileName('');
       setGrnInvoiceFile(null);
       setGrnNotes('');
-      setEditingGrn(null);
       showToast(statusParam === 'Draft' ? 'GRN saved as Draft successfully!' : 'GRN generated & stock updated successfully!');
+
+      // Asynchronously refresh backend data in background
+      Promise.allSettled([
+        fetchProcurementData(),
+        fetchInventory(),
+        fetchSales(),
+        fetchOverviewSales()
+      ]).catch(refreshErr => console.warn('Background sync error after GRN:', refreshErr));
     } catch (err) {
       console.error(err);
       showToast(err.response?.data?.error || 'Failed to save GRN', 'error');
+    } finally {
+      setIsSubmittingGRN(false);
     }
   };
 
@@ -1257,8 +1271,9 @@ const PharmacyDashboard = () => {
 
     let sellableStock;
     if (batchAgg && batchAgg.batchCount > 0) {
-      // Expiry/FEFO batch-tracked item: sellable stock is unexpired availableQuantity
-      sellableStock = batchAgg.validSellable;
+      // Expiry/FEFO batch-tracked item: sellable stock is unexpired availableQuantity + any unbatched stock
+      const unbatchedStock = Math.max(0, (Number(item.stock) || 0) - (batchAgg.totalAvailable + batchAgg.expiredQty));
+      sellableStock = batchAgg.validSellable + unbatchedStock;
     } else {
       // Legacy inventory without MedicineBatch records
       sellableStock = Number(item.stock) || 0;
@@ -8236,8 +8251,8 @@ const PharmacyDashboard = () => {
                                   ↳ Split of {po.parentPOId}
                                 </span>
                               ) : (
-                                <span style={{ background: '#F8FAFC', color: '#64748B', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600 }}>
-                                  Direct PO
+                                <span style={{ background: '#F0FDF4', color: '#166534', border: '1px solid #BBF7D0', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+                                  Purchase Order
                                 </span>
                               )}
                             </td>
@@ -11607,7 +11622,9 @@ const PharmacyDashboard = () => {
                 {/* RIGHT COLUMN: REAL-TIME SPLIT BREAKDOWN & CONFIRMATION */}
                 <div style={{ borderLeft: '1px solid #E2E8F0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <div>
-                    <h4 style={{ margin: '0 0 12px', fontSize: '13px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Consolidated Order Summary</h4>
+                    <h4 style={{ margin: '0 0 12px', fontSize: '13px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                      {liveSplits.length > 1 ? 'Consolidated Order Summary' : 'Purchase Order Summary'}
+                    </h4>
                     
                     <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
@@ -11632,7 +11649,9 @@ const PharmacyDashboard = () => {
                       </div>
                     </div>
 
-                    <h4 style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Vendor Split Orders</h4>
+                    <h4 style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                      {liveSplits.length > 1 ? 'Vendor Split Orders' : 'Assigned Vendor Order'}
+                    </h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '28vh', overflowY: 'auto', marginBottom: '16px' }}>
                       {liveSplits.map((split, index) => (
                         <div key={index} style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px', background: '#FFFFFF', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
@@ -11658,7 +11677,9 @@ const PharmacyDashboard = () => {
                       onClick={handleSendPurchaseOrders}
                       style={{ width: '100%', height: '44px', fontWeight: 800, borderRadius: '8px', background: validLinesCount > 0 ? '#10B981' : '#CBD5E1', color: 'white', border: 'none', cursor: validLinesCount > 0 ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '13.5px', boxShadow: validLinesCount > 0 ? '0 4px 6px -1px rgba(16, 185, 129, 0.2)' : 'none' }}
                     >
-                      <span>🚀 Submit Consolidated PO ({liveSplits.length} Orders)</span>
+                      <span>
+                        🚀 {liveSplits.length > 1 ? `Submit Master PO (${liveSplits.length} Orders)` : 'Submit Purchase Order'}
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -12353,18 +12374,18 @@ const PharmacyDashboard = () => {
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button 
                       type="button" 
-                      disabled={grnItems.length === 0}
-                      style={{ height: '40px', padding: '0 18px', borderRadius: '8px', border: '1px solid #2563EB', background: 'transparent', color: '#2563EB', fontWeight: 800, cursor: grnItems.length > 0 ? 'pointer' : 'not-allowed' }}
+                      disabled={grnItems.length === 0 || isSubmittingGRN}
+                      style={{ height: '40px', padding: '0 18px', borderRadius: '8px', border: '1px solid #2563EB', background: 'transparent', color: '#2563EB', fontWeight: 800, cursor: (grnItems.length > 0 && !isSubmittingGRN) ? 'pointer' : 'not-allowed' }}
                       onClick={(e) => handleSaveGRN(e, 'Draft')}
                     >
-                      Save as Draft
+                      {isSubmittingGRN ? 'Saving...' : 'Save as Draft'}
                     </button>
                     <button 
                       type="submit" 
-                      disabled={grnItems.length === 0 || (grnFlowType === 'direct' && !grnDirectVendorId)}
-                      style={{ height: '40px', padding: '0 22px', borderRadius: '8px', background: (grnItems.length > 0 && (grnFlowType === 'po' || grnDirectVendorId)) ? '#059669' : '#CBD5E1', color: 'white', border: 'none', fontWeight: 800, cursor: (grnItems.length > 0 && (grnFlowType === 'po' || grnDirectVendorId)) ? 'pointer' : 'not-allowed' }}
+                      disabled={grnItems.length === 0 || (grnFlowType === 'direct' && !grnDirectVendorId) || isSubmittingGRN}
+                      style={{ height: '40px', padding: '0 22px', borderRadius: '8px', background: (grnItems.length > 0 && (grnFlowType === 'po' || grnDirectVendorId) && !isSubmittingGRN) ? '#059669' : '#CBD5E1', color: 'white', border: 'none', fontWeight: 800, cursor: (grnItems.length > 0 && (grnFlowType === 'po' || grnDirectVendorId) && !isSubmittingGRN) ? 'pointer' : 'not-allowed' }}
                     >
-                      Generate GRN &amp; Update Inventory
+                      {isSubmittingGRN ? 'Generating GRN...' : 'Generate GRN & Update Inventory'}
                     </button>
                   </div>
                 </div>

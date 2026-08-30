@@ -251,10 +251,27 @@ router.post('/', async (req, res) => {
         const acceptedQuantity = Number(item.qtyReceived) || 0;
         if (acceptedQuantity <= 0) continue;
 
-        let medicine = await Medicine.findOne({ sku: item.sku, tenantId: req.tenantId });
+        const cleanSku = String(item.sku || '').trim().toUpperCase();
+        let medicine = await Medicine.findOne({
+          tenantId: req.tenantId,
+          $or: [
+            { sku: item.sku },
+            { sku: cleanSku },
+            { sku: String(item.sku || '').trim().toLowerCase() }
+          ]
+        });
+
+        if (!medicine && item.name) {
+          medicine = await Medicine.findOne({
+            tenantId: req.tenantId,
+            name: new RegExp(`^${item.name.trim()}$`, 'i')
+          });
+        }
         
+        let priorStock = 0;
         if (medicine) {
-          const newStock = medicine.stock + acceptedQuantity;
+          priorStock = Number(medicine.stock) || 0;
+          const newStock = priorStock + acceptedQuantity;
           medicine.stock = newStock;
           if (item.expiryDate) {
             medicine.expiry = new Date(item.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' });
@@ -289,9 +306,48 @@ router.post('/', async (req, res) => {
           });
         }
 
-        // Phase 1 MedicineBatch integration
+        // Check if there was existing unbatched legacy stock for this medicine
+        const existingBatchesForMed = await MedicineBatch.find({
+          tenantId: req.tenantId,
+          $or: [
+            { medicineId: medicine._id },
+            { sku: cleanSku }
+          ]
+        });
+        const totalBatchedPrior = existingBatchesForMed.reduce((sum, b) => sum + (Number(b.availableQuantity) || 0), 0);
+        const unbatchedLegacyQty = priorStock - totalBatchedPrior;
+        if (unbatchedLegacyQty > 0) {
+          let legacyExp = null;
+          if (medicine.expiry && medicine.expiry !== '--') {
+            const parts = medicine.expiry.split('/');
+            if (parts.length === 2) {
+              legacyExp = new Date(parseInt(parts[1], 10), parseInt(parts[0], 10) - 1, 28);
+            }
+          }
+          if (!legacyExp || isNaN(legacyExp.getTime())) {
+            legacyExp = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+          }
+
+          await MedicineBatch.create({
+            tenantId: req.tenantId,
+            medicineId: medicine._id,
+            sku: cleanSku,
+            name: medicine.name,
+            batchNumber: 'INITIAL-STOCK',
+            mfgDate: null,
+            expiryDate: legacyExp,
+            receivedQuantity: unbatchedLegacyQty,
+            availableQuantity: unbatchedLegacyQty,
+            purchaseRate: Number(medicine.mrp ? medicine.mrp * 0.7 : 0),
+            mrp: Number(medicine.mrp || 0),
+            grnId: 'LEGACY-STOCK',
+            vendorName: 'Existing Inventory',
+            status: 'Active'
+          });
+        }
+
+        // Phase 1 MedicineBatch integration for received item
         const cleanBatchNumber = String(item.batchNumber || '').trim().toUpperCase() || 'DEFAULT';
-        const cleanSku = String(item.sku).trim().toUpperCase();
 
         let batchDoc = await MedicineBatch.findOne({
           tenantId: req.tenantId,
@@ -321,8 +377,8 @@ router.post('/', async (req, res) => {
             availableQuantity: acceptedQuantity,
             purchaseRate: Number(item.purchaseRate || item.price || 0),
             mrp: Number(item.mrp || (Number(item.purchaseRate || item.price || 0) * 1.25)),
-            grnId: savedGrn.grnId,
-            vendorName: savedGrn.vendorName,
+            grnId: grn.grnId,
+            vendorName: grn.vendorName,
             status: 'Active'
           });
         }

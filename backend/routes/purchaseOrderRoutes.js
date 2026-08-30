@@ -213,13 +213,81 @@ router.post('/', async (req, res) => {
       vendorGroups[vId].totalAmount += lineTotal;
     }
 
-    // 2. Generate Base Master PO Number
-    const parentPoId = await getNextPoId(req.tenantId);
+    // 2. Determine distinct vendors involved in the procurement request
     const vendorKeys = Object.keys(vendorGroups);
+    const distinctVendorCount = vendorKeys.length;
     const Approval = require('../models/Approval');
-    const childOrders = [];
+    const generatedPoId = await getNextPoId(req.tenantId);
 
-    // 3. Create Vendor-Specific Child POs
+    // SCENARIO A — SINGLE VENDOR: Create a direct, normal Purchase Order (no Master PO, no sub-PO, no suffix)
+    if (distinctVendorCount === 1) {
+      const singleVendorKey = vendorKeys[0];
+      const grp = vendorGroups[singleVendorKey];
+      const poTotal = Math.round(grp.totalAmount * 100) / 100;
+      const poSubtotal = Math.round(grp.subtotal * 100) / 100;
+      const poTax = Math.round(grp.taxAmount * 100) / 100;
+
+      const singlePO = await PurchaseOrder.create({
+        tenantId: req.tenantId,
+        poId: generatedPoId,
+        parentPOId: null,
+        isParent: false,
+        vendorId: grp.vendor._id,
+        vendorName: grp.vendor.name,
+        items: grp.items,
+        subtotal: poSubtotal,
+        taxAmount: poTax,
+        totalAmount: poTotal,
+        totalItems: grp.items.length,
+        totalVendors: 1,
+        vendorOrders: [],
+        requestedBy: requestedBy || req.user.name || 'Pharmacist',
+        status: 'Pending Approval',
+        expectedDelivery: expectedDelivery ? new Date(expectedDelivery) : null,
+        notes: notes || ''
+      });
+
+      // Create Admin Approval document directly for this normal single-vendor PO
+      await Approval.create({
+        tenantId: req.tenantId,
+        type: 'purchase_order_approval',
+        staffId: req.user.staff_id || req.user.id || 'system',
+        requesterName: requestedBy || req.user.name || 'Pharmacist',
+        requesterRole: req.user.role || 'pharmacist',
+        details: {
+          poId: singlePO._id,
+          poNumber: singlePO.poId,
+          parentPOId: null,
+          parentPONumber: null,
+          vendorId: grp.vendor._id,
+          vendorName: grp.vendor.name,
+          items: singlePO.items,
+          subtotal: poSubtotal,
+          taxAmount: poTax,
+          totalAmount: poTotal
+        },
+        comment: `Purchase Order approval request for ${singlePO.poId} (${grp.vendor.name})`
+      });
+
+      // Emit targeted Socket.IO notifications
+      const io = req.app.get("io");
+      if (io && req.tenantId) {
+        io.to(req.tenantId).emit("data_changed", { type: "purchase_orders" });
+        io.to(req.tenantId).emit("data_changed", { type: "approvals" });
+      }
+
+      return res.status(201).json({
+        message: 'Purchase order created successfully',
+        parentPO: singlePO,
+        purchaseOrder: singlePO,
+        childPOsCount: 0,
+        isParent: false
+      });
+    }
+
+    // SCENARIO B — MULTIPLE VENDORS (distinctVendorCount > 1): Create Master PO + vendor-specific Sub-POs
+    const parentPoId = generatedPoId;
+    const childOrders = [];
     const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     for (let i = 0; i < vendorKeys.length; i++) {
       const vKey = vendorKeys[i];
@@ -280,7 +348,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 4. Create Master Parent Consolidated PO
+    // Create Master Parent Consolidated PO
     const parentPO = await PurchaseOrder.create({
       tenantId: req.tenantId,
       poId: parentPoId,
@@ -301,7 +369,7 @@ router.post('/', async (req, res) => {
       notes: notes || ''
     });
 
-    // 5. Emit targeted Socket.IO notifications
+    // Emit targeted Socket.IO notifications
     const io = req.app.get("io");
     if (io && req.tenantId) {
       io.to(req.tenantId).emit("data_changed", { type: "purchase_orders" });
