@@ -1237,6 +1237,7 @@ const PharmacyDashboard = () => {
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState('All');
   const [showInventoryExportModal, setShowInventoryExportModal] = useState(false);
   const [skuBatchRiskMap, setSkuBatchRiskMap] = useState({});
+  const [skuBatchAggMap, setSkuBatchAggMap] = useState({});
 
   const uniqueInventoryCategories = useMemo(() => {
     const cats = new Set();
@@ -1245,6 +1246,33 @@ const PharmacyDashboard = () => {
     });
     return Array.from(cats).sort();
   }, [inventory]);
+
+  // Authoritative FEFO/Batch-aware inventory semantics helper
+  const getMedicineSellableInfo = useCallback((item) => {
+    if (!item) return { sellableStock: 0, status: 'Out of Stock' };
+    const cleanSku = String(item.sku || '').trim().toUpperCase();
+    const batchAgg = skuBatchAggMap[cleanSku];
+
+    let sellableStock;
+    if (batchAgg && batchAgg.batchCount > 0) {
+      // Expiry/FEFO batch-tracked item: sellable stock is unexpired availableQuantity
+      sellableStock = batchAgg.validSellable;
+    } else {
+      // Legacy inventory without MedicineBatch records
+      sellableStock = Number(item.stock) || 0;
+    }
+
+    let status = item.status;
+    if (sellableStock <= 0) {
+      status = 'Out of Stock';
+    } else if (sellableStock <= 20 || status === 'Low Stock') {
+      status = 'Low Stock';
+    } else {
+      status = 'In Stock';
+    }
+
+    return { sellableStock, status };
+  }, [skuBatchAggMap]);
 
   const filteredInventory = useMemo(() => {
     return inventory.filter(item => {
@@ -1256,16 +1284,12 @@ const PharmacyDashboard = () => {
 
       const matchesCategory = inventoryCategoryFilter === 'All' || item.category === inventoryCategoryFilter;
 
-      let itemStatus = item.status;
-      if (!itemStatus) {
-        const stockNum = Number(item.stock) || 0;
-        itemStatus = stockNum > 20 ? 'In Stock' : stockNum > 0 ? 'Low Stock' : 'Out of Stock';
-      }
-      const matchesStatus = inventoryStatusFilter === 'All' || itemStatus === inventoryStatusFilter;
+      const { status } = getMedicineSellableInfo(item);
+      const matchesStatus = inventoryStatusFilter === 'All' || status === inventoryStatusFilter;
 
       return matchesSearch && matchesCategory && matchesStatus;
     });
-  }, [inventory, inventorySearch, inventoryCategoryFilter, inventoryStatusFilter]);
+  }, [inventory, inventorySearch, inventoryCategoryFilter, inventoryStatusFilter, getMedicineSellableInfo]);
 
   const [indents, setIndents] = useState([]);
   const [selectedIndent, setSelectedIndent] = useState(null);
@@ -1683,19 +1707,35 @@ const PharmacyDashboard = () => {
       const res = await api.get('/medicines');
       setInventory(res.data);
       try {
-        const expiryRes = await api.get('/inventory-expiry?risk=ALL_RISKS&limit=300');
+        const expiryRes = await api.get('/inventory-expiry?risk=ALL&limit=1000');
         const batches = expiryRes.data?.batches || [];
-        const map = {};
+        const riskMap = {};
+        const batchAggMap = {};
+        const now = new Date();
         batches.forEach(b => {
           const key = String(b.sku || '').toUpperCase();
-          if (!map[key]) {
-            map[key] = { expiredCount: 0, criticalCount: 0, warningCount: 0 };
+          if (!riskMap[key]) {
+            riskMap[key] = { expiredCount: 0, criticalCount: 0, warningCount: 0 };
           }
-          if (b.risk === 'EXPIRED') map[key].expiredCount++;
-          else if (b.risk === 'CRITICAL') map[key].criticalCount++;
-          else if (b.risk === 'WARNING') map[key].warningCount++;
+          if (b.risk === 'EXPIRED') riskMap[key].expiredCount++;
+          else if (b.risk === 'CRITICAL') riskMap[key].criticalCount++;
+          else if (b.risk === 'WARNING') riskMap[key].warningCount++;
+
+          if (!batchAggMap[key]) {
+            batchAggMap[key] = { totalAvailable: 0, validSellable: 0, expiredQty: 0, batchCount: 0 };
+          }
+          batchAggMap[key].batchCount++;
+          const avail = Number(b.availableQuantity) || 0;
+          batchAggMap[key].totalAvailable += avail;
+          const isExp = b.isExpired || b.risk === 'EXPIRED' || (b.expiryDate && new Date(b.expiryDate) <= now);
+          if (isExp) {
+            batchAggMap[key].expiredQty += avail;
+          } else {
+            batchAggMap[key].validSellable += avail;
+          }
         });
-        setSkuBatchRiskMap(map);
+        setSkuBatchRiskMap(riskMap);
+        setSkuBatchAggMap(batchAggMap);
       } catch (e) {
         // Expiry route silent fallback
       }
@@ -2284,18 +2324,22 @@ const PharmacyDashboard = () => {
     }
   };
 
-  // Compute stock alerts dynamically from real inventory
+  // Compute stock alerts dynamically from real authoritative inventory
   const alerts = inventory
-    .filter(item => item.status === 'Low Stock' || item.status === 'Out of Stock')
-    .map((item, idx) => ({
-      _id: item._id,
-      id: `ALT-${idx + 1}`,
-      item: item.name,
-      type: item.status,
-      severity: item.status === 'Out of Stock' ? 'High' : 'Medium',
-      date: 'Today',
-      rawItem: item
-    }));
+    .map((item, idx) => {
+      const { sellableStock, status } = getMedicineSellableInfo(item);
+      return {
+        _id: item._id,
+        id: `ALT-${idx + 1}`,
+        item: item.name,
+        type: status,
+        severity: status === 'Out of Stock' ? 'High' : 'Medium',
+        date: 'Today',
+        rawItem: item,
+        sellableStock
+      };
+    })
+    .filter(a => a.type === 'Low Stock' || a.type === 'Out of Stock');
 
   useEffect(() => {
     if (window.lucide) {
@@ -2872,13 +2916,13 @@ const PharmacyDashboard = () => {
     return todayOverviewSales.reduce((acc, s) => acc + (Number(s.grandTotal) || 0), 0);
   }, [todayOverviewSales]);
 
-  // Top KPI Card 5: Low Stock Items
+  // Top KPI Card 5: Low Stock Items (authoritative FEFO/batch & catalog unified)
   const lowStockTotalCount = useMemo(() => {
     return inventory.filter(item => {
-      const stock = Number(item.stock) || 0;
-      return item.status === 'Low Stock' || item.status === 'Out of Stock' || stock <= 20;
+      const { sellableStock, status } = getMedicineSellableInfo(item);
+      return status === 'Low Stock' || status === 'Out of Stock' || sellableStock <= 20;
     }).length;
-  }, [inventory]);
+  }, [inventory, getMedicineSellableInfo]);
 
   // Today's Overview Calendar Card Stats
   const calendarDayPrescriptions = useMemo(() => {
@@ -2894,7 +2938,7 @@ const PharmacyDashboard = () => {
     return { total, dispensed, pending, cancelled };
   }, [calendarDayPrescriptions]);
 
-  // Bottom Card 1: Inventory Snapshot Stats
+  // Bottom Card 1: Inventory Snapshot Stats (authoritative FEFO/batch & catalog unified)
   const inventorySnapshotStats = useMemo(() => {
     const total = inventory.length;
     let inStock = 0;
@@ -2902,10 +2946,10 @@ const PharmacyDashboard = () => {
     let outOfStock = 0;
 
     inventory.forEach(item => {
-      const stock = Number(item.stock) || 0;
-      if (item.status === 'Out of Stock' || stock <= 0) {
+      const { sellableStock, status } = getMedicineSellableInfo(item);
+      if (status === 'Out of Stock' || sellableStock <= 0) {
         outOfStock++;
-      } else if (item.status === 'Low Stock' || stock <= 20) {
+      } else if (status === 'Low Stock' || sellableStock <= 20) {
         lowStock++;
       } else {
         inStock++;
@@ -2917,7 +2961,7 @@ const PharmacyDashboard = () => {
     const outOfStockPct = total > 0 ? Math.max(0, 100 - inStockPct - lowStockPct) : 0;
 
     return { total, inStock, lowStock, outOfStock, inStockPct, lowStockPct, outOfStockPct };
-  }, [inventory]);
+  }, [inventory, getMedicineSellableInfo]);
 
   // Bottom Card 2: Sales Split Stats (reconciled with actual PharmacySale records)
   const salesSplitStats = useMemo(() => {
@@ -2963,21 +3007,22 @@ const PharmacyDashboard = () => {
     };
   }, [allSalesList]);
 
-  // Bottom Card 3: Actual Low Stock Alerts from inventory
+  // Bottom Card 3: Actual Low Stock Alerts from inventory (authoritative FEFO/batch & catalog unified)
   const actualLowStockAlerts = useMemo(() => {
     return inventory
-      .filter(item => {
-        const stock = Number(item.stock) || 0;
-        return item.status === 'Low Stock' || item.status === 'Out of Stock' || stock <= 20;
+      .map(item => {
+        const { sellableStock, status } = getMedicineSellableInfo(item);
+        return {
+          name: item.name,
+          stock: sellableStock,
+          status,
+          severity: sellableStock <= 0 ? 'red' : 'orange'
+        };
       })
-      .sort((a, b) => (Number(a.stock) || 0) - (Number(b.stock) || 0))
-      .slice(0, 4)
-      .map(item => ({
-        name: item.name,
-        stock: Number(item.stock) || 0,
-        severity: (Number(item.stock) || 0) <= 0 ? 'red' : 'orange'
-      }));
-  }, [inventory]);
+      .filter(item => item.status === 'Low Stock' || item.status === 'Out of Stock' || item.stock <= 20)
+      .sort((a, b) => a.stock - b.stock)
+      .slice(0, 4);
+  }, [inventory, getMedicineSellableInfo]);
 
   // Bottom Card 4: Payment Summary (Today's collected vs pending from actual sales)
   const paymentSummaryToday = useMemo(() => {

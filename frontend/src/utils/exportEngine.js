@@ -1,7 +1,8 @@
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
+import * as jsPDFModule from 'jspdf';
+const jsPDF = jsPDFModule.jsPDF || jsPDFModule.default || jsPDFModule;
 import autoTable from 'jspdf-autotable';
-import api from './api';
+import api from './api.js';
 
 /**
  * Resolves a date range into start and end Date objects.
