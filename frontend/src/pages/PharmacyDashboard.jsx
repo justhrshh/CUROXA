@@ -1233,6 +1233,8 @@ const PharmacyDashboard = () => {
 
   const [inventory, setInventory] = useState([]);
   const [inventorySearch, setInventorySearch] = useState('');
+  const [inventoryCurrentPage, setInventoryCurrentPage] = useState(1);
+  const inventoryPageSize = 10;
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('All');
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState('All');
   const [showInventoryExportModal, setShowInventoryExportModal] = useState(false);
@@ -5963,14 +5965,27 @@ const PharmacyDashboard = () => {
         )}
 
         {/* TAB 3: INVENTORY MANAGEMENT */}
-        {activeTab === 'inventory' && (
+        {activeTab === 'inventory' && (() => {
+          // Calculate stock health totals
+          let inStockCount = 0;
+          let lowStockCount = 0;
+          let outOfStockCount = 0;
+          (inventory || []).forEach(item => {
+            const { status } = getMedicineSellableInfo(item);
+            if (status === 'Out of Stock') outOfStockCount++;
+            else if (status === 'Low Stock') lowStockCount++;
+            else inStockCount++;
+          });
+          const totalMedCount = (inventory || []).length;
+
+          return (
           <div style={{ animation: 'slideUp 0.3s ease-out' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
               <div>
                 <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: 0 }}>Pharmacy Catalog</h2>
-                <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
-                  Showing {filteredInventory.length} of {inventory.length} medications
-                </span>
+                <p style={{ color: '#64748B', fontSize: '13px', margin: '4px 0 0', fontWeight: 500 }}>
+                  Real-time stock monitoring, FEFO batch levels, and reorder alerts.
+                </p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <button
@@ -6003,7 +6018,7 @@ const PharmacyDashboard = () => {
                 </button>
                 <button 
                   className="btn btn-primary" 
-                  style={{ padding: '10px 20px', fontSize: '13px', borderRadius: '10px', background: '#2563EB', border: 'none', color: 'white', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                  style={{ padding: '10px 20px', fontSize: '13px', borderRadius: '10px', background: '#2563EB', border: 'none', color: 'white', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)' }}
                   onClick={handleOpenAdd}
                 >
                   <i data-lucide="plus" style={{ width: '16px' }}></i> Add Medication
@@ -6011,167 +6026,770 @@ const PharmacyDashboard = () => {
               </div>
             </div>
 
-            {/* Filter toolbar */}
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-              <div style={{ flex: '1 1 240px', minWidth: '200px' }}>
-                <input
-                  type="text"
-                  placeholder="Search by name, SKU, or category..."
-                  value={inventorySearch}
-                  onChange={(e) => setInventorySearch(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 14px',
-                    fontSize: '12.5px',
+            {/* Top Stock Health KPI Summary Cards (Interactive Filters) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '16px', marginBottom: '22px' }}>
+              
+              {/* Card 1: All Items (Electric Blue Theme) */}
+              <div 
+                onClick={() => { setInventoryStatusFilter('All'); setInventoryCurrentPage(1); }}
+                style={{ 
+                  padding: '18px 20px', 
+                  borderRadius: '16px', 
+                  border: inventoryStatusFilter === 'All' ? '2px solid #2563EB' : '1px solid rgba(191, 219, 254, 0.9)', 
+                  boxShadow: inventoryStatusFilter === 'All' ? '0 16px 36px rgba(37, 99, 235, 0.18)' : '0 12px 28px rgba(37, 99, 235, 0.08)',
+                  background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 16px 36px rgba(37, 99, 235, 0.18)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = inventoryStatusFilter === 'All' ? '0 16px 36px rgba(37, 99, 235, 0.18)' : '0 12px 28px rgba(37, 99, 235, 0.08)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
                     borderRadius: '10px',
-                    border: '1px solid #E2E8F0',
-                    background: '#FFFFFF',
-                    color: '#0F172A',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
+                    background: 'linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%)',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 10px rgba(37, 99, 235, 0.25)'
+                  }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    ALL MEDICATIONS
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                      {totalMedCount}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#2563EB', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }}></span> Full catalog registered
+                    </div>
+                  </div>
+
+                  {/* Blue Mini Sparkline */}
+                  <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                    <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="invKpiBlue" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#invKpiBlue)" />
+                      <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                </div>
+
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  height: '4px',
+                  width: '60%',
+                  borderBottomRightRadius: '16px',
+                  background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)',
+                  pointerEvents: 'none'
+                }} />
               </div>
-              <div style={{ width: '170px' }}>
+
+              {/* Card 2: In Stock (Emerald Green Theme) */}
+              <div 
+                onClick={() => { setInventoryStatusFilter('In Stock'); setInventoryCurrentPage(1); }}
+                style={{ 
+                  padding: '18px 20px', 
+                  borderRadius: '16px', 
+                  border: inventoryStatusFilter === 'In Stock' ? '2px solid #10B981' : '1px solid rgba(167, 243, 208, 0.9)', 
+                  boxShadow: inventoryStatusFilter === 'In Stock' ? '0 16px 36px rgba(16, 185, 129, 0.18)' : '0 12px 28px rgba(16, 185, 129, 0.08)',
+                  background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 16px 36px rgba(16, 185, 129, 0.18)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = inventoryStatusFilter === 'In Stock' ? '0 16px 36px rgba(16, 185, 129, 0.18)' : '0 12px 28px rgba(16, 185, 129, 0.08)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #047857 0%, #10B981 100%)',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 10px rgba(16, 185, 129, 0.25)'
+                  }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    IN STOCK (HEALTHY)
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '30px', fontWeight: 900, color: '#059669', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                      {inStockCount}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#059669', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981', display: 'inline-block' }}></span> Optimal stock (&gt;20 units)
+                    </div>
+                  </div>
+
+                  {/* Emerald Mini Sparkline */}
+                  <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                    <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="invKpiEmerald" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10B981" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#10B981" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 28 Q 12 28, 22 20 T 36 22 T 50 10 T 64 16 L 64 32 L 0 32 Z" fill="url(#invKpiEmerald)" />
+                      <path d="M 0 28 Q 12 28, 22 20 T 36 22 T 50 10 T 64 16" fill="none" stroke="#10B981" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                </div>
+
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  height: '4px',
+                  width: '60%',
+                  borderBottomRightRadius: '16px',
+                  background: 'linear-gradient(90deg, transparent 0%, #10B981 100%)',
+                  pointerEvents: 'none'
+                }} />
+              </div>
+
+              {/* Card 3: Low Stock Alert (Warm Amber / Gold Theme) */}
+              <div 
+                onClick={() => { setInventoryStatusFilter('Low Stock'); setInventoryCurrentPage(1); }}
+                style={{ 
+                  padding: '18px 20px', 
+                  borderRadius: '16px', 
+                  border: inventoryStatusFilter === 'Low Stock' ? '2px solid #F59E0B' : '1px solid rgba(254, 215, 170, 0.9)', 
+                  boxShadow: inventoryStatusFilter === 'Low Stock' ? '0 16px 36px rgba(245, 158, 11, 0.18)' : '0 12px 28px rgba(245, 158, 11, 0.08)',
+                  background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 16px 36px rgba(245, 158, 11, 0.18)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = inventoryStatusFilter === 'Low Stock' ? '0 16px 36px rgba(245, 158, 11, 0.18)' : '0 12px 28px rgba(245, 158, 11, 0.08)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 10px rgba(245, 158, 11, 0.25)'
+                  }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    LOW STOCK ALERTS
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '30px', fontWeight: 900, color: '#D97706', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                      {lowStockCount}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#D97706', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#F59E0B', display: 'inline-block' }}></span> {lowStockCount > 0 ? 'At or below 20 units' : 'All stock optimal'}
+                    </div>
+                  </div>
+
+                  {/* Amber Mini Sparkline */}
+                  <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                    <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="invKpiAmber" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22 L 64 32 L 0 32 Z" fill="url(#invKpiAmber)" />
+                      <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22" fill="none" stroke="#F59E0B" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                </div>
+
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  height: '4px',
+                  width: '60%',
+                  borderBottomRightRadius: '16px',
+                  background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)',
+                  pointerEvents: 'none'
+                }} />
+              </div>
+
+              {/* Card 4: Out of Stock Alert (Rose / Red Theme) */}
+              <div 
+                onClick={() => { setInventoryStatusFilter('Out of Stock'); setInventoryCurrentPage(1); }}
+                style={{ 
+                  padding: '18px 20px', 
+                  borderRadius: '16px', 
+                  border: inventoryStatusFilter === 'Out of Stock' ? '2px solid #EF4444' : '1px solid rgba(254, 205, 211, 0.9)', 
+                  boxShadow: inventoryStatusFilter === 'Out of Stock' ? '0 16px 36px rgba(244, 63, 94, 0.18)' : '0 12px 28px rgba(244, 63, 94, 0.08)',
+                  background: 'radial-gradient(circle at 100% 100%, rgba(244, 63, 94, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFF1F2 50%, #FFE4E6 100%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 16px 36px rgba(244, 63, 94, 0.18)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = inventoryStatusFilter === 'Out of Stock' ? '0 16px 36px rgba(244, 63, 94, 0.18)' : '0 12px 28px rgba(244, 63, 94, 0.08)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #E11D48 0%, #F43F5E 100%)',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 10px rgba(244, 63, 94, 0.25)'
+                  }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#9F1239', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    OUT OF STOCK
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '30px', fontWeight: 900, color: '#DC2626', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                      {outOfStockCount}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#DC2626', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#EF4444', display: 'inline-block' }}></span> {outOfStockCount > 0 ? 'Depleted / unavailable stock' : 'Zero items depleted'}
+                    </div>
+                  </div>
+
+                  {/* Rose Mini Sparkline */}
+                  <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                    <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="invKpiRose" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#F43F5E" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#F43F5E" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 28 Q 16 28, 26 22 T 42 24 T 54 12 T 64 18 L 64 32 L 0 32 Z" fill="url(#invKpiRose)" />
+                      <path d="M 0 28 Q 16 28, 26 22 T 42 24 T 54 12 T 64 18" fill="none" stroke="#F43F5E" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                </div>
+
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  height: '4px',
+                  width: '60%',
+                  borderBottomRightRadius: '16px',
+                  background: 'linear-gradient(90deg, transparent 0%, #F43F5E 100%)',
+                  pointerEvents: 'none'
+                }} />
+              </div>
+
+            </div>
+
+            {/* Filter Toolbar Matching Sales Panel */}
+            <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '16px', marginBottom: '20px', border: '1px solid #E2E8F0', background: 'white' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                
+                {/* Search Input with Magnifier */}
+                <div style={{ position: 'relative', flex: '1 1 260px', minWidth: '220px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  <input
+                    type="text"
+                    placeholder="Search by medicine name, SKU, or category..."
+                    value={inventorySearch}
+                    onChange={(e) => { setInventorySearch(e.target.value); setInventoryCurrentPage(1); }}
+                    style={{ width: '100%', padding: '8px 14px 8px 36px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '13px', fontWeight: 600, color: '#1E293B', outline: 'none' }}
+                  />
+                  {inventorySearch && (
+                    <button onClick={() => { setInventorySearch(''); setInventoryCurrentPage(1); }} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '13px', fontWeight: 'bold' }}>✕</button>
+                  )}
+                </div>
+
+                {/* Category Dropdown */}
                 <select
                   value={inventoryCategoryFilter}
-                  onChange={(e) => setInventoryCategoryFilter(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    fontSize: '12.5px',
-                    borderRadius: '10px',
-                    border: '1px solid #E2E8F0',
-                    background: '#FFFFFF',
-                    color: '#0F172A',
-                    fontWeight: 600,
-                    outline: 'none'
-                  }}
+                  onChange={(e) => { setInventoryCategoryFilter(e.target.value); setInventoryCurrentPage(1); }}
+                  style={{ padding: '8px 14px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '13px', fontWeight: 600, color: '#334155', background: 'white', outline: 'none', cursor: 'pointer' }}
                 >
                   <option value="All">All Categories</option>
                   {uniqueInventoryCategories.map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
-              </div>
-              <div style={{ width: '160px' }}>
-                <select
-                  value={inventoryStatusFilter}
-                  onChange={(e) => setInventoryStatusFilter(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    fontSize: '12.5px',
-                    borderRadius: '10px',
-                    border: '1px solid #E2E8F0',
-                    background: '#FFFFFF',
-                    color: '#0F172A',
-                    fontWeight: 600,
-                    outline: 'none'
-                  }}
-                >
-                  <option value="All">All Statuses</option>
-                  <option value="In Stock">In Stock</option>
-                  <option value="Low Stock">Low Stock</option>
-                  <option value="Out of Stock">Out of Stock</option>
-                </select>
+
+                {/* Status Segmented Filter Pills */}
+                <div style={{ display: 'flex', gap: '6px', background: '#F8FAFC', padding: '4px', borderRadius: '10px', border: '1px solid #E2E8F0', marginLeft: 'auto', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setInventoryStatusFilter('All'); setInventoryCurrentPage(1); }}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: 750,
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: inventoryStatusFilter === 'All' ? '#FFFFFF' : 'transparent',
+                      color: inventoryStatusFilter === 'All' ? '#0F172A' : '#64748B',
+                      boxShadow: inventoryStatusFilter === 'All' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    All ({totalMedCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setInventoryStatusFilter('In Stock'); setInventoryCurrentPage(1); }}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: 750,
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: inventoryStatusFilter === 'In Stock' ? '#ECFDF5' : 'transparent',
+                      color: inventoryStatusFilter === 'In Stock' ? '#059669' : '#64748B',
+                      boxShadow: inventoryStatusFilter === 'In Stock' ? '0 1px 4px rgba(16,185,129,0.12)' : 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }}></span>
+                    In Stock ({inStockCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setInventoryStatusFilter('Low Stock'); setInventoryCurrentPage(1); }}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: 750,
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: inventoryStatusFilter === 'Low Stock' ? '#FFFBEB' : 'transparent',
+                      color: inventoryStatusFilter === 'Low Stock' ? '#D97706' : '#64748B',
+                      boxShadow: inventoryStatusFilter === 'Low Stock' ? '0 1px 4px rgba(245,158,11,0.12)' : 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#F59E0B' }}></span>
+                    Low Stock ({lowStockCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setInventoryStatusFilter('Out of Stock'); setInventoryCurrentPage(1); }}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: 750,
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: inventoryStatusFilter === 'Out of Stock' ? '#FEF2F2' : 'transparent',
+                      color: inventoryStatusFilter === 'Out of Stock' ? '#DC2626' : (outOfStockCount > 0 ? '#DC2626' : '#64748B'),
+                      boxShadow: inventoryStatusFilter === 'Out of Stock' ? '0 1px 4px rgba(239,68,68,0.12)' : 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#EF4444' }}></span>
+                    Out of Stock ({outOfStockCount})
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="glass-card">
-              <div style={{ overflowX: 'auto' }}>
-                <table className="premium-table">
-                  <thead>
-                    <tr>
-                      <th>Medicine Name</th>
-                      <th>Category</th>
-                      <th>SKU Code</th>
-                      <th>Stock Quantity</th>
-                      <th>Unit</th>
-                      <th>MRP (₹)</th>
-                      <th>Expiry</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredInventory.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: '#64748B', fontWeight: 600 }}>
-                          No medications match the active search and filter criteria.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredInventory.map(inv => {
-                        const risk = skuBatchRiskMap[String(inv.sku || '').toUpperCase()];
-                        const hasExpired = risk && risk.expiredCount > 0;
-                        const hasCritical = risk && risk.criticalCount > 0;
-                        const hasWarning = risk && risk.warningCount > 0;
+            {/* Inventory Table Container */}
+            {(() => {
+              const totalInventoryPages = Math.ceil(filteredInventory.length / inventoryPageSize) || 1;
+              const paginatedInventory = filteredInventory.slice((inventoryCurrentPage - 1) * inventoryPageSize, inventoryCurrentPage * inventoryPageSize);
 
-                        let rowBg = 'transparent';
-                        if (hasExpired) rowBg = 'linear-gradient(90deg, rgba(254, 242, 242, 0.45) 0%, rgba(255, 255, 255, 0.95) 100%)';
-                        else if (hasCritical) rowBg = 'linear-gradient(90deg, rgba(255, 247, 237, 0.45) 0%, rgba(255, 255, 255, 0.95) 100%)';
-                        else if (hasWarning) rowBg = 'linear-gradient(90deg, rgba(254, 252, 232, 0.45) 0%, rgba(255, 255, 255, 0.95) 100%)';
-
-                        return (
-                          <tr key={inv._id} style={{ background: rowBg }}>
-                            <td>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <div style={{ fontWeight: 800, color: '#0F172A' }}>{inv.name}</div>
-                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                  {hasExpired && (
-                                    <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '5px', background: '#FEE2E2', color: '#DC2626', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                      🔴 {risk.expiredCount} expired batch{risk.expiredCount > 1 ? 'es' : ''}
-                                    </span>
-                                  )}
-                                  {hasCritical && (
-                                    <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '5px', background: '#FFEDD5', color: '#C2410C', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                      🟠 {risk.criticalCount} batch{risk.criticalCount > 1 ? 'es' : ''} expiring ≤30d
-                                    </span>
-                                  )}
-                                  {hasWarning && (
-                                    <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '5px', background: '#FEF9C3', color: '#854D0E', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                      🟡 {risk.warningCount} batch{risk.warningCount > 1 ? 'es' : ''} expiring ≤90d
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-                            <td style={{ fontWeight: 600, color: '#64748B' }}>{inv.category}</td>
-                            <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#475569' }}>{inv.sku}</td>
-                            <td>
-                              <b style={{ color: inv.stock > 20 ? '#10B981' : '#EF4444', fontWeight: 800 }}>
-                                {inv.stock}
-                              </b>
-                            </td>
-                            <td style={{ fontWeight: 600, color: '#64748B' }}>{inv.unit}</td>
-                            <td style={{ fontWeight: 800, color: '#0F172A' }}>₹{inv.mrp ? Number(inv.mrp).toFixed(2) : '0.00'}</td>
-                            <td style={{ fontWeight: 600, color: '#475569' }}>{inv.expiry}</td>
-                            <td>
-                              <div style={{ display: 'flex', gap: '8px' }}>
-                                <button 
-                                  className="btn btn-secondary" 
-                                  style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid #E2E8F0', background: 'transparent', color: '#475569', fontWeight: 700, cursor: 'pointer' }} 
-                                  onClick={() => handleOpenEdit(inv)}
-                                >
-                                  Edit
-                                </button>
-                                <button 
-                                  className="btn btn-secondary" 
-                                  style={{ padding: '6px 12px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid #FEE2E2', background: 'transparent', color: '#EF4444', fontWeight: 700, cursor: 'pointer' }} 
-                                  onClick={() => handleDeleteMedicine(inv._id)}
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </td>
+              return (
+                <>
+                  <div className="glass-card" style={{ borderRadius: '16px', overflow: 'hidden', border: '1px solid #E2E8F0', background: 'white' }}>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                            <th style={{ padding: '14px 18px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', minWidth: '180px' }}>MEDICINE NAME</th>
+                            <th style={{ padding: '14px 18px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>CATEGORY</th>
+                            <th style={{ padding: '14px 18px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>SKU CODE</th>
+                            <th style={{ padding: '14px 18px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>STOCK QUANTITY</th>
+                            <th style={{ padding: '14px 18px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>STATUS</th>
+                            <th style={{ padding: '14px 18px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>UNIT</th>
+                            <th style={{ padding: '14px 18px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>MRP (₹)</th>
+                            <th style={{ padding: '14px 18px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>EXPIRY</th>
+                            <th style={{ padding: '14px 18px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>ACTION</th>
                           </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                        </thead>
+                        <tbody>
+                          {filteredInventory.length === 0 ? (
+                            <tr>
+                              <td colSpan={9} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                                <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '32px' }}>
+                                    {inventoryStatusFilter === 'Low Stock' ? '🎉' : inventoryStatusFilter === 'Out of Stock' ? '✅' : '🔍'}
+                                  </span>
+                                  <span style={{ fontWeight: 800, fontSize: '15px', color: '#0F172A' }}>
+                                    {inventoryStatusFilter === 'Low Stock' 
+                                      ? 'No Low Stock Medications!' 
+                                      : inventoryStatusFilter === 'Out of Stock' 
+                                        ? 'No Out of Stock Medications!' 
+                                        : 'No medications match the active criteria.'}
+                                  </span>
+                                  <span style={{ fontSize: '12.5px', color: '#64748B' }}>
+                                    {inventoryStatusFilter !== 'All' ? 'All catalog stock in this category is at optimal levels.' : 'Try adjusting your search query or filters.'}
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            paginatedInventory.map(inv => {
+                              const risk = skuBatchRiskMap[String(inv.sku || '').toUpperCase()];
+                              const hasExpired = risk && risk.expiredCount > 0;
+                              const hasCritical = risk && risk.criticalCount > 0;
+                              const hasWarning = risk && risk.warningCount > 0;
+
+                              const { sellableStock, status } = getMedicineSellableInfo(inv);
+                              const isOutOfStock = status === 'Out of Stock';
+                              const isLowStock = status === 'Low Stock';
+
+                              const defaultBg = isOutOfStock
+                                ? 'linear-gradient(90deg, rgba(254, 226, 226, 0.48) 0%, rgba(255, 241, 242, 0.3) 55%, rgba(255, 255, 255, 0) 100%)'
+                                : isLowStock
+                                  ? 'linear-gradient(90deg, rgba(254, 243, 199, 0.48) 0%, rgba(255, 251, 235, 0.3) 55%, rgba(255, 255, 255, 0) 100%)'
+                                  : 'transparent';
+
+                              const hoverBg = isOutOfStock
+                                ? 'linear-gradient(90deg, rgba(254, 226, 226, 0.65) 0%, rgba(255, 241, 242, 0.5) 55%, rgba(255, 255, 255, 0.3) 100%)'
+                                : isLowStock
+                                  ? 'linear-gradient(90deg, rgba(254, 243, 199, 0.65) 0%, rgba(255, 251, 235, 0.5) 55%, rgba(255, 255, 255, 0.3) 100%)'
+                                  : '#F8FAFC';
+
+                              const borderLeftAccent = isOutOfStock
+                                ? '4px solid #EF4444'
+                                : isLowStock
+                                  ? '4px solid #F59E0B'
+                                  : '4px solid transparent';
+
+                              return (
+                                <tr 
+                                  key={inv._id}
+                                  style={{ 
+                                    background: defaultBg,
+                                    borderLeft: borderLeftAccent,
+                                    borderBottom: '1px solid #F1F5F9', 
+                                    transition: 'background 0.15s ease' 
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.background = hoverBg}
+                                  onMouseLeave={e => e.currentTarget.style.background = defaultBg}
+                                >
+                                  {/* Medicine Name */}
+                                  <td style={{ padding: '14px 18px' }}>
+                                    <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>{inv.name}</div>
+                                    {(hasExpired || hasCritical || hasWarning) && (
+                                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                        {hasExpired && (
+                                          <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '5px', background: '#FEE2E2', color: '#DC2626', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                            🔴 {risk.expiredCount} expired batch{risk.expiredCount > 1 ? 'es' : ''}
+                                          </span>
+                                        )}
+                                        {hasCritical && (
+                                          <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '5px', background: '#FFEDD5', color: '#C2410C', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                            🟠 {risk.criticalCount} batch{risk.criticalCount > 1 ? 'es' : ''} expiring ≤30d
+                                          </span>
+                                        )}
+                                        {hasWarning && (
+                                          <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '5px', background: '#FEF9C3', color: '#854D0E', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                            🟡 {risk.warningCount} batch{risk.warningCount > 1 ? 'es' : ''} expiring ≤90d
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Category */}
+                                  <td style={{ padding: '14px 18px', fontWeight: 600, color: '#64748B', fontSize: '13px' }}>
+                                    {inv.category}
+                                  </td>
+
+                                  {/* SKU Code */}
+                                  <td style={{ padding: '14px 18px' }}>
+                                    <span style={{
+                                      display: 'inline-block',
+                                      padding: '3px 8px',
+                                      borderRadius: '6px',
+                                      fontSize: '12px',
+                                      fontWeight: 700,
+                                      fontFamily: 'monospace',
+                                      background: '#EFF6FF',
+                                      color: '#2563EB',
+                                      border: '1px solid #DBEAFE'
+                                    }}>
+                                      {inv.sku}
+                                    </span>
+                                  </td>
+
+                                  {/* Stock Quantity */}
+                                  <td style={{ padding: '14px 18px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span style={{ 
+                                        fontSize: '15px', 
+                                        fontWeight: 900, 
+                                        fontFamily: "'Outfit', sans-serif",
+                                        color: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#059669' 
+                                      }}>
+                                        {sellableStock}
+                                      </span>
+                                      {isLowStock && (
+                                        <span style={{ 
+                                          fontSize: '10px', 
+                                          fontWeight: 800, 
+                                          padding: '2px 6px', 
+                                          borderRadius: '5px', 
+                                          background: '#FEF3C7', 
+                                          color: '#B45309',
+                                          border: '1px solid #FDE68A'
+                                        }}>
+                                          REORDER
+                                        </span>
+                                      )}
+                                      {isOutOfStock && (
+                                        <span style={{ 
+                                          fontSize: '10px', 
+                                          fontWeight: 800, 
+                                          padding: '2px 6px', 
+                                          borderRadius: '5px', 
+                                          background: '#FEE2E2', 
+                                          color: '#DC2626',
+                                          border: '1px solid #FCA5A5'
+                                        }}>
+                                          DEPLETED
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  {/* Status */}
+                                  <td style={{ padding: '14px 18px' }}>
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px',
+                                      padding: '4px 10px',
+                                      borderRadius: '6px',
+                                      fontSize: '11px',
+                                      fontWeight: 800,
+                                      textTransform: 'uppercase',
+                                      letterSpacing: '0.4px',
+                                      background: isOutOfStock ? '#FEF2F2' : isLowStock ? '#FFFBEB' : '#ECFDF5',
+                                      color: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#047857',
+                                      border: isOutOfStock ? '1px solid #FECACA' : isLowStock ? '1px solid #FDE68A' : '1px solid #A7F3D0'
+                                    }}>
+                                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor' }} />
+                                      {status}
+                                    </span>
+                                  </td>
+
+                                  {/* Unit */}
+                                  <td style={{ padding: '14px 18px', fontWeight: 600, color: '#64748B', fontSize: '13px' }}>
+                                    {inv.unit}
+                                  </td>
+
+                                  {/* MRP */}
+                                  <td style={{ padding: '14px 18px', fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>
+                                    ₹{inv.mrp ? Number(inv.mrp).toFixed(2) : '0.00'}
+                                  </td>
+
+                                  {/* Expiry */}
+                                  <td style={{ padding: '14px 18px', fontWeight: 600, color: '#475569', fontSize: '13px' }}>
+                                    {inv.expiry || '--'}
+                                  </td>
+
+                                  {/* Action */}
+                                  <td style={{ padding: '14px 18px', textAlign: 'center' }}>
+                                    <div style={{ display: 'inline-flex', gap: '8px', justifyContent: 'center' }}>
+                                      <button 
+                                        style={{
+                                          padding: '5px 12px',
+                                          borderRadius: '6px',
+                                          background: '#EFF6FF',
+                                          color: '#2563EB',
+                                          border: '1px solid #DBEAFE',
+                                          fontSize: '12px',
+                                          fontWeight: 700,
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s'
+                                        }} 
+                                        onClick={() => handleOpenEdit(inv)}
+                                        onMouseEnter={e => { e.currentTarget.style.background = '#2563EB'; e.currentTarget.style.color = '#FFFFFF'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.color = '#2563EB'; }}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button 
+                                        style={{
+                                          padding: '5px 12px',
+                                          borderRadius: '6px',
+                                          background: '#FEF2F2',
+                                          color: '#EF4444',
+                                          border: '1px solid #FEE2E2',
+                                          fontSize: '12px',
+                                          fontWeight: 700,
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s'
+                                        }} 
+                                        onClick={() => handleDeleteMedicine(inv._id)}
+                                        onMouseEnter={e => { e.currentTarget.style.background = '#EF4444'; e.currentTarget.style.color = '#FFFFFF'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.color = '#EF4444'; }}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Inventory Pagination Footer */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '0 4px', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
+                      Showing <span style={{ color: '#0F172A', fontWeight: 800 }}>{filteredInventory.length === 0 ? 0 : (inventoryCurrentPage - 1) * inventoryPageSize + 1}</span> to <span style={{ color: '#0F172A', fontWeight: 800 }}>{Math.min(inventoryCurrentPage * inventoryPageSize, filteredInventory.length)}</span> of <span style={{ color: '#0F172A', fontWeight: 800 }}>{filteredInventory.length}</span> medications
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        disabled={inventoryCurrentPage <= 1}
+                        onClick={() => setInventoryCurrentPage(prev => Math.max(prev - 1, 1))}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '8px',
+                          border: '1px solid #E2E8F0',
+                          background: inventoryCurrentPage <= 1 ? '#F8FAFC' : 'white',
+                          color: inventoryCurrentPage <= 1 ? '#94A3B8' : '#334155',
+                          fontSize: '12.5px',
+                          fontWeight: 700,
+                          cursor: inventoryCurrentPage <= 1 ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        Previous
+                      </button>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#334155', padding: '6px 12px', background: 'white', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                        Page {inventoryCurrentPage} of {totalInventoryPages}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={inventoryCurrentPage >= totalInventoryPages}
+                        onClick={() => setInventoryCurrentPage(prev => Math.min(prev + 1, totalInventoryPages))}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '8px',
+                          border: '1px solid #E2E8F0',
+                          background: inventoryCurrentPage >= totalInventoryPages ? '#F8FAFC' : 'white',
+                          color: inventoryCurrentPage >= totalInventoryPages ? '#94A3B8' : '#334155',
+                          fontSize: '12.5px',
+                          fontWeight: 700,
+                          cursor: inventoryCurrentPage >= totalInventoryPages ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Inventory Export Modal */}
             {showInventoryExportModal && (
@@ -6193,7 +6811,8 @@ const PharmacyDashboard = () => {
               />
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* TAB: EXPIRY MANAGEMENT */}
         {activeTab === 'expiry' && (
@@ -6454,30 +7073,336 @@ const PharmacyDashboard = () => {
               const totalLedgerRev = (pharmacySales || []).reduce((acc, s) => acc + (s.grandTotal || 0), 0);
 
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px', marginBottom: '20px' }}>
-                  <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Today's Sales</div>
-                    <div style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', marginTop: '6px' }}>₹{todayRev.toFixed(2)}</div>
-                    <div style={{ fontSize: '11.5px', color: '#10B981', fontWeight: 700, marginTop: '4px' }}>{todaySales.length} transactions today</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '16px', marginBottom: '22px' }}>
+                  
+                  {/* Card 1: Today's Sales (Purple / Violet Theme) */}
+                  <div 
+                    style={{
+                      padding: '18px 20px',
+                      borderRadius: '16px',
+                      border: '1px solid rgba(221, 214, 254, 0.9)',
+                      boxShadow: '0 12px 28px rgba(139, 92, 246, 0.08)',
+                      background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      transition: 'all 0.2s ease',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 16px 36px rgba(139, 92, 246, 0.16)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = 'none';
+                      e.currentTarget.style.boxShadow = '0 12px 28px rgba(139, 92, 246, 0.08)';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #6D28D9 0%, #8B5CF6 100%)',
+                        color: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        boxShadow: '0 4px 10px rgba(139, 92, 246, 0.25)'
+                      }}>
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#4C1D95', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        TODAY'S SALES
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                          ₹{todayRev.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#7C3AED', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#7C3AED', display: 'inline-block' }}></span> {todaySales.length} transaction{todaySales.length === 1 ? '' : 's'} today
+                        </div>
+                      </div>
+
+                      {/* Purple Mini Sparkline */}
+                      <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                        <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                          <defs>
+                            <linearGradient id="salesKpiPurple" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.45"/>
+                              <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.05"/>
+                            </linearGradient>
+                          </defs>
+                          <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#salesKpiPurple)" />
+                          <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#8B5CF6" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      right: 0,
+                      height: '4px',
+                      width: '60%',
+                      borderBottomRightRadius: '16px',
+                      background: 'linear-gradient(90deg, transparent 0%, #8B5CF6 100%)',
+                      pointerEvents: 'none'
+                    }} />
                   </div>
 
-                  <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Direct Sales</div>
-                    <div style={{ fontSize: '22px', fontWeight: 900, color: '#4F46E5', marginTop: '6px' }}>{directCount}</div>
-                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, marginTop: '4px' }}>OTC / Walk-in transactions</div>
+                  {/* Card 2: Direct Sales (Electric Blue Theme) */}
+                  <div 
+                    style={{
+                      padding: '18px 20px',
+                      borderRadius: '16px',
+                      border: '1px solid rgba(191, 219, 254, 0.9)',
+                      boxShadow: '0 12px 28px rgba(37, 99, 235, 0.08)',
+                      background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      transition: 'all 0.2s ease',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 16px 36px rgba(37, 99, 235, 0.16)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = 'none';
+                      e.currentTarget.style.boxShadow = '0 12px 28px rgba(37, 99, 235, 0.08)';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%)',
+                        color: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        boxShadow: '0 4px 10px rgba(37, 99, 235, 0.25)'
+                      }}>
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        DIRECT SALES
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                          {directCount}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#2563EB', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }}></span> OTC / Walk-in transactions
+                        </div>
+                      </div>
+
+                      {/* Blue Mini Sparkline */}
+                      <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                        <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                          <defs>
+                            <linearGradient id="salesKpiBlue" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
+                              <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
+                            </linearGradient>
+                          </defs>
+                          <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#salesKpiBlue)" />
+                          <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      right: 0,
+                      height: '4px',
+                      width: '60%',
+                      borderBottomRightRadius: '16px',
+                      background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)',
+                      pointerEvents: 'none'
+                    }} />
                   </div>
 
-                  <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Prescription Sales</div>
-                    <div style={{ fontSize: '22px', fontWeight: 900, color: '#059669', marginTop: '6px' }}>{rxCount}</div>
-                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, marginTop: '4px' }}>Dispensed via Doctor Rx</div>
+                  {/* Card 3: Prescription Sales (Emerald Green Theme) */}
+                  <div 
+                    style={{
+                      padding: '18px 20px',
+                      borderRadius: '16px',
+                      border: '1px solid rgba(167, 243, 208, 0.9)',
+                      boxShadow: '0 12px 28px rgba(16, 185, 129, 0.08)',
+                      background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      transition: 'all 0.2s ease',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 16px 36px rgba(16, 185, 129, 0.16)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = 'none';
+                      e.currentTarget.style.boxShadow = '0 12px 28px rgba(16, 185, 129, 0.08)';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #047857 0%, #10B981 100%)',
+                        color: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        boxShadow: '0 4px 10px rgba(16, 185, 129, 0.25)'
+                      }}>
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        PRESCRIPTION SALES
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                          {rxCount}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#059669', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981', display: 'inline-block' }}></span> Dispensed via Doctor Rx
+                        </div>
+                      </div>
+
+                      {/* Emerald Mini Sparkline */}
+                      <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                        <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                          <defs>
+                            <linearGradient id="salesKpiEmerald" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#10B981" stopOpacity="0.45"/>
+                              <stop offset="100%" stopColor="#10B981" stopOpacity="0.05"/>
+                            </linearGradient>
+                          </defs>
+                          <path d="M 0 28 Q 12 28, 22 20 T 36 22 T 50 10 T 64 16 L 64 32 L 0 32 Z" fill="url(#salesKpiEmerald)" />
+                          <path d="M 0 28 Q 12 28, 22 20 T 36 22 T 50 10 T 64 16" fill="none" stroke="#10B981" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      right: 0,
+                      height: '4px',
+                      width: '60%',
+                      borderBottomRightRadius: '16px',
+                      background: 'linear-gradient(90deg, transparent 0%, #10B981 100%)',
+                      pointerEvents: 'none'
+                    }} />
                   </div>
 
-                  <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Page Revenue</div>
-                    <div style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', marginTop: '6px' }}>₹{totalLedgerRev.toFixed(2)}</div>
-                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, marginTop: '4px' }}>Total on current view</div>
+                  {/* Card 4: Page Revenue (Warm Amber / Orange Theme) */}
+                  <div 
+                    style={{
+                      padding: '18px 20px',
+                      borderRadius: '16px',
+                      border: '1px solid rgba(254, 215, 170, 0.9)',
+                      boxShadow: '0 12px 28px rgba(245, 158, 11, 0.08)',
+                      background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      transition: 'all 0.2s ease',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 16px 36px rgba(245, 158, 11, 0.16)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = 'none';
+                      e.currentTarget.style.boxShadow = '0 12px 28px rgba(245, 158, 11, 0.08)';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
+                        color: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        boxShadow: '0 4px 10px rgba(245, 158, 11, 0.25)'
+                      }}>
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        PAGE REVENUE
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                          ₹{totalLedgerRev.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#D97706', fontWeight: 700, marginTop: '6px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#F59E0B', display: 'inline-block' }}></span> Total on current view
+                        </div>
+                      </div>
+
+                      {/* Amber Mini Sparkline */}
+                      <div style={{ width: '64px', height: '32px', position: 'relative', flexShrink: 0 }}>
+                        <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                          <defs>
+                            <linearGradient id="salesKpiAmber" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.45"/>
+                              <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.05"/>
+                            </linearGradient>
+                          </defs>
+                          <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22 L 64 32 L 0 32 Z" fill="url(#salesKpiAmber)" />
+                          <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22" fill="none" stroke="#F59E0B" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      right: 0,
+                      height: '4px',
+                      width: '60%',
+                      borderBottomRightRadius: '16px',
+                      background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)',
+                      pointerEvents: 'none'
+                    }} />
                   </div>
+
                 </div>
               );
             })()}
