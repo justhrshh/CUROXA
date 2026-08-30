@@ -1254,6 +1254,15 @@ const PharmacyDashboard = () => {
   const [showInventoryExportModal, setShowInventoryExportModal] = useState(false);
   const [skuBatchRiskMap, setSkuBatchRiskMap] = useState({});
   const [skuBatchAggMap, setSkuBatchAggMap] = useState({});
+  const [skuBatchesMap, setSkuBatchesMap] = useState({});
+  const [expandedSku, setExpandedSku] = useState(null);
+
+  const formatBatchDisplayDate = useCallback((dateVal) => {
+    if (!dateVal) return '--';
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }, []);
 
   const uniqueInventoryCategories = useMemo(() => {
     const cats = new Set();
@@ -1724,10 +1733,11 @@ const PharmacyDashboard = () => {
       const res = await api.get('/medicines');
       setInventory(res.data);
       try {
-        const expiryRes = await api.get('/inventory-expiry?risk=ALL&limit=1000');
+        const expiryRes = await api.get('/inventory-expiry?risk=ALL&limit=2000');
         const batches = expiryRes.data?.batches || [];
         const riskMap = {};
         const batchAggMap = {};
+        const batchesMap = {};
         const now = new Date();
         batches.forEach(b => {
           const key = String(b.sku || '').toUpperCase();
@@ -1750,9 +1760,23 @@ const PharmacyDashboard = () => {
           } else {
             batchAggMap[key].validSellable += avail;
           }
+
+          if (!batchesMap[key]) batchesMap[key] = [];
+          batchesMap[key].push(b);
         });
+
+        // Sort each medicine's batches by FEFO (earliest expiry first)
+        Object.values(batchesMap).forEach(list => {
+          list.sort((a, b) => {
+            if (!a.expiryDate) return 1;
+            if (!b.expiryDate) return -1;
+            return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+          });
+        });
+
         setSkuBatchRiskMap(riskMap);
         setSkuBatchAggMap(batchAggMap);
+        setSkuBatchesMap(batchesMap);
       } catch (e) {
         // Expiry route silent fallback
       }
@@ -6544,7 +6568,12 @@ const PharmacyDashboard = () => {
                             </tr>
                           ) : (
                             paginatedInventory.map(inv => {
-                              const risk = skuBatchRiskMap[String(inv.sku || '').toUpperCase()];
+                              const cleanSku = String(inv.sku || '').toUpperCase();
+                              const risk = skuBatchRiskMap[cleanSku];
+                              const batchesForMed = skuBatchesMap[cleanSku] || [];
+                              const isExpanded = expandedSku === inv.sku;
+                              const nearestBatch = batchesForMed.find(b => b.availableQuantity > 0 && b.risk !== 'EXPIRED') || batchesForMed[0];
+
                               const hasExpired = risk && risk.expiredCount > 0;
                               const hasCritical = risk && risk.criticalCount > 0;
                               const hasWarning = risk && risk.warningCount > 0;
@@ -6557,7 +6586,9 @@ const PharmacyDashboard = () => {
                                 ? 'linear-gradient(90deg, rgba(254, 226, 226, 0.48) 0%, rgba(255, 241, 242, 0.3) 55%, rgba(255, 255, 255, 0) 100%)'
                                 : isLowStock
                                   ? 'linear-gradient(90deg, rgba(254, 243, 199, 0.48) 0%, rgba(255, 251, 235, 0.3) 55%, rgba(255, 255, 255, 0) 100%)'
-                                  : 'transparent';
+                                  : isExpanded
+                                    ? '#F8FAFC'
+                                    : 'transparent';
 
                               const hoverBg = isOutOfStock
                                 ? 'linear-gradient(90deg, rgba(254, 226, 226, 0.65) 0%, rgba(255, 241, 242, 0.5) 55%, rgba(255, 255, 255, 0.3) 100%)'
@@ -6569,184 +6600,366 @@ const PharmacyDashboard = () => {
                                 ? '4px solid #EF4444'
                                 : isLowStock
                                   ? '4px solid #F59E0B'
-                                  : '4px solid transparent';
+                                  : hasExpired
+                                    ? '4px solid #DC2626'
+                                    : hasCritical
+                                      ? '4px solid #F97316'
+                                      : hasWarning
+                                        ? '4px solid #FBBF24'
+                                        : '4px solid transparent';
 
                               return (
-                                <tr 
-                                  key={inv._id}
-                                  style={{ 
-                                    background: defaultBg,
-                                    borderLeft: borderLeftAccent,
-                                    borderBottom: '1px solid #F1F5F9', 
-                                    transition: 'background 0.15s ease' 
-                                  }}
-                                  onMouseEnter={e => e.currentTarget.style.background = hoverBg}
-                                  onMouseLeave={e => e.currentTarget.style.background = defaultBg}
-                                >
-                                  {/* Medicine Name */}
-                                  <td style={{ padding: '14px 18px' }}>
-                                    <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>{inv.name}</div>
-                                    {(hasExpired || hasCritical || hasWarning) && (
-                                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                                        {hasExpired && (
-                                          <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '5px', background: '#FEE2E2', color: '#DC2626', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                            🔴 {risk.expiredCount} expired batch{risk.expiredCount > 1 ? 'es' : ''}
-                                          </span>
+                                <React.Fragment key={inv._id}>
+                                  <tr 
+                                    style={{ 
+                                      background: defaultBg,
+                                      borderLeft: borderLeftAccent,
+                                      borderBottom: isExpanded ? 'none' : '1px solid #F1F5F9', 
+                                      transition: 'background 0.15s ease',
+                                      cursor: batchesForMed.length > 0 ? 'pointer' : 'default'
+                                    }}
+                                    onClick={() => {
+                                      if (batchesForMed.length > 0) {
+                                        setExpandedSku(prev => prev === inv.sku ? null : inv.sku);
+                                      }
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = hoverBg}
+                                    onMouseLeave={e => e.currentTarget.style.background = defaultBg}
+                                  >
+                                    {/* Medicine Name with Expand Arrow & Nearest Expiry */}
+                                    <td style={{ padding: '14px 18px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        {batchesForMed.length > 0 ? (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setExpandedSku(prev => prev === inv.sku ? null : inv.sku);
+                                            }}
+                                            style={{
+                                              background: isExpanded ? '#EFF6FF' : '#F1F5F9',
+                                              border: isExpanded ? '1px solid #BFDBFE' : '1px solid #E2E8F0',
+                                              borderRadius: '6px',
+                                              cursor: 'pointer',
+                                              fontSize: '11px',
+                                              color: isExpanded ? '#2563EB' : '#64748B',
+                                              width: '22px',
+                                              height: '22px',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              fontWeight: 900,
+                                              transition: 'all 0.15s ease',
+                                              padding: 0
+                                            }}
+                                            title={isExpanded ? 'Collapse batches' : 'Expand batches'}
+                                          >
+                                            {isExpanded ? '▼' : '▸'}
+                                          </button>
+                                        ) : (
+                                          <span style={{ width: '22px', display: 'inline-block' }} />
                                         )}
-                                        {hasCritical && (
-                                          <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '5px', background: '#FFEDD5', color: '#C2410C', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                            🟠 {risk.criticalCount} batch{risk.criticalCount > 1 ? 'es' : ''} expiring ≤30d
-                                          </span>
-                                        )}
-                                        {hasWarning && (
-                                          <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '5px', background: '#FEF9C3', color: '#854D0E', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                            🟡 {risk.warningCount} batch{risk.warningCount > 1 ? 'es' : ''} expiring ≤90d
+                                        <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>{inv.name}</span>
+                                        {batchesForMed.length > 0 && (
+                                          <span style={{
+                                            fontSize: '11px',
+                                            fontWeight: 700,
+                                            color: '#475569',
+                                            background: '#F1F5F9',
+                                            border: '1px solid #E2E8F0',
+                                            padding: '1px 6px',
+                                            borderRadius: '5px'
+                                          }}>
+                                            {batchesForMed.length} batch{batchesForMed.length > 1 ? 'es' : ''}
                                           </span>
                                         )}
                                       </div>
-                                    )}
-                                  </td>
 
-                                  {/* Category */}
-                                  <td style={{ padding: '14px 18px', fontWeight: 600, color: '#64748B', fontSize: '13px' }}>
-                                    {inv.category}
-                                  </td>
+                                      {/* Nearest Expiry Sub-line */}
+                                      {nearestBatch && (
+                                        <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '5px', display: 'flex', alignItems: 'center', gap: '5px', paddingLeft: '30px', flexWrap: 'wrap' }}>
+                                          <span style={{ color: '#64748B', fontWeight: 600 }}>Nearest expiry:</span>
+                                          <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#0F172A', background: '#F1F5F9', padding: '1px 5px', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
+                                            {nearestBatch.batchNumber}
+                                          </span>
+                                          <span>•</span>
+                                          <span style={{ fontWeight: 600, color: '#334155' }}>{formatBatchDisplayDate(nearestBatch.expiryDate)}</span>
+                                          <span>•</span>
+                                          <span style={{
+                                            fontWeight: 800,
+                                            fontSize: '10.5px',
+                                            color: nearestBatch.risk === 'EXPIRED' ? '#DC2626' : nearestBatch.risk === 'CRITICAL' ? '#C2410C' : nearestBatch.risk === 'WARNING' ? '#B45309' : '#047857',
+                                            background: nearestBatch.risk === 'EXPIRED' ? '#FEE2E2' : nearestBatch.risk === 'CRITICAL' ? '#FFEDD5' : nearestBatch.risk === 'WARNING' ? '#FEF3C7' : '#ECFDF5',
+                                            border: nearestBatch.risk === 'EXPIRED' ? '1px solid #FECACA' : nearestBatch.risk === 'CRITICAL' ? '1px solid #FED7AA' : nearestBatch.risk === 'WARNING' ? '1px solid #FDE68A' : '1px solid #A7F3D0',
+                                            padding: '1px 6px',
+                                            borderRadius: '4px'
+                                          }}>
+                                            {nearestBatch.daysRemaining !== null ? (nearestBatch.daysRemaining < 0 ? `${Math.abs(nearestBatch.daysRemaining)}d expired` : `${nearestBatch.daysRemaining}d left (${nearestBatch.risk})`) : nearestBatch.risk}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </td>
 
-                                  {/* SKU Code */}
-                                  <td style={{ padding: '14px 18px' }}>
-                                    <span style={{
-                                      display: 'inline-block',
-                                      padding: '3px 8px',
-                                      borderRadius: '6px',
-                                      fontSize: '12px',
-                                      fontWeight: 700,
-                                      fontFamily: 'monospace',
-                                      background: '#EFF6FF',
-                                      color: '#2563EB',
-                                      border: '1px solid #DBEAFE'
-                                    }}>
-                                      {inv.sku}
-                                    </span>
-                                  </td>
+                                    {/* Category */}
+                                    <td style={{ padding: '14px 18px', fontWeight: 600, color: '#64748B', fontSize: '13px' }}>
+                                      {inv.category}
+                                    </td>
 
-                                  {/* Stock Quantity */}
-                                  <td style={{ padding: '14px 18px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                      <span style={{ 
-                                        fontSize: '15px', 
-                                        fontWeight: 900, 
-                                        fontFamily: "'Outfit', sans-serif",
-                                        color: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#059669' 
+                                    {/* SKU Code */}
+                                    <td style={{ padding: '14px 18px' }}>
+                                      <span style={{
+                                        display: 'inline-block',
+                                        padding: '3px 8px',
+                                        borderRadius: '6px',
+                                        fontSize: '12px',
+                                        fontWeight: 700,
+                                        fontFamily: 'monospace',
+                                        background: '#EFF6FF',
+                                        color: '#2563EB',
+                                        border: '1px solid #DBEAFE'
                                       }}>
-                                        {sellableStock}
+                                        {inv.sku}
                                       </span>
-                                      {isLowStock && (
+                                    </td>
+
+                                    {/* Stock Quantity */}
+                                    <td style={{ padding: '14px 18px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <span style={{ 
-                                          fontSize: '10px', 
-                                          fontWeight: 800, 
-                                          padding: '2px 6px', 
-                                          borderRadius: '5px', 
-                                          background: '#FEF3C7', 
-                                          color: '#B45309',
-                                          border: '1px solid #FDE68A'
+                                          fontSize: '15px', 
+                                          fontWeight: 900, 
+                                          fontFamily: "'Outfit', sans-serif",
+                                          color: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#059669' 
                                         }}>
-                                          REORDER
+                                          {sellableStock}
                                         </span>
-                                      )}
-                                      {isOutOfStock && (
-                                        <span style={{ 
-                                          fontSize: '10px', 
-                                          fontWeight: 800, 
-                                          padding: '2px 6px', 
-                                          borderRadius: '5px', 
-                                          background: '#FEE2E2', 
-                                          color: '#DC2626',
-                                          border: '1px solid #FCA5A5'
+                                        {isLowStock && (
+                                          <span style={{ 
+                                            fontSize: '10px', 
+                                            fontWeight: 800, 
+                                            padding: '2px 6px', 
+                                            borderRadius: '5px', 
+                                            background: '#FEF3C7', 
+                                            color: '#B45309',
+                                            border: '1px solid #FDE68A'
+                                          }}>
+                                            REORDER
+                                          </span>
+                                        )}
+                                        {isOutOfStock && (
+                                          <span style={{ 
+                                            fontSize: '10px', 
+                                            fontWeight: 800, 
+                                            padding: '2px 6px', 
+                                            borderRadius: '5px', 
+                                            background: '#FEE2E2', 
+                                            color: '#DC2626',
+                                            border: '1px solid #FCA5A5'
+                                          }}>
+                                            DEPLETED
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+
+                                    {/* Status */}
+                                    <td style={{ padding: '14px 18px' }}>
+                                      <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        padding: '4px 10px',
+                                        borderRadius: '6px',
+                                        fontSize: '11px',
+                                        fontWeight: 800,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.4px',
+                                        background: isOutOfStock ? '#FEF2F2' : isLowStock ? '#FFFBEB' : '#ECFDF5',
+                                        color: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#047857',
+                                        border: isOutOfStock ? '1px solid #FECACA' : isLowStock ? '1px solid #FDE68A' : '1px solid #A7F3D0'
+                                      }}>
+                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor' }} />
+                                        {status}
+                                      </span>
+                                    </td>
+
+                                    {/* Unit */}
+                                    <td style={{ padding: '14px 18px', fontWeight: 600, color: '#64748B', fontSize: '13px' }}>
+                                      {inv.unit}
+                                    </td>
+
+                                    {/* MRP */}
+                                    <td style={{ padding: '14px 18px', fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>
+                                      ₹{inv.mrp ? Number(inv.mrp).toFixed(2) : '0.00'}
+                                    </td>
+
+                                    {/* Expiry */}
+                                    <td style={{ padding: '14px 18px', fontWeight: 600, color: '#475569', fontSize: '13px' }}>
+                                      {inv.expiry || '--'}
+                                    </td>
+
+                                    {/* Action */}
+                                    <td style={{ padding: '14px 18px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                                      <div style={{ display: 'inline-flex', gap: '8px', justifyContent: 'center' }}>
+                                        <button 
+                                          style={{
+                                            padding: '5px 12px',
+                                            borderRadius: '6px',
+                                            background: '#EFF6FF',
+                                            color: '#2563EB',
+                                            border: '1px solid #DBEAFE',
+                                            fontSize: '12px',
+                                            fontWeight: 700,
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s'
+                                          }} 
+                                          onClick={() => handleOpenEdit(inv)}
+                                          onMouseEnter={e => { e.currentTarget.style.background = '#2563EB'; e.currentTarget.style.color = '#FFFFFF'; }}
+                                          onMouseLeave={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.color = '#2563EB'; }}
+                                        >
+                                          Edit
+                                        </button>
+                                        <button 
+                                          style={{
+                                            padding: '5px 12px',
+                                            borderRadius: '6px',
+                                            background: '#FEF2F2',
+                                            color: '#EF4444',
+                                            border: '1px solid #FEE2E2',
+                                            fontSize: '12px',
+                                            fontWeight: 700,
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s'
+                                          }} 
+                                          onClick={() => handleDeleteMedicine(inv._id)}
+                                          onMouseEnter={e => { e.currentTarget.style.background = '#EF4444'; e.currentTarget.style.color = '#FFFFFF'; }}
+                                          onMouseLeave={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.color = '#EF4444'; }}
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+
+                                  {/* Expandable Batch Detail Row */}
+                                  {isExpanded && (
+                                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                                      <td colSpan={9} style={{ padding: '10px 18px 16px 48px' }}>
+                                        <div style={{
+                                          background: '#FFFFFF',
+                                          borderRadius: '12px',
+                                          border: '1px solid #E2E8F0',
+                                          padding: '14px 18px',
+                                          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
                                         }}>
-                                          DEPLETED
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                              <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                ▼ BATCH DETAILS ({batchesForMed.length} BATCH{batchesForMed.length > 1 ? 'ES' : ''})
+                                              </span>
+                                              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, background: '#F1F5F9', padding: '2px 8px', borderRadius: '5px' }}>
+                                                FEFO Order (Earliest Expiry First)
+                                              </span>
+                                            </div>
+                                            <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#0F172A' }}>
+                                              Total Sellable Stock: <strong style={{ color: '#2563EB', fontWeight: 900 }}>{sellableStock} units</strong>
+                                            </div>
+                                          </div>
 
-                                  {/* Status */}
-                                  <td style={{ padding: '14px 18px' }}>
-                                    <span style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '5px',
-                                      padding: '4px 10px',
-                                      borderRadius: '6px',
-                                      fontSize: '11px',
-                                      fontWeight: 800,
-                                      textTransform: 'uppercase',
-                                      letterSpacing: '0.4px',
-                                      background: isOutOfStock ? '#FEF2F2' : isLowStock ? '#FFFBEB' : '#ECFDF5',
-                                      color: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#047857',
-                                      border: isOutOfStock ? '1px solid #FECACA' : isLowStock ? '1px solid #FDE68A' : '1px solid #A7F3D0'
-                                    }}>
-                                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor' }} />
-                                      {status}
-                                    </span>
-                                  </td>
-
-                                  {/* Unit */}
-                                  <td style={{ padding: '14px 18px', fontWeight: 600, color: '#64748B', fontSize: '13px' }}>
-                                    {inv.unit}
-                                  </td>
-
-                                  {/* MRP */}
-                                  <td style={{ padding: '14px 18px', fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>
-                                    ₹{inv.mrp ? Number(inv.mrp).toFixed(2) : '0.00'}
-                                  </td>
-
-                                  {/* Expiry */}
-                                  <td style={{ padding: '14px 18px', fontWeight: 600, color: '#475569', fontSize: '13px' }}>
-                                    {inv.expiry || '--'}
-                                  </td>
-
-                                  {/* Action */}
-                                  <td style={{ padding: '14px 18px', textAlign: 'center' }}>
-                                    <div style={{ display: 'inline-flex', gap: '8px', justifyContent: 'center' }}>
-                                      <button 
-                                        style={{
-                                          padding: '5px 12px',
-                                          borderRadius: '6px',
-                                          background: '#EFF6FF',
-                                          color: '#2563EB',
-                                          border: '1px solid #DBEAFE',
-                                          fontSize: '12px',
-                                          fontWeight: 700,
-                                          cursor: 'pointer',
-                                          transition: 'all 0.15s'
-                                        }} 
-                                        onClick={() => handleOpenEdit(inv)}
-                                        onMouseEnter={e => { e.currentTarget.style.background = '#2563EB'; e.currentTarget.style.color = '#FFFFFF'; }}
-                                        onMouseLeave={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.color = '#2563EB'; }}
-                                      >
-                                        Edit
-                                      </button>
-                                      <button 
-                                        style={{
-                                          padding: '5px 12px',
-                                          borderRadius: '6px',
-                                          background: '#FEF2F2',
-                                          color: '#EF4444',
-                                          border: '1px solid #FEE2E2',
-                                          fontSize: '12px',
-                                          fontWeight: 700,
-                                          cursor: 'pointer',
-                                          transition: 'all 0.15s'
-                                        }} 
-                                        onClick={() => handleDeleteMedicine(inv._id)}
-                                        onMouseEnter={e => { e.currentTarget.style.background = '#EF4444'; e.currentTarget.style.color = '#FFFFFF'; }}
-                                        onMouseLeave={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.color = '#EF4444'; }}
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
+                                          {batchesForMed.length === 0 ? (
+                                            <div style={{ fontSize: '12px', color: '#94A3B8', fontStyle: 'italic', padding: '8px 0' }}>
+                                              No batch records found. Standard inventory stock: {inv.stock} units.
+                                            </div>
+                                          ) : (
+                                            <div style={{ overflowX: 'auto' }}>
+                                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                                                <thead>
+                                                  <tr style={{ borderBottom: '1px solid #E2E8F0', color: '#64748B', background: '#F8FAFC' }}>
+                                                    <th style={{ padding: '8px 10px', fontWeight: 800, fontSize: '10.5px', textTransform: 'uppercase' }}>BATCH</th>
+                                                    <th style={{ padding: '8px 10px', fontWeight: 800, fontSize: '10.5px', textTransform: 'uppercase' }}>AVAILABLE</th>
+                                                    <th style={{ padding: '8px 10px', fontWeight: 800, fontSize: '10.5px', textTransform: 'uppercase' }}>EXPIRY</th>
+                                                    <th style={{ padding: '8px 10px', fontWeight: 800, fontSize: '10.5px', textTransform: 'uppercase' }}>DAYS REMAINING</th>
+                                                    <th style={{ padding: '8px 10px', fontWeight: 800, fontSize: '10.5px', textTransform: 'uppercase' }}>PURCHASE RATE</th>
+                                                    <th style={{ padding: '8px 10px', fontWeight: 800, fontSize: '10.5px', textTransform: 'uppercase' }}>BATCH STOCK VALUE</th>
+                                                    <th style={{ padding: '8px 10px', fontWeight: 800, fontSize: '10.5px', textTransform: 'uppercase' }}>STATUS</th>
+                                                    <th style={{ padding: '8px 10px', fontWeight: 800, fontSize: '10.5px', textTransform: 'uppercase' }}>SOURCE / GRN</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {batchesForMed.map((b, bIdx) => {
+                                                    const isFefoNext = bIdx === 0 && b.risk !== 'EXPIRED' && b.availableQuantity > 0;
+                                                    return (
+                                                      <tr 
+                                                        key={b._id || bIdx}
+                                                        style={{
+                                                          borderBottom: bIdx < batchesForMed.length - 1 ? '1px solid #F1F5F9' : 'none',
+                                                          background: isFefoNext ? 'rgba(239, 246, 255, 0.45)' : 'transparent'
+                                                        }}
+                                                      >
+                                                        <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontWeight: 800, color: '#0F172A' }}>
+                                                          {b.batchNumber}
+                                                          {isFefoNext && (
+                                                            <span style={{ marginLeft: '6px', fontSize: '9.5px', fontWeight: 800, background: '#DBEAFE', color: '#1D4ED8', padding: '1px 5px', borderRadius: '4px' }}>
+                                                              FEFO NEXT
+                                                            </span>
+                                                          )}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontWeight: 800, color: b.availableQuantity > 0 ? '#0F172A' : '#94A3B8' }}>
+                                                          {b.availableQuantity} units
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontWeight: 600, color: '#334155' }}>
+                                                          {formatBatchDisplayDate(b.expiryDate)}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontWeight: 700 }}>
+                                                          {b.daysRemaining !== null ? (
+                                                            b.daysRemaining < 0 ? (
+                                                              <span style={{ color: '#DC2626' }}>{Math.abs(b.daysRemaining)}d ago</span>
+                                                            ) : (
+                                                              <span style={{ color: b.daysRemaining <= 30 ? '#C2410C' : b.daysRemaining <= 90 ? '#B45309' : '#059669' }}>
+                                                                {b.daysRemaining} days
+                                                              </span>
+                                                            )
+                                                          ) : '--'}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontWeight: 600, color: '#475569' }}>
+                                                          ₹{b.purchaseRate ? Number(b.purchaseRate).toFixed(2) : '0.00'}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontWeight: 800, color: '#0F172A' }}>
+                                                          ₹{b.stockValue ? Number(b.stockValue).toFixed(2) : (Number(b.availableQuantity || 0) * Number(b.purchaseRate || 0)).toFixed(2)}
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px' }}>
+                                                          <span style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            padding: '2px 8px',
+                                                            borderRadius: '5px',
+                                                            fontSize: '10.5px',
+                                                            fontWeight: 800,
+                                                            textTransform: 'uppercase',
+                                                            background: b.risk === 'EXPIRED' ? '#FEE2E2' : b.risk === 'CRITICAL' ? '#FFEDD5' : b.risk === 'WARNING' ? '#FEF3C7' : '#ECFDF5',
+                                                            color: b.risk === 'EXPIRED' ? '#DC2626' : b.risk === 'CRITICAL' ? '#C2410C' : b.risk === 'WARNING' ? '#B45309' : '#047857',
+                                                            border: b.risk === 'EXPIRED' ? '1px solid #FECACA' : b.risk === 'CRITICAL' ? '1px solid #FED7AA' : b.risk === 'WARNING' ? '1px solid #FDE68A' : '1px solid #A7F3D0'
+                                                          }}>
+                                                            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor' }} />
+                                                            {b.risk}
+                                                          </span>
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', fontSize: '11px', color: '#64748B' }}>
+                                                          {b.grnId || 'Direct / Initial'}
+                                                        </td>
+                                                      </tr>
+                                                    );
+                                                  })}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
                               );
                             })
                           )}

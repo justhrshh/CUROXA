@@ -29,7 +29,7 @@ function ExpiryManagementPanel({ showToast, onStockUpdated }) {
     try {
       const [summaryRes, listRes] = await Promise.all([
         api.get('/inventory-expiry/summary'),
-        api.get('/inventory-expiry?risk=ALL&limit=200')
+        api.get('/inventory-expiry?risk=ALL&limit=1000')
       ]);
       setSummary(summaryRes.data || { expiredUnits: 0, criticalUnits: 0, warningUnits: 0, atRiskValue: 0, affectedBatchesCount: 0 });
       setBatches(listRes.data.batches || []);
