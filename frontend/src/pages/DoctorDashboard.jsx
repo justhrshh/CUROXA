@@ -467,7 +467,7 @@ const DoctorDashboard = () => {
     }
   })();
 
-  const [activeTab, setActiveTab] = useState('consultations'); // Default to Consultations page on login
+  const [activeTab, setActiveTab] = useState('dash'); // Default to Overview (Daily Command Center) page on login
   const [showHomeCalendar, setShowHomeCalendar] = useState(false);
   const [emrSearchQuery, setEmrSearchQuery] = useState('');
   const [emrFilterType, setEmrFilterType] = useState('all');
@@ -703,10 +703,53 @@ const DoctorDashboard = () => {
   const [coveragePharmacyInventory, setCoveragePharmacyInventory] = useState([]);
   const [coverageDoctors, setCoverageDoctors] = useState([]);
 
+  // Real-time Interactive Calendar date state
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
+  const getLocalDateString = (d) => {
+    const dateObj = d ? new Date(d) : new Date();
+    if (isNaN(dateObj.getTime())) return '';
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Phase 3 Live Doctor Token Queue State
+  const [doctorQueue, setDoctorQueue] = useState({
+    currentToken: null,
+    currentAppointmentId: null,
+    currentPatient: null,
+    nextToken: null,
+    waitingCount: 0,
+    lastIssuedToken: 0
+  });
+
+  const fetchDoctorQueue = useCallback(async () => {
+    const docId = user?.id || user?._id;
+    if (!docId) return;
+    try {
+      const targetDate = getLocalDateString(selectedDate || new Date());
+      const res = await api.get(`/appointments/doctor-queue/${docId}?date=${targetDate}`);
+      if (res.data) {
+        setDoctorQueue({
+          currentToken: res.data.currentToken ?? null,
+          currentAppointmentId: res.data.currentAppointmentId ?? null,
+          currentPatient: res.data.currentPatient ?? null,
+          nextToken: res.data.nextToken ?? null,
+          waitingCount: res.data.waitingCount ?? 0,
+          lastIssuedToken: res.data.lastIssuedToken ?? 0
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to fetch live doctor queue state:", err);
+    }
+  }, [user, selectedDate]);
 
 
   const parseResults = (resultsStr) => {
     if (!resultsStr) return { parameters: {}, remarks: '', isDraft: false };
+
     try {
       return JSON.parse(resultsStr);
     } catch (e) {
@@ -977,9 +1020,9 @@ const DoctorDashboard = () => {
   const [selectedOverviewApp, setSelectedOverviewApp] = useState(null);
   
   // Real-time Interactive Calendar & Dynamic Data Flow states
-  const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [allPrescriptions, setAllPrescriptions] = useState([]);
+
 
   // Doctor Panel Export Modals state
   const [showAppointmentExportModal, setShowAppointmentExportModal] = useState(false);
@@ -2547,13 +2590,15 @@ const DoctorDashboard = () => {
   // Fetch initial system appointments and patients
   useEffect(() => {
     fetchData(true);
-    // Poll data and coverage data every 5 seconds for real-time updates
+    fetchDoctorQueue();
+    // Poll data, coverage data, and doctor live queue every 5 seconds for real-time updates
     const pollInterval = setInterval(() => {
       fetchData();
       fetchCoverageData();
+      fetchDoctorQueue();
     }, 5000);
     return () => clearInterval(pollInterval);
-  }, [fetchCoverageData]);
+  }, [fetchCoverageData, fetchDoctorQueue]);
 
   useEffect(() => {
     const handleSync = (e) => {
@@ -2561,15 +2606,20 @@ const DoctorDashboard = () => {
       console.log('[SOCKET] DoctorDashboard received sync event for:', type);
       fetchData();
       fetchCoverageData();
+      fetchDoctorQueue();
     };
     window.addEventListener('curoxa_sync', handleSync);
     return () => window.removeEventListener('curoxa_sync', handleSync);
-  }, [fetchCoverageData]);
+  }, [fetchCoverageData, fetchDoctorQueue]);
 
   const fetchData = async (forceInitial = false) => {
     const isInitial = forceInitial || !hasFetchedInitial;
+    fetchDoctorQueue();
+
     try {
-      const apps = await api.get((user.id && user.role === 'doctor') ? `/appointments?doctorId=${user.id}` : '/appointments');
+      const docId = user?.id || user?._id;
+      const apps = await api.get((docId && user.role === 'doctor') ? `/appointments?doctorId=${docId}` : '/appointments');
+
       const sortedApps = (apps.data || []).sort((a, b) => {
         const aCompleted = a.status === 'Completed' || a.status === 'Cancelled' || a.status === 'Checked Out';
         const bCompleted = b.status === 'Completed' || b.status === 'Cancelled' || b.status === 'Checked Out';
@@ -2858,15 +2908,20 @@ const DoctorDashboard = () => {
         patientIdStr: `#${formattedId}`,
         patientName: pObj?.name || 'Anonymous Patient',
         timeRange: app.time ? (app.time.includes('-') ? app.time : `${app.time} to ${calculateEndTime(app.time)}`) : '10:15 AM to 11:00 AM',
-        symptoms: app.reason || 'Fever, Body Pain',
+        symptoms: app.reason || 'General Consultation',
         status: ['Pending', 'In Progress', 'Paid', 'Upcoming'].includes(app.status) ? 'Upcoming' : app.status,
         billingStatus: app.billingStatus || 'Unpaid',
         rawDate: app.date || new Date(),
         rawTime: app.time || '10:15 AM',
+        tokenNumber: app.tokenNumber || null,
+        tokenDisplay: app.tokenDisplay || (app.tokenNumber ? String(app.tokenNumber) : null),
+        tokenSlotId: app.tokenSlotId || null,
+        queueStatus: app.queueStatus || null,
         originalApp: app
       };
     });
   };
+
 
   // Timezone-safe and date-format robust parser/formatter to YYYY-MM-DD
   const formatDateString = (d) => {
@@ -6548,8 +6603,78 @@ I have scanned the medical reference databases, but couldn't find a direct match
                 </div>
               </div>
 
+              {/* LIVE OPD TOKEN QUEUE BAR */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                borderRadius: '16px',
+                padding: '16px 20px',
+                marginBottom: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '16px',
+                boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '12px',
+                    background: '#EFF6FF',
+                    color: '#2563EB',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid #DBEAFE'
+                  }}>
+                    <i data-lucide="ticket" style={{ width: '20px', height: '20px' }}></i>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LIVE OPD QUEUE</div>
+                    <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A' }}>Doctor Live Consultation Token Stream</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                  {/* NOW SERVING */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: doctorQueue.currentToken ? '#EFF6FF' : '#F8FAFC', border: doctorQueue.currentToken ? '1.5px solid #60A5FA' : '1px solid #E2E8F0', padding: '8px 14px', borderRadius: '10px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: doctorQueue.currentToken ? '#1E40AF' : '#64748B', textTransform: 'uppercase' }}>NOW SERVING</span>
+                    {doctorQueue.currentToken ? (
+                      <span style={{ fontSize: '13.5px', fontWeight: 900, color: '#1D4ED8', background: '#DBEAFE', padding: '2px 8px', borderRadius: '6px' }}>
+                        Token #{doctorQueue.currentToken} {doctorQueue.currentPatient?.name ? `• ${doctorQueue.currentPatient.name}` : ''}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#94A3B8' }}>NO PATIENT IN QUEUE</span>
+                    )}
+                  </div>
+
+                  {/* NEXT IN QUEUE */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '8px 14px', borderRadius: '10px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>NEXT</span>
+                    {doctorQueue.nextToken ? (
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', background: '#F1F5F9', padding: '2px 8px', borderRadius: '6px' }}>
+                        Token #{doctorQueue.nextToken}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#94A3B8' }}>—</span>
+                    )}
+                  </div>
+
+                  {/* WAITING COUNT */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FEF3C7', border: '1px solid #FDE68A', padding: '8px 14px', borderRadius: '10px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#92400E', textTransform: 'uppercase' }}>WAITING</span>
+                    <span style={{ fontSize: '13px', fontWeight: 900, color: '#B45309' }}>
+                      {doctorQueue.waitingCount} {doctorQueue.waitingCount === 1 ? 'patient' : 'patients'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Row 2: Key Daily KPI Cards (Copied directly from Pharmacy KPI system - 5 cards single row) */}
               <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '12px', marginBottom: '24px' }}>
+
                 
                 {/* Card 1: Today's Appointments (Electric Blue Theme) */}
                 <div 
@@ -7403,6 +7528,75 @@ I have scanned the medical reference databases, but couldn't find a direct match
           return (
             <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', padding: '24px' }}>
               
+              {/* LIVE OPD TOKEN QUEUE BAR */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                borderRadius: '16px',
+                padding: '16px 20px',
+                marginBottom: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '16px',
+                boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    background: '#EFF6FF',
+                    color: '#2563EB',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid #DBEAFE'
+                  }}>
+                    <i data-lucide="ticket" style={{ width: '18px', height: '18px' }}></i>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LIVE OPD QUEUE</div>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>Active Doctor Consultation Queue</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                  {/* NOW SERVING */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: doctorQueue.currentToken ? '#EFF6FF' : '#F8FAFC', border: doctorQueue.currentToken ? '1.5px solid #60A5FA' : '1px solid #E2E8F0', padding: '8px 14px', borderRadius: '10px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: doctorQueue.currentToken ? '#1E40AF' : '#64748B', textTransform: 'uppercase' }}>NOW SERVING</span>
+                    {doctorQueue.currentToken ? (
+                      <span style={{ fontSize: '13.5px', fontWeight: 900, color: '#1D4ED8', background: '#DBEAFE', padding: '2px 8px', borderRadius: '6px' }}>
+                        Token #{doctorQueue.currentToken} {doctorQueue.currentPatient?.name ? `• ${doctorQueue.currentPatient.name}` : ''}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#94A3B8' }}>NO PATIENT IN QUEUE</span>
+                    )}
+                  </div>
+
+                  {/* NEXT IN QUEUE */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '8px 14px', borderRadius: '10px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>NEXT</span>
+                    {doctorQueue.nextToken ? (
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', background: '#F1F5F9', padding: '2px 8px', borderRadius: '6px' }}>
+                        Token #{doctorQueue.nextToken}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#94A3B8' }}>—</span>
+                    )}
+                  </div>
+
+                  {/* WAITING COUNT */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FEF3C7', border: '1px solid #FDE68A', padding: '8px 14px', borderRadius: '10px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#92400E', textTransform: 'uppercase' }}>WAITING</span>
+                    <span style={{ fontSize: '13px', fontWeight: 900, color: '#B45309' }}>
+                      {doctorQueue.waitingCount} {doctorQueue.waitingCount === 1 ? 'patient' : 'patients'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Header Row */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -7539,12 +7733,13 @@ I have scanned the medical reference databases, but couldn't find a direct match
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                       <tr>
-                        <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '15%' }}>Patient ID</th>
-                        <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '20%' }}>Patient Name</th>
-                        <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '20%' }}>Appointment Timing</th>
+                        <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '12%' }}>Patient ID</th>
+                        <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '18%' }}>Patient Name</th>
+                        <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '12%' }}>Token</th>
+                        <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '18%' }}>Appointment Timing</th>
                         <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '15%' }}>Symptoms</th>
                         <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '10%' }}>Status</th>
-                        <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '15%' }}>Payment</th>
+                        <th style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '10%' }}>Payment</th>
                         <th style={{ padding: '16px 24px', width: '5%', textAlign: 'right' }}></th>
                       </tr>
                     </thead>
@@ -7605,6 +7800,26 @@ I have scanned the medical reference databases, but couldn't find a direct match
                                     {item.patientName}
                                   </span>
                                 </div>
+                              </td>
+                              <td style={{ padding: '16px 24px' }}>
+                                {item.tokenNumber || item.originalApp?.tokenNumber ? (
+                                  <span style={{
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '11.5px',
+                                    fontWeight: 800,
+                                    background: '#EFF6FF',
+                                    color: '#1D4ED8',
+                                    border: '1px solid #BFDBFE',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}>
+                                    Token #{item.tokenNumber || item.originalApp?.tokenNumber}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>—</span>
+                                )}
                               </td>
                               <td style={{ padding: '16px 24px', fontSize: '13px', color: '#334155', fontWeight: 500 }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
@@ -7667,42 +7882,57 @@ I have scanned the medical reference databases, but couldn't find a direct match
                                 </span>
                               </td>
                               <td style={{ padding: '16px 24px', textAlign: 'right', position: 'relative' }}>
-                                {isOverviewEnabled ? (
-                                  <button 
-                                    onClick={() => {
-                                      setSelectedOverviewApp(item.originalApp || item);
-                                      setShowAppOverviewModal(true);
-                                      addLog(`Opened clinical overview for completed appointment of: ${item.patientName}`);
-                                    }}
-                                    style={{
-                                      background: 'transparent',
-                                      border: '1.5px solid #16A34A',
-                                      color: '#16A34A',
-                                      padding: '6px 12px',
-                                      borderRadius: '8px',
-                                      fontSize: '12px',
-                                      fontWeight: 700,
-                                      cursor: 'pointer',
-                                      transition: 'all 0.2s',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '4px'
-                                    }}
-                                    onMouseEnter={e => { e.currentTarget.style.background = '#ECFDF5'; }}
-                                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                                  >
-                                    <i data-lucide="eye" style={{ width: '14px', height: '14px' }}></i>
-                                    <span>Overview</span>
-                                  </button>
-                                ) : (
-                                  <div 
-                                    style={{ cursor: 'pointer', display: 'inline-block', color: '#94A3B8' }}
-                                    onClick={() => startConsultation(item.originalApp || item)}
-                                    title="View Case sheet / Prescribe"
-                                  >
-                                    <i data-lucide="more-vertical" style={{ width: '18px', height: '18px' }}></i>
-                                  </div>
-                                )}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                                  {!isCompleted && item.originalApp?.status !== 'Cancelled' && (
+                                    <button 
+                                      type="button"
+                                      onClick={() => startConsultation(item.originalApp || item)}
+                                      style={{
+                                        padding: '6px 12px',
+                                        fontSize: '12px',
+                                        background: '#2563EB',
+                                        color: '#FFFFFF',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                    >
+                                      <i data-lucide="stethoscope" style={{ width: '12px', height: '12px' }}></i> Consult
+                                    </button>
+                                  )}
+                                  {isOverviewEnabled && (
+                                    <button 
+                                      onClick={() => {
+                                        setSelectedOverviewApp(item.originalApp || item);
+                                        setShowAppOverviewModal(true);
+                                        addLog(`Opened clinical overview for completed appointment of: ${item.patientName}`);
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: '1.5px solid #16A34A',
+                                        color: '#16A34A',
+                                        padding: '6px 12px',
+                                        borderRadius: '8px',
+                                        fontSize: '12px',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                      onMouseEnter={e => { e.currentTarget.style.background = '#ECFDF5'; }}
+                                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                                    >
+                                      <i data-lucide="eye" style={{ width: '14px', height: '14px' }}></i>
+                                      <span>Overview</span>
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );

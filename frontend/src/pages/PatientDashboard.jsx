@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { convertPdfToImage } from '../utils/pdfHelper';
@@ -188,13 +188,15 @@ const DEFAULT_TIME_SLOTS = [
 ];
 
 const PatientDashboard = () => {
-  const getLocalDateString = () => {
-    const d = new Date();
+  const getLocalDateString = (inputDate) => {
+    const d = inputDate ? new Date(inputDate) : new Date();
+    if (isNaN(d.getTime())) return '';
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
+
 
   const [activeTab, setActiveTab] = useState('summary');
   const [privacySlideIdx, setPrivacySlideIdx] = useState(0);
@@ -431,9 +433,30 @@ const PatientDashboard = () => {
 
   const [doctors, setDoctors] = useState([]);
   const [appointments, setAppointments] = useState([]);
-  const activeAppt = appointments.find(app => ['Pending', 'In Progress', 'Paid'].includes(app.status));
+
+  // Prioritize today's checked-in / active appointment, then today's appointment, then upcoming
+  const todayStr = new Date().toISOString().split('T')[0];
+  const activeAppt = appointments.find(app => {
+    const isToday = (app.tokenDate === todayStr) || (app.date && new Date(app.date).toISOString().startsWith(todayStr));
+    return isToday && app.tokenNumber && !['Completed', 'Cancelled', 'Checked Out'].includes(app.status);
+  }) || appointments.find(app => {
+    const isToday = (app.tokenDate === todayStr) || (app.date && new Date(app.date).toISOString().startsWith(todayStr));
+    return isToday && !['Completed', 'Cancelled', 'Checked Out'].includes(app.status);
+  }) || appointments.find(app => ['Pending', 'In Progress', 'Paid', 'Upcoming', 'Confirmed'].includes(app.status)) || appointments[0] || null;
+
+  // Phase 4 Live Patient Token Queue State
+  const [patientQueue, setPatientQueue] = useState({
+    currentToken: null,
+    nextToken: null,
+    waitingCount: 0,
+    patientsAhead: null,
+    doctorName: '',
+    specialty: ''
+  });
+
   const [prescriptions, setPrescriptions] = useState([]);
   const [patientProfile, setPatientProfile] = useState(null);
+
 
   const [editProfileData, setEditProfileData] = useState({ name: '', age: '', ageMonths: '', ageDays: '', gender: '', contact: '', address: '', bloodGroup: '', allergies: '', medicalHistory: '' });
   const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -642,19 +665,52 @@ const PatientDashboard = () => {
     }
   };
 
+  const fetchPatientQueue = useCallback(async () => {
+
+    if (!activeAppt || !activeAppt.doctorId) {
+      setPatientQueue({ currentToken: null, nextToken: null, waitingCount: 0, patientsAhead: null, doctorName: '', specialty: '' });
+      return;
+    }
+    try {
+      const docId = typeof activeAppt.doctorId === 'object' ? activeAppt.doctorId._id : activeAppt.doctorId;
+      const apptDate = activeAppt.tokenDate || getLocalDateString(activeAppt.date);
+      const tokenParam = activeAppt.tokenNumber ? `&patientToken=${activeAppt.tokenNumber}` : '';
+
+      const res = await api.get(`/appointments/doctor-queue/${docId}?date=${apptDate}${tokenParam}`);
+      if (res.data) {
+        setPatientQueue({
+          currentToken: res.data.currentToken ?? null,
+          nextToken: res.data.nextToken ?? null,
+          waitingCount: res.data.waitingCount ?? 0,
+          patientsAhead: res.data.patientsAhead ?? null,
+          doctorName: res.data.doctorName || (activeAppt.doctorId?.name || 'Assigned Doctor'),
+          specialty: res.data.specialty || (activeAppt.doctorId?.specialty || 'General Consultation')
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to fetch live patient queue:", err);
+    }
+  }, [activeAppt]);
+
+  useEffect(() => {
+    fetchPatientQueue();
+  }, [fetchPatientQueue]);
+
   useEffect(() => {
     let pollInterval;
     if (currentUser.id) {
       fetchData();
+      fetchPatientQueue();
       detectLocation();
       pollInterval = setInterval(() => {
         fetchData();
+        fetchPatientQueue();
       }, 5000);
     }
     return () => {
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [currentUser.id, currentUser.isSetupComplete]);
+  }, [currentUser.id, currentUser.isSetupComplete, fetchPatientQueue]);
 
   useEffect(() => {
     const handleSync = (e) => {
@@ -662,11 +718,13 @@ const PatientDashboard = () => {
       console.log('[SOCKET] PatientDashboard received sync event for:', type);
       if (currentUser.id) {
         fetchData();
+        fetchPatientQueue();
       }
     };
     window.addEventListener('curoxa_sync', handleSync);
     return () => window.removeEventListener('curoxa_sync', handleSync);
-  }, [currentUser.id]);
+  }, [currentUser.id, fetchPatientQueue]);
+
 
   useEffect(() => {
     const fetchBookedSlots = async () => {
@@ -3297,23 +3355,23 @@ const PatientDashboard = () => {
                 </div>
               </div>
 
-              {/* Next Appointment widget column */}
+              {/* Next Appointment & Live OPD Queue Card */}
               <div className="mobile-stack-container">
                 {activeAppt ? (
                   <>
-                    <div className="glass-card" style={{ background: 'var(--primary-gradient)', color: 'white', border: 'none', marginBottom: '24px' }}>
+                    <div className="glass-card" style={{ background: 'var(--primary-gradient)', color: 'white', border: 'none', marginBottom: '20px' }}>
                       <div style={{ fontSize: '11px', fontWeight: 800, opacity: 0.8, letterSpacing: '1px', marginBottom: '16px', textTransform: 'uppercase' }}>Next Appointment</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
                         <div style={{
-                          width: '56px',
-                          height: '56px',
+                          width: '52px',
+                          height: '52px',
                           borderRadius: '16px',
                           background: 'rgba(255,255,255,0.2)',
                           color: 'white',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          fontSize: '20px',
+                          fontSize: '18px',
                           fontWeight: 800,
                           border: '2px solid rgba(255,255,255,0.3)',
                           flexShrink: 0
@@ -3321,27 +3379,125 @@ const PatientDashboard = () => {
                           {activeAppt.doctorId?.name ? activeAppt.doctorId.name.replace('Dr. ', '').substring(0, 2).toUpperCase() : 'DR'}
                         </div>
                         <div>
-                          <div style={{ fontWeight: 800, fontSize: '18px' }}>{activeAppt.doctorId?.name || 'Assigned Doctor'}</div>
-                          <div style={{ fontSize: '13px', opacity: 0.9 }}>{activeAppt.doctorId?.specialty || activeAppt.reason || 'General Consultation'}</div>
+                          <div style={{ fontWeight: 800, fontSize: '17px' }}>{activeAppt.doctorId?.name || patientQueue.doctorName || 'Assigned Doctor'}</div>
+                          <div style={{ fontSize: '13px', opacity: 0.9 }}>{activeAppt.doctorId?.specialty || patientQueue.specialty || activeAppt.reason || 'General Consultation'}</div>
                         </div>
                       </div>
-                      <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                        <i data-lucide="calendar" style={{ width: '18px' }}></i>
-                        <div style={{ fontSize: '14px', fontWeight: 700 }}>
-                          {new Date(activeAppt.date).toLocaleDateString()} at {activeAppt.time}
+                      <div style={{ background: 'rgba(255,255,255,0.12)', borderRadius: '12px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <i data-lucide="calendar" style={{ width: '16px', height: '16px' }}></i>
+                        <div style={{ fontSize: '13.5px', fontWeight: 700 }}>
+                          {new Date(activeAppt.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })} at {activeAppt.time}
                         </div>
                       </div>
                     </div>
 
-                    <div className="glass-card" style={{ textAlign: 'center', padding: '20px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '12px' }}>ACTIVE TOKEN</div>
-                      <div style={{ fontSize: '48px', fontWeight: 900, color: 'var(--primary)', letterSpacing: '-2px' }}>
-                        T-{activeAppt._id.substring(activeAppt._id.length - 4).toUpperCase()}
+                    {/* AUTHORITATIVE LIVE OPD QUEUE CARD */}
+                    <div className="glass-card" style={{ padding: '24px', border: '1px solid #E2E8F0', borderRadius: '16px', background: '#FFFFFF', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB' }}></span>
+                          <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', letterSpacing: '0.5px', textTransform: 'uppercase' }}>LIVE OPD QUEUE</span>
+                        </div>
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          background: activeAppt.status === 'Completed' ? '#ECFDF5' : (activeAppt.tokenNumber ? '#EFF6FF' : '#F8FAFC'),
+                          color: activeAppt.status === 'Completed' ? '#059669' : (activeAppt.tokenNumber ? '#2563EB' : '#64748B'),
+                          border: activeAppt.status === 'Completed' ? '1px solid #A7F3D0' : (activeAppt.tokenNumber ? '1px solid #BFDBFE' : '1px solid #E2E8F0')
+                        }}>
+                          {activeAppt.status === 'Completed' ? 'Completed' : (activeAppt.tokenNumber ? (patientQueue.currentToken === activeAppt.tokenNumber ? 'Your Turn' : 'Waiting') : 'Not Checked In')}
+                        </span>
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px' }}>Status: <span style={{ color: 'var(--text-main)', fontWeight: 800 }}>{activeAppt.status}</span></div>
-                      <div style={{ marginTop: '20px', padding: '12px', border: '2px dashed var(--border)', borderRadius: '12px', display: 'flex', justifyContent: 'center' }}>
-                        <i data-lucide="qr-code" style={{ width: '100px', height: '100px', color: 'var(--text-main)', opacity: 0.2 }}></i>
+
+                      {/* 2-Column Grid: YOUR TOKEN vs NOW SERVING */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+                        {/* YOUR TOKEN */}
+                        <div style={{ background: '#F8FAFC', padding: '16px 12px', borderRadius: '14px', textAlign: 'center', border: '1px solid #E2E8F0' }}>
+                          <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginBottom: '6px' }}>YOUR TOKEN</div>
+                          {activeAppt.tokenNumber ? (
+                            <div style={{ fontSize: '32px', fontWeight: 900, color: '#2563EB', lineHeight: 1.1 }}>
+                              #{activeAppt.tokenNumber}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#94A3B8', padding: '8px 0' }}>
+                              Not Checked In
+                            </div>
+                          )}
+                          <div style={{ fontSize: '10.5px', color: '#94A3B8', marginTop: '4px', fontWeight: 600 }}>
+                            {activeAppt.tokenNumber ? (activeAppt.tokenSlotId || 'OPD Slot') : 'Assigned at Reception'}
+                          </div>
+                        </div>
+
+                        {/* NOW SERVING */}
+                        <div style={{ background: patientQueue.currentToken ? '#EFF6FF' : '#F8FAFC', padding: '16px 12px', borderRadius: '14px', textAlign: 'center', border: patientQueue.currentToken ? '1.5px solid #93C5FD' : '1px solid #E2E8F0' }}>
+                          <div style={{ fontSize: '11px', fontWeight: 800, color: patientQueue.currentToken ? '#1E40AF' : '#64748B', textTransform: 'uppercase', marginBottom: '6px' }}>NOW SERVING</div>
+                          {patientQueue.currentToken ? (
+                            <div style={{ fontSize: '32px', fontWeight: 900, color: '#1D4ED8', lineHeight: 1.1 }}>
+                              #{patientQueue.currentToken}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#94A3B8', padding: '8px 0' }}>
+                              —
+                            </div>
+                          )}
+                          <div style={{ fontSize: '10.5px', color: patientQueue.currentToken ? '#3B82F6' : '#94A3B8', marginTop: '4px', fontWeight: 600 }}>
+                            {patientQueue.currentToken ? 'In Consultation Room' : 'Waiting to start'}
+                          </div>
+                        </div>
                       </div>
+
+                      {/* PATIENTS AHEAD & DYNAMIC STATUS BANNER */}
+                      {(() => {
+                        if (activeAppt.status === 'Completed') {
+                          return (
+                            <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', color: '#047857', padding: '12px', borderRadius: '10px', textAlign: 'center', fontSize: '13px', fontWeight: 800 }}>
+                              ✓ Consultation Completed
+                            </div>
+                          );
+                        }
+                        if (activeAppt.status === 'Cancelled') {
+                          return (
+                            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#B91C1C', padding: '12px', borderRadius: '10px', textAlign: 'center', fontSize: '13px', fontWeight: 800 }}>
+                              ✕ Appointment Cancelled
+                            </div>
+                          );
+                        }
+                        if (activeAppt.status === 'No-Show' || activeAppt.status === 'no-show') {
+                          return (
+                            <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#B45309', padding: '12px', borderRadius: '10px', textAlign: 'center', fontSize: '13px', fontWeight: 800 }}>
+                              Marked as No-Show
+                            </div>
+                          );
+                        }
+                        if (!activeAppt.tokenNumber) {
+                          return (
+                            <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#64748B', padding: '12px', borderRadius: '10px', textAlign: 'center', fontSize: '12.5px', fontWeight: 600 }}>
+                              Please check in at Reception on arrival to get your token.
+                            </div>
+                          );
+                        }
+                        if (patientQueue.currentToken === activeAppt.tokenNumber) {
+                          return (
+                            <div style={{ background: '#EFF6FF', border: '1.5px solid #3B82F6', color: '#1D4ED8', padding: '12px', borderRadius: '10px', textAlign: 'center', fontSize: '13px', fontWeight: 900, animation: 'pulse 2s infinite' }}>
+                              ⚡ IT'S YOUR TURN — PLEASE PROCEED TO ROOM
+                            </div>
+                          );
+                        }
+                        if (patientQueue.patientsAhead !== null) {
+                          return (
+                            <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', color: '#92400E', padding: '12px', borderRadius: '10px', textAlign: 'center', fontSize: '13px', fontWeight: 800 }}>
+                              👥 {patientQueue.patientsAhead} {patientQueue.patientsAhead === 1 ? 'Patient' : 'Patients'} Ahead in Queue
+                            </div>
+                          );
+                        }
+                        return (
+                          <div style={{ background: '#EFF6FF', border: '1px solid #DBEAFE', color: '#1E40AF', padding: '12px', borderRadius: '10px', textAlign: 'center', fontSize: '13px', fontWeight: 700 }}>
+                            Waiting in OPD Queue
+                          </div>
+                        );
+                      })()}
                     </div>
                   </>
                 ) : (
@@ -3355,6 +3511,7 @@ const PatientDashboard = () => {
                   </div>
                 )}
               </div>
+
             </div>
           </div>
         )}
@@ -3884,12 +4041,43 @@ const PatientDashboard = () => {
             <div className="glass-card" style={{ padding: '24px' }}>
               <div className="table-responsive">
                 <table className="elite-table" style={{ margin: 0 }}>
-                  <thead style={{ background: '#F8FAFC' }}><tr><th>Date</th><th>Time</th><th>Specialist</th><th>Reason</th><th>Status</th><th>Payment</th><th>Action</th></tr></thead>
+                  <thead style={{ background: '#F8FAFC' }}>
+                    <tr>
+                      <th>Date</th>
+                      <th>Time</th>
+                      <th>Token</th>
+                      <th>Specialist</th>
+                      <th>Reason</th>
+                      <th>Status</th>
+                      <th>Payment</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {appointments.map(app => (
                       <tr key={app._id}>
                         <td style={{ fontWeight: 700 }}>{new Date(app.date).toLocaleDateString()}</td>
                         <td style={{ fontWeight: 600 }}>{app.time}</td>
+                        <td>
+                          {app.tokenNumber ? (
+                            <span style={{
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11.5px',
+                              fontWeight: 800,
+                              background: '#EFF6FF',
+                              color: '#1D4ED8',
+                              border: '1px solid #BFDBFE',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              Token #{app.tokenNumber}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>Not Checked In</span>
+                          )}
+                        </td>
                         <td>
                           <b>{app.doctorId?.name || 'Dr. Assigned'}</b>
                           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{getHospitalDetails(app.tenantId).name}</div>
@@ -3904,6 +4092,7 @@ const PatientDashboard = () => {
                         <td>
                           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                             <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={() => openDetailsModal(app)}>View Details</button>
+
                             {app.status === 'Approved' && app.billingStatus !== 'Paid' && (
                               <button 
                                 className="btn btn-primary" 
@@ -5057,8 +5246,10 @@ const PatientDashboard = () => {
             </div>
             <div style={{ background: '#F8FAFC', padding: '20px', borderRadius: '16px', marginBottom: '24px', border: '1px solid #E2E8F0' }}>
               <div className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}><div><div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Doctor Name</div><div style={{ fontWeight: 800, fontSize: '15px' }}>{selectedAppointment.doctorId?.name || 'Assigned Doctor'}</div></div><div><div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Current Status</div><div style={{ fontWeight: 800, fontSize: '15px' }}>{selectedAppointment.status}</div></div></div>
-              <div className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}><div><div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Hospital</div><div style={{ fontWeight: 800, fontSize: '15px' }}>{getHospitalDetails(selectedAppointment.tenantId).name}</div></div><div><div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Payment Status</div><div style={{ fontWeight: 800, fontSize: '15px', color: selectedAppointment.billingStatus === 'Paid' ? '#16A34A' : '#D97706' }}>{selectedAppointment.billingStatus === 'Paid' ? 'Paid' : 'Unpaid (Please Pay Offline)'}</div></div></div>
-              <div><div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Reason</div><div style={{ fontWeight: 800, fontSize: '15px' }}>{selectedAppointment.reason}</div></div>
+              <div className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}><div><div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Live OPD Token</div><div style={{ fontWeight: 800, fontSize: '15px', color: selectedAppointment.tokenNumber ? '#2563EB' : '#64748B' }}>{selectedAppointment.tokenNumber ? `Token #${selectedAppointment.tokenNumber}` : 'Not Checked In'}</div></div><div><div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Payment Status</div><div style={{ fontWeight: 800, fontSize: '15px', color: selectedAppointment.billingStatus === 'Paid' ? '#16A34A' : '#D97706' }}>{selectedAppointment.billingStatus === 'Paid' ? 'Paid' : 'Unpaid (Please Pay Offline)'}</div></div></div>
+              <div><div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Hospital</div><div style={{ fontWeight: 800, fontSize: '15px' }}>{getHospitalDetails(selectedAppointment.tenantId).name}</div></div>
+              <div style={{ marginTop: '12px' }}><div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Reason</div><div style={{ fontWeight: 800, fontSize: '15px' }}>{selectedAppointment.reason}</div></div>
+
               <div style={{ borderTop: '1px solid #E2E8F0', margin: '20px 0' }}></div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {(() => {

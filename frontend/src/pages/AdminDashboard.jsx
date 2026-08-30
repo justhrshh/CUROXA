@@ -11581,7 +11581,7 @@ const AdminDashboard = () => {
                 style={{
                   background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)'
                 }}
-                onClick={() => { setRevenueTimeframe('today'); setShowRevenueModal(true); }}
+                onClick={() => { setActiveTab('financials'); }}
               >
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">

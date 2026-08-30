@@ -529,4 +529,181 @@ router.post('/:id/pay', async (req, res) => {
   }
 });
 
+// Reception Check-in endpoint: server-authoritative token generation & queue entry
+router.post('/:id/check-in', async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Ensure tenant isolation
+    const resolvedTenant = appointment.tenantId || req.tenantId;
+
+    // Idempotency: If patient already has a token, return existing token without reallocating
+    if (appointment.tokenNumber !== null && appointment.tokenNumber !== undefined) {
+      return res.json({
+        success: true,
+        message: 'Patient is already checked in.',
+        alreadyCheckedIn: true,
+        appointment,
+        token: {
+          tokenNumber: appointment.tokenNumber,
+          tokenDisplay: appointment.tokenDisplay || String(appointment.tokenNumber),
+          tokenDate: appointment.tokenDate,
+          tokenDoctorId: appointment.tokenDoctorId,
+          tokenSlotId: appointment.tokenSlotId,
+          tokenAssignedAt: appointment.tokenAssignedAt,
+          queueStatus: appointment.queueStatus
+        }
+      });
+    }
+
+    if (!appointment.doctorId) {
+      return res.status(400).json({ error: 'Cannot check in an appointment without an assigned doctor' });
+    }
+
+    const { allocateDoctorToken } = require('../utils/queueEngine');
+
+    // Server-authoritative atomic token allocation
+    const tokenResult = await allocateDoctorToken({
+      tenantId: resolvedTenant,
+      doctorId: appointment.doctorId,
+      date: appointment.date,
+      time: appointment.time
+    });
+
+    appointment.tokenNumber = tokenResult.tokenNumber;
+    appointment.tokenDisplay = tokenResult.tokenDisplay;
+    appointment.tokenDate = tokenResult.tokenDate;
+    appointment.tokenDoctorId = tokenResult.tokenDoctorId;
+    appointment.tokenSlotId = tokenResult.tokenSlotId;
+    appointment.tokenAssignedAt = tokenResult.tokenAssignedAt;
+    appointment.queueStatus = 'Waiting';
+
+    if (appointment.status !== 'Completed' && appointment.status !== 'Cancelled') {
+      appointment.status = 'In Progress';
+    }
+
+    await appointment.save();
+
+    const io = req.app.get("io");
+    if (io) {
+      const tenantKey = String(resolvedTenant).trim().toLowerCase();
+      io.to(tenantKey).emit("data_changed", {
+        type: "appointments",
+        subType: "doctor_queue",
+        doctorId: appointment.doctorId,
+        date: tokenResult.tokenDate,
+        lastIssuedToken: tokenResult.tokenNumber
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Patient checked in successfully and token generated.',
+      appointment,
+      token: tokenResult
+    });
+  } catch (error) {
+    console.error("Check-in error:", error);
+    res.status(400).json({ error: error.message || 'Check-in failed' });
+  }
+});
+
+// Complete doctor consultation and advance live queue to next eligible patient
+router.post('/:id/complete-consultation', async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const resolvedTenant = String(req.tenantId || appointment.tenantId || 'city_hospital').trim().toLowerCase();
+    const doctorId = appointment.doctorId;
+
+    if (!doctorId) {
+      return res.status(400).json({ error: 'Appointment does not have an assigned doctor' });
+    }
+
+    const { advanceDoctorQueue } = require('../utils/queueEngine');
+
+    const result = await advanceDoctorQueue({
+      tenantId: resolvedTenant,
+      doctorId,
+      appointmentId: appointment._id
+    });
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(resolvedTenant).emit("data_changed", {
+        type: "appointments",
+        subType: "doctor_queue",
+        action: "queue_advanced",
+        doctorId,
+        date: result.queueState.date,
+        currentToken: result.queueState.currentToken,
+        currentAppointmentId: result.queueState.currentAppointmentId,
+        nextToken: result.queueState.nextToken,
+        waitingCount: result.queueState.waitingCount
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Consultation completed and live queue advanced.',
+      appointment: result.completedAppointment,
+      queue: result.queueState
+    });
+  } catch (error) {
+    console.error("Complete consultation error:", error);
+    res.status(400).json({ error: error.message || 'Failed to complete consultation' });
+  }
+});
+
+// Get live doctor queue state and slot configuration
+router.get('/doctor-queue/:doctorId', async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+    const User = require('../models/User');
+    const doctorObj = await User.findById(doctorId);
+    if (!doctorObj) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    const tenantId = req.tenantId || doctorObj.tenantId || 'city_hospital';
+    const dateInput = req.query.date || new Date();
+    const { normalizeDateString, getDoctorSlotRanges, getDoctorQueueState } = require('../utils/queueEngine');
+    const dateStr = normalizeDateString(dateInput);
+
+    const patientToken = req.query.patientToken || null;
+    const slotRanges = getDoctorSlotRanges(doctorObj);
+    const queueState = await getDoctorQueueState(tenantId, doctorId, dateStr, patientToken);
+
+    const isPatientRole = req.user && req.user.role === 'patient';
+
+    res.json({
+      tenantId,
+      doctorId,
+      doctorName: doctorObj.name,
+      specialty: doctorObj.specialty || '',
+      date: dateStr,
+      currentToken: queueState.currentToken,
+      currentAppointmentId: isPatientRole ? undefined : queueState.currentAppointmentId,
+      currentPatient: isPatientRole ? undefined : queueState.currentPatient,
+      nextToken: queueState.nextToken,
+      waitingCount: queueState.waitingCount,
+      patientsAhead: queueState.patientsAhead,
+      lastIssuedToken: queueState.lastIssuedToken,
+      slotRanges,
+      slotCounters: queueState.slotCounters || {},
+      queueAppointments: isPatientRole ? undefined : (queueState.queueAppointments || [])
+    });
+  } catch (error) {
+    console.error("Get doctor queue error:", error);
+    res.status(500).json({ error: error.message || 'Failed to get doctor queue state' });
+  }
+});
+
 module.exports = router;
+

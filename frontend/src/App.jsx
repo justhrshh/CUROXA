@@ -287,6 +287,13 @@ function App() {
           </ProtectedRoute>
         } />
 
+        <Route path="/receptionist/waiting-queue" element={
+          <ProtectedRoute targetRole="receptionist">
+            <ReceptionistDashboard />
+          </ProtectedRoute>
+        } />
+
+
         <Route path="/patient" element={
           <ProtectedRoute targetRole="patient">
             <PatientDashboard />

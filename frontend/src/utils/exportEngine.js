@@ -1909,5 +1909,299 @@ export const labReportExportColumns = [
   { key: 'notes', header: 'Clinical Notes / Instructions', extractor: r => r.notes || r.instructions || r.subtitle || '--' }
 ];
 
+/**
+ * Generates an official Payment Receipt & Clinical Service Order Slip PDF.
+ * Automatically incorporates active clinic letterhead and safe margins.
+ */
+export async function generateReceiptSlipPdf(activeSlipData, passedConfig = null) {
+  if (!activeSlipData) return;
 
+  const letterheadConfig = passedConfig || await fetchLetterheadConfig();
+  const hasLetterhead = letterheadConfig && letterheadConfig.hasLetterhead && !!letterheadConfig.letterheadImg;
+  const margins = letterheadConfig?.margins || { left: 14, right: 14, top: 14, bottom: 16 };
 
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  const safeLeft = margins.left;
+  const safeRight = margins.right;
+  const safeTop = margins.top;
+  const safeBottom = margins.bottom;
+  const safeWidth = pageWidth - safeLeft - safeRight;
+
+  // Stamp letterhead image if configured
+  if (hasLetterhead && letterheadConfig.letterheadImg) {
+    try {
+      doc.addImage(letterheadConfig.letterheadImg, 'JPEG', 0, 0, pageWidth, pageHeight);
+    } catch {
+      try {
+        doc.addImage(letterheadConfig.letterheadImg, 'PNG', 0, 0, pageWidth, pageHeight);
+      } catch (imgErr) {
+        console.warn('[EXPORT ENGINE] Failed to stamp letterhead on Receipt PDF:', imgErr.message);
+      }
+    }
+  }
+
+  let currentY = safeTop;
+
+  // If NO letterhead image, draw the default modern hospital header banner & subtle watermark
+  if (!hasLetterhead) {
+    // Watermark
+    try {
+      if (doc.saveGraphicsState) doc.saveGraphicsState();
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(55);
+      doc.setTextColor(241, 245, 249); // slate 100
+      doc.text('CUROXA', pageWidth / 2, pageHeight / 2 - 10, { align: 'center', angle: 35 });
+      doc.setFontSize(14);
+      doc.text('HEALTHCARE • MEDICAL RECEIPT', pageWidth / 2, pageHeight / 2 + 10, { align: 'center', angle: 35 });
+      if (doc.restoreGraphicsState) doc.restoreGraphicsState();
+    } catch (e) {
+      // Ignore watermark if angle/graphicsState unsupported
+    }
+
+    // Hospital Header
+    currentY = 16;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(15, 23, 42);
+    doc.text(activeSlipData.hospitalName || 'Curoxa Medical Center', safeLeft, currentY + 4);
+
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(37, 99, 235);
+    doc.text('OFFICIAL PAYMENT RECEIPT & CLINICAL SERVICE ORDER SLIP', safeLeft, currentY + 10);
+
+    // Top Right Receipt Badge
+    const receiptText = activeSlipData.receiptNo || 'REC';
+    doc.setFillColor(239, 246, 255);
+    doc.setDrawColor(191, 219, 254);
+    doc.setLineWidth(0.3);
+    const badgeW = 32;
+    const badgeH = 7;
+    doc.roundedRect(pageWidth - safeRight - badgeW, currentY, badgeW, badgeH, 1.5, 1.5, 'FD');
+    doc.setFontSize(9);
+    doc.setTextColor(37, 99, 235);
+    doc.setFont('helvetica', 'bold');
+    doc.text(receiptText, pageWidth - safeRight - (badgeW / 2), currentY + 4.8, { align: 'center' });
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Date: ${activeSlipData.date || new Date().toLocaleDateString('en-IN')}`, pageWidth - safeRight, currentY + 12, { align: 'right' });
+
+    currentY += 16;
+    doc.setDrawColor(37, 99, 235);
+    doc.setLineWidth(0.5);
+    doc.line(safeLeft, currentY, pageWidth - safeRight, currentY);
+    currentY += 6;
+  } else {
+    // With Letterhead: Top space is reserved for the letterhead banner
+    currentY = safeTop + 2;
+
+    // Header bar under the letterhead
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(30, 41, 59);
+    doc.text('OFFICIAL PAYMENT RECEIPT & CLINICAL SERVICE ORDER SLIP', safeLeft, currentY + 3);
+
+    // Receipt Badge on Right
+    const receiptText = activeSlipData.receiptNo || 'REC';
+    doc.setFillColor(239, 246, 255);
+    doc.setDrawColor(191, 219, 254);
+    doc.setLineWidth(0.3);
+    const badgeW = 30;
+    const badgeH = 6.5;
+    doc.roundedRect(pageWidth - safeRight - badgeW, currentY - 2, badgeW, badgeH, 1.5, 1.5, 'FD');
+    doc.setFontSize(8.5);
+    doc.setTextColor(37, 99, 235);
+    doc.setFont('helvetica', 'bold');
+    doc.text(receiptText, pageWidth - safeRight - (badgeW / 2), currentY + 2.4, { align: 'center' });
+
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Date: ${activeSlipData.date || new Date().toLocaleDateString('en-IN')}`, pageWidth - safeRight, currentY + 9, { align: 'right' });
+
+    currentY += 12;
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.line(safeLeft, currentY, pageWidth - safeRight, currentY);
+    currentY += 5;
+  }
+
+  // Patient Meta Box
+  const metaBoxY = currentY;
+  const metaBoxH = 20;
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(safeLeft, metaBoxY, safeWidth, metaBoxH, 2, 2, 'FD');
+
+  const col2X = safeLeft + (safeWidth / 2);
+
+  // Column 1: Patient Name & UHID
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184); // slate 400
+  doc.text('PATIENT NAME', safeLeft + 4, metaBoxY + 5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(15, 23, 42); // slate 900
+  doc.text(activeSlipData.patientName || 'Walk-in Patient', safeLeft + 4, metaBoxY + 10.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139); // slate 500
+  doc.text(`UHID: ${activeSlipData.patientId || 'N/A'}`, safeLeft + 4, metaBoxY + 15.5);
+
+  // Column 2: Age / Gender / Contact
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.text('AGE / GENDER / CONTACT', col2X + 4, metaBoxY + 5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(51, 65, 85);
+  doc.text(activeSlipData.ageGender || '—', col2X + 4, metaBoxY + 10.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Phone: ${activeSlipData.contact || '—'}`, col2X + 4, metaBoxY + 15.5);
+
+  currentY = metaBoxY + metaBoxH + 6;
+
+  // Items Table
+  const items = activeSlipData.items && activeSlipData.items.length > 0 ? activeSlipData.items : [{ description: activeSlipData.testName || 'Consultation / OPD Registration', amount: activeSlipData.totalAmount || 0 }];
+
+  const tableBody = items.map((it, idx) => [
+    idx + 1,
+    it.description || it.name || 'Clinical Service',
+    `₹${Number(it.amount || 0).toFixed(2)}`
+  ]);
+
+  autoTable(doc, {
+    startY: currentY,
+    margin: { left: safeLeft, right: safeRight },
+    head: [['#', 'Investigation / Procedure Description', 'Amount (₹)']],
+    body: tableBody,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [71, 85, 105],
+      fontSize: 8.5,
+      fontStyle: 'bold',
+      cellPadding: 3
+    },
+    styles: {
+      fontSize: 8.5,
+      textColor: [15, 23, 42],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.2,
+      cellPadding: 3
+    },
+    columnStyles: {
+      0: { cellWidth: 14, halign: 'center' },
+      1: { cellWidth: 'auto', halign: 'left', fontStyle: 'bold' },
+      2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }
+    }
+  });
+
+  currentY = doc.lastAutoTable.finalY + 6;
+
+  // Payment Status & Total Received Box
+  const summaryBoxH = 18;
+  doc.setFillColor(240, 253, 244); // emerald 50
+  doc.setDrawColor(187, 247, 208); // emerald 200
+  doc.setLineWidth(0.4);
+  doc.roundedRect(safeLeft, currentY, safeWidth, summaryBoxH, 2, 2, 'FD');
+
+  // Status on Left
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(21, 128, 61); // emerald 700
+  doc.text('PAYMENT STATUS', safeLeft + 5, currentY + 6);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(22, 101, 52); // emerald 800
+  const payMode = activeSlipData.paymentMethod || activeSlipData.paymentMode || 'Cash';
+  doc.text(`[PAID] via ${payMode}`, safeLeft + 5, currentY + 12.5);
+
+  // Total Received on Right
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(21, 128, 61);
+  doc.text('TOTAL RECEIVED', pageWidth - safeRight - 5, currentY + 6, { align: 'right' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(21, 128, 61);
+  doc.text(`₹${Number(activeSlipData.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, pageWidth - safeRight - 5, currentY + 13, { align: 'right' });
+
+  currentY += summaryBoxH + 6;
+
+  // Instructions & Barcode Box
+  const instBoxH = 18;
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(safeLeft, currentY, safeWidth, instBoxH, 1.5, 1.5, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(51, 65, 85);
+  doc.text('Instructions: Please present this computer-generated official receipt at the counter.', safeLeft + 4, currentY + 7);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Authorized Signature / Computer Generated Receipt', safeLeft + 4, currentY + 12);
+
+  // Barcode Graphic on Right
+  const barcodeRightX = pageWidth - safeRight - 4;
+  const barcodeStartY = currentY + 3;
+  const barcodeH = 8;
+  const pattern = [2, 1, 3, 1, 2, 2, 1, 3, 1, 2, 1, 3, 2, 1, 2, 3, 1, 2, 1, 1, 3, 2, 1, 3, 1, 2];
+  let curBx = barcodeRightX - 38;
+  doc.setFillColor(51, 65, 85);
+  pattern.forEach(w => {
+    doc.rect(curBx, barcodeStartY, w * 0.4, barcodeH, 'F');
+    curBx += (w * 0.4) + 0.5;
+  });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(activeSlipData.receiptNo || 'REC', barcodeRightX - 19, currentY + 14.5, { align: 'center' });
+
+  // Official Footer
+  const footerY = pageHeight - Math.max(10, safeBottom - 5);
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.3);
+  doc.line(safeLeft, footerY - 4, pageWidth - safeRight, footerY - 4);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(37, 99, 235);
+  doc.text('www.curoxa-healthcare.com', safeLeft, footerY);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.text('Official Computer Generated Receipt • Valid Without Physical Signature', pageWidth - safeRight, footerY, { align: 'right' });
+
+  // Save the PDF
+  const filename = `Receipt_${(activeSlipData.receiptNo || 'Slip').replace(/[^a-zA-Z0-9-_]/g, '')}.pdf`;
+  doc.save(filename);
+  return filename;
+}
