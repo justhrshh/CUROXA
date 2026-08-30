@@ -1048,7 +1048,7 @@ const PatientDashboard = () => {
       let letterheadUrl = res.data?.letterheadUrl || "";
       if (letterheadUrl && !letterheadUrl.startsWith('http://') && !letterheadUrl.startsWith('https://') && !letterheadUrl.startsWith('data:')) {
         const apiURL = import.meta.env.VITE_API_URL || '';
-        const backendBase = apiURL ? apiURL.replace('/api', '') : 'http://localhost:5000';
+        const backendBase = apiURL ? apiURL.replace('/api', '') : 'https://curoxa.onrender.com';
         letterheadUrl = `${backendBase}${letterheadUrl}`;
       }
       if (letterheadUrl) {

@@ -1,6 +1,10 @@
 const express = require('express');
 const Approval = require('../models/Approval');
 const AuditLog = require('../models/AuditLog');
+const Indent = require('../models/Indent');
+const Vendor = require('../models/Vendor');
+const Medicine = require('../models/Medicine');
+const PurchaseOrder = require('../models/PurchaseOrder');
 const { verifyToken, isAdmin } = require('../middleware/authMiddleware');
 const tenantMiddleware = require('../middleware/tenantMiddleware');
 const router = express.Router();
@@ -185,41 +189,34 @@ router.patch('/:id', verifyToken, isAdmin, tenantMiddleware, async (req, res) =>
     if (status === 'approved') {
       if (indentToUpdate) {
         indentToUpdate.status = 'Approved';
-        if (indentToUpdate.items && Array.isArray(indentToUpdate.items)) {
-          indentToUpdate.items.forEach((item, idx) => {
-            const matched = approvedItems.find(
-              it => (it.itemId && item._id && String(it.itemId) === String(item._id)) ||
-                    (it.name && item.name && item.name.trim().toLowerCase() === it.name.trim().toLowerCase()) ||
-                    (approvedItems.length === indentToUpdate.items.length && approvedItems[idx])
-            );
-            if (matched) {
-              item.approvedQty = Number(matched.approvedQty);
-            }
-            if (item.suppliedQty === undefined || item.suppliedQty === null) {
-              item.suppliedQty = 0;
-            }
-            if (item.utilizedQty === undefined || item.utilizedQty === null) {
-              item.utilizedQty = 0;
-            }
-          });
-        }
+        const plainItems = (indentToUpdate.items || []).map((item, idx) => {
+          const itemObj = item.toObject ? item.toObject() : { ...item };
+          const matched = (approvedItems || []).find(
+            it => (it.itemId && item._id && String(it.itemId) === String(item._id)) ||
+                  (it.name && item.name && item.name.trim().toLowerCase() === it.name.trim().toLowerCase()) ||
+                  (Array.isArray(approvedItems) && approvedItems.length === indentToUpdate.items.length && approvedItems[idx])
+          );
+          if (matched) {
+            itemObj.approvedQty = Number(matched.approvedQty);
+          } else {
+            itemObj.approvedQty = (itemObj.approvedQty !== null && itemObj.approvedQty !== undefined) 
+              ? Number(itemObj.approvedQty) 
+              : Number(itemObj.requiredQty || 0);
+          }
+          itemObj.suppliedQty = Number(itemObj.suppliedQty) || 0;
+          itemObj.utilizedQty = Number(itemObj.utilizedQty) || 0;
+          return itemObj;
+        });
+
         await Indent.updateOne(
           { _id: indentToUpdate._id, tenantId: req.tenantId },
-          { $set: { status: 'Approved', items: indentToUpdate.items } }
+          { $set: { status: 'Approved', items: plainItems } },
+          sessionOpt
         );
 
         // Also update Approval details items so approvals API returns the exact approvedQty
-        if (approval.details && Array.isArray(approval.details.items)) {
-          approval.details.items.forEach((it, idx) => {
-            const matched = approvedItems.find(
-              ai => (ai.itemId && it._id && String(ai.itemId) === String(it._id)) ||
-                    (ai.name && it.name && ai.name.trim().toLowerCase() === it.name.trim().toLowerCase()) ||
-                    (approvedItems.length === approval.details.items.length && approvedItems[idx])
-            );
-            if (matched) {
-              it.approvedQty = Number(matched.approvedQty);
-            }
-          });
+        if (approval.details) {
+          approval.details.items = plainItems;
         }
       } else if (approval.type === 'vendor_onboarding') {
         const Vendor = require('../models/Vendor');
@@ -524,7 +521,8 @@ router.patch('/:id', verifyToken, isAdmin, tenantMiddleware, async (req, res) =>
           resolvedBy: approval.resolvedBy,
           'details.items': approval.details?.items
         }
-      }
+      },
+      sessionOpt
     );
 
     // Commit transaction if active

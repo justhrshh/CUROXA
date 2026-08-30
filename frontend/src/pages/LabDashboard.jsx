@@ -395,7 +395,14 @@ const LabDashboard = () => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
         setShowNotifications(false);
       }
-      if (!event.target.closest('.sidebar-user') && !event.target.closest('.sidebar-profile-card') && !event.target.closest('.sidebar-profile')) {
+      if (
+        !event.target.closest('.sidebar-user') && 
+        !event.target.closest('.sidebar-profile-card') && 
+        !event.target.closest('.sidebar-profile') &&
+        !event.target.closest('.sidebar-profile-popover-card') &&
+        !event.target.closest('.sidebar-profile-popover') &&
+        !event.target.closest('.sidebar-profile-footer')
+      ) {
         setShowProfileMenu(false);
       }
     };

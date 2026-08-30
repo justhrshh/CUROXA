@@ -4,6 +4,14 @@ import api, { setEmergencyBypass, isEmergencyBypassActive } from '../utils/api';
 import PrescriptionMakerTab from './PrescriptionMakerTab';
 import HRPayroll from './HRPayroll';
 import { convertPdfToImage } from '../utils/pdfHelper';
+import ExportModal from '../components/export/ExportModal';
+import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import {
+  appointmentExportColumns,
+  labReportExportColumns,
+  patientExportColumns,
+  prescriptionExportColumns
+} from '../utils/exportEngine';
 
 const permissionNames = {
   'dr-consult': 'Patient consultation notes',
@@ -555,7 +563,14 @@ const DoctorDashboard = () => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
         setShowNotifications(false);
       }
-      if (!event.target.closest('.sidebar-user') && !event.target.closest('.sidebar-profile-card') && !event.target.closest('.sidebar-profile')) {
+      if (
+        !event.target.closest('.sidebar-user') && 
+        !event.target.closest('.sidebar-profile-card') && 
+        !event.target.closest('.sidebar-profile') &&
+        !event.target.closest('.sidebar-profile-popover-card') &&
+        !event.target.closest('.sidebar-profile-popover') &&
+        !event.target.closest('.sidebar-profile-footer')
+      ) {
         setShowProfileMenu(false);
       }
     };
@@ -966,6 +981,20 @@ const DoctorDashboard = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [allPrescriptions, setAllPrescriptions] = useState([]);
 
+  // Doctor Panel Export Modals state
+  const [showAppointmentExportModal, setShowAppointmentExportModal] = useState(false);
+  const [showLabExportModal, setShowLabExportModal] = useState(false);
+  const [showPrescriptionExportModal, setShowPrescriptionExportModal] = useState(false);
+  const [showPatientExportModal, setShowPatientExportModal] = useState(false);
+
+  const [sectionOpen, setSectionOpen] = useState({
+    management: true,
+    tools: true
+  });
+  const toggleSection = (sec) => {
+    setSectionOpen(prev => ({ ...prev, [sec]: !prev[sec] }));
+  };
+
   // Real-time EMR Appointments page states (filtering, sorting, pagination)
   const [appSearch, setAppSearch] = useState('');
   const [appSort, setAppSort] = useState('Newest');
@@ -1082,7 +1111,7 @@ const DoctorDashboard = () => {
         letterheadUrl = letterheadUrl.replace(/\\/g, '/');
         if (letterheadUrl && !letterheadUrl.startsWith('http://') && !letterheadUrl.startsWith('https://') && !letterheadUrl.startsWith('data:')) {
           const apiURL = import.meta.env.VITE_API_URL || '';
-          const backendBase = apiURL ? apiURL.replace('/api', '') : 'http://localhost:5000';
+          const backendBase = apiURL ? apiURL.replace('/api', '') : 'https://curoxa.onrender.com';
           const baseClean = backendBase.endsWith('/') ? backendBase.slice(0, -1) : backendBase;
           const pathClean = letterheadUrl.startsWith('/') ? letterheadUrl : `/${letterheadUrl}`;
           letterheadUrl = `${baseClean}${pathClean}`;
@@ -4395,6 +4424,507 @@ I have scanned the medical reference databases, but couldn't find a direct match
           }
         }
 
+        /* 1. Flagship Light Theme Sidebar Navigation (Identical to Pharmacy and Admin Portal) */
+        .admin-sidebar {
+          width: 260px !important;
+          background: rgba(255, 255, 255, 0.94) !important;
+          backdrop-filter: blur(16px) !important;
+          -webkit-backdrop-filter: blur(16px) !important;
+          color: #0F172A !important;
+          display: flex !important;
+          flex-direction: column !important;
+          position: fixed !important;
+          top: 0 !important;
+          bottom: 0 !important;
+          left: 0 !important;
+          height: 100vh !important;
+          height: 100dvh !important;
+          min-height: 100vh !important;
+          min-height: calc(100vh / 0.9) !important;
+          z-index: 1000 !important;
+          border-right: 1px solid rgba(226, 232, 240, 0.85) !important;
+          border-top-right-radius: 28px !important;
+          border-bottom-right-radius: 28px !important;
+          box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.04) !important;
+          overscroll-behavior: contain !important;
+          transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          box-sizing: border-box !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          overflow: hidden !important;
+        }
+
+        .admin-sidebar.collapsed {
+          width: 76px !important;
+        }
+        .admin-sidebar.collapsed .sidebar-brand-text,
+        .admin-sidebar.collapsed .sidebar-brand-subtitle,
+        .admin-sidebar.collapsed .sidebar-group-title,
+        .admin-sidebar.collapsed .sidebar-link-text,
+        .admin-sidebar.collapsed .sidebar-link span,
+        .admin-sidebar.collapsed .profile-info,
+        .admin-sidebar.collapsed .profile-chevron {
+          display: none !important;
+        }
+        .admin-sidebar.collapsed .sidebar-brand {
+          justify-content: center !important;
+          padding: 16px 8px 14px !important;
+        }
+        .admin-sidebar.collapsed .sidebar-nav-container {
+          padding: 10px 6px !important;
+        }
+        .admin-sidebar.collapsed .sidebar-link {
+          justify-content: center !important;
+          padding: 6px !important;
+        }
+        .admin-sidebar.collapsed .sidebar-zone {
+          padding: 4px 2px !important;
+          background: transparent !important;
+        }
+        .admin-sidebar.collapsed .sidebar-profile {
+          margin: auto 6px 12px !important;
+          padding: 6px !important;
+          justify-content: center !important;
+          width: 44px !important;
+          height: 44px !important;
+        }
+
+        .sidebar-brand-wrapper {
+          position: relative !important;
+          overflow: visible !important;
+          flex-shrink: 0 !important;
+        }
+
+        .sidebar-brand {
+          padding: 24px 20px 16px 20px !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 14px !important;
+          position: relative !important;
+          z-index: 10 !important;
+        }
+
+        .sidebar-nav-container {
+          flex: 1 !important;
+          overflow-y: auto !important;
+          padding: 8px 12px 14px 12px !important;
+          overscroll-behavior: contain !important;
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+          min-height: 0 !important;
+        }
+        .sidebar-nav-container::-webkit-scrollbar {
+          display: none !important;
+          width: 0 !important;
+          height: 0 !important;
+        }
+
+        .sidebar-group {
+          margin-bottom: 14px !important;
+        }
+
+        .sidebar-group-title {
+          font-size: 12.5px !important;
+          font-weight: 800 !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.07em !important;
+          line-height: 1.25 !important;
+          margin-bottom: 8px !important;
+          padding: 4px 8px !important;
+          border-radius: 8px !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          cursor: pointer !important;
+          user-select: none !important;
+          transition: background-color 0.15s ease, margin-bottom 0.2s ease !important;
+        }
+        .sidebar-group-title:hover {
+          background-color: rgba(0, 0, 0, 0.035) !important;
+        }
+        .sidebar-group-title.collapsed {
+          margin-bottom: 0px !important;
+        }
+        .sidebar-group-chevron {
+          margin-left: auto !important;
+          transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          opacity: 0.7 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+        .sidebar-group-title:hover .sidebar-group-chevron {
+          opacity: 1 !important;
+        }
+
+        .sidebar-zone-clinic {
+          background: linear-gradient(180deg, rgba(240, 253, 250, 0.75) 0%, rgba(236, 254, 255, 0.45) 100%) !important;
+          border-radius: 18px !important;
+          padding: 10px 8px !important;
+          margin-top: 14px !important;
+          margin-bottom: 14px !important;
+          transition: all 0.25s ease !important;
+        }
+        .sidebar-zone-clinic.collapsed {
+          padding: 6px 8px !important;
+          margin-top: 8px !important;
+          margin-bottom: 8px !important;
+        }
+
+        .sidebar-zone-finance {
+          background: linear-gradient(180deg, rgba(255, 247, 237, 0.8) 0%, rgba(254, 242, 242, 0.35) 100%) !important;
+          border-radius: 18px !important;
+          padding: 10px 8px !important;
+          margin-top: 14px !important;
+          margin-bottom: 14px !important;
+          transition: all 0.25s ease !important;
+        }
+        .sidebar-zone-finance.collapsed {
+          padding: 6px 8px !important;
+          margin-top: 8px !important;
+          margin-bottom: 8px !important;
+        }
+
+        .sidebar-link {
+          position: relative !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 10px !important;
+          padding: 5px 8px !important;
+          border-radius: 14px !important;
+          color: #0F172A !important;
+          text-decoration: none !important;
+          font-weight: 600 !important;
+          font-size: 14px !important;
+          line-height: 1.25 !important;
+          transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          margin-bottom: 3px !important;
+          cursor: pointer !important;
+          user-select: none !important;
+          border: 1px solid transparent !important;
+        }
+
+        .sidebar-link-text {
+          line-height: 1.25 !important;
+          font-size: 13.5px !important;
+          font-weight: 600 !important;
+          color: #0F172A !important;
+          transition: all 0.2s ease !important;
+        }
+
+        .sidebar-link:hover:not(.active) {
+          background-color: rgba(241, 245, 249, 0.85) !important;
+          transform: translateX(2px) !important;
+        }
+
+        /* 3D POPPED-OUT ACTIVE STATE WITH RICH DEPTH & SHADOWS */
+        .sidebar-link.active {
+          background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+          border: 1px solid rgba(219, 234, 254, 0.95) !important;
+          box-shadow: 
+            0 10px 24px -3px rgba(37, 99, 235, 0.18),
+            0 4px 10px -2px rgba(15, 23, 42, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.04),
+            inset 0 1px 0 #FFFFFF !important;
+          transform: translateY(-1.5px) !important;
+          z-index: 5 !important;
+        }
+
+        .sidebar-link.active .sidebar-link-text {
+          color: #2563EB !important;
+          font-weight: 800 !important;
+          letter-spacing: -0.01em !important;
+        }
+
+        .sidebar-link.active .sidebar-link-icon {
+          transform: scale(1.04) !important;
+          box-shadow: 0 5px 15px -1px rgba(37, 99, 235, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* Clinic zone active 3D pop */
+        .sidebar-zone-clinic .sidebar-link.active {
+          border-color: rgba(153, 246, 228, 0.95) !important;
+          box-shadow: 
+            0 10px 24px -3px rgba(13, 148, 136, 0.2),
+            0 4px 10px -2px rgba(15, 23, 42, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.04),
+            inset 0 1px 0 #FFFFFF !important;
+        }
+        .sidebar-zone-clinic .sidebar-link.active .sidebar-link-text {
+          color: #0D9488 !important;
+        }
+        .sidebar-zone-clinic .sidebar-link.active .sidebar-link-icon {
+          box-shadow: 0 5px 15px -1px rgba(13, 148, 136, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* Finance zone active 3D pop */
+        .sidebar-zone-finance .sidebar-link.active {
+          border-color: rgba(254, 215, 170, 0.95) !important;
+          box-shadow: 
+            0 10px 24px -3px rgba(234, 88, 12, 0.2),
+            0 4px 10px -2px rgba(15, 23, 42, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.04),
+            inset 0 1px 0 #FFFFFF !important;
+        }
+        .sidebar-zone-finance .sidebar-link.active .sidebar-link-text {
+          color: #EA580C !important;
+        }
+        .sidebar-zone-finance .sidebar-link.active .sidebar-link-icon {
+          box-shadow: 0 5px 15px -1px rgba(234, 88, 12, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+        }
+
+        .sidebar-link-icon {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 11px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          flex-shrink: 0 !important;
+          transition: all 0.2s ease !important;
+        }
+
+        .sidebar-profile-footer {
+          position: relative !important;
+          padding: 8px 10px 12px 10px !important;
+          background: #FFFFFF !important;
+          border-bottom-right-radius: 28px !important;
+          flex-shrink: 0 !important;
+          z-index: 20 !important;
+          margin-top: auto !important;
+        }
+        .admin-sidebar.collapsed .sidebar-profile-footer,
+        .sidebar.collapsed .sidebar-profile-footer {
+          padding: 8px 6px 12px 6px !important;
+        }
+        .sidebar-profile-fade-top {
+          position: absolute !important;
+          top: -16px !important;
+          left: 0 !important;
+          right: 0 !important;
+          height: 16px !important;
+          background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.45) 50%, rgba(255, 255, 255, 0.9) 100%) !important;
+          pointer-events: none !important;
+          backdrop-filter: blur(0.75px) !important;
+          -webkit-backdrop-filter: blur(0.75px) !important;
+          z-index: 15 !important;
+        }
+
+        .sidebar-profile {
+          margin: 0 !important;
+          padding: 7px 10px !important;
+          border-radius: 14px !important;
+          background: linear-gradient(135deg, #EEF4FF 0%, #F5F8FF 45%, #FFFFFF 100%) !important;
+          border: 1px solid rgba(219, 234, 254, 0.8) !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 10px !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+          position: relative !important;
+          box-shadow: 0 4px 14px -2px rgba(30, 58, 138, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+          line-height: 1.2 !important;
+          user-select: none !important;
+        }
+        .sidebar-profile:hover {
+          background: linear-gradient(135deg, #E0E7FF 0%, #EEF2FF 50%, #FFFFFF 100%) !important;
+          border-color: #C7D2FE !important;
+          box-shadow: 0 6px 18px -2px rgba(30, 58, 138, 0.1) !important;
+        }
+        .admin-sidebar.collapsed .sidebar-profile,
+        .sidebar.collapsed .sidebar-profile {
+          margin: 0 auto !important;
+          padding: 6px !important;
+          justify-content: center !important;
+          width: 44px !important;
+          height: 44px !important;
+        }
+        .profile-avatar-wrap {
+          position: relative !important;
+          flex-shrink: 0 !important;
+          display: inline-flex !important;
+        }
+        .profile-avatar-status-dot {
+          position: absolute !important;
+          bottom: -1px !important;
+          right: -1px !important;
+          width: 9px !important;
+          height: 9px !important;
+          border-radius: 50% !important;
+          background: #22C55E !important;
+          border: 2px solid #FFFFFF !important;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+        }
+        .profile-avatar {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 50% !important;
+          object-fit: cover !important;
+          border: 1.5px solid #818CF8 !important;
+        }
+        .profile-avatar-initials {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 50% !important;
+          background: linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #8B5CF6 100%) !important;
+          color: #FFFFFF !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          font-weight: 800 !important;
+          font-size: 13.5px !important;
+          box-shadow: 0 3px 8px rgba(79, 70, 229, 0.3) !important;
+          flex-shrink: 0 !important;
+        }
+        .profile-info {
+          display: flex !important;
+          flex-direction: column !important;
+          flex: 1 !important;
+          min-width: 0 !important;
+        }
+        .profile-name {
+          font-size: 13.5px !important;
+          font-weight: 800 !important;
+          color: #0F172A !important;
+          line-height: 1.2 !important;
+          white-space: nowrap !important;
+          text-overflow: ellipsis !important;
+          overflow: hidden !important;
+        }
+        .profile-role {
+          font-size: 11px !important;
+          color: #64748B !important;
+          font-weight: 600 !important;
+          line-height: 1.2 !important;
+          margin-top: 1px !important;
+          white-space: nowrap !important;
+          text-overflow: ellipsis !important;
+          overflow: hidden !important;
+        }
+        .profile-chevron {
+          color: #2563EB !important;
+          display: flex !important;
+          align-items: center !important;
+          transition: transform 0.25s ease !important;
+          flex-shrink: 0 !important;
+        }
+
+        /* Profile Floating Popover Menu */
+        .sidebar-profile-popover-card {
+          position: absolute !important;
+          bottom: 66px !important;
+          left: 8px !important;
+          right: 8px !important;
+          background: #FFFFFF !important;
+          border-radius: 18px !important;
+          padding: 6px !important;
+          box-shadow: 0 12px 36px -4px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(226, 232, 240, 0.8) !important;
+          z-index: 1100 !important;
+          animation: popoverFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          min-width: 210px !important;
+        }
+        @keyframes popoverFadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* TOP NAV STYLES */
+        .top-nav {
+          margin-left: 260px !important;
+          height: 64px !important;
+          padding: 0 28px !important;
+          border-bottom: 1px solid #F1F5F9 !important;
+          background: #FFFFFF !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          position: fixed !important;
+          top: 0 !important;
+          right: 0 !important;
+          left: 0 !important;
+          z-index: 99 !important;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02) !important;
+          transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .top-nav.collapsed {
+          margin-left: 76px !important;
+        }
+
+        .main-content {
+          margin-left: 260px !important;
+          margin-top: 64px !important;
+          padding: 24px 28px 40px 28px !important;
+          background-color: #F8FAFC !important;
+          min-height: calc(100vh - 64px) !important;
+          transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .main-content.collapsed {
+          margin-left: 76px !important;
+        }
+
+        /* 5-KPI METRICS GRID IN A SINGLE ROW */
+        .kpi-grid {
+          display: grid !important;
+          grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+          gap: 14px !important;
+          margin-bottom: 24px !important;
+        }
+
+        @media (max-width: 1280px) {
+          .kpi-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+          }
+        }
+        @media (max-width: 1024px) {
+          .kpi-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 12px !important;
+          }
+        }
+        @media (max-width: 640px) {
+          .kpi-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
+        @media (max-width: 1024px) {
+          .admin-sidebar {
+            left: -260px !important;
+            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            display: flex !important;
+            z-index: 2000 !important;
+          }
+          .admin-sidebar.mobile-open {
+            left: 0 !important;
+            z-index: 2010 !important;
+          }
+          .top-nav, .main-content {
+            margin-left: 0 !important;
+          }
+          .top-nav {
+            padding: 0 16px !important;
+            left: 0 !important;
+          }
+          .main-content {
+            padding: 16px !important;
+          }
+          .mobile-menu-toggle {
+            display: flex !important;
+            z-index: 100 !important;
+          }
+          .mobile-backdrop {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            background-color: rgba(15, 23, 42, 0.4) !important;
+            backdrop-filter: blur(4px) !important;
+            z-index: 1999 !important;
+          }
+        }
+
         /* Calendar Retraction & Expansion Drawer Styles */
         @media (min-width: 1025px) {
           .calendar-row {
@@ -4512,193 +5042,447 @@ I have scanned the medical reference databases, but couldn't find a direct match
 
       {/* Main Sidebar */}
       {activeTab !== 'hr-payroll' && (
-        <div className={"sidebar " + (isSidebarCollapsed ? "collapsed " : "") + (mobileSidebarOpen ? "mobile-open" : "")} data-lenis-prevent>
-        <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative', width: '100%' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary)', color: '#FFFFFF', fontWeight: 900, fontSize: '16px', boxShadow: '0 0 15px rgba(59, 113, 254, 0.15)', flexShrink: 0 }}>
-            C
-          </div>
-          <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 900, color: '#2563EB', letterSpacing: '-0.02em' }}>Curoxa</span>
-          <button 
-            className="sidebar-collapse-toggle desktop-only-flex"
-            onClick={(e) => {
-              e.stopPropagation();
-              const newState = !isSidebarCollapsed;
-              setIsSidebarCollapsed(newState);
-              localStorage.setItem('curoxa_sidebar_collapsed', String(newState));
-            }}
-            style={{
-              transform: isSidebarCollapsed ? 'rotate(180deg)' : 'none'
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          </button>
-        </div>
-        <nav>
-          <a href="#" className={`nav-link ${activeTab === 'dash' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('dash'); setMobileSidebarOpen(false); }}>
-            <i data-lucide="layout-grid"></i> Dashboard
-          </a>
-          {(currentUser?.role === 'doctor' || (coverageState['dr-consult']?.on || coverageState['dr-history']?.on)) && (
-            <a href="#" className={`nav-link ${activeTab === 'appointments' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('appointments'); setMobileSidebarOpen(false); }}>
-              <i data-lucide="calendar"></i> Appointments
-            </a>
-          )}
-          {(currentUser?.role === 'doctor' || coverageState['dr-laborder']?.on) && (
-            <a href="#" className={`nav-link ${activeTab === 'labs' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('labs'); setMobileSidebarOpen(false); }}>
-              <i data-lucide="flask-conical"></i> Lab reports
-            </a>
-          )}
-          {(currentUser?.role === 'doctor' || coverageState['dr-rx']?.on) && (
-            <a href="#" className={`nav-link ${activeTab === 'prescriptions' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('prescriptions'); setMobileSidebarOpen(false); }}>
-              <i data-lucide="file-text"></i> Prescriptions
-            </a>
-          )}
-          {(currentUser?.role === 'doctor' || (coverageState['dr-consult']?.on || coverageState['dr-discharge']?.on || coverageState['dr-history']?.on)) && (
-            <a href="#" className={`nav-link ${['consultations', 'patient-profile'].includes(activeTab) ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('consultations'); setMobileSidebarOpen(false); }}>
-              <i data-lucide="activity"></i> Patient Records
-            </a>
-          )}
-          {currentUser?.role === 'doctor' && (
-            <a href="#" className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('settings'); setMobileSidebarOpen(false); }}>
-              <i data-lucide="settings"></i> Settings
-            </a>
-          )}
-
-          {/* DYNAMIC COVERAGE INTEGRATION LINKS */}
-          {(Object.keys(coverageState || {}).some(k => k.startsWith('rc-') && coverageState[k]?.on)) && tenantModules.reception?.enabled !== false && (
-            <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); window.open('/receptionist', '_blank'); setMobileSidebarOpen(false); }} style={{ color: '#E11D48', fontWeight: 800 }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', flexShrink: 0 }}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-              Receptionist Cover
-            </a>
-          )}
-          {(Object.keys(coverageState || {}).some(k => k.startsWith('lt-') && coverageState[k]?.on)) && tenantModules.laboratory?.enabled !== false && (
-            <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); window.open('/lab', '_blank'); setMobileSidebarOpen(false); }} style={{ color: '#059669', fontWeight: 800 }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', flexShrink: 0 }}><path d="M6 18H18"/><path d="M10 14H14"/><path d="M12 2v20"/><path d="M18 10H6"/></svg>
-              Lab Cover
-            </a>
-          )}
-          {(Object.keys(coverageState || {}).some(k => (k.startsWith('ph-') || k === 'dr-stockview') && coverageState[k]?.on)) && tenantModules.pharmacy?.enabled !== false && (
-            <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); window.open('/pharmacy', '_blank'); setMobileSidebarOpen(false); }} style={{ color: '#2563EB', fontWeight: 800 }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', flexShrink: 0 }}><path d="M12 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-              Pharmacy Cover
-            </a>
-          )}
-        </nav>
-        
-        {/* Bottom Doctor Profile Card */}
-        <div className="sidebar-profile-card" onClick={(e) => { e.stopPropagation(); setShowProfileMenu(!showProfileMenu); }}>
-          {docProfile.avatar ? (
-            <img 
-              className="sidebar-profile-avatar" 
-              src={docProfile.avatar} 
-              alt="Doctor Avatar" 
-              style={{ objectFit: 'cover', border: '2px solid #BFDBFE' }}
-            />
-          ) : (
-            <div className="sidebar-profile-avatar-initials" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px', marginRight: '10px', flexShrink: 0 }}>
-              {docProfile.name ? docProfile.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'DR'}
-            </div>
-          )}
-          <div className="sidebar-profile-info">
-            <span className="sidebar-profile-name">{docProfile.name}</span>
-            <span className="sidebar-profile-role">{docProfile.specialty}</span>
-          </div>
-          <i data-lucide="chevron-down" className="sidebar-profile-chevron" style={{ transition: '0.3s', transform: showProfileMenu ? 'rotate(180deg)' : 'none' }}></i>
-
-          {showProfileMenu && (
-            <div 
-              className="glass-card sidebar-profile-popover" 
+        <div 
+          className={`admin-sidebar ${isSidebarCollapsed ? "collapsed " : ""}${mobileSidebarOpen ? "mobile-open" : ""}`}
+          style={{
+            position: 'fixed',
+            top: 0,
+            bottom: 0,
+            left: 0,
+            height: '100%',
+            minHeight: 'calc(100vh / 0.9)',
+            display: 'flex',
+            flexDirection: 'column',
+            zIndex: 1000,
+            overflow: 'hidden'
+          }}
+          data-lenis-prevent
+        >
+          {/* Logo & Brand Header */}
+          <div className="sidebar-brand-wrapper">
+            {/* Top decorative subtle mesh wave in brand header */}
+            <svg 
+              viewBox="0 0 280 130" 
+              fill="none" 
+              xmlns="http://www.w3.org/2000/svg"
               style={{ 
                 position: 'absolute', 
-                bottom: '72px', 
-                left: '0px', 
-                width: '208px', 
-                zIndex: 3000, 
-                padding: '8px', 
-                boxShadow: '0 -10px 40px rgba(0,0,0,0.06)', 
-                background: 'white',
-                borderRadius: '12px',
-                border: '1px solid #F1F5F9',
-                animation: 'slideUp 0.2s ease-out'
+                top: 0, 
+                left: 0, 
+                width: '100%', 
+                height: '130px', 
+                pointerEvents: 'none', 
+                zIndex: 0,
+                opacity: isSidebarCollapsed ? 0 : 0.95,
+                transition: 'opacity 0.2s'
               }}
-              onClick={e => e.stopPropagation()}
             >
-              <div style={{ padding: '10px 12px', borderBottom: '1px solid #F1F5F9', marginBottom: '6px' }}>
-                <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0F172A' }}>{docProfile.name}</div>
-                <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>{docProfile.specialty}</div>
+              <path d="M0,0 L280,0 L280,65 C215,100 155,70 85,105 C40,120 15,110 0,100 Z" fill="url(#curoxaWaveGradDoc1)" />
+              <path d="M0,0 L280,0 L280,40 C195,80 135,50 55,90 C20,102 0,92 0,92 Z" fill="url(#curoxaWaveGradDoc2)" opacity="0.65" />
+              <defs>
+                <linearGradient id="curoxaWaveGradDoc1" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#DBEAFE" stopOpacity="0.85" />
+                  <stop offset="50%" stopColor="#E0E7FF" stopOpacity="0.6" />
+                  <stop offset="100%" stopColor="#F3E8FF" stopOpacity="0.2" />
+                </linearGradient>
+                <linearGradient id="curoxaWaveGradDoc2" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#BAE6FD" stopOpacity="0.75" />
+                  <stop offset="100%" stopColor="#DDD6FE" stopOpacity="0.15" />
+                </linearGradient>
+              </defs>
+            </svg>
+
+            <div className="sidebar-brand">
+              <img 
+                src={curoxaSidebarLogo} 
+                alt="CUROXA" 
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  objectFit: 'contain',
+                  flexShrink: 0,
+                  filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.08))'
+                }}
+              />
+              <div className="sidebar-brand-text-group" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                <span className="sidebar-brand-text" style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif", fontWeight: 900, fontSize: '18px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1 }}>
+                  CUROXA
+                </span>
+                <span className="sidebar-brand-subtitle" style={{ fontSize: '11px', color: '#64748B', fontWeight: 500, letterSpacing: '-0.01em', marginTop: '3px', lineHeight: 1 }}>
+                  Health Management
+                </span>
               </div>
-              <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#334155', 
+              <button 
+                className="sidebar-collapse-toggle desktop-only-flex"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const newState = !isSidebarCollapsed;
+                  setIsSidebarCollapsed(newState);
+                  localStorage.setItem('curoxa_sidebar_collapsed', String(newState));
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '-12px',
+                  top: '26px',
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '50%',
+                  background: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   cursor: 'pointer',
-                  transition: 'background 0.2s',
-                  marginBottom: '4px'
+                  zIndex: 100,
+                  transition: 'transform 0.3s ease',
+                  transform: isSidebarCollapsed ? 'rotate(180deg)' : 'none'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={() => {
-                  setShowProfileMenu(false);
-                  setActiveTab('settings');
-                }}
+                title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
               >
-                <i data-lucide="user" style={{ width: '16px', height: '16px' }}></i> Edit Profile
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Scrollable Nav Container */}
+          <div 
+            className="sidebar-nav-container"
+            style={{
+              flex: '1 1 auto',
+              overflowY: 'auto',
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {/* SECTION 1: OVERVIEW GROUP */}
+            <div className="sidebar-group">
+              <div className="sidebar-group-title" style={{ color: '#2563EB' }}>
+                <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> OVERVIEW
               </div>
+
               <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#334155', 
-                  cursor: 'pointer',
-                  transition: 'background 0.2s',
-                  marginBottom: '4px'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={() => {
-                  setActiveTab('hr-payroll');
-                  setShowProfileMenu(false);
-                }}
+                className={`sidebar-link ${activeTab === 'dash' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); setActiveTab('dash'); setMobileSidebarOpen(false); }}
               >
-                <i data-lucide="credit-card" style={{ width: '16px', height: '16px' }}></i> HR & Payroll
+                {activeTab === 'dash' && (
+                  <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
+                )}
+                <div className="sidebar-link-icon" style={{
+                  background: activeTab === 'dash' ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#EFF6FF',
+                  color: activeTab === 'dash' ? '#FFFFFF' : '#2563EB',
+                  boxShadow: activeTab === 'dash' ? '0 3px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="7" x="3" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="14" rx="1.5"/><rect width="7" height="7" x="3" y="14" rx="1.5"/></svg>
+                </div>
+                <span className="sidebar-link-text">Overview</span>
               </div>
+
+              {(currentUser?.role === 'doctor' || (coverageState['dr-consult']?.on || coverageState['dr-history']?.on)) && (
+                <div 
+                  className={`sidebar-link ${activeTab === 'appointments' ? 'active' : ''}`}
+                  onClick={(e) => { e.preventDefault(); setActiveTab('appointments'); setMobileSidebarOpen(false); }}
+                >
+                  {activeTab === 'appointments' && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: activeTab === 'appointments' ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#EFF6FF',
+                    color: activeTab === 'appointments' ? '#FFFFFF' : '#2563EB',
+                    boxShadow: activeTab === 'appointments' ? '0 3px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  </div>
+                  <span className="sidebar-link-text">Appointments</span>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 2: CLINICAL MANAGEMENT ZONE (Tinted Teal Card) */}
+            <div className={`sidebar-zone sidebar-zone-clinic ${!sectionOpen.management ? 'collapsed' : ''}`}>
               <div 
-                style={{ 
-                  padding: '10px 12px', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  fontSize: '13px', 
-                  fontWeight: 700, 
-                  color: '#DC2626', 
-                  cursor: 'pointer',
-                  transition: 'background 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#FEF2F2'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={() => {
-                  setShowProfileMenu(false);
-                  handleLogout();
-                }}
+                className={`sidebar-group-title ${!sectionOpen.management ? 'collapsed' : ''}`}
+                style={{ color: '#0D9488' }}
+                onClick={() => toggleSection('management')}
+                title="Toggle Management Section"
               >
-                <i data-lucide="log-out" style={{ width: '16px', height: '16px' }}></i> Logout
+                <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> MANAGEMENT
+                <span className="sidebar-group-chevron" style={{ transform: sectionOpen.management ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
+              </div>
+              {sectionOpen.management && (
+                <>
+                  {(currentUser?.role === 'doctor' || (coverageState['dr-consult']?.on || coverageState['dr-discharge']?.on || coverageState['dr-history']?.on)) && (
+                    <div 
+                      className={`sidebar-link ${['consultations', 'patient-profile'].includes(activeTab) ? 'active' : ''}`}
+                      onClick={(e) => { e.preventDefault(); setActiveTab('consultations'); setMobileSidebarOpen(false); }}
+                    >
+                      {['consultations', 'patient-profile'].includes(activeTab) && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: ['consultations', 'patient-profile'].includes(activeTab) ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                        color: ['consultations', 'patient-profile'].includes(activeTab) ? '#FFFFFF' : '#0D9488',
+                        boxShadow: ['consultations', 'patient-profile'].includes(activeTab) ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                      }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Patient Records</span>
+                    </div>
+                  )}
+
+                  {(currentUser?.role === 'doctor' || coverageState['dr-rx']?.on) && (
+                    <div 
+                      className={`sidebar-link ${activeTab === 'prescriptions' ? 'active' : ''}`}
+                      onClick={(e) => { e.preventDefault(); setActiveTab('prescriptions'); setMobileSidebarOpen(false); }}
+                    >
+                      {activeTab === 'prescriptions' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'prescriptions' ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                        color: activeTab === 'prescriptions' ? '#FFFFFF' : '#0D9488',
+                        boxShadow: activeTab === 'prescriptions' ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                      }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Prescriptions</span>
+                    </div>
+                  )}
+
+                  {(currentUser?.role === 'doctor' || coverageState['dr-laborder']?.on) && (
+                    <div 
+                      className={`sidebar-link ${activeTab === 'labs' ? 'active' : ''}`}
+                      onClick={(e) => { e.preventDefault(); setActiveTab('labs'); setMobileSidebarOpen(false); }}
+                    >
+                      {activeTab === 'labs' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'labs' ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                        color: activeTab === 'labs' ? '#FFFFFF' : '#0D9488',
+                        boxShadow: activeTab === 'labs' ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                      }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><path d="M5.52 16h12.96"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Lab reports</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* SECTION 3: TOOLS ZONE (Tinted Peach/Orange Card) */}
+            <div className={`sidebar-zone sidebar-zone-finance ${!sectionOpen.tools ? 'collapsed' : ''}`}>
+              <div 
+                className={`sidebar-group-title ${!sectionOpen.tools ? 'collapsed' : ''}`}
+                style={{ color: '#EA580C' }}
+                onClick={() => toggleSection('tools')}
+                title="Toggle Tools Section"
+              >
+                <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> TOOLS
+                <span className="sidebar-group-chevron" style={{ transform: sectionOpen.tools ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
+              </div>
+              {sectionOpen.tools && (
+                <>
+                  {currentUser?.role === 'doctor' && (
+                    <div 
+                      className={`sidebar-link ${activeTab === 'settings' ? 'active' : ''}`}
+                      onClick={(e) => { e.preventDefault(); setActiveTab('settings'); setMobileSidebarOpen(false); }}
+                    >
+                      <div className="sidebar-link-icon" style={{ background: '#FFF7ED', color: '#EA580C' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                      </div>
+                      <span className="sidebar-link-text">Settings</span>
+                    </div>
+                  )}
+
+                  <div 
+                    className={`sidebar-link ${activeTab === 'hr-payroll' ? 'active' : ''}`}
+                    onClick={(e) => { e.preventDefault(); setActiveTab('hr-payroll'); setMobileSidebarOpen(false); }}
+                  >
+                    <div className="sidebar-link-icon" style={{ background: '#FFF7ED', color: '#EA580C' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                    </div>
+                    <span className="sidebar-link-text">HR & Payroll</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* SECTION 4: DYNAMIC COVERAGE INTEGRATION LINKS */}
+            {((Object.keys(coverageState || {}).some(k => k.startsWith('rc-') && coverageState[k]?.on)) && tenantModules.reception?.enabled !== false ||
+              (Object.keys(coverageState || {}).some(k => k.startsWith('lt-') && coverageState[k]?.on)) && tenantModules.laboratory?.enabled !== false ||
+              (Object.keys(coverageState || {}).some(k => (k.startsWith('ph-') || k === 'dr-stockview') && coverageState[k]?.on)) && tenantModules.pharmacy?.enabled !== false) && (
+              <div className="sidebar-group" style={{ marginTop: '10px' }}>
+                <div className="sidebar-group-title" style={{ color: '#EF4444' }}>
+                  <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> ACTIVE COVERAGES
+                </div>
+
+                {(Object.keys(coverageState || {}).some(k => k.startsWith('rc-') && coverageState[k]?.on)) && tenantModules.reception?.enabled !== false && (
+                  <div 
+                    className="sidebar-link"
+                    onClick={(e) => { e.preventDefault(); window.open('/receptionist', '_blank'); setMobileSidebarOpen(false); }}
+                  >
+                    <div className="sidebar-link-icon" style={{ background: '#FFE4E6', color: '#E11D48' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    </div>
+                    <span className="sidebar-link-text" style={{ color: '#E11D48', fontWeight: 800 }}>Receptionist Cover</span>
+                  </div>
+                )}
+
+                {(Object.keys(coverageState || {}).some(k => k.startsWith('lt-') && coverageState[k]?.on)) && tenantModules.laboratory?.enabled !== false && (
+                  <div 
+                    className="sidebar-link"
+                    onClick={(e) => { e.preventDefault(); window.open('/lab', '_blank'); setMobileSidebarOpen(false); }}
+                  >
+                    <div className="sidebar-link-icon" style={{ background: '#D1FAE5', color: '#059669' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18H18"/><path d="M10 14H14"/><path d="M12 2v20"/><path d="M18 10H6"/></svg>
+                    </div>
+                    <span className="sidebar-link-text" style={{ color: '#059669', fontWeight: 800 }}>Lab Cover</span>
+                  </div>
+                )}
+
+                {(Object.keys(coverageState || {}).some(k => (k.startsWith('ph-') || k === 'dr-stockview') && coverageState[k]?.on)) && tenantModules.pharmacy?.enabled !== false && (
+                  <div 
+                    className="sidebar-link"
+                    onClick={(e) => { e.preventDefault(); window.open('/pharmacy', '_blank'); setMobileSidebarOpen(false); }}
+                  >
+                    <div className="sidebar-link-icon" style={{ background: '#EFF6FF', color: '#2563EB' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    </div>
+                    <span className="sidebar-link-text" style={{ color: '#2563EB', fontWeight: 800 }}>Pharmacy Cover</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Profile Section sitting at bottom with soft blur fade above */}
+          <div 
+            className="sidebar-profile-footer"
+            style={{
+              marginTop: 'auto',
+              flexShrink: 0,
+              position: 'relative'
+            }}
+          >
+            <div className="sidebar-profile-fade-top" />
+            <div className="sidebar-profile" onClick={(e) => { e.stopPropagation(); setShowProfileMenu(!showProfileMenu); }}>
+              <div className="profile-avatar-wrap">
+                {docProfile.avatar ? (
+                  <img 
+                    className="profile-avatar" 
+                    src={docProfile.avatar} 
+                    alt="Doctor Avatar" 
+                  />
+                ) : (
+                  <div className="profile-avatar-initials" style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}>
+                    {docProfile.name ? docProfile.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'DR'}
+                  </div>
+                )}
+                <span className="profile-avatar-status-dot" />
+              </div>
+              <div className="profile-info">
+                <span className="profile-name">{docProfile.name || currentUser.name || 'Doctor'}</span>
+                <span className="profile-role">{docProfile.specialty || 'General Physician'}</span>
+              </div>
+              <div className="profile-chevron" style={{ transform: showProfileMenu ? 'rotate(180deg)' : 'none' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
               </div>
             </div>
-          )}
+
+            {showProfileMenu && (
+              <div 
+                className="glass-card sidebar-profile-popover-card" 
+                onClick={e => e.stopPropagation()}
+              >
+                <div style={{ padding: '10px 12px', borderBottom: '1px solid #F1F5F9', marginBottom: '6px' }}>
+                  <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0F172A' }}>{docProfile.name || currentUser.name || 'Doctor'}</div>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>{docProfile.specialty || 'General Physician'}</div>
+                </div>
+                <div 
+                  style={{ 
+                    padding: '10px 12px', 
+                    borderRadius: '10px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    fontSize: '13px', 
+                    fontWeight: 700, 
+                    color: '#334155', 
+                    cursor: 'pointer',
+                    transition: 'background 0.2s',
+                    marginBottom: '4px'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowProfileMenu(false);
+                    setActiveTab('settings');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Edit Profile
+                </div>
+                <div 
+                  style={{ 
+                    padding: '10px 12px', 
+                    borderRadius: '10px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    fontSize: '13px', 
+                    fontWeight: 700, 
+                    color: '#334155', 
+                    cursor: 'pointer',
+                    transition: 'background 0.2s',
+                    marginBottom: '4px'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowProfileMenu(false);
+                    setActiveTab('hr-payroll');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg> HR & Payroll
+                </div>
+                <div 
+                  style={{ 
+                    padding: '10px 12px', 
+                    borderRadius: '10px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    fontSize: '13px', 
+                    fontWeight: 700, 
+                    color: '#DC2626', 
+                    cursor: 'pointer',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#FEF2F2'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowProfileMenu(false);
+                    handleLogout();
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Logout
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    )}
+      )}
 
       {/* Mobile Sidebar Backdrop Overlay */}
       {mobileSidebarOpen && (
@@ -4731,6 +5515,25 @@ I have scanned the medical reference databases, but couldn't find a direct match
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
         </button>
+
+        {/* Left: Section Indicator & Clinic Context */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', fontFamily: "'Outfit', sans-serif" }}>
+              {activeTab === 'dash' ? 'Daily Command Center' : 
+               activeTab === 'appointments' ? 'Appointments Management' : 
+               activeTab === 'labs' ? 'Laboratory Orders & Reports' : 
+               activeTab === 'prescriptions' ? 'Prescription Management' : 
+               activeTab === 'consultations' ? 'Patient Records & Consultations' : 
+               activeTab === 'settings' ? 'Doctor Profile & Settings' : 'Doctor Portal'}
+            </span>
+          </div>
+          <span style={{ height: '14px', width: '1px', background: '#E2E8F0', margin: '0 4px' }}></span>
+          <span style={{ background: '#EFF6FF', color: '#2563EB', fontSize: '11px', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
+            {currentUser.tenantName || 'CUROXA HEALTHCARE'}
+          </span>
+        </div>
+
         {/* Global Patient Search (Optimized & Absolute Overlaid Dropdown) */}
         <div 
           ref={searchContainerRef}
@@ -5652,353 +6455,789 @@ I have scanned the medical reference databases, but couldn't find a direct match
           const recentConsults = getRecentConsultations(selectedDateStr);
           
           return (
-            <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out' }}>
-              {/* Row 1: Total Appointments & Today's Overview */}
-              <div className="calendar-row mobile-stack">
-                
-                {/* Total Appointments List */}
-                <div className={`glass-card calendar-left-panel ${showHomeCalendar ? 'calendar-open' : ''}`} style={{ padding: '24px', border: '1px solid #F1F5F9', borderRadius: '16px', background: '#ffffff', boxShadow: '0 4px 20px rgba(0,0,0,0.01)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                        Total Appointments
-                      </h3>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                      <a href="#" style={{ color: '#2563EB', fontSize: '13px', fontWeight: 700, textDecoration: 'none' }} onClick={(e) => { e.preventDefault(); setActiveTab('appointments'); }}>View All</a>
-                      {!showHomeCalendar && (
-                        <button 
-                          onClick={() => setShowHomeCalendar(true)}
-                          title="Expand Calendar"
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '6px',
-                            borderRadius: '8px',
-                            color: '#64748B',
-                            backgroundColor: '#F1F5F9',
-                            transition: 'all 0.2s ease',
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                          }}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-                            <line x1="16" x2="16" y1="2" y2="6"/>
-                            <line x1="8" x2="8" y1="2" y2="6"/>
-                            <line x1="3" x2="21" y1="10" y2="10"/>
-                          </svg>
-                        </button>
-                      )}
-                    </div>
+            <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', padding: '24px' }}>
+              
+              {/* Doctor Command Center Greeting Hero Bar */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '24px',
+                flexWrap: 'wrap',
+                gap: '16px',
+                background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
+                padding: '20px 24px',
+                borderRadius: '16px',
+                border: '1px solid #E2E8F0',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '14px',
+                    background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
+                    flexShrink: 0
+                  }}>
+                    <i data-lucide="stethoscope" style={{ width: '24px', height: '24px' }}></i>
                   </div>
-                  
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ width: '15%', paddingBottom: '12px', color: '#94A3B8', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Time</th>
-                          <th style={{ width: '30%', paddingBottom: '12px', color: '#94A3B8', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Patient Details</th>
-                          <th style={{ width: '15%', paddingBottom: '12px', color: '#94A3B8', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Type</th>
-                          <th style={{ width: '15%', paddingBottom: '12px', color: '#94A3B8', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Status</th>
-                          <th style={{ width: '15%', paddingBottom: '12px', color: '#94A3B8', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Payment</th>
-                          <th style={{ width: '10%', paddingBottom: '12px', color: '#94A3B8', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', textAlign: 'right' }}>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activeAppointments.length > 0 ? (
-                          activeAppointments.map((app, idx) => (
-                            <tr key={app._id} style={{ borderBottom: idx === activeAppointments.length - 1 ? 'none' : '1px solid #F1F5F9' }}>
-                              <td style={{ padding: '16px 0', fontSize: '13px', fontWeight: 600, color: '#64748B' }}>{app.time}</td>
-                              <td style={{ padding: '16px 0' }}>
-                                <div 
-                                  style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', cursor: 'pointer' }} 
-                                  onClick={() => {
-                                    if (app.status === 'Completed' || app.status === 'In Progress' || app._id === activeAppointmentId) {
-                                      setSelectedOverviewApp(app.originalApp || app);
-                                      setShowAppOverviewModal(true);
-                                      addLog(`Opened clinical overview for completed appointment of: ${app.patientId?.name}`);
-                                    } else {
-                                      handleOpenTimelineForPatient(app.patientId);
-                                    }
-                                  }}
-                                >
-                                  {app.patientId?.name}
-                                </div>
-                                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px', fontWeight: 600 }}>{app.patientId?.age} Y, {app.patientId?.gender}</div>
-                                {app.tenantId && <div style={{ fontSize: '10px', color: 'var(--cu-primary)', marginTop: '2px', fontWeight: 700 }}>{app.tenantId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</div>}
-                              </td>
-                              <td style={{ padding: '16px 0' }}>
-                                <span className={`badge-pill ${app.type?.toLowerCase() === 'revisit' ? 'revisit' : 'new'}`}>{app.type}</span>
-                              </td>
-                              <td style={{ padding: '16px 0' }}>
-                                <span 
-                                  className={
-                                    (app.status === 'Completed' || app._id === activeAppointmentId) ? 'semantic-badge-success' :
-                                    (app.status?.toLowerCase() === 'pending' ? 'semantic-badge-warning' :
-                                    (app.status?.toLowerCase() === 'upcoming' ? 'semantic-badge-attention' :
-                                    (app.status?.toLowerCase() === 'cancelled' ? 'semantic-badge-danger' : 'semantic-badge-info')))
-                                  } 
-                                  style={{ 
-                                    padding: '4px 8px', 
-                                    borderRadius: '6px', 
-                                    fontSize: '11px', 
-                                    fontWeight: 800,
-                                    cursor: (app.status === 'Completed' || app.status === 'In Progress' || app._id === activeAppointmentId) ? 'pointer' : 'default',
-                                    textDecoration: (app.status === 'Completed' || app.status === 'In Progress' || app._id === activeAppointmentId) ? 'underline' : 'none',
-                                    display: 'inline-block'
-                                  }}
-                                  onClick={() => {
-                                    if (app.status === 'Completed' || app.status === 'In Progress' || app._id === activeAppointmentId) {
-                                      setSelectedOverviewApp(app.originalApp || app);
-                                      setShowAppOverviewModal(true);
-                                      addLog(`Opened clinical overview for completed appointment of: ${app.patientId?.name}`);
-                                    }
-                                  }}
-                                >
-                                  {app.status || 'Waiting'}
-                                </span>
-                              </td>
-                              <td style={{ padding: '16px 0' }}>
-                                <span 
-                                  style={{ 
-                                    background: app.billingStatus === 'Paid' ? '#ECFDF5' : '#FFFBEB',
-                                    color: app.billingStatus === 'Paid' ? '#16A34A' : '#D97706',
-                                    padding: '4px 8px', 
-                                    borderRadius: '6px', 
-                                    fontSize: '11px', 
-                                    fontWeight: 800,
-                                    display: 'inline-block'
-                                  }}
-                                >
-                                  {app.billingStatus === 'Paid' ? 'Paid' : 'Pending'}
-                                </span>
-                              </td>
-                              <td style={{ padding: '16px 0', textAlign: 'right' }}>
-                                {app.status === 'Completed' || app.status === 'In Progress' || app._id === activeAppointmentId || allPrescriptions.some(r => r.appointmentId === app._id || (r.appointmentId?._id && r.appointmentId?._id === app._id)) ? (
-                                  <button 
-                                    className="btn-view-detail" 
-                                    style={{ 
-                                      background: 'transparent', 
-                                      border: '1.5px solid #16A34A', 
-                                      color: '#16A34A', 
-                                      padding: '6px 12px', 
-                                      borderRadius: '8px', 
-                                      fontSize: '12px', 
-                                      fontWeight: 700, 
-                                      cursor: 'pointer', 
-                                      transition: 'all 0.2s' 
-                                    }} 
-                                    onClick={() => {
-                                      setSelectedOverviewApp(app.originalApp || app);
-                                      setShowAppOverviewModal(true);
-                                      addLog(`Opened clinical overview for completed appointment of: ${app.patientId?.name}`);
-                                    }}
-                                  >
-                                    Overview
-                                  </button>
-                                ) : (
-                                  <button 
-                                    className="btn-view-detail" 
-                                    style={{ 
-                                      background: 'transparent', 
-                                      border: '1px solid #2563EB', 
-                                      color: '#2563EB', 
-                                      padding: '6px 12px', 
-                                      borderRadius: '8px', 
-                                      fontSize: '12px', 
-                                      fontWeight: 700, 
-                                      cursor: 'pointer', 
-                                      transition: 'all 0.2s' 
-                                    }} 
-                                    onClick={() => startConsultation(app.originalApp || app)}
-                                  >
-                                    View in detail
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan="5" style={{ textAlign: 'center', padding: '48px 24px', background: '#FAFAFA' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-                                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3B82F6' }}>
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
-                                </div>
-                                <div>
-                                  <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 700, color: '#334155' }}>No Appointments</h4>
-                                  <p style={{ margin: 0, fontSize: '12.5px', color: '#64748B', fontWeight: 500 }}>There are no patients scheduled for {selectedDateStr === new Date().toISOString().split('T')[0] ? 'today' : 'this date'}.</p>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
+                        {(() => {
+                          const h = new Date().getHours();
+                          const greeting = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+                          return `${greeting}, ${docProfile.name || currentUser.name || 'Doctor'} 👋`;
+                        })()}
+                      </h1>
+                      <span style={{ background: '#EFF6FF', color: '#2563EB', fontSize: '11px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
+                        {docProfile.specialty || 'General Physician'}
+                      </span>
+                    </div>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748B', fontWeight: 500 }}>
+                      Doctor Daily Command Center • Clinical overview and active schedule for today.
+                    </p>
                   </div>
                 </div>
-  
-                {/* Today's Overview Calendar */}
-                <div className={`glass-card calendar-right-panel ${showHomeCalendar ? 'calendar-open' : ''}`}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Today's Overview</h3>
-                    <button 
-                      onClick={() => setShowHomeCalendar(false)}
-                      title="Collapse Calendar"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '6px',
-                        borderRadius: '8px',
-                        color: '#64748B',
-                        backgroundColor: '#F1F5F9',
-                        transition: 'all 0.2s ease',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                      }}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-                        <line x1="16" x2="16" y1="2" y2="6"/>
-                        <line x1="8" x2="8" y1="2" y2="6"/>
-                        <line x1="3" x2="21" y1="10" y2="10"/>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    background: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
+                    padding: '8px 14px',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: '#334155',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                  }}>
+                    <i data-lucide="calendar" style={{ width: '15px', height: '15px', color: '#2563EB' }}></i>
+                    <span>{new Date().toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('consultations')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: '#2563EB',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      padding: '8px 16px',
+                      borderRadius: '10px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(37, 99, 235, 0.2)',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#1D4ED8'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#2563EB'}
+                  >
+                    <i data-lucide="user-plus" style={{ width: '15px', height: '15px' }}></i>
+                    <span>New Consultation</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Row 2: Key Daily KPI Cards (Copied directly from Pharmacy KPI system - 5 cards single row) */}
+              <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '12px', marginBottom: '24px' }}>
+                
+                {/* Card 1: Today's Appointments (Electric Blue Theme) */}
+                <div 
+                  style={{
+                    padding: '16px 14px',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(191, 219, 254, 0.9)',
+                    boxShadow: '0 12px 28px rgba(37, 99, 235, 0.08)',
+                    background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    transition: 'all 0.2s ease',
+                    cursor: 'pointer',
+                    minWidth: 0
+                  }}
+                  onClick={() => setActiveTab('appointments')}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 16px 36px rgba(37, 99, 235, 0.16)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = '0 12px 28px rgba(37, 99, 235, 0.08)';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%)',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 10px rgba(37, 99, 235, 0.25)'
+                    }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    </div>
+                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      TODAY'S APPOINTMENTS
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '6px' }}>
+                    <div>
+                      <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                        {activeAppointments.length}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#2563EB', fontWeight: 700, marginTop: '5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }}></span> Active today
+                      </div>
+                    </div>
+
+                    {/* Blue Mini Sparkline */}
+                    <div style={{ width: '52px', height: '28px', position: 'relative', flexShrink: 0 }}>
+                      <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                        <defs>
+                          <linearGradient id="docKpiBlue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
+                            <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
+                          </linearGradient>
+                        </defs>
+                        <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#docKpiBlue)" />
+                        <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
                       </svg>
+                    </div>
+                  </div>
+
+                  {/* Half Gradient Accent Line Beneath Card */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    right: 0,
+                    height: '4px',
+                    width: '60%',
+                    borderBottomRightRadius: '16px',
+                    background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)',
+                    pointerEvents: 'none'
+                  }} />
+                </div>
+
+                {/* Card 2: Waiting / In Queue (Warm Amber / Orange Theme) */}
+                <div 
+                  style={{
+                    padding: '16px 14px',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(254, 215, 170, 0.9)',
+                    boxShadow: '0 12px 28px rgba(245, 158, 11, 0.08)',
+                    background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    transition: 'all 0.2s ease',
+                    cursor: 'pointer',
+                    minWidth: 0
+                  }}
+                  onClick={() => setActiveTab('appointments')}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 16px 36px rgba(245, 158, 11, 0.16)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = '0 12px 28px rgba(245, 158, 11, 0.08)';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 10px rgba(245, 158, 11, 0.25)'
+                    }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>
+                    </div>
+                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#78350F', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      WAITING / IN QUEUE
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '6px' }}>
+                    <div>
+                      <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                        {activeAppointments.filter(app => ['Waiting', 'Scheduled', 'In Progress', 'Pending', 'Upcoming'].includes(app.status || 'Waiting')).length}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#D97706', fontWeight: 700, marginTop: '5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#D97706', display: 'inline-block' }}></span> Awaiting
+                      </div>
+                    </div>
+
+                    {/* Amber Mini Sparkline */}
+                    <div style={{ width: '52px', height: '28px', position: 'relative', flexShrink: 0 }}>
+                      <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                        <defs>
+                          <linearGradient id="docKpiAmber" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.45"/>
+                            <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.05"/>
+                          </linearGradient>
+                        </defs>
+                        <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22 L 64 32 L 0 32 Z" fill="url(#docKpiAmber)" />
+                        <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22" fill="none" stroke="#F59E0B" strokeWidth="2.4" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Half Gradient Accent Line Beneath Card */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    right: 0,
+                    height: '4px',
+                    width: '60%',
+                    borderBottomRightRadius: '16px',
+                    background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)',
+                    pointerEvents: 'none'
+                  }} />
+                </div>
+
+                {/* Card 3: Consultations Completed (Emerald Green Theme) */}
+                <div 
+                  style={{
+                    padding: '16px 14px',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(167, 243, 208, 0.9)',
+                    boxShadow: '0 12px 28px rgba(16, 185, 129, 0.08)',
+                    background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    transition: 'all 0.2s ease',
+                    cursor: 'pointer',
+                    minWidth: 0
+                  }}
+                  onClick={() => setActiveTab('consultations')}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 16px 36px rgba(16, 185, 129, 0.16)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = '0 12px 28px rgba(16, 185, 129, 0.08)';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 10px rgba(16, 185, 129, 0.25)'
+                    }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    </div>
+                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#064E3B', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      COMPLETED TODAY
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '6px' }}>
+                    <div>
+                      <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                        {activeAppointments.filter(app => app.status === 'Completed').length}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#059669', fontWeight: 700, marginTop: '5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#059669', display: 'inline-block' }}></span> Done
+                      </div>
+                    </div>
+
+                    {/* Green Mini Sparkline */}
+                    <div style={{ width: '52px', height: '28px', position: 'relative', flexShrink: 0 }}>
+                      <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                        <defs>
+                          <linearGradient id="docKpiGreen" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#10B981" stopOpacity="0.45"/>
+                            <stop offset="100%" stopColor="#10B981" stopOpacity="0.05"/>
+                          </linearGradient>
+                        </defs>
+                        <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#docKpiGreen)" />
+                        <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#10B981" strokeWidth="2.4" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Half Gradient Accent Line Beneath Card */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    right: 0,
+                    height: '4px',
+                    width: '60%',
+                    borderBottomRightRadius: '16px',
+                    background: 'linear-gradient(90deg, transparent 0%, #10B981 100%)',
+                    pointerEvents: 'none'
+                  }} />
+                </div>
+
+                {/* Card 4: Pending Lab Reports (Purple / Violet Theme) */}
+                <div 
+                  style={{
+                    padding: '16px 14px',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(221, 214, 254, 0.9)',
+                    boxShadow: '0 12px 28px rgba(139, 92, 246, 0.08)',
+                    background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    transition: 'all 0.2s ease',
+                    cursor: 'pointer',
+                    minWidth: 0
+                  }}
+                  onClick={() => setActiveTab('labs')}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 16px 36px rgba(139, 92, 246, 0.16)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = '0 12px 28px rgba(139, 92, 246, 0.08)';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #6D28D9 0%, #8B5CF6 100%)',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 10px rgba(139, 92, 246, 0.25)'
+                    }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><path d="M5.52 16h12.96"/></svg>
+                    </div>
+                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#4C1D95', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      PENDING LABS
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '6px' }}>
+                    <div>
+                      <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                        {allLabs.filter(l => ['PENDING', 'PROCESSING', 'Pending', 'Processing'].includes(l.status || 'PENDING')).length}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#8B5CF6', fontWeight: 700, marginTop: '5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#8B5CF6', display: 'inline-block' }}></span> Awaiting
+                      </div>
+                    </div>
+
+                    {/* Purple Mini Sparkline */}
+                    <div style={{ width: '52px', height: '28px', position: 'relative', flexShrink: 0 }}>
+                      <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                        <defs>
+                          <linearGradient id="docKpiPurple" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.45"/>
+                            <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.05"/>
+                          </linearGradient>
+                        </defs>
+                        <path d="M 0 30 Q 18 28, 28 20 T 44 22 T 54 12 T 64 8 L 64 32 L 0 32 Z" fill="url(#docKpiPurple)" />
+                        <path d="M 0 30 Q 18 28, 28 20 T 44 22 T 54 12 T 64 8" fill="none" stroke="#8B5CF6" strokeWidth="2.4" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Half Gradient Accent Line Beneath Card */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    right: 0,
+                    height: '4px',
+                    width: '60%',
+                    borderBottomRightRadius: '16px',
+                    background: 'linear-gradient(90deg, transparent 0%, #8B5CF6 100%)',
+                    pointerEvents: 'none'
+                  }} />
+                </div>
+
+                {/* Card 5: Total Registered Patients (Coral / Rose Theme) */}
+                <div 
+                  style={{
+                    padding: '16px 14px',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(254, 202, 202, 0.9)',
+                    boxShadow: '0 12px 28px rgba(239, 68, 68, 0.08)',
+                    background: 'radial-gradient(circle at 100% 100%, rgba(239, 68, 68, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FEF2F2 50%, #FEE2E2 100%)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    transition: 'all 0.2s ease',
+                    cursor: 'pointer',
+                    minWidth: 0
+                  }}
+                  onClick={() => setActiveTab('consultations')}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 16px 36px rgba(239, 68, 68, 0.16)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = '0 12px 28px rgba(239, 68, 68, 0.08)';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #DC2626 0%, #EF4444 100%)',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 10px rgba(239, 68, 68, 0.25)'
+                    }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </div>
+                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#881337', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      TOTAL PATIENTS
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '6px' }}>
+                    <div>
+                      <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em', lineHeight: 1 }}>
+                        {patients.length}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#EF4444', fontWeight: 700, marginTop: '5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#EF4444', display: 'inline-block' }}></span> Records
+                      </div>
+                    </div>
+
+                    {/* Red Mini Sparkline */}
+                    <div style={{ width: '52px', height: '28px', position: 'relative', flexShrink: 0 }}>
+                      <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                        <defs>
+                          <linearGradient id="docKpiRed" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#EF4444" stopOpacity="0.45"/>
+                            <stop offset="100%" stopColor="#EF4444" stopOpacity="0.05"/>
+                          </linearGradient>
+                        </defs>
+                        <path d="M 0 18 Q 16 12, 28 20 T 44 14 T 54 26 T 64 6 L 64 32 L 0 32 Z" fill="url(#docKpiRed)" />
+                        <path d="M 0 18 Q 16 12, 28 20 T 44 14 T 54 26 T 64 6" fill="none" stroke="#EF4444" strokeWidth="2.4" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Half Gradient Accent Line Beneath Card */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    right: 0,
+                    height: '4px',
+                    width: '60%',
+                    borderBottomRightRadius: '16px',
+                    background: 'linear-gradient(90deg, transparent 0%, #EF4444 100%)',
+                    pointerEvents: 'none'
+                  }} />
+                </div>
+              </div>
+
+              {/* Row 3: Today's Schedule & Quick Actions */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '20px', marginBottom: '24px' }} className="mobile-stack">
+                
+                {/* Today's Schedule Card */}
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '14px', borderBottom: '1px solid #F1F5F9', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <i data-lucide="calendar" style={{ width: '16px', height: '16px' }}></i>
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>Today's Schedule</h3>
+                        <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>{activeAppointments.length} patient{activeAppointments.length === 1 ? '' : 's'} scheduled</span>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setActiveTab('appointments')}
+                      style={{ background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#DBEAFE'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#EFF6FF'}
+                    >
+                      <span>View All</span>
+                      <i data-lucide="arrow-right" style={{ width: '13px', height: '13px' }}></i>
                     </button>
                   </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>{monthLabel}</span>
-                    <div style={{ display: 'flex', gap: '12px', color: '#64748B' }}>
-                      <svg 
-                        xmlns="http://www.w3.org/2000/svg" 
-                        width="16" 
-                        height="16" 
-                        viewBox="0 0 24 24" 
-                        fill="none" 
-                        stroke="currentColor" 
-                        strokeWidth="2.5" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => {
-                          const prevMonth = new Date(currentMonth);
-                          prevMonth.setMonth(prevMonth.getMonth() - 1);
-                          setCurrentMonth(prevMonth);
-                        }}
-                      ><polyline points="15 18 9 12 15 6"/></svg>
-                      <svg 
-                        xmlns="http://www.w3.org/2000/svg" 
-                        width="16" 
-                        height="16" 
-                        viewBox="0 0 24 24" 
-                        fill="none" 
-                        stroke="currentColor" 
-                        strokeWidth="2.5" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => {
-                          const nextMonth = new Date(currentMonth);
-                          nextMonth.setMonth(nextMonth.getMonth() + 1);
-                          setCurrentMonth(nextMonth);
-                        }}
-                      ><polyline points="9 18 15 12 9 6"/></svg>
-                    </div>
-                  </div>
-  
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px 8px', textAlign: 'center' }}>
-                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                      <span key={day} style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: '8px' }}>{day}</span>
-                    ))}
-                    
-                    {/* Calendar Dates Grid */}
-                    {calendarDays.map((d, i) => {
-                      const isSelected = formatDateString(d.date) === selectedDateStr;
-                      const isToday = formatDateString(d.date) === formatDateString(new Date());
-                      
-                      return (
-                        <div 
-                          key={i} 
-                          onClick={() => {
-                            setSelectedDate(d.date);
-                            if (!d.current) {
-                              setCurrentMonth(d.date);
-                            }
-                          }}
-                          style={{ 
-                            width: '32px',
-                            height: '32px', 
-                            margin: '0 auto',
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center', 
-                            fontSize: '13px', 
-                            fontWeight: isSelected ? '700' : '600', 
-                            color: isSelected ? '#ffffff' : (d.current ? '#334155' : '#CBD5E1'), 
-                            background: isSelected ? '#2563EB' : 'transparent',
-                            border: (!isSelected && isToday) ? '1px solid #2563EB' : 'none',
-                            borderRadius: '50%',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease'
-                          }}
-                        >
-                          {d.num}
+
+                  {/* Table / Empty State */}
+                  <div style={{ overflowX: 'auto', flex: 1 }}>
+                    {activeAppointments.length > 0 ? (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
+                            <th style={{ padding: '8px 12px 12px', color: '#94A3B8', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Time</th>
+                            <th style={{ padding: '8px 12px 12px', color: '#94A3B8', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Patient</th>
+                            <th style={{ padding: '8px 12px 12px', color: '#94A3B8', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Type</th>
+                            <th style={{ padding: '8px 12px 12px', color: '#94A3B8', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Status</th>
+                            <th style={{ padding: '8px 12px 12px', color: '#94A3B8', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', textAlign: 'right' }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeAppointments.slice(0, 6).map((app, idx) => {
+                            const isCompleted = app.status === 'Completed' || app._id === activeAppointmentId;
+                            return (
+                              <tr 
+                                key={app._id || idx} 
+                                style={{ borderBottom: idx === Math.min(activeAppointments.length, 6) - 1 ? 'none' : '1px solid #F8FAFC', transition: 'background 0.15s' }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <td style={{ padding: '12px', fontSize: '13px', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>
+                                  {app.time || '--'}
+                                </td>
+                                <td style={{ padding: '12px' }}>
+                                  <div 
+                                    style={{ fontSize: '13.5px', fontWeight: 700, color: '#0F172A', cursor: 'pointer' }}
+                                    onClick={() => {
+                                      if (isCompleted || app.status === 'In Progress') {
+                                        setSelectedOverviewApp(app.originalApp || app);
+                                        setShowAppOverviewModal(true);
+                                        addLog(`Opened clinical overview for appointment of: ${app.patientId?.name}`);
+                                      } else {
+                                        handleOpenTimelineForPatient(app.patientId);
+                                      }
+                                    }}
+                                  >
+                                    {app.patientId?.name || 'Unknown Patient'}
+                                  </div>
+                                  <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 500, marginTop: '2px' }}>
+                                    {app.patientId?.age ? `${app.patientId.age} Y, ` : ''}{app.patientId?.gender || ''}
+                                    {app.patientId?.uhid ? ` • ${app.patientId.uhid}` : ''}
+                                  </div>
+                                </td>
+                                <td style={{ padding: '12px', whiteSpace: 'nowrap' }}>
+                                  <span style={{ 
+                                    background: app.type?.toLowerCase() === 'revisit' ? '#F3E8FF' : '#EFF6FF', 
+                                    color: app.type?.toLowerCase() === 'revisit' ? '#7C3AED' : '#2563EB',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '11px',
+                                    fontWeight: 700
+                                  }}>
+                                    {app.type || 'General'}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px', whiteSpace: 'nowrap' }}>
+                                  <span style={{
+                                    background: isCompleted ? '#DCFCE7' : (app.status?.toLowerCase() === 'in progress' ? '#EFF6FF' : '#FEF3C7'),
+                                    color: isCompleted ? '#166534' : (app.status?.toLowerCase() === 'in progress' ? '#1D4ED8' : '#B45309'),
+                                    padding: '4px 9px',
+                                    borderRadius: '6px',
+                                    fontSize: '11px',
+                                    fontWeight: 800,
+                                    display: 'inline-block'
+                                  }}>
+                                    {app.status || 'Scheduled'}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                  {isCompleted ? (
+                                    <button 
+                                      onClick={() => {
+                                        setSelectedOverviewApp(app.originalApp || app);
+                                        setShowAppOverviewModal(true);
+                                        addLog(`Opened clinical overview for completed appointment of: ${app.patientId?.name}`);
+                                      }}
+                                      style={{ background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', padding: '5px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s' }}
+                                      onMouseEnter={e => e.currentTarget.style.background = '#DCFCE7'}
+                                      onMouseLeave={e => e.currentTarget.style.background = '#F0FDF4'}
+                                    >
+                                      Overview
+                                    </button>
+                                  ) : (
+                                    <button 
+                                      onClick={() => startConsultation(app.originalApp || app)}
+                                      style={{ background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', padding: '5px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s' }}
+                                      onMouseEnter={e => e.currentTarget.style.background = '#DBEAFE'}
+                                      onMouseLeave={e => e.currentTarget.style.background = '#EFF6FF'}
+                                    >
+                                      Consult
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '36px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB' }}>
+                          <i data-lucide="calendar" style={{ width: '22px', height: '22px' }}></i>
                         </div>
-                      );
-                    })}
+                        <div>
+                          <h4 style={{ margin: '0 0 3px 0', fontSize: '14px', fontWeight: 800, color: '#1E293B' }}>No Appointments Scheduled</h4>
+                          <p style={{ margin: 0, fontSize: '12.5px', color: '#64748B', fontWeight: 500 }}>Your schedule is clear for today.</p>
+                        </div>
+                        <button 
+                          onClick={() => setActiveTab('appointments')}
+                          style={{ marginTop: '6px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', borderRadius: '8px', padding: '6px 14px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          View Calendar →
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-  
-              </div>
-  
-              {/* Row 2: Recent Consultations & Today's Lab Reports */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: '24px' }} className="mobile-stack">
-                
-                {/* Recent Consultations */}
-                <div className="glass-card" style={{ padding: '24px', border: '1px solid #F1F5F9', borderRadius: '16px', background: '#ffffff', boxShadow: '0 4px 20px rgba(0,0,0,0.01)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Recent Consultations</h3>
-                    <a href="#" style={{ color: '#2563EB', fontSize: '13px', fontWeight: 700, textDecoration: 'none' }} onClick={(e) => { e.preventDefault(); setActiveTab('consultations'); }}>View All</a>
+
+                {/* Quick Actions Panel */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #F1F5F9' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <i data-lucide="zap" style={{ width: '15px', height: '15px' }}></i>
+                      </div>
+                      <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>Clinical Shortcuts</h3>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {/* Shortcut 1: Start Consultation */}
+                      <div 
+                        onClick={() => setActiveTab('consultations')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer', transition: 'all 0.15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.borderColor = '#BFDBFE'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                      >
+                        <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: '#2563EB', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <i data-lucide="user-check" style={{ width: '16px', height: '16px' }}></i>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Patient Records & EMR</div>
+                          <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>Access medical files & timeline</div>
+                        </div>
+                      </div>
+
+                      {/* Shortcut 2: Prescriptions */}
+                      <div 
+                        onClick={() => setActiveTab('prescriptions')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer', transition: 'all 0.15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.borderColor = '#BFDBFE'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                      >
+                        <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: '#059669', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <i data-lucide="file-text" style={{ width: '16px', height: '16px' }}></i>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Prescription Maker</div>
+                          <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>Write & manage prescriptions</div>
+                        </div>
+                      </div>
+
+                      {/* Shortcut 3: Lab Reports */}
+                      <div 
+                        onClick={() => setActiveTab('labs')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer', transition: 'all 0.15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.borderColor = '#BFDBFE'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                      >
+                        <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: '#7C3AED', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <i data-lucide="flask-conical" style={{ width: '16px', height: '16px' }}></i>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Laboratory Reports</div>
+                          <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>Review test results & orders</div>
+                        </div>
+                      </div>
+
+                      {/* Shortcut 4: Appointments List */}
+                      <div 
+                        onClick={() => setActiveTab('appointments')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer', transition: 'all 0.15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.borderColor = '#BFDBFE'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                      >
+                        <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: '#EA580C', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <i data-lucide="calendar-days" style={{ width: '16px', height: '16px' }}></i>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>All Appointments</div>
+                          <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>Filter, search & export bookings</div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                </div>
+
+              </div>
+
+              {/* Row 4: Recent Consultations & Today's Lab Reports */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }} className="mobile-stack">
+                
+                {/* Recent Consultations Card */}
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #F1F5F9' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <i data-lucide="stethoscope" style={{ width: '15px', height: '15px' }}></i>
+                      </div>
+                      <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>Recent Consultations</h3>
+                    </div>
+                    <button 
+                      onClick={() => setActiveTab('consultations')}
+                      style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      View All →
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {recentConsults && recentConsults.length > 0 ? (
-                      recentConsults.map((consult, idx, arr) => (
+                      recentConsults.map((consult, idx) => (
                         <div 
-                          key={consult._id} 
-                          style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'space-between', 
-                            paddingBottom: idx === arr.length - 1 ? '0' : '16px', 
-                            borderBottom: idx === arr.length - 1 ? 'none' : '1px solid #F1F5F9' 
-                          }}
+                          key={consult._id || idx}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #F1F5F9' }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{ 
-                              width: '40px', 
-                              height: '40px', 
-                              borderRadius: '50%', 
-                              background: consult.color?.bg || '#EFF6FF', 
-                              color: consult.color?.text || '#2563EB', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'center', 
-                              fontWeight: 700, 
-                              fontSize: '13px' 
-                            }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: consult.color?.bg || '#EFF6FF', color: consult.color?.text || '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '12.5px', flexShrink: 0 }}>
                               {consult.initials}
                             </div>
                             <div>
                               <div 
-                                style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', cursor: 'pointer' }} 
+                                style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', cursor: 'pointer' }}
                                 onClick={() => {
                                   if (consult.status === 'Completed') {
                                     setSelectedOverviewApp(consult.appRaw?.originalApp || consult.appRaw);
@@ -6012,92 +7251,103 @@ I have scanned the medical reference databases, but couldn't find a direct match
                               >
                                 {consult.name}
                               </div>
-                              <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px', fontWeight: 600 }}>{consult.age} Y, {consult.gender}</div>
+                              <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>{consult.age} Y, {consult.gender}</div>
                             </div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>{consult.time}</div>
-                            <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px', fontWeight: 600 }}>{consult.date || new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                            <span style={{ background: '#DCFCE7', color: '#166534', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+                              {consult.time || 'Completed'}
+                            </span>
                           </div>
                         </div>
                       ))
                     ) : (
-                      <div style={{ textAlign: 'center', padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8B5CF6' }}>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                      <div style={{ textAlign: 'center', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
+                          <i data-lucide="check-circle-2" style={{ width: '18px', height: '18px' }}></i>
                         </div>
                         <div>
-                          <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 700, color: '#334155' }}>No Consultations</h4>
-                          <p style={{ margin: 0, fontSize: '12.5px', color: '#64748B', fontWeight: 500 }}>No completed or in-progress consultations yet.</p>
+                          <h4 style={{ margin: '0 0 2px 0', fontSize: '13.5px', fontWeight: 700, color: '#334155' }}>No Recent Consultations</h4>
+                          <p style={{ margin: 0, fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Completed consultations will appear here.</p>
                         </div>
                       </div>
                     )}
                   </div>
                 </div>
-  
-                {/* Today's Lab Reports */}
-                <div className="glass-card" style={{ padding: '24px', border: '1px solid #F1F5F9', borderRadius: '16px', background: '#ffffff', boxShadow: '0 4px 20px rgba(0,0,0,0.01)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Today's Lab Reports</h3>
-                    <a href="#" style={{ color: '#2563EB', fontSize: '13px', fontWeight: 700, textDecoration: 'none' }} onClick={(e) => { e.preventDefault(); setActiveTab('labs'); }}>View All</a>
+
+                {/* Lab Reports Card */}
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #F1F5F9' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: '#FAF5FF', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <i data-lucide="flask-conical" style={{ width: '15px', height: '15px' }}></i>
+                      </div>
+                      <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>Today's Lab Reports</h3>
+                    </div>
+                    <button 
+                      onClick={() => setActiveTab('labs')}
+                      style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      View All →
+                    </button>
                   </div>
-  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {(() => {
                       const todayStart = new Date();
                       todayStart.setHours(0,0,0,0);
                       const todaysLabs = allLabs.filter(l => new Date(l.createdAt) >= todayStart);
+                      const displayLabs = todaysLabs.length > 0 ? todaysLabs.slice(0, 3) : allLabs.slice(0, 3);
                       
-                      if (todaysLabs.length === 0) {
+                      if (displayLabs.length === 0) {
                         return (
-                          <div style={{ textAlign: 'center', padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
-                              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><path d="M5.52 16h12.96"/></svg>
+                          <div style={{ textAlign: 'center', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#FAF5FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7C3AED' }}>
+                              <i data-lucide="flask-conical" style={{ width: '18px', height: '18px' }}></i>
                             </div>
                             <div>
-                              <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 700, color: '#334155' }}>No Lab Reports</h4>
-                              <p style={{ margin: 0, fontSize: '12.5px', color: '#64748B', fontWeight: 500 }}>You haven't ordered any lab tests today.</p>
+                              <h4 style={{ margin: '0 0 2px 0', fontSize: '13.5px', fontWeight: 700, color: '#334155' }}>No Lab Reports</h4>
+                              <p style={{ margin: 0, fontSize: '12px', color: '#64748B', fontWeight: 500 }}>No active laboratory orders found.</p>
                             </div>
                           </div>
                         );
                       }
-                      
-                      return todaysLabs.map((report, idx, arr) => (
-                        <div 
-                          key={report._id || idx} 
-                          style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'space-between', 
-                            paddingBottom: idx === arr.length - 1 ? '0' : '16px', 
-                            borderBottom: idx === arr.length - 1 ? 'none' : '1px solid #F1F5F9' 
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>{report.testName}</div>
-                            <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px', fontWeight: 600 }}>{report.instructions || 'Routine Checkup'}</div>
+
+                      return displayLabs.map((report, idx) => {
+                        const isReady = (report.status || '').toUpperCase() === 'READY' || (report.status || '').toUpperCase() === 'COMPLETED';
+                        return (
+                          <div 
+                            key={report._id || idx}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #F1F5F9' }}
+                          >
+                            <div>
+                              <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>{report.testName || 'Laboratory Test'}</div>
+                              <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500, marginTop: '2px' }}>
+                                {report.patientId?.name || 'Patient'} • {report.instructions || 'Routine'}
+                              </div>
+                            </div>
+                            <div>
+                              <span style={{
+                                background: isReady ? '#DCFCE7' : '#EFF6FF',
+                                color: isReady ? '#166534' : '#1D4ED8',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                textTransform: 'uppercase'
+                              }}>
+                                {report.status || 'PENDING'}
+                              </span>
+                            </div>
                           </div>
-                          <div>
-                            <span style={{ 
-                              background: report.status === 'READY' ? '#E6F4EA' : '#EFF6FF', 
-                              color: report.status === 'READY' ? '#137333' : '#2563EB', 
-                              padding: '4px 10px', 
-                              borderRadius: '20px', 
-                              fontSize: '11px', 
-                              fontWeight: 800,
-                              letterSpacing: '0.5px'
-                            }}>
-                              {report.status}
-                            </span>
-                          </div>
-                        </div>
-                      ));
+                        );
+                      });
                     })()}
                   </div>
                 </div>
-  
+
               </div>
-  
+
             </div>
           );
         })()}
@@ -6253,6 +7503,32 @@ I have scanned the medical reference databases, but couldn't find a direct match
                       height: '37px'
                     }}
                   />
+
+                  {/* Export Button */}
+                  <button
+                    onClick={() => setShowAppointmentExportModal(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      background: '#EFF6FF',
+                      color: '#2563EB',
+                      border: '1px solid #BFDBFE',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      height: '37px',
+                      transition: 'all 0.15s ease',
+                      boxShadow: '0 1px 2px rgba(37, 99, 235, 0.05)'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#DBEAFE'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#EFF6FF'; }}
+                  >
+                    <i data-lucide="download" style={{ width: '14px', height: '14px' }}></i>
+                    <span>Export</span>
+                  </button>
                   
                 </div>
               </div>
@@ -6706,7 +7982,31 @@ I have scanned the medical reference databases, but couldn't find a direct match
                     }}
                   />
 
-
+                  {/* Export Patient Records Button */}
+                  <button
+                    onClick={() => setShowPatientExportModal(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '12px 18px',
+                      borderRadius: '12px',
+                      border: '1px solid #BFDBFE',
+                      background: '#EFF6FF',
+                      color: '#2563EB',
+                      fontSize: '14px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      minHeight: '45px',
+                      transition: 'all 0.15s ease',
+                      boxShadow: '0 1px 2px rgba(37, 99, 235, 0.05)'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#DBEAFE'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#EFF6FF'; }}
+                  >
+                    <i data-lucide="download" style={{ width: '15px', height: '15px' }}></i>
+                    <span>Export</span>
+                  </button>
 
                 </div>
 
@@ -7154,12 +8454,37 @@ I have scanned the medical reference databases, but couldn't find a direct match
                   <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: '0 0 4px 0' }}>All Prescriptions</h2>
                   <p style={{ color: '#64748B', fontSize: '13px', margin: 0, fontWeight: 500 }}>View and edit your patient prescriptions.</p>
                 </div>
-                <button 
-                  onClick={() => setActiveTab('consultations')} 
-                  style={{ backgroundColor: '#2563EB', color: '#FFFFFF', fontWeight: 700, fontSize: '13px', padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.15)' }}
-                >
-                  + New Prescription
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    onClick={() => setShowPrescriptionExportModal(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 18px',
+                      borderRadius: '8px',
+                      border: '1px solid #BFDBFE',
+                      background: '#EFF6FF',
+                      color: '#2563EB',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      boxShadow: '0 1px 2px rgba(37, 99, 235, 0.05)'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#DBEAFE'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#EFF6FF'; }}
+                  >
+                    <i data-lucide="download" style={{ width: '14px', height: '14px' }}></i>
+                    <span>Export</span>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('consultations')} 
+                    style={{ backgroundColor: '#2563EB', color: '#FFFFFF', fontWeight: 700, fontSize: '13px', padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.15)' }}
+                  >
+                    + New Prescription
+                  </button>
+                </div>
               </div>
 
               {allPrescriptions.length === 0 ? (
@@ -7321,9 +8646,34 @@ I have scanned the medical reference databases, but couldn't find a direct match
                   />
                 </div>
 
-                {/* Filter and New Report Buttons */}
+                {/* Filter and Export Buttons */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  
+
+                  {/* Export button */}
+                  <button 
+                    onClick={() => setShowLabExportModal(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '12px 20px',
+                      borderRadius: '12px',
+                      border: '1.5px solid #BFDBFE',
+                      background: '#EFF6FF',
+                      color: '#2563EB',
+                      fontSize: '14px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: 'none',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#DBEAFE'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#EFF6FF'; }}
+                  >
+                    <i data-lucide="download" style={{ width: '15px', height: '15px' }}></i>
+                    <span>Export</span>
+                  </button>
+
                   {/* Filter trigger */}
                   <button 
                     onClick={() => setShowLabFilters(prev => !prev)}
@@ -11542,6 +12892,51 @@ I have scanned the medical reference databases, but couldn't find a direct match
             </div>
           </div>
         </div>
+      )}
+
+      {/* Unified Export Modals for Doctor Panel */}
+      {showAppointmentExportModal && (
+        <ExportModal
+          dataset="Appointments"
+          data={getAllAppointmentsForList()}
+          columns={appointmentExportColumns}
+          dateField="date"
+          clinicName={user.tenantName || 'CUROXA HEALTHCARE'}
+          onClose={() => setShowAppointmentExportModal(false)}
+        />
+      )}
+
+      {showLabExportModal && (
+        <ExportModal
+          dataset="Lab Reports"
+          data={allLabs}
+          columns={labReportExportColumns}
+          dateField="createdAt"
+          clinicName={user.tenantName || 'CUROXA HEALTHCARE'}
+          onClose={() => setShowLabExportModal(false)}
+        />
+      )}
+
+      {showPrescriptionExportModal && (
+        <ExportModal
+          dataset="Prescriptions"
+          data={allPrescriptions}
+          columns={prescriptionExportColumns}
+          dateField="createdAt"
+          clinicName={user.tenantName || 'CUROXA HEALTHCARE'}
+          onClose={() => setShowPrescriptionExportModal(false)}
+        />
+      )}
+
+      {showPatientExportModal && (
+        <ExportModal
+          dataset="Patients"
+          data={patients}
+          columns={patientExportColumns}
+          dateField="createdAt"
+          clinicName={user.tenantName || 'CUROXA HEALTHCARE'}
+          onClose={() => setShowPatientExportModal(false)}
+        />
       )}
       </>
     </ErrorBoundary>

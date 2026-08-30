@@ -1878,5 +1878,36 @@ export const prescriptionExportColumns = [
   }
 ];
 
+/**
+ * Authoritative Patient Records Export Column Definitions
+ */
+export const patientExportColumns = [
+  { key: 'uhid', header: 'UHID / Patient ID', extractor: p => p.uhid || p.patientId || (p.id ? String(p.id) : (p._id ? String(p._id).slice(-6).toUpperCase() : '--')) },
+  { key: 'name', header: 'Patient Name', extractor: p => p.name || '--' },
+  { key: 'age', header: 'Age', extractor: p => p.age ?? '--' },
+  { key: 'gender', header: 'Gender', extractor: p => p.gender ? p.gender.charAt(0).toUpperCase() + p.gender.slice(1) : '--' },
+  { key: 'contact', header: 'Contact / Phone', extractor: p => p.contact || p.phone || p.mobile || '--' },
+  { key: 'email', header: 'Email', extractor: p => p.email || '--' },
+  { key: 'bloodGroup', header: 'Blood Group', extractor: p => p.bloodGroup || p.bloodType || '--' },
+  { key: 'address', header: 'Address / City', extractor: p => p.address || p.city || '--' },
+  { key: 'status', header: 'Status', extractor: p => p.status || 'Active' },
+  { key: 'createdAt', header: 'Registration Date', extractor: p => p.createdAt || p.registeredAt, formatter: v => v ? new Date(v).toLocaleDateString('en-IN') : '--' }
+];
+
+/**
+ * Authoritative Lab Reports Export Column Definitions
+ */
+export const labReportExportColumns = [
+  { key: 'labId', header: 'Report ID', extractor: r => r.id || (r._id ? `#LAB-${String(r._id).slice(-6).toUpperCase()}` : '--') },
+  { key: 'patientName', header: 'Patient Name', extractor: r => r.name || r.patientName || (r.patientId?.name) || '--' },
+  { key: 'patientId', header: 'Patient ID', extractor: r => (r.patientId?.patientId) || (r.patientId?.uhid) || (r.patientIdStr) || '--' },
+  { key: 'testName', header: 'Test Name', extractor: r => r.testName || '--' },
+  { key: 'priority', header: 'Priority', extractor: r => r.priority || 'Routine' },
+  { key: 'status', header: 'Status', extractor: r => r.status ? String(r.status).toUpperCase() : 'PENDING' },
+  { key: 'date', header: 'Report Date', extractor: r => r.createdAt || r.date, formatter: v => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '--' },
+  { key: 'time', header: 'Time', extractor: r => r.time || (r.createdAt ? new Date(r.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--') },
+  { key: 'notes', header: 'Clinical Notes / Instructions', extractor: r => r.notes || r.instructions || r.subtitle || '--' }
+];
+
 
 

@@ -417,7 +417,14 @@ const ReceptionistDashboard = () => {
       if (symptomDropdownRef.current && !symptomDropdownRef.current.contains(event.target)) {
         setSymptomDropdownOpen(false);
       }
-      if (!event.target.closest('.sidebar-user') && !event.target.closest('.sidebar-profile-card') && !event.target.closest('.sidebar-profile')) {
+      if (
+        !event.target.closest('.sidebar-user') && 
+        !event.target.closest('.sidebar-profile-card') && 
+        !event.target.closest('.sidebar-profile') &&
+        !event.target.closest('.sidebar-profile-popover-card') &&
+        !event.target.closest('.sidebar-profile-popover') &&
+        !event.target.closest('.sidebar-profile-footer')
+      ) {
         setShowProfileMenu(false);
       }
     };

@@ -140,7 +140,7 @@ const AdminDashboard = () => {
     if (!url) return '';
     if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
     const apiURL = import.meta.env.VITE_API_URL || '';
-    const backendBase = apiURL ? apiURL.replace('/api', '') : 'http://localhost:5000';
+    const backendBase = apiURL ? apiURL.replace('/api', '') : 'https://curoxa.onrender.com';
     const baseClean = backendBase.endsWith('/') ? backendBase.slice(0, -1) : backendBase;
     const pathClean = url.startsWith('/') ? url : `/${url}`;
     return `${baseClean}${pathClean}`;
@@ -886,7 +886,14 @@ const AdminDashboard = () => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
         setShowNotifications(false);
       }
-      if (!event.target.closest('.sidebar-user') && !event.target.closest('.sidebar-profile-card') && !event.target.closest('.sidebar-profile')) {
+      if (
+        !event.target.closest('.sidebar-user') && 
+        !event.target.closest('.sidebar-profile-card') && 
+        !event.target.closest('.sidebar-profile') &&
+        !event.target.closest('.sidebar-profile-popover-card') &&
+        !event.target.closest('.sidebar-profile-popover') &&
+        !event.target.closest('.sidebar-profile-footer')
+      ) {
         setShowProfileMenu(false);
       }
     };
@@ -14117,7 +14124,7 @@ const AdminDashboard = () => {
                               <div className="task-card-bottom-row">
                                 <button
                                   className="task-card-review-btn"
-                                  onClick={() => setViewingApproval(task)}
+                                  onClick={() => openApprovalModal(task)}
                                   title="Review approval details"
                                 >
                                   Review →

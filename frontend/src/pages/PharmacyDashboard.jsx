@@ -1174,7 +1174,14 @@ const PharmacyDashboard = () => {
       if (alertsWidgetRef.current && !alertsWidgetRef.current.contains(event.target)) {
         setShowExpiryAlerts(false);
       }
-      if (!event.target.closest('.sidebar-user') && !event.target.closest('.sidebar-profile-card') && !event.target.closest('.sidebar-profile')) {
+      if (
+        !event.target.closest('.sidebar-user') && 
+        !event.target.closest('.sidebar-profile-card') && 
+        !event.target.closest('.sidebar-profile') &&
+        !event.target.closest('.sidebar-profile-popover-card') &&
+        !event.target.closest('.sidebar-profile-popover') &&
+        !event.target.closest('.sidebar-profile-footer')
+      ) {
         setShowProfileMenu(false);
       }
     };
@@ -1725,7 +1732,7 @@ const PharmacyDashboard = () => {
 
   const fetchIndents = async () => {
     try {
-      const indentsRes = await api.get('/indents');
+      const indentsRes = await api.get('/indents?role=pharmacy');
       setIndents(indentsRes.data || []);
     } catch (err) {
       console.error("Failed to fetch indents:", err);
@@ -2332,8 +2339,8 @@ const PharmacyDashboard = () => {
         console.error("Failed to fetch return logs:", err);
       }
       try {
-        const indentsRes = await api.get('/indents');
-        setIndents(indentsRes.data);
+        const indentsRes = await api.get('/indents?role=pharmacy');
+        setIndents(indentsRes.data || []);
       } catch (err) {
         console.error("Failed to fetch indents:", err);
       }
@@ -7327,18 +7334,29 @@ const PharmacyDashboard = () => {
                         <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Supplied</th>
                         <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Remaining</th>
                         <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Actions</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', width: '130px' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {indents.length === 0 ? (
-                        <tr>
-                          <td colSpan={10} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8', fontWeight: 600 }}>
-                            No approved internal requests found
-                          </td>
-                        </tr>
-                      ) : (
-                        indents.map((ind, idx) => {
+                      {(() => {
+                        const visibleApprovedIndents = (indents || []).filter(ind => 
+                          ind && 
+                          ind.status !== 'Pending' && 
+                          ind.status !== 'Draft' && 
+                          ['Approved', 'Partially Fulfilled', 'Awaiting Stock', 'Fulfilled', 'Cannot Fulfill', 'Received'].includes(ind.status)
+                        );
+
+                        if (visibleApprovedIndents.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={10} style={{ textAlign: 'center', padding: '48px', color: '#94A3B8', fontWeight: 600 }}>
+                                No approved internal requests found
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return visibleApprovedIndents.map((ind, idx) => {
                           const reqTotal = (ind.items || []).reduce((sum, it) => sum + (Number(it.requiredQty) || 0), 0);
                           const appTotal = (ind.items || []).reduce((sum, it) => (it.approvedQty !== null && it.approvedQty !== undefined ? sum + Number(it.approvedQty) : sum), 0);
                           const supTotal = (ind.items || []).reduce((sum, it) => sum + (Number(it.suppliedQty) || 0), 0);
@@ -7414,27 +7432,64 @@ const PharmacyDashboard = () => {
                               <td style={{ padding: '14px 16px' }}>
                                 <span style={getIndentStatusStyle(ind.status)}>{ind.status}</span>
                               </td>
-                              <td onClick={e => e.stopPropagation()} style={{ padding: '14px 16px', textAlign: 'right' }}>
-                                {!['Received', 'Fulfilled', 'Cannot Fulfill', 'Rejected'].includes(ind.status) ? (
-                                  <button
-                                    onClick={() => { setSelectedIndent(ind); setSupplyInputMap({}); setShowIndentModal(true); }}
-                                    style={{ padding: '6px 14px', background: '#2563EB', color: 'white', border: 'none', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                                  >
-                                    Fulfill / Review
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => { setSelectedIndent(ind); setSupplyInputMap({}); setShowIndentModal(true); }}
-                                    style={{ padding: '5px 10px', background: '#F1F5F9', color: '#475569', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
-                                  >
-                                    View Details
-                                  </button>
-                                )}
+                              <td onClick={e => e.stopPropagation()} style={{ padding: '14px 16px', textAlign: 'center', width: '130px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                  {!['Received', 'Fulfilled', 'Cannot Fulfill', 'Rejected'].includes(ind.status) ? (
+                                    <button
+                                      onClick={() => { setSelectedIndent(ind); setSupplyInputMap({}); setShowIndentModal(true); }}
+                                      style={{
+                                        width: '116px',
+                                        height: '32px',
+                                        padding: '0',
+                                        background: '#2563EB',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '7px',
+                                        fontSize: '12px',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        boxShadow: '0 1px 2px rgba(37, 99, 235, 0.15)',
+                                        transition: 'background 0.15s ease, transform 0.15s ease'
+                                      }}
+                                      onMouseEnter={e => { e.currentTarget.style.background = '#1D4ED8'; }}
+                                      onMouseLeave={e => { e.currentTarget.style.background = '#2563EB'; }}
+                                    >
+                                      Fulfill / Review
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => { setSelectedIndent(ind); setSupplyInputMap({}); setShowIndentModal(true); }}
+                                      style={{
+                                        width: '116px',
+                                        height: '32px',
+                                        padding: '0',
+                                        background: '#F1F5F9',
+                                        color: '#475569',
+                                        border: '1px solid #E2E8F0',
+                                        borderRadius: '7px',
+                                        fontSize: '12px',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'background 0.15s ease, border-color 0.15s ease'
+                                      }}
+                                      onMouseEnter={e => { e.currentTarget.style.background = '#E2E8F0'; }}
+                                      onMouseLeave={e => { e.currentTarget.style.background = '#F1F5F9'; }}
+                                    >
+                                      View Details
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
-                        })
-                      )}
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>

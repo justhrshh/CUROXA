@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://clinical-management-backend-rgiz.onrender.com/api/:path*"
+      "destination": "https://curoxa.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",

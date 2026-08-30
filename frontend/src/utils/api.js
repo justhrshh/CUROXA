@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_API_URL : null) || '/api' // Uses Vercel environment variable or defaults to local proxy
+  baseURL: (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_API_URL : null) || 'https://curoxa.onrender.com/api'
 });
 
 // ═══════════════════════════════════════════════════════════════════

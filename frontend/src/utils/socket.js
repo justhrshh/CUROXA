@@ -1,8 +1,8 @@
 import { io } from 'socket.io-client';
 
-const apiUrl = import.meta.env.VITE_API_URL || '';
+const apiUrl = import.meta.env.VITE_API_URL || 'https://curoxa.onrender.com/api';
 // Strip '/api' from the end of the VITE_API_URL to get the root host URL
-const socketUrl = apiUrl.replace(/\/api$/, '') || window.location.origin;
+const socketUrl = apiUrl.replace(/\/api$/, '') || 'https://curoxa.onrender.com';
 
 console.log('[SOCKET] Initializing socket connection to url:', socketUrl);
 

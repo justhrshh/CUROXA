@@ -11,7 +11,8 @@ router.use(verifyToken);
 // GET /api/indents — Fetch indents with strict role-based filtering
 router.get('/', async (req, res) => {
   try {
-    const isPharmacy = req.user && req.user.role === 'pharmacy';
+    const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+    const isPharmacy = userRole === 'pharmacy' || userRole === 'pharmacist' || req.query.role === 'pharmacy';
     const filter = { tenantId: req.tenantId };
 
     if (isPharmacy) {
