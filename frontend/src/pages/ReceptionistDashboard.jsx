@@ -5947,69 +5947,9 @@ const ReceptionistDashboard = () => {
                 </div>
               );
             })()}
-
-            {/* 5. FLOATING ACTION DOCK */}
-            <div style={{
-              position: 'fixed',
-              bottom: '20px',
-              left: '50%',
-              transform: isSidebarCollapsed ? 'translateX(-50%)' : 'translateX(calc(-50% + 130px))',
-              zIndex: 1100,
-              background: 'rgba(255, 255, 255, 0.92)',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              border: '1px solid rgba(226, 232, 240, 0.9)',
-              boxShadow: '0 16px 36px -8px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(0, 0, 0, 0.04)',
-              borderRadius: '40px',
-              padding: '6px 14px',
-              display: 'flex',
-              gap: '6px',
-              alignItems: 'center',
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-            }}>
-              {[
-                { id: 'help', title: 'Help & Guide', icon: 'help-circle', color: '#2563EB', bg: '#EFF6FF', action: () => window.open('https://curoxa.com/help', '_blank') },
-                { id: 'dash', title: 'Dashboard', icon: 'layout-grid', color: '#7C3AED', bg: '#FAF5FF', action: () => switchTab('dash') },
-                { id: 'patients', title: 'Patients', icon: 'users', color: '#059669', bg: '#ECFDF5', action: () => switchTab('patients') },
-                { id: 'appt', title: 'Appointments', icon: 'calendar', color: '#0284C7', bg: '#F0F9FF', action: () => switchTab('appointments') },
-                { id: 'billing', title: 'Finance & Billing', icon: 'wallet', color: '#EA580C', bg: '#FFF7ED', action: () => switchTab('billing') },
-                { id: 'doctors', title: 'Doctor Roster', icon: 'stethoscope', color: '#10B981', bg: '#ECFDF5', action: () => switchTab('staff') },
-                { id: 'filter', title: 'Date Filter', icon: 'filter', color: '#DB2777', bg: '#FDF2F8', action: () => setShowDashboardDateFilter(prev => !prev) },
-                { id: 'refresh', title: 'Live Sync', icon: 'refresh-cw', color: '#6366F1', bg: '#EEF2FF', action: () => window.location.reload() }
-              ].map(d => (
-                <button
-                  key={d.id}
-                  onClick={d.action}
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '50%',
-                    border: 'none',
-                    background: d.bg,
-                    color: d.color,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-                  }}
-                  title={d.title}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.transform = 'translateY(-3px) scale(1.1)';
-                    e.currentTarget.style.boxShadow = `0 6px 16px ${d.color}35`;
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.transform = 'none';
-                    e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
-                  }}
-                >
-                  <i data-lucide={d.icon} style={{ width: '16px', height: '16px' }}></i>
-                </button>
-              ))}
-            </div>
           </div>
         )}
+
 
         {/* PATIENTS TAB */}
         {activeTab === 'patients' && (() => {
