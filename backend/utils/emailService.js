@@ -26,12 +26,22 @@ async function sendEmail({ to, subject, text, html }) {
           ? text.trim()
           : (html ? html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : (subject || "Curoxa Notification"));
 
+        const senderEmail = process.env.SMTP_USER || "curoxatechnology@gmail.com";
+        const senderName = "Curoxa Healthcare";
+
         const payload = JSON.stringify({
           sender: { 
-            name: "Curoxa Security", 
-            email: process.env.SMTP_USER || "curoxatechnology@gmail.com" 
+            name: senderName, 
+            email: senderEmail 
           },
           to: [{ email: recipient }],
+          replyTo: {
+            name: senderName,
+            email: senderEmail
+          },
+          headers: {
+            "X-Mailin-Tag": "transactional-auth"
+          },
           subject,
           textContent: plainText,
           htmlContent: html || `<p>${plainText}</p>`
@@ -88,10 +98,11 @@ async function sendEmail({ to, subject, text, html }) {
         };
         const transporter = nodemailer.createTransport(smtpConfig);
         await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Curoxa Security" <${process.env.SMTP_USER}>`,
+          from: process.env.SMTP_FROM || `"Curoxa Healthcare" <${process.env.SMTP_USER}>`,
           to: recipient,
+          replyTo: `"Curoxa Healthcare" <${process.env.SMTP_USER}>`,
           subject,
-          text: text || "",
+          text: plainText,
           html: html || text || ""
         });
         emailSent = true;
