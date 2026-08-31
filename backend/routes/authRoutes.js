@@ -1351,7 +1351,8 @@ router.post("/send-login-otp", tenantMiddleware, async (req, res) => {
 
     // 5. Send email (if email is configured)
     let emailSent = false;
-    const targetEmail = user.email || (input.includes('@') ? input : null);
+    const isEmail = input.includes('@');
+    const targetEmail = isEmail ? input.toLowerCase().trim() : (user.email ? user.email.toLowerCase().trim() : null);
     if (targetEmail) {
       const emailHtmlBody = `
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
@@ -1706,32 +1707,26 @@ router.post('/patient-portal/send-otp', async (req, res) => {
     const path = require('path');
     const fs = require('fs');
     
-    // 1. Check if patient record exists in Patient collection
-    let patient = await Patient.findOne({
-      $or: [
-        { email: input.toLowerCase() },
-        { contact: input }
-      ]
-    });
-
-    // 2. Check if user account exists
+    const isEmail = input.includes('@');
+    let targetEmail = null;
+    let patient = null;
     let user = null;
-    if (patient) {
-      user = await User.findOne({
-        $or: [
-          { staff_id: patient.contact },
-          { email: patient.email ? patient.email.toLowerCase() : '' },
-          { phone: patient.contact }
-        ]
-      });
+
+    // 1. Strict email vs phone resolution (no cross-linking pollution)
+    if (isEmail) {
+      targetEmail = input.toLowerCase().trim();
+      patient = await Patient.findOne({ email: targetEmail });
+      user = await User.findOne({ email: targetEmail, role: 'patient' }) ||
+             await User.findOne({ email: targetEmail });
     } else {
-      user = await User.findOne({
-        $or: [
-          { staff_id: input },
-          { email: input.toLowerCase() },
-          { phone: input }
-        ]
-      });
+      patient = await Patient.findOne({ contact: input });
+      user = await User.findOne({ phone: input, role: 'patient' }) ||
+             await User.findOne({ staff_id: input });
+      if (user && user.email) {
+        targetEmail = user.email.toLowerCase().trim();
+      } else if (patient && patient.email) {
+        targetEmail = patient.email.toLowerCase().trim();
+      }
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -1746,7 +1741,7 @@ router.post('/patient-portal/send-otp', async (req, res) => {
     // Always store in RegistrationOtp for seamless verification fallback
     try {
       await RegistrationOtp.findOneAndUpdate(
-        { email: input.toLowerCase() },
+        { email: isEmail ? targetEmail : input },
         { otp_code: otp, expires_at: expiresAt },
         { upsert: true, new: true }
       );
@@ -1762,7 +1757,6 @@ router.post('/patient-portal/send-otp', async (req, res) => {
     } catch (_) {}
 
     // Send email to target email address
-    const targetEmail = (user && user.email) || (patient && patient.email) || (input.includes('@') ? input.toLowerCase() : null);
     if (targetEmail) {
       await sendPortalOtpEmail(targetEmail, otp);
     }
@@ -1793,44 +1787,19 @@ router.post('/patient-portal/verify-otp', async (req, res) => {
     let secretKey;
     try { secretKey = getJwtSecret(); } catch(e) { secretKey = process.env.JWT_SECRET || 'secret_key'; }
 
-    // 1. Search in Patient collection first
-    let patientDoc = await Patient.findOne({
-      $or: [
-        { email: input.toLowerCase() },
-        { contact: input }
-      ]
-    });
-
-    // 2. Search linked or standalone User account
+    const isEmail = input.includes('@');
+    let patientDoc = null;
     let user = null;
-    if (patientDoc) {
-      user = await User.findOne({
-        $or: [
-          { staff_id: patientDoc.contact },
-          { email: patientDoc.email ? patientDoc.email.toLowerCase() : '' },
-          { phone: patientDoc.contact }
-        ]
-      }).select('+password_hash');
-    }
 
-    if (!user) {
-      user = await User.findOne({
-        $or: [
-          { staff_id: input },
-          { email: input.toLowerCase() },
-          { phone: input }
-        ]
-      }).select('+password_hash');
-
-      if (user && !patientDoc) {
-        patientDoc = await Patient.findOne({
-          $or: [
-            { contact: user.staff_id },
-            { email: user.email ? user.email.toLowerCase() : '' },
-            { contact: user.phone || '' }
-          ]
-        });
-      }
+    if (isEmail) {
+      const emailLower = input.toLowerCase().trim();
+      patientDoc = await Patient.findOne({ email: emailLower });
+      user = await User.findOne({ email: emailLower, role: 'patient' }).select('+password_hash') ||
+             await User.findOne({ email: emailLower }).select('+password_hash');
+    } else {
+      patientDoc = await Patient.findOne({ contact: input });
+      user = await User.findOne({ phone: input, role: 'patient' }).select('+password_hash') ||
+             await User.findOne({ staff_id: input }).select('+password_hash');
     }
 
     // 3. Verify OTP code
