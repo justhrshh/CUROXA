@@ -378,19 +378,23 @@ const PatientDashboard = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const notificationRef = useRef(null);
+  const topNavProfileRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
         setShowNotifications(false);
       }
-      if (!event.target.closest('.sidebar-user') && !event.target.closest('.sidebar-profile-card') && !event.target.closest('.sidebar-profile')) {
+      const isInsideSidebarProfile = event.target.closest('.sidebar-user') || event.target.closest('.sidebar-profile-card') || event.target.closest('.sidebar-profile') || event.target.closest('.sidebar-profile-popover');
+      const isInsideTopNavProfile = (topNavProfileRef.current && topNavProfileRef.current.contains(event.target)) || event.target.closest('.patient-nav-pill') || event.target.closest('.patient-profile-dropdown');
+
+      if (!isInsideSidebarProfile && !isInsideTopNavProfile) {
         setShowProfileMenu(false);
       }
     };
-    document.addEventListener('click', handleClickOutside, true);
+    document.addEventListener('click', handleClickOutside);
     return () => {
-      document.removeEventListener('click', handleClickOutside, true);
+      document.removeEventListener('click', handleClickOutside);
     };
   }, []);
 
@@ -890,9 +894,21 @@ const PatientDashboard = () => {
   }, [activeTab, selectedHospital, curoxaHospitals, curoxaFacilityFilter, showAppointmentModal, appointments, doctors, showProfileMenu, detailsModalOpen, prescriptionModalOpen, currentUser.isSetupComplete, discoveryTab, selectedHospitalId, selectedHospitalDetails, selectedSpecialtyFilter, patientQueue, appointmentFilterTab, showWithdrawConsentModal, labModalOpen, emrModalOpen, docModalOpen, myHealthCategory]);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/login');
+    try {
+      setShowProfileMenu(false);
+      const isPatient = !currentUser.role || currentUser.role === 'patient';
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('tenantId');
+      localStorage.removeItem('tenantModules');
+      localStorage.removeItem('plan');
+      localStorage.removeItem('curoxa_superadmin_session');
+      window.dispatchEvent(new CustomEvent('curoxa_logout'));
+      window.location.href = isPatient ? '/patient/login' : '/login';
+    } catch (e) {
+      console.error('Logout error:', e);
+      window.location.href = '/patient/login';
+    }
   };
 
   const handleUpdateProfile = async (e) => {
@@ -3427,7 +3443,10 @@ const PatientDashboard = () => {
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.background = '#FEF2F2'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                onClick={handleLogout}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleLogout();
+                }}
               >
                 <i data-lucide="log-out" style={{ width: '16px', height: '16px' }}></i> Logout
               </div>
@@ -3763,7 +3782,7 @@ const PatientDashboard = () => {
           </div>
 
           {/* User Profile Badge matching mockup */}
-          <div style={{ position: 'relative' }}>
+          <div ref={topNavProfileRef} style={{ position: 'relative' }}>
             <div 
               className="patient-nav-pill"
               style={{
@@ -3819,7 +3838,7 @@ const PatientDashboard = () => {
 
             {showProfileMenu && (
               <div 
-                className="glass-card" 
+                className="glass-card patient-profile-dropdown" 
                 style={{ 
                   position: 'absolute', 
                   top: '48px', 
@@ -3855,7 +3874,8 @@ const PatientDashboard = () => {
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
                   onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setActiveTab('profile');
                     setShowProfileMenu(false);
                   }}
@@ -3877,7 +3897,10 @@ const PatientDashboard = () => {
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.background = '#FEF2F2'}
                   onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                  onClick={handleLogout}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleLogout();
+                  }}
                 >
                   <i data-lucide="log-out" style={{ width: '16px', height: '16px' }}></i> Logout
                 </div>
