@@ -3,6 +3,9 @@ node_modules/
 *.sqlite
 .DS_Store
 npm-debug.log*
+.env
+*.env
 
 # Generated seed credentials
 .seed-admin.txt
+.seed-otp.txt

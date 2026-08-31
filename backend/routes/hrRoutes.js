@@ -128,58 +128,20 @@ router.post("/notify-leave", async (req, res) => {
     </div>
   `;
 
-  // Try sending via SMTP
+  // Send notification via unified email service
   try {
-    const smtpConfig = {
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: parseInt(process.env.SMTP_PORT, 10) || 465,
-      secure: process.env.SMTP_SECURE === "true" || parseInt(process.env.SMTP_PORT, 10) === 465,
-      auth: {
-        user: process.env.SMTP_USER || "",
-        pass: process.env.SMTP_PASS || ""
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 10000
-    };
-
-    const transporter = nodemailer.createTransport(smtpConfig);
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || `"Curoxa HR" <${process.env.SMTP_USER}>`,
+    const { sendEmail } = require('../utils/emailService');
+    const result = await sendEmail({
       to: employeeEmail,
       subject,
       html: htmlBody
     });
-
-    console.log(`[HR] Leave ${statusLabel} email sent to ${employeeEmail}`);
-    return res.json({ success: true, message: `Notification sent to ${employeeEmail}` });
-  } catch (smtpErr) {
-    console.error("[HR] SMTP send failed:", smtpErr.message);
-  }
-
-  // Fallback: Resend HTTP API
-  if (process.env.RESEND_API_KEY) {
-    try {
-      const resendRes = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          from: "Curoxa HR <onboarding@resend.dev>",
-          to: [employeeEmail],
-          subject,
-          html: htmlBody
-        })
-      });
-      if (resendRes.ok) {
-        console.log(`[HR] Leave ${statusLabel} email sent via Resend to ${employeeEmail}`);
-        return res.json({ success: true, message: `Notification sent via Resend to ${employeeEmail}` });
-      }
-    } catch (resendErr) {
-      console.error("[HR] Resend send failed:", resendErr.message);
+    if (result.success) {
+      console.log(`[HR] Leave ${statusLabel} email sent to ${employeeEmail}`);
+      return res.json({ success: true, message: `Notification sent to ${employeeEmail}` });
     }
+  } catch (emailErr) {
+    console.error("[HR] Notification email failed:", emailErr.message);
   }
 
   // If both fail, still return 200 — the leave was processed, email is best-effort

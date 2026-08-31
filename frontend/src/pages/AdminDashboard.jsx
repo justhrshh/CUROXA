@@ -7,6 +7,20 @@ import { printPO, printGRN } from '../utils/printDocHelper';
 import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
 import ExportModal from '../components/export/ExportModal';
 import { staffExportColumns, appointmentExportColumns } from '../utils/exportEngine';
+import { 
+  UserPlus, X, User, Phone, ShieldCheck, Lock, Sparkles, Eye, KeyRound, 
+  Check, Briefcase, Mail, Shield, ChevronDown, Stethoscope, Clock, Plus, 
+  AlertCircle, FileText, ChevronUp, Users, Droplet, CreditCard, MapPin, HeartPulse, Calendar
+} from 'lucide-react';
+
+const DOCTOR_SPECIALIZATIONS = [
+  'General Medicine', 'Cardiology', 'Dermatology', 'Orthopedics', 'Pediatrics',
+  'ENT', 'Ophthalmology', 'Neurology', 'Gynecology', 'Psychiatry',
+  'Dentistry', 'Radiology', 'Pulmonology', 'Urology', 'Gastroenterology',
+  'Nephrology', 'Oncology', 'Endocrinology', 'Rheumatology', 'General Surgery'
+];
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 // Safeguard React DOM reconciliation against external DOM mutations
 if (typeof window !== 'undefined') {
@@ -516,6 +530,53 @@ const AdminDashboard = () => {
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
+  const [showAddStaffConfirmPassword, setShowAddStaffConfirmPassword] = useState(false);
+  const [showAddStaffOptional, setShowAddStaffOptional] = useState(true);
+  const addStaffModalFormRef = useRef(null);
+
+  const getPasswordStrength = (pass) => {
+    if (!pass) return { label: '', color: 'transparent' };
+    const strongRegex = new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\\$%\\^&\\*])(?=.{8,})");
+    const mediumRegex = new RegExp("^(((?=.*[a-z])(?=.*[A-Z]))|((?=.*[a-z])(?=.*[0-9]))|((?=.*[A-Z])(?=.*[0-9])))(?=.{6,})");
+    if (strongRegex.test(pass)) return { label: 'Strong', color: '#22C55E' };
+    if (mediumRegex.test(pass)) return { label: 'Medium', color: '#EAB308' };
+    return { label: 'Weak', color: '#EF4444' };
+  };
+
+  const handleStaffModalKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      if (e.target.tagName === 'TEXTAREA') {
+        if (!e.ctrlKey) return;
+      }
+      if (e.target.tagName === 'BUTTON') return;
+
+      e.preventDefault();
+
+      const form = addStaffModalFormRef.current;
+      if (!form) return;
+
+      const focusable = Array.from(
+        form.querySelectorAll(
+          'input:not([disabled]):not([type="hidden"]):not([readonly]), select:not([disabled]), textarea:not([disabled])'
+        )
+      ).filter(el => el.offsetParent !== null && !el.closest('[style*="display: none"]'));
+
+      const currentIndex = focusable.indexOf(e.target);
+      if (currentIndex > -1 && currentIndex < focusable.length - 1) {
+        const next = focusable[currentIndex + 1];
+        next.focus();
+        if (next.select && next.type !== 'date') {
+          try { next.select(); } catch (_) {}
+        }
+      } else {
+        if (form.requestSubmit) {
+          form.requestSubmit();
+        } else {
+          form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        }
+      }
+    }
+  };
   const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
   const [selectedStaffToRevoke, setSelectedStaffToRevoke] = useState(null);
   const [showRevenueModal, setShowRevenueModal] = useState(false);
@@ -2086,22 +2147,34 @@ const AdminDashboard = () => {
     }
     setNewStaff(prev => ({ ...prev, password: pass, confirmPassword: pass }));
     setShowAddStaffPassword(true);
+    setShowAddStaffConfirmPassword(true);
   };
 
   const handleAddStaff = async (e) => {
     e.preventDefault();
+    if (loading) return;
     
+    if (!newStaff.name || !newStaff.email || !newStaff.phone || !newStaff.password) {
+      setError('Please fill in all mandatory fields (Name, Email, Phone Number, Password).');
+      return;
+    }
+    if (newStaff.phone.length !== 10) {
+      setError('Phone Number must be exactly 10 digits (it will be used as the Login Username).');
+      return;
+    }
     if (newStaff.password !== newStaff.confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
-    if (isUsernameAvailable === false) {
-      setError('Please choose a different username. The selected username is already taken.');
-      return;
-    }
-    if (checkingUsername) {
-      setError('Checking username availability... Please wait.');
-      return;
+    if (newStaff.role === 'doctor') {
+      if (!newStaff.specialty) {
+        setError('Please select a Specialization for the doctor.');
+        return;
+      }
+      if (!newStaff.doctorSlots || newStaff.doctorSlots.length === 0) {
+        setError('Please select at least one Attending Time Slot for the doctor.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -2113,15 +2186,26 @@ const AdminDashboard = () => {
     if (!initials) initials = 'ST';
     
     let dept = 'General Medicine';
-    if (newStaff.role === 'receptionist') dept = 'Front desk';
-    if (newStaff.role === 'lab') dept = 'Laboratory';
+    if (newStaff.role === 'doctor') dept = newStaff.specialty || 'General Medicine';
+    if (newStaff.role === 'receptionist') dept = 'Outpatient Services';
+    if (newStaff.role === 'lab') dept = 'Pathology & Lab';
     if (newStaff.role === 'pharmacy') dept = 'Pharmacy';
-    if (newStaff.role === 'hr') dept = 'HR & Administration';
+    if (newStaff.role === 'hr') dept = 'Hospital Administration';
 
     let avatarColor = 'blue';
     if (newStaff.role === 'doctor') avatarColor = 'purple';
     if (newStaff.role === 'receptionist') avatarColor = 'gold';
     if (newStaff.role === 'hr') avatarColor = 'teal';
+
+    const payload = {
+      ...newStaff,
+      staff_id: newStaff.phone,
+      department: dept,
+      specialty: newStaff.role === 'doctor' ? newStaff.specialty : undefined,
+      consultationFee: newStaff.role === 'doctor' ? (newStaff.consultationFee !== undefined && newStaff.consultationFee !== '' ? Number(newStaff.consultationFee) : 500) : undefined,
+      doctorSlots: newStaff.role === 'doctor' ? newStaff.doctorSlots : [],
+      weeklyOff: newStaff.weeklyOff || 'Sunday'
+    };
 
     const localEntry = {
       id: Math.random().toString(),
@@ -2136,7 +2220,7 @@ const AdminDashboard = () => {
       active: true,
       email: newStaff.email || '',
       phone: newStaff.phone || '',
-      consultationFee: newStaff.consultationFee !== undefined ? newStaff.consultationFee : 500,
+      consultationFee: payload.consultationFee,
       weeklyOff: newStaff.weeklyOff || 'Sunday',
       shiftName: newStaff.shiftName || 'General Shift',
       password: newStaff.password,
@@ -2145,12 +2229,43 @@ const AdminDashboard = () => {
     };
 
     try {
-      await api.post('/admin/users', newStaff);
+      await api.post('/admin/users', payload);
       setSuccess('Staff account created successfully!');
       setStaff(prev => [...prev.filter(x => x.name.toLowerCase() !== newStaff.name.toLowerCase()), localEntry]);
-      setNewStaff({ staff_id: '', password: '', confirmPassword: '', role: getAvailableRoles()[0]?.value || 'doctor', name: '', max_slots: '', email: '', phone: '', weeklyOff: 'Sunday', shiftName: 'General Shift', doctorSlots: ['09:00 AM - 09:30 AM', '09:30 AM - 10:00 AM', '10:00 AM - 10:30 AM', '10:30 AM - 11:00 AM', '11:00 AM - 11:30 AM', '11:30 AM - 12:00 PM', '12:00 PM - 12:30 PM', '12:30 PM - 01:00 PM', '02:00 PM - 02:30 PM', '02:30 PM - 03:00 PM', '03:00 PM - 03:30 PM', '03:30 PM - 04:00 PM', '04:00 PM - 04:30 PM', '04:30 PM - 05:00 PM', '05:00 PM - 05:30 PM'] });
+      setNewStaff({
+        staff_id: '',
+        password: '',
+        confirmPassword: '',
+        role: getAvailableRoles()[0]?.value || 'doctor',
+        name: '',
+        max_slots: 10,
+        email: '',
+        phone: '',
+        weeklyOff: 'Sunday',
+        shiftName: 'General Shift',
+        specialty: '',
+        consultationFee: 500,
+        ctcAnnual: '',
+        dob: '',
+        gender: '',
+        bloodGroup: '',
+        aadhaar: '',
+        pan: '',
+        address: '',
+        emergencyContactName: '',
+        emergencyContactRelation: '',
+        emergencyContactPhone: '',
+        doctorSlots: [
+          '09:00 AM - 09:30 AM', '09:30 AM - 10:00 AM', '10:00 AM - 10:30 AM',
+          '10:30 AM - 11:00 AM', '11:00 AM - 11:30 AM', '11:30 AM - 12:00 PM',
+          '12:00 PM - 12:30 PM', '12:30 PM - 01:00 PM', '02:00 PM - 02:30 PM',
+          '02:30 PM - 03:00 PM', '03:00 PM - 03:30 PM', '03:30 PM - 04:00 PM',
+          '04:00 PM - 04:30 PM', '04:30 PM - 05:00 PM', '05:00 PM - 05:30 PM'
+        ]
+      });
       setShowAddStaffModal(false);
       setShowAddStaffPassword(false);
+      setShowAddStaffConfirmPassword(false);
       fetchStaff();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
@@ -2161,9 +2276,40 @@ const AdminDashboard = () => {
       } else {
         setSuccess('Staff account created successfully (Local Registry)!');
         setStaff(prev => [...prev, localEntry]);
-        setNewStaff({ staff_id: '', password: '', confirmPassword: '', role: getAvailableRoles()[0]?.value || 'doctor', name: '', max_slots: '', email: '' });
+        setNewStaff({
+          staff_id: '',
+          password: '',
+          confirmPassword: '',
+          role: getAvailableRoles()[0]?.value || 'doctor',
+          name: '',
+          max_slots: 10,
+          email: '',
+          phone: '',
+          weeklyOff: 'Sunday',
+          shiftName: 'General Shift',
+          specialty: '',
+          consultationFee: 500,
+          ctcAnnual: '',
+          dob: '',
+          gender: '',
+          bloodGroup: '',
+          aadhaar: '',
+          pan: '',
+          address: '',
+          emergencyContactName: '',
+          emergencyContactRelation: '',
+          emergencyContactPhone: '',
+          doctorSlots: [
+            '09:00 AM - 09:30 AM', '09:30 AM - 10:00 AM', '10:00 AM - 10:30 AM',
+            '10:30 AM - 11:00 AM', '11:00 AM - 11:30 AM', '11:30 AM - 12:00 PM',
+            '12:00 PM - 12:30 PM', '12:30 PM - 01:00 PM', '02:00 PM - 02:30 PM',
+            '02:30 PM - 03:00 PM', '03:00 PM - 03:30 PM', '03:30 PM - 04:00 PM',
+            '04:00 PM - 04:30 PM', '04:30 PM - 05:00 PM', '05:00 PM - 05:30 PM'
+          ]
+        });
         setShowAddStaffModal(false);
         setShowAddStaffPassword(false);
+        setShowAddStaffConfirmPassword(false);
         setTimeout(() => setSuccess(''), 3000);
       }
     } finally {
@@ -23413,360 +23559,952 @@ const AdminDashboard = () => {
         </div>
       )}
 
-       {/* Pop-up Add Staff Modal Overlay */}
+      {/* Onboard New Hospital Staff Modal Overlay */}
       {showAddStaffModal && (
-        <div className="admin-modal-overlay" onClick={() => { setShowAddStaffModal(false); setShowAddStaffPassword(false); }}>
-          <div className="admin-modal-card" onClick={e => e.stopPropagation()}>
-            <div className="admin-modal-header">
-              <span className="admin-modal-title">Add New Staff Account</span>
-              <button className="admin-modal-close-btn" onClick={() => { setShowAddStaffModal(false); setShowAddStaffPassword(false); }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+        <div 
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 animate-fadeIn hr-modal-overlay" 
+          style={{ zIndex: 99999 }}
+          onClick={() => {
+            setShowAddStaffModal(false);
+            setShowAddStaffPassword(false);
+            setShowAddStaffConfirmPassword(false);
+            setError('');
+          }}
+        >
+          <form 
+            ref={addStaffModalFormRef}
+            onSubmit={handleAddStaff}
+            onKeyDown={handleStaffModalKeyDown}
+            autoComplete="off"
+            className="bg-slate-50 rounded-2xl shadow-2xl border border-slate-200/90 max-w-4xl lg:max-w-[960px] w-full relative hr-admin-modal max-h-[92vh] flex flex-col overflow-hidden animate-scaleUp"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header: Gradient Banner with Medical Glow & Icon Badge */}
+            <div className="relative bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 px-6 py-5 text-white flex items-center justify-between shadow-lg overflow-hidden shrink-0">
+              <div className="absolute -right-8 -top-8 w-36 h-36 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+              <div className="absolute left-1/3 -bottom-8 w-32 h-32 rounded-full bg-cyan-400/15 blur-xl pointer-events-none" />
+              
+              <div className="flex items-center gap-3.5 relative z-10">
+                <div className="w-11 h-11 rounded-xl bg-white/15 border border-white/25 backdrop-blur-md flex items-center justify-center shadow-inner">
+                  <UserPlus className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black tracking-tight text-white m-0">
+                      Onboard New Hospital Staff
+                    </h3>
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-white/20 text-blue-100 border border-white/20 tracking-wider">
+                      Clinic HR
+                    </span>
+                  </div>
+                  <p className="text-xs text-blue-100/90 font-medium m-0 mt-0.5">
+                    Configure login credentials, clinical access & staff profile
+                  </p>
+                </div>
+              </div>
+
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowAddStaffModal(false);
+                  setShowAddStaffPassword(false);
+                  setShowAddStaffConfirmPassword(false);
+                  setError('');
+                }} 
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer border border-white/15 active:scale-95 z-10"
+                title="Close (Esc)"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
-            
-            <form onSubmit={handleAddStaff}>
-              {error && (
-                <div style={{
-                  background: '#FEE2E2',
-                  border: '1px solid #FCA5A5',
-                  color: '#991B1B',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  marginBottom: '16px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
-                  <span>{error}</span>
-                </div>
-              )}
-              <div className="admin-input-group">
-                <label className="admin-input-label">Full Name</label>
-                <input 
-                  type="text" 
-                  className="admin-text-input" 
-                  value={newStaff.name} 
-                  onChange={e => setNewStaff({...newStaff, name: e.target.value})} 
-                  placeholder="e.g. Dr. Jane Smith" 
-                  required 
-                />
-              </div>
-              <div className="admin-input-group" style={{ marginBottom: '16px' }}>
-                <label className="admin-input-label">Username (Staff ID)</label>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type="text" 
-                    className="admin-text-input" 
-                    value={newStaff.staff_id} 
-                    onChange={e => setNewStaff({...newStaff, staff_id: e.target.value})} 
-                    placeholder="e.g. janesmith" 
-                    required 
-                    autoComplete="new-username"
-                    style={{
-                      borderColor: isUsernameAvailable === true ? '#10B981' : isUsernameAvailable === false ? '#EF4444' : undefined,
-                      paddingRight: checkingUsername || isUsernameAvailable !== null ? '36px' : undefined
-                    }}
-                  />
-                  <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                    {checkingUsername && (
-                      <div className="animate-spin" style={{ width: '16px', height: '16px', border: '2px solid #E2E8F0', borderTopColor: '#3B82F6', borderRadius: '50%' }}></div>
-                    )}
-                    {!checkingUsername && isUsernameAvailable === true && (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    )}
-                    {!checkingUsername && isUsernameAvailable === false && (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
-                    )}
-                  </div>
-                </div>
-                {checkingUsername && (
-                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748B', fontWeight: 500 }}>Checking availability...</p>
-                )}
-                {!checkingUsername && isUsernameAvailable === true && (
-                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#10B981', fontWeight: 600 }}>✓ Username is available</p>
-                )}
-                {!checkingUsername && isUsernameAvailable === false && (
-                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#EF4444', fontWeight: 600 }}>✗ Username is already taken</p>
-                )}
-              </div>
-              <div className="admin-input-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <label className="admin-input-label" style={{ margin: 0 }}>Login Password</label>
-                  <button 
-                    type="button" 
-                    onClick={generateRandomPassword} 
-                    style={{ 
-                      background: '#EFF6FF', 
-                      border: '1px solid #3B82F6', 
-                      color: '#2563EB', 
-                      padding: '4px 10px', 
-                      borderRadius: '6px', 
-                      fontSize: '11px', 
-                      fontWeight: 800, 
-                      cursor: 'pointer' 
-                    }}
-                  >
-                    Generate Password
-                  </button>
-                </div>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input 
-                    type={showAddStaffPassword ? 'text' : 'password'} 
-                    className="admin-text-input" 
-                    style={{ paddingRight: '40px', width: '100%' }}
-                    value={newStaff.password} 
-                    onChange={e => setNewStaff({...newStaff, password: e.target.value})} 
-                    placeholder="••••••••" 
-                    required 
-                    autoComplete="new-password"
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => setShowAddStaffPassword(!showAddStaffPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: '#64748B',
-                      padding: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  >
-                    {showAddStaffPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.52 13.52 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                    )}
-                  </button>
-                </div>
-              </div>
-              <div className="admin-input-group">
-                <label className="admin-input-label">Confirm Password</label>
-                <input 
-                  type={showAddStaffPassword ? 'text' : 'password'} 
-                  className="admin-text-input" 
-                  style={{ borderColor: newStaff.confirmPassword && newStaff.password !== newStaff.confirmPassword ? '#EF4444' : undefined }}
-                  value={newStaff.confirmPassword} 
-                  onChange={e => setNewStaff({...newStaff, confirmPassword: e.target.value})} 
-                  placeholder="Re-enter password" 
-                  required 
-                  autoComplete="new-password"
-                />
-                {newStaff.confirmPassword && newStaff.password !== newStaff.confirmPassword && (
-                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#EF4444', fontWeight: 600 }}>Passwords do not match</p>
-                )}
-              </div>
-              <div className="admin-input-group">
-                <label className="admin-input-label">Access Role</label>
-                <select 
-                  className="admin-text-input" 
-                  style={{ padding: '0 8px' }}
-                  value={newStaff.role} 
-                  onChange={e => setNewStaff({...newStaff, role: e.target.value})}
-                >
-                  {getAvailableRoles().map(r => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
-              </div>
 
-              <div className="admin-input-group">
-                <label className="admin-input-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <svg style={{ width: '14px', height: '14px', flexShrink: 0 }} viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.62-.62-1.05-1.37-1.35-2.22z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                  </svg>
-                  Google Login Email
-                  <span style={{ fontSize: '10px', fontWeight: 600, color: '#94A3B8', marginLeft: '4px' }}>(optional)</span>
-                </label>
-                <input 
-                  type="email" 
-                  className="admin-text-input" 
-                  value={newStaff.email} 
-                  onChange={e => setNewStaff({...newStaff, email: e.target.value})} 
-                  placeholder="e.g. doctor.sarah@gmail.com" 
-                  autoComplete="off"
-                />
-                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, marginTop: '4px', display: 'block' }}>
-                  Staff can use this email to log in with "Sign in with Google" button
+            {/* Status Guidance Strip */}
+            <div className="bg-white px-6 py-2 border-b border-slate-200/80 flex items-center justify-between flex-wrap gap-2 text-xs shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1.5 font-bold text-slate-700">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 ring-4 ring-rose-100" />
+                  <span className="text-rose-600 font-extrabold">Required</span>
+                  <span className="text-slate-500 font-normal">Compulsory for registration</span>
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="flex items-center gap-1.5 font-bold text-slate-700">
+                  <span className="w-2 h-2 rounded-full bg-slate-300" />
+                  <span className="text-slate-600 font-semibold">Optional</span>
+                  <span className="text-slate-500 font-normal">Can be skipped or filled later</span>
                 </span>
               </div>
-
-              <div className="admin-input-group">
-                <label className="admin-input-label">Phone Number</label>
-                <input 
-                  type="text" 
-                  className="admin-text-input" 
-                  value={newStaff.phone || ''} 
-                  onChange={e => setNewStaff({...newStaff, phone: e.target.value})} 
-                  placeholder="e.g. +919876543210" 
-                  required 
-                />
+              <div className="text-[11px] text-slate-400 font-medium hidden sm:flex items-center gap-1">
+                <span>Press</span>
+                <kbd className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 border border-slate-300 rounded text-slate-700">Enter ↵</kbd>
+                <span>for next field</span>
               </div>
-              
-              {newStaff.role === 'doctor' && (
-                <>
-                  <div className="admin-input-group animate-in">
-                    <label className="admin-input-label">Daily Max Appointment Slots</label>
-                    <input 
-                      type="number" 
-                      className="admin-text-input" 
-                      min="1" 
-                      max="100" 
-                      placeholder="e.g. 10"
-                      value={newStaff.max_slots} 
-                      onChange={e => setNewStaff({...newStaff, max_slots: Number(e.target.value)})} 
-                      required 
-                    />
-                  </div>
-                  <div className="admin-input-group animate-in">
-                    <label className="admin-input-label">Doctor Consultation Fee (₹)</label>
-                    <input 
-                      type="number" 
-                      className="admin-text-input" 
-                      min="0" 
-                      placeholder="e.g. 500"
-                      value={newStaff.consultationFee !== undefined ? newStaff.consultationFee : 500} 
-                      onChange={e => setNewStaff({...newStaff, consultationFee: e.target.value !== '' ? Number(e.target.value) : ''})} 
-                      required 
-                    />
-                  </div>
-                  
-                  <div className="admin-input-group animate-in">
-                    <label className="admin-input-label">Weekly Off Day</label>
-                    <select 
-                      className="admin-text-input" 
-                      style={{ padding: '0 8px' }}
-                      value={newStaff.weeklyOff || 'Sunday'} 
-                      onChange={e => setNewStaff({...newStaff, weeklyOff: e.target.value})}
-                      required
-                    >
-                      <option value="Sunday">Sunday</option>
-                      <option value="Monday">Monday</option>
-                      <option value="Tuesday">Tuesday</option>
-                      <option value="Wednesday">Wednesday</option>
-                      <option value="Thursday">Thursday</option>
-                      <option value="Friday">Friday</option>
-                      <option value="Saturday">Saturday</option>
-                    </select>
-                  </div>
-                  
-                  <div className="admin-input-group animate-in">
-                    <label className="admin-input-label">Hospital Shift</label>
-                    <select 
-                      className="admin-text-input" 
-                      style={{ padding: '0 8px' }}
-                      value={newStaff.shiftName || 'General Shift'} 
-                      onChange={e => setNewStaff({...newStaff, shiftName: e.target.value})}
-                      required
-                    >
-                      <option value="General Shift">General Shift (09:00 AM - 05:00 PM)</option>
-                      <option value="Morning Shift">Morning Shift (08:00 AM - 02:00 PM)</option>
-                      <option value="Evening Shift">Evening Shift (02:00 PM - 08:00 PM)</option>
-                      <option value="Night Rotation">Night Rotation (08:00 PM - 08:00 AM)</option>
-                    </select>
-                  </div>
+            </div>
 
-                  <div className="admin-input-group animate-in" style={{ gridColumn: 'span 2', marginTop: '8px' }}>
-                    <label className="admin-input-label">Attending Time Slots (Required)</label>
-                    
-                    {/* Add Custom Slot */}
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+            {/* Form Scrollable Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/60" data-lenis-prevent>
+              {error && (
+                <div id="staff-form-error" className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2.5 animate-shake">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                  <span className="flex-1">{error}</span>
+                </div>
+              )}
+
+              {/* CARD 1: Essential Account Credentials */}
+              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs">
+                      1
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 m-0">
+                        Account Credentials & Security
+                      </h4>
+                      <p className="text-[11px] text-slate-400 m-0">Core login identification for the staff member</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
+                    Compulsory
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Full Name */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        Full Legal Name
+                      </label>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                        Required
+                      </span>
+                    </div>
+                    <div className="relative flex items-center group">
+                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
                       <input 
                         type="text" 
-                        placeholder="e.g. 10:00 AM - 11:00 AM" 
-                        className="admin-text-input" 
-                        style={{ height: '36px', flex: 1 }}
-                        value={adminCustomSlotInput}
-                        onChange={e => setAdminCustomSlotInput(e.target.value)}
+                        required
+                        placeholder="e.g. Dr. Rajesh Sharma"
+                        value={newStaff.name}
+                        onChange={(e) => setNewStaff({...newStaff, name: e.target.value})}
+                        className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                        style={{ paddingLeft: '44px' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Phone Number (Used as Login Username) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        Phone Number <span className="text-slate-400 font-normal">(Login Username)</span>
+                      </label>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                        10 Digits
+                      </span>
+                    </div>
+                    <div className="relative flex items-center group">
+                      <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                      <input 
+                        type="tel" 
+                        required
+                        maxLength="10"
+                        placeholder="10-digit mobile number"
+                        value={newStaff.phone}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '');
+                          setNewStaff({
+                            ...newStaff, 
+                            phone: val,
+                            staff_id: val
+                          });
+                        }}
+                        className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                        style={{ paddingLeft: '44px' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Username / Staff ID (Auto-populated from phone) */}
+                  <div className="md:col-span-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        System Login ID / Staff ID
+                      </label>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Auto-Populated
+                      </span>
+                    </div>
+                    <div className="relative flex items-center group">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 absolute left-3.5 pointer-events-none z-10" />
+                      <input 
+                        type="text" 
+                        readOnly
+                        value={newStaff.phone || 'Enter 10-digit Phone Number above'}
+                        className="w-full h-10 pr-3.5 bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-not-allowed select-none"
+                        style={{ paddingLeft: '44px' }}
+                      />
+                      {newStaff.phone?.length === 10 && (
+                        <span className="absolute right-3 text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5 stroke-[3]" /> Valid ID
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Password Field */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        Login Password
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {newStaff.password && (
+                          <span 
+                            className="text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.2 rounded border"
+                            style={{ 
+                              color: getPasswordStrength(newStaff.password).color,
+                              borderColor: getPasswordStrength(newStaff.password).color,
+                              backgroundColor: `${getPasswordStrength(newStaff.password).color}15`
+                            }}
+                          >
+                            {getPasswordStrength(newStaff.password).label}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={generateRandomPassword}
+                          className="text-[10px] font-bold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded px-1.5 py-0.5 transition-all cursor-pointer flex items-center gap-1"
+                          title="Generate secure password"
+                        >
+                          <Sparkles className="w-2.5 h-2.5" />
+                          <span>Generate</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="relative flex items-center group">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                      <input 
+                        type={showAddStaffPassword ? "text" : "password"} 
+                        required
+                        placeholder="••••••••••••"
+                        value={newStaff.password}
+                        onChange={(e) => setNewStaff({...newStaff, password: e.target.value})}
+                        className="w-full h-10 pr-10 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                        style={{ paddingLeft: '44px' }}
                       />
                       <button
                         type="button"
-                        onClick={() => {
-                          if (!adminCustomSlotInput.trim()) return;
-                          const newSlot = adminCustomSlotInput.trim();
-                          const currentSlots = newStaff.doctorSlots || [];
-                          if (!currentSlots.includes(newSlot)) {
-                            setNewStaff({
-                              ...newStaff,
-                              doctorSlots: [...currentSlots, newSlot]
-                            });
-                          }
-                          setAdminCustomSlotInput('');
-                        }}
-                        style={{
-                          background: '#3B82F6',
-                          border: 'none',
-                          color: '#FFFFFF',
-                          padding: '0 16px',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
+                        onClick={() => setShowAddStaffPassword(!showAddStaffPassword)}
+                        className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
                       >
-                        Add Custom
+                        <Eye className="w-4 h-4" />
                       </button>
                     </div>
 
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', maxHeight: '160px', overflowY: 'auto', padding: '10px', border: '1px solid #CBD5E1', borderRadius: '8px', background: '#F8FAFC' }} data-lenis-prevent>
-                      {Array.from(new Set([
-                        '09:00 AM - 09:30 AM', '09:30 AM - 10:00 AM', '10:00 AM - 10:30 AM',
-                        '10:30 AM - 11:00 AM', '11:00 AM - 11:30 AM', '11:30 AM - 12:00 PM',
-                        '12:00 PM - 12:30 PM', '12:30 PM - 01:00 PM', '02:00 PM - 02:30 PM',
-                        '02:30 PM - 03:00 PM', '03:00 PM - 03:30 PM', '03:30 PM - 04:00 PM',
-                        '04:00 PM - 04:30 PM', '04:30 PM - 05:00 PM', '05:00 PM - 05:30 PM',
-                        ...(newStaff.doctorSlots || [])
-                      ])).map(slot => {
-                        const isSelected = (newStaff.doctorSlots || []).includes(slot);
-                        return (
-                          <button
-                            key={slot}
-                            type="button"
-                            onClick={() => {
-                              let currentSlots = [...(newStaff.doctorSlots || [])];
-                              if (currentSlots.includes(slot)) {
-                                currentSlots = currentSlots.filter(s => s !== slot);
-                              } else {
-                                currentSlots.push(slot);
-                              }
-                              setNewStaff({...newStaff, doctorSlots: currentSlots});
-                            }}
-                            style={{
-                              padding: '6px 12px',
-                              borderRadius: '6px',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                              border: '1px solid ' + (isSelected ? '#3B82F6' : '#CBD5E1'),
-                              background: isSelected ? '#EFF6FF' : '#FFFFFF',
-                              color: isSelected ? '#2563EB' : '#475569',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease'
-                            }}
-                          >
-                            {slot}
-                          </button>
-                        );
-                      })}
+                    {/* Password Strength Indicator Bar */}
+                    {newStaff.password && (
+                      <div className="mt-1.5 flex gap-1 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full transition-all duration-300 rounded-full"
+                          style={{
+                            width: getPasswordStrength(newStaff.password).label === 'Weak' ? '33%' : getPasswordStrength(newStaff.password).label === 'Medium' ? '66%' : '100%',
+                            backgroundColor: getPasswordStrength(newStaff.password).color
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Confirm Password */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        Confirm Password
+                      </label>
+                      {newStaff.confirmPassword && (
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border ${
+                          newStaff.password === newStaff.confirmPassword 
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                            : 'bg-rose-50 text-rose-600 border-rose-200'
+                        }`}>
+                          {newStaff.password === newStaff.confirmPassword ? '✓ Matched' : 'Mismatch'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative flex items-center group">
+                      <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                      <input 
+                        type={showAddStaffConfirmPassword ? "text" : "password"} 
+                        required
+                        placeholder="••••••••••••"
+                        value={newStaff.confirmPassword}
+                        onChange={(e) => setNewStaff({...newStaff, confirmPassword: e.target.value})}
+                        className="w-full h-10 pr-10 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                        style={{ paddingLeft: '44px' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAddStaffConfirmPassword(!showAddStaffConfirmPassword)}
+                        className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                </>
+                </div>
+              </div>
+
+              {/* CARD 2: Role & Department Assignment */}
+              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                      2
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 m-0">
+                        Role & Department Assignment
+                      </h4>
+                      <p className="text-[11px] text-slate-400 m-0">Sets module permissions and department affiliation</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
+                    Compulsory
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Access Role */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        Access Role
+                      </label>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                        Required
+                      </span>
+                    </div>
+                    <div className="relative flex items-center group">
+                      <Shield className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                      <select 
+                        className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
+                        style={{ paddingLeft: '44px', paddingRight: '36px' }}
+                        value={newStaff.role} 
+                        onChange={(e) => setNewStaff({...newStaff, role: e.target.value})}
+                      >
+                        {getAvailableRoles().map(r => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none z-10" />
+                    </div>
+                  </div>
+
+                  {/* Hospital Email */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        Hospital / Work Email
+                      </label>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                        Required
+                      </span>
+                    </div>
+                    <div className="relative flex items-center group">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                      <input 
+                        type="email" 
+                        required
+                        placeholder="staff.name@hospital.com"
+                        value={newStaff.email}
+                        onChange={(e) => setNewStaff({...newStaff, email: e.target.value})}
+                        className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                        style={{ paddingLeft: '44px' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 3: Doctor Configuration (Conditionally rendered when role is Doctor) */}
+              {newStaff.role === 'doctor' && (
+                <div className="bg-gradient-to-br from-teal-500/5 via-teal-50/50 to-white rounded-xl p-5 border-2 border-teal-500/40 shadow-xs space-y-4 animate-slideDown">
+                  <div className="flex items-center justify-between border-b border-teal-200/60 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                        <Stethoscope className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black uppercase tracking-wider text-teal-950 m-0">
+                          3. Doctor Clinical Configuration
+                        </h4>
+                        <p className="text-[11px] text-teal-700 m-0">Specialization, appointment fees, and OPD schedule</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-300">
+                      Doctor Setup
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Specialization */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          Medical Specialization
+                        </label>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                          Required
+                        </span>
+                      </div>
+                      <div className="relative flex items-center group">
+                        <Stethoscope className="w-4 h-4 text-teal-600 absolute left-3.5 pointer-events-none z-10" />
+                        <select 
+                          value={newStaff.specialty || ''}
+                          onChange={(e) => setNewStaff({...newStaff, specialty: e.target.value})}
+                          className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-teal-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
+                          style={{ paddingLeft: '44px', paddingRight: '36px' }}
+                        >
+                          <option value="">-- Select Specialization --</option>
+                          {DOCTOR_SPECIALIZATIONS.map(spec => (
+                            <option key={spec} value={spec}>{spec}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none z-10" />
+                      </div>
+                    </div>
+
+                    {/* Doctor Consultation Fee */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          Consultation Fee (₹ INR)
+                        </label>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                          Default: ₹500
+                        </span>
+                      </div>
+                      <div className="relative flex items-center group">
+                        <span className="absolute left-3.5 font-bold text-sm text-slate-500 pointer-events-none group-focus-within:text-teal-600 transition-colors z-10">₹</span>
+                        <input 
+                          type="number" 
+                          min="0"
+                          placeholder="e.g. 500"
+                          value={newStaff.consultationFee !== undefined ? newStaff.consultationFee : 500}
+                          onChange={(e) => setNewStaff({...newStaff, consultationFee: e.target.value !== '' ? Number(e.target.value) : ''})}
+                          className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-teal-500/15 transition-all shadow-2xs"
+                          style={{ paddingLeft: '44px' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Attending Time Slots */}
+                    <div className="md:col-span-2 space-y-2.5">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            Attending OPD Time Slots
+                          </label>
+                          <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs">
+                            {(newStaff.doctorSlots || []).length} Active
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allBase = [
+                                '09:00 AM - 09:30 AM', '09:30 AM - 10:00 AM', '10:00 AM - 10:30 AM',
+                                '10:30 AM - 11:00 AM', '11:00 AM - 11:30 AM', '11:30 AM - 12:00 PM',
+                                '12:00 PM - 12:30 PM', '12:30 PM - 01:00 PM', '02:00 PM - 02:30 PM',
+                                '02:30 PM - 03:00 PM', '03:00 PM - 03:30 PM', '03:30 PM - 04:00 PM',
+                                '04:00 PM - 04:30 PM', '04:30 PM - 05:00 PM', '05:00 PM - 05:30 PM',
+                                ...(newStaff.doctorSlots || [])
+                              ];
+                              setNewStaff({ ...newStaff, doctorSlots: Array.from(new Set(allBase)) });
+                            }}
+                            className="text-[11px] font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
+                          >
+                            Select All
+                          </button>
+                          <span className="text-slate-300">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setNewStaff({ ...newStaff, doctorSlots: [] })}
+                            className="text-[11px] font-bold text-slate-500 hover:text-rose-600 underline cursor-pointer"
+                          >
+                            Clear All
+                          </button>
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200 ml-1">
+                            Required (≥ 1)
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Add Custom Slot Input */}
+                      <div className="flex gap-2">
+                        <div className="relative flex-1 flex items-center">
+                          <Clock className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+                          <input 
+                            type="text" 
+                            placeholder="Add custom slot (e.g. 10:00 AM - 11:00 AM)" 
+                            value={adminCustomSlotInput}
+                            onChange={e => setAdminCustomSlotInput(e.target.value)}
+                            className="w-full h-9 pl-9 pr-3 bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-lg text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-3 focus:ring-teal-500/15 transition-all"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!adminCustomSlotInput.trim()) return;
+                            const newSlot = adminCustomSlotInput.trim();
+                            const currentSlots = newStaff.doctorSlots || [];
+                            if (!currentSlots.includes(newSlot)) {
+                              setNewStaff({
+                                ...newStaff,
+                                doctorSlots: [...currentSlots, newSlot]
+                              });
+                            }
+                            setAdminCustomSlotInput('');
+                          }}
+                          className="px-3.5 h-9 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 flex items-center gap-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Slot</span>
+                        </button>
+                      </div>
+
+                      {/* Visual Legend */}
+                      <div className="flex items-center justify-between text-[11px] px-1 text-slate-500 pt-0.5">
+                        <div className="flex items-center gap-3">
+                          <span className="inline-flex items-center gap-1.5 font-bold text-blue-700">
+                            <span className="w-4 h-4 rounded bg-blue-600 text-white inline-flex items-center justify-center text-[10px] shadow-2xs">✓</span>
+                            Selected (Scheduled OPD)
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 font-medium text-slate-500">
+                            <span className="w-4 h-4 rounded border border-dashed border-slate-400 bg-white text-slate-400 inline-flex items-center justify-center text-[10px]">+</span>
+                            Deselected (Click to enable)
+                          </span>
+                        </div>
+                        <span className="text-[10.5px] text-slate-400 hidden sm:inline">Click slot to toggle</span>
+                      </div>
+
+                      {/* Slots Pill Stack */}
+                      <div className="flex flex-wrap gap-2 p-3.5 border border-teal-200/70 rounded-xl bg-teal-50/25 max-h-[160px] overflow-y-auto" data-lenis-prevent>
+                        {Array.from(new Set([
+                          '09:00 AM - 09:30 AM', '09:30 AM - 10:00 AM', '10:00 AM - 10:30 AM',
+                          '10:30 AM - 11:00 AM', '11:00 AM - 11:30 AM', '11:30 AM - 12:00 PM',
+                          '12:00 PM - 12:30 PM', '12:30 PM - 01:00 PM', '02:00 PM - 02:30 PM',
+                          '02:30 PM - 03:00 PM', '03:00 PM - 03:30 PM', '03:30 PM - 04:00 PM',
+                          '04:00 PM - 04:30 PM', '04:30 PM - 05:00 PM', '05:00 PM - 05:30 PM',
+                          ...(newStaff.doctorSlots || [])
+                        ])).map(slot => {
+                          const isSelected = (newStaff.doctorSlots || []).includes(slot);
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              onClick={() => {
+                                let currentSlots = [...(newStaff.doctorSlots || [])];
+                                if (currentSlots.includes(slot)) {
+                                  currentSlots = currentSlots.filter(s => s !== slot);
+                                } else {
+                                  currentSlots.push(slot);
+                                }
+                                setNewStaff({...newStaff, doctorSlots: currentSlots});
+                              }}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer select-none active:scale-95 ${
+                                isSelected
+                                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs shadow-blue-500/25 border border-blue-600'
+                                  : 'bg-white hover:bg-blue-50/50 text-slate-600 border border-dashed border-slate-300 hover:border-blue-400 hover:text-blue-700'
+                              }`}
+                              title={isSelected ? 'Click to deselect (remove from schedule)' : 'Click to select (add to schedule)'}
+                            >
+                              {isSelected ? (
+                                <span className="w-3.5 h-3.5 rounded-full bg-white/20 flex items-center justify-center">
+                                  <Check className="w-2.5 h-2.5 text-white stroke-[3]" />
+                                </span>
+                              ) : (
+                                <span className="w-3.5 h-3.5 rounded-full bg-slate-100 flex items-center justify-center">
+                                  <Plus className="w-2.5 h-2.5 text-slate-400" />
+                                </span>
+                              )}
+                              <span>{slot}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Weekly Off Days */}
+                    <div className="md:col-span-2 space-y-1.5">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            Weekly Off Days
+                          </label>
+                          <span className="text-[10.5px] text-slate-500 font-medium">
+                            (Mark which days doctor does NOT attend clinic)
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          Optional
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {WEEKDAYS.map(day => {
+                          const isSelected = Array.isArray(newStaff.weeklyOff)
+                            ? newStaff.weeklyOff.includes(day)
+                            : (newStaff.weeklyOff || '').split(',').map(d => d.trim()).includes(day);
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => {
+                                let currentOffs = Array.isArray(newStaff.weeklyOff)
+                                  ? [...newStaff.weeklyOff]
+                                  : (newStaff.weeklyOff ? newStaff.weeklyOff.split(',').map(d => d.trim()) : []);
+                                if (currentOffs.includes(day)) {
+                                  currentOffs = currentOffs.filter(d => d !== day);
+                                } else {
+                                  currentOffs.push(day);
+                                }
+                                setNewStaff({...newStaff, weeklyOff: currentOffs});
+                              }}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer select-none active:scale-95 ${
+                                isSelected
+                                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-transparent shadow-xs shadow-blue-500/25'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                              }`}
+                              title={isSelected ? `${day} marked as OFF (Click to mark Working)` : `${day} is Working (Click to mark OFF)`}
+                            >
+                              {isSelected && <Check className="w-3 h-3 text-white stroke-[3]" />}
+                              <span>{day.slice(0, 3)}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
 
-              <button type="submit" disabled={loading} className="admin-submit-btn">
-                {loading ? 'Processing...' : 'Create Account'}
-              </button>
-            </form>
-          </div>
+              {/* CARD 4: Personal, Statutory & Emergency Details (Optional Collapsible) */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowAddStaffOptional(!showAddStaffOptional)}
+                  className="w-full px-5 py-3.5 bg-slate-50/70 hover:bg-slate-100/70 flex items-center justify-between transition-colors border-b border-slate-200/80 text-left cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-6 h-6 rounded-md bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs">
+                      <FileText className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 m-0">
+                        4. Personal, Statutory & Emergency Details
+                      </h4>
+                      <p className="text-[11px] text-slate-400 m-0">Demographics, Aadhaar/PAN, Address & Emergency Contact</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">
+                      All Optional
+                    </span>
+                    {showAddStaffOptional ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                  </div>
+                </button>
+
+                {showAddStaffOptional && (
+                  <div className="p-5 space-y-4 animate-fadeIn">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Annual CTC */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            Annual CTC (₹ INR)
+                          </label>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            Optional
+                          </span>
+                        </div>
+                        <div className="relative flex items-center group">
+                          <span className="absolute left-3.5 font-bold text-sm text-slate-400 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10">₹</span>
+                          <input 
+                            type="number" 
+                            min="0"
+                            placeholder="e.g. 600000"
+                            value={newStaff.ctcAnnual || ''}
+                            onChange={e => setNewStaff({...newStaff, ctcAnnual: e.target.value})}
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            style={{ paddingLeft: '44px' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Date of Birth */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            Date of Birth
+                          </label>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            Optional
+                          </span>
+                        </div>
+                        <div className="relative flex items-center group">
+                          <Calendar className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                          <input 
+                            type="date" 
+                            value={newStaff.dob || ''} 
+                            onChange={e => setNewStaff({...newStaff, dob: e.target.value})} 
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            style={{ paddingLeft: '44px' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Gender */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            Gender
+                          </label>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            Optional
+                          </span>
+                        </div>
+                        <div className="relative flex items-center group">
+                          <Users className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                          <select 
+                            value={newStaff.gender || ''} 
+                            onChange={e => setNewStaff({...newStaff, gender: e.target.value})} 
+                            className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
+                            style={{ paddingLeft: '44px', paddingRight: '36px' }}
+                          >
+                            <option value="">-- Select Gender --</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                          </select>
+                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none z-10" />
+                        </div>
+                      </div>
+
+                      {/* Blood Group */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            Blood Group
+                          </label>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            Optional
+                          </span>
+                        </div>
+                        <div className="relative flex items-center group">
+                          <Droplet className="w-4 h-4 text-rose-500 absolute left-3.5 pointer-events-none z-10" />
+                          <select 
+                            value={newStaff.bloodGroup || ''} 
+                            onChange={e => setNewStaff({...newStaff, bloodGroup: e.target.value})} 
+                            className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
+                            style={{ paddingLeft: '44px', paddingRight: '36px' }}
+                          >
+                            <option value="">-- Select Blood Group --</option>
+                            {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => <option key={bg} value={bg}>{bg}</option>)}
+                          </select>
+                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none z-10" />
+                        </div>
+                      </div>
+
+                      {/* Aadhaar Number */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            Aadhaar Card (12 Digits)
+                          </label>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            Optional
+                          </span>
+                        </div>
+                        <div className="relative flex items-center group">
+                          <CreditCard className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                          <input 
+                            type="text" 
+                            maxLength="12"
+                            placeholder="XXXX XXXX XXXX" 
+                            value={newStaff.aadhaar || ''} 
+                            onChange={e => setNewStaff({...newStaff, aadhaar: e.target.value.replace(/\D/g, '')})} 
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            style={{ paddingLeft: '44px' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* PAN Card */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            PAN Number (10 Characters)
+                          </label>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            Optional
+                          </span>
+                        </div>
+                        <div className="relative flex items-center group">
+                          <FileText className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                          <input 
+                            type="text" 
+                            maxLength="10"
+                            placeholder="ABCDE1234F" 
+                            value={newStaff.pan || ''} 
+                            onChange={e => setNewStaff({...newStaff, pan: e.target.value.toUpperCase()})} 
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 uppercase focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            style={{ paddingLeft: '44px' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Residential Address */}
+                      <div className="md:col-span-3">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            Residential Address
+                          </label>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            Optional
+                          </span>
+                        </div>
+                        <div className="relative flex items-center group">
+                          <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                          <textarea 
+                            rows="2"
+                            placeholder="Street address, city, state, postal pin code..." 
+                            value={newStaff.address || ''} 
+                            onChange={e => setNewStaff({...newStaff, address: e.target.value})} 
+                            className="w-full pr-3.5 pt-2.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            style={{ paddingLeft: '44px' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Emergency Contact Name */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            Emergency Contact Name
+                          </label>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            Optional
+                          </span>
+                        </div>
+                        <div className="relative flex items-center group">
+                          <HeartPulse className="w-4 h-4 text-rose-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                          <input 
+                            type="text" 
+                            placeholder="Next of Kin / Contact Name" 
+                            value={newStaff.emergencyContactName || ''} 
+                            onChange={e => setNewStaff({...newStaff, emergencyContactName: e.target.value})} 
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            style={{ paddingLeft: '44px' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Emergency Contact Relation */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            Relationship
+                          </label>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            Optional
+                          </span>
+                        </div>
+                        <div className="relative flex items-center group">
+                          <Users className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                          <input 
+                            type="text" 
+                            placeholder="e.g. Spouse / Parent / Sibling" 
+                            value={newStaff.emergencyContactRelation || ''} 
+                            onChange={e => setNewStaff({...newStaff, emergencyContactRelation: e.target.value})} 
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            style={{ paddingLeft: '44px' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Emergency Contact Phone */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            Emergency Phone Number
+                          </label>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            Optional
+                          </span>
+                        </div>
+                        <div className="relative flex items-center group">
+                          <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
+                          <input 
+                            type="tel" 
+                            maxLength="10"
+                            placeholder="10-digit emergency phone" 
+                            value={newStaff.emergencyContactPhone || ''} 
+                            onChange={e => setNewStaff({...newStaff, emergencyContactPhone: e.target.value.replace(/\D/g, '')})} 
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            style={{ paddingLeft: '44px' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Sticky Footer */}
+            <div className="px-6 py-4 bg-white border-t border-slate-200 flex items-center justify-between flex-wrap gap-3 shrink-0 shadow-lg">
+              <div className="text-[11px] text-slate-400 hidden sm:flex items-center gap-1.5">
+                <span className="font-semibold text-slate-500">Shortcut:</span>
+                <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-[10px] text-slate-600">Enter ↵</kbd>
+                <span>advances fields & submits</span>
+              </div>
+
+              <div className="flex items-center gap-3 ml-auto">
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setShowAddStaffModal(false);
+                    setShowAddStaffPassword(false);
+                    setShowAddStaffConfirmPassword(false);
+                    setError('');
+                  }} 
+                  className="px-5 py-2.5 rounded-xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-all cursor-pointer active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={loading}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 text-white font-extrabold text-xs shadow-md shadow-blue-500/25 transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Registering Staff...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4" />
+                      <span>Register Staff Member</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
       )}
 
