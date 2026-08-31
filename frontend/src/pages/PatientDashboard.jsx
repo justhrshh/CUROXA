@@ -2975,10 +2975,11 @@ const PatientDashboard = () => {
             top: auto !important;
             width: 100% !important;
             max-width: 100% !important;
-            max-height: 90vh !important;
+            max-height: calc(90vh - 70px) !important;
             border-radius: 24px 24px 0 0 !important;
             box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2) !important;
             animation: slideUpSheet 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+            margin-bottom: 65px !important;
           }
         }
         @keyframes slideUpSheet {
@@ -5514,33 +5515,35 @@ const PatientDashboard = () => {
                                 </div>
                               </div>
 
-                              {/* Token Badge - ONLY when tokenNumber exists */}
-                              {app.tokenNumber ? (
-                                <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{
-                                    padding: '4px 10px',
-                                    borderRadius: '8px',
-                                    fontSize: '12px',
-                                    fontWeight: 900,
-                                    background: '#EFF6FF',
-                                    color: '#1D4ED8',
-                                    border: '1.5px solid #93C5FD',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '5px'
-                                  }}>
-                                    <span>🎟️</span> Token #{app.tokenNumber}
-                                  </span>
-                                  {app.tokenSlotId && (
-                                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
-                                      ({app.tokenSlotId})
+                              {/* Token Badge - hidden if Cancelled */}
+                              {app.status !== 'Cancelled' && (
+                                app.tokenNumber ? (
+                                  <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{
+                                      padding: '4px 10px',
+                                      borderRadius: '8px',
+                                      fontSize: '12px',
+                                      fontWeight: 900,
+                                      background: '#EFF6FF',
+                                      color: '#1D4ED8',
+                                      border: '1.5px solid #93C5FD',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px'
+                                    }}>
+                                      <span>🎟️</span> Token #{app.tokenNumber}
                                     </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <div style={{ marginTop: '10px', fontSize: '11.5px', color: '#94A3B8', fontWeight: 600 }}>
-                                  Token assigned when you arrive at reception
-                                </div>
+                                    {app.tokenSlotId && (
+                                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
+                                        ({app.tokenSlotId})
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div style={{ marginTop: '10px', fontSize: '11.5px', color: '#94A3B8', fontWeight: 600 }}>
+                                    Token assigned when you arrive at reception
+                                  </div>
+                                )
                               )}
                             </div>
 
@@ -7140,384 +7143,297 @@ const PatientDashboard = () => {
       </div>
 
       {/* 1. APPOINTMENT DETAIL SHEET */}
-      {detailsModalOpen && selectedAppointment && (
-        <div 
-          className="modal-overlay mobile-detail-sheet-overlay" 
-          style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }} 
-          onClick={() => setDetailsModalOpen(false)}
-        >
+      {detailsModalOpen && selectedAppointment && (() => {
+        const apptStatus = selectedAppointment.status;
+        const isCancelled = apptStatus === 'Cancelled';
+        const isCompleted = apptStatus === 'Completed' || apptStatus === 'Checked Out';
+        const statusColors = isCancelled
+          ? { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA', badgeBg: '#FEE2E2', icon: '🚫' }
+          : isCompleted
+          ? { bg: '#F0FDF4', color: '#059669', border: '#A7F3D0', badgeBg: '#DCFCE7', icon: '✅' }
+          : { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE', badgeBg: '#DBEAFE', icon: '📅' };
+
+        return (
           <div 
-            className="modal-box mobile-detail-sheet" 
-            style={{ background: 'white', borderRadius: '24px', width: '100%', maxWidth: '520px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} 
-            onClick={e => e.stopPropagation()}
+            className="modal-overlay mobile-detail-sheet-overlay" 
+            style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }} 
+            onClick={() => setDetailsModalOpen(false)}
           >
-            {/* Sticky Sheet Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #E2E8F0', flexShrink: 0 }}>
-              <div>
-                <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>Appointment Details</h2>
-                <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-                  {getHospitalDetails(selectedAppointment.tenantId).name}
-                </div>
-              </div>
-              <button 
-                type="button" 
-                onClick={() => setDetailsModalOpen(false)} 
-                style={{ background: '#F1F5F9', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Scrollable Sheet Body */}
-            <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }} data-lenis-prevent>
-              {/* SECTION: APPOINTMENT ESSENTIALS */}
-              <div style={{ background: '#F8FAFC', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '16px', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{
-                      width: '44px',
-                      height: '44px',
-                      borderRadius: '12px',
-                      background: '#EFF6FF',
-                      color: '#2563EB',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 900,
-                      fontSize: '15px'
-                    }}>
-                      {selectedAppointment.doctorId?.name ? selectedAppointment.doctorId.name.replace('Dr. ', '').substring(0, 2).toUpperCase() : 'DR'}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
-                        {selectedAppointment.doctorId?.name || 'Assigned Doctor'}
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#2563EB', fontWeight: 700 }}>
-                        {selectedAppointment.doctorId?.specialty || selectedAppointment.reason || 'General Consultation'} • {selectedAppointment.doctorId?.department || 'OPD'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <span style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: 800,
-                    background: selectedAppointment.status === 'Completed' ? '#ECFDF5' : (selectedAppointment.status === 'Cancelled' ? '#FEF2F2' : '#EFF6FF'),
-                    color: selectedAppointment.status === 'Completed' ? '#059669' : (selectedAppointment.status === 'Cancelled' ? '#DC2626' : '#2563EB'),
-                    border: selectedAppointment.status === 'Completed' ? '1px solid #A7F3D0' : (selectedAppointment.status === 'Cancelled' ? '1px solid #FECACA' : '1px solid #BFDBFE')
+            <div 
+              className="modal-box mobile-detail-sheet" 
+              style={{ background: '#FFFFFF', borderRadius: '24px', width: '100%', maxWidth: '520px', boxShadow: '0 32px 64px -12px rgba(0,0,0,0.28)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid #E2E8F0' }} 
+              onClick={e => e.stopPropagation()}
+            >
+              {/* ── HEADER ── */}
+              <div style={{ 
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                padding: '18px 22px', 
+                background: 'linear-gradient(135deg, #F8FAFF 0%, #FFFFFF 100%)',
+                borderBottom: '1px solid #E8EEF4', flexShrink: 0 
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ 
+                    width: '40px', height: '40px', borderRadius: '12px', 
+                    background: statusColors.badgeBg, 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                    fontSize: '18px', flexShrink: 0
                   }}>
-                    {selectedAppointment.status}
-                  </span>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', paddingTop: '12px', borderTop: '1px solid #E2E8F0' }}>
-                  <div>
-                    <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Date</div>
-                    <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#1E293B', marginTop: '2px' }}>
-                      {selectedAppointment.date ? new Date(selectedAppointment.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
-                    </div>
+                    {statusColors.icon}
                   </div>
                   <div>
-                    <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Time Slot</div>
-                    <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#1E293B', marginTop: '2px' }}>
-                      {selectedAppointment.time || 'Standard Slot'}
+                    <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif", lineHeight: 1.2 }}>Appointment Details</h2>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', fontWeight: 600 }}>
+                      {getHospitalDetails(selectedAppointment.tenantId).name}
                     </div>
                   </div>
                 </div>
+                <button 
+                  type="button" 
+                  onClick={() => setDetailsModalOpen(false)} 
+                  style={{ background: '#F1F5F9', border: 'none', borderRadius: '10px', width: '34px', height: '34px', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '16px', flexShrink: 0 }}
+                >
+                  ✕
+                </button>
               </div>
 
-              {/* SECTION: LIVE TOKEN INFORMATION (ONLY IF TOKEN EXISTS) */}
-              {selectedAppointment.tokenNumber && (
-                <div style={{
-                  background: 'linear-gradient(135deg, #EFF6FF 0%, #FFFFFF 100%)',
-                  borderRadius: '16px',
-                  border: '1.5px solid #BFDBFE',
-                  padding: '18px',
-                  marginBottom: '20px',
-                  boxShadow: '0 4px 12px -2px rgba(37, 99, 235, 0.08)'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: '#2563EB', letterSpacing: '0.05em' }}>
-                      Live Queue Token
-                    </span>
-                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#16A34A', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16A34A' }}></span>
-                      Live Sync
-                    </span>
-                  </div>
+              {/* ── BODY ── */}
+              <div style={{ padding: '20px 22px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }} data-lenis-prevent>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', textAlign: 'center' }}>
-                    <div style={{ background: '#FFFFFF', padding: '12px 8px', borderRadius: '12px', border: '1px solid #DBEAFE' }}>
-                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Your Token</div>
-                      <div style={{ fontSize: '20px', fontWeight: 900, color: '#2563EB', marginTop: '4px' }}>
-                        #{selectedAppointment.tokenNumber}
+                {/* Doctor + Status card */}
+                <div style={{ borderRadius: '16px', border: `1.5px solid ${statusColors.border}`, background: statusColors.bg, padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
+                      <div style={{
+                        width: '46px', height: '46px', borderRadius: '14px',
+                        background: '#FFFFFF', border: `1.5px solid ${statusColors.border}`,
+                        color: statusColors.color,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontWeight: 900, fontSize: '16px', flexShrink: 0, boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
+                      }}>
+                        {selectedAppointment.doctorId?.name ? selectedAppointment.doctorId.name.replace('Dr. ', '').substring(0, 2).toUpperCase() : 'DR'}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>
+                          {selectedAppointment.doctorId?.name || 'Assigned Doctor'}
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: statusColors.color, fontWeight: 700, marginTop: '2px' }}>
+                          {selectedAppointment.doctorId?.specialty || selectedAppointment.reason || 'General Consultation'} • {selectedAppointment.doctorId?.department || 'OPD'}
+                        </div>
                       </div>
                     </div>
-                    <div style={{ background: '#FFFFFF', padding: '12px 8px', borderRadius: '12px', border: '1px solid #DBEAFE' }}>
-                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Now Serving</div>
-                      <div style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', marginTop: '4px' }}>
-                        #{patientQueue.currentToken ?? 'Wait'}
-                      </div>
-                    </div>
-                    <div style={{ background: '#FFFFFF', padding: '12px 8px', borderRadius: '12px', border: '1px solid #DBEAFE' }}>
-                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Patients Ahead</div>
-                      <div style={{ fontSize: '20px', fontWeight: 900, color: '#475569', marginTop: '4px' }}>
-                        {patientQueue.patientsAhead !== null ? patientQueue.patientsAhead : 0}
-                      </div>
-                    </div>
-                  </div>
-
-                  {patientQueue.currentToken && String(patientQueue.currentToken) === String(selectedAppointment.tokenNumber) && (
-                    <div style={{ marginTop: '12px', padding: '10px', background: '#DCFCE7', borderRadius: '10px', color: '#166534', fontWeight: 800, fontSize: '13px', textAlign: 'center' }}>
-                      🎉 It is YOUR TURN! Please proceed to the consultation room.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* SECTION: VISIT DETAILS */}
-              <div style={{ background: '#F8FAFC', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '16px', marginBottom: '20px' }}>
-                <h4 style={{ fontSize: '12px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
-                  Visit Details
-                </h4>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #EDF2F7', paddingBottom: '8px' }}>
-                    <span style={{ color: '#64748B' }}>Reason / Consultation Type:</span>
-                    <span style={{ fontWeight: 700, color: '#0F172A' }}>{selectedAppointment.reason || 'General Consultation'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #EDF2F7', paddingBottom: '8px' }}>
-                    <span style={{ color: '#64748B' }}>Payment Status:</span>
-                    <span style={{ fontWeight: 800, color: selectedAppointment.billingStatus === 'Paid' ? '#16A34A' : '#D97706' }}>
-                      {selectedAppointment.billingStatus === 'Paid' ? 'Paid' : 'Unpaid (Pay at Reception)'}
+                    <span style={{
+                      padding: '4px 11px', borderRadius: '20px', fontSize: '11px', fontWeight: 800,
+                      background: '#FFFFFF', color: statusColors.color,
+                      border: `1.5px solid ${statusColors.border}`,
+                      whiteSpace: 'nowrap', flexShrink: 0
+                    }}>
+                      {apptStatus}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#64748B' }}>Booking Source:</span>
-                    <span style={{ fontWeight: 700, color: '#0F172A' }}>{selectedAppointment.source || 'Curoxa Patient Portal'}</span>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', paddingTop: '12px', borderTop: `1px solid ${statusColors.border}` }}>
+                    <div style={{ background: '#FFFFFF', borderRadius: '10px', padding: '10px 12px', border: `1px solid ${statusColors.border}` }}>
+                      <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>📅 Date</div>
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', marginTop: '4px' }}>
+                        {selectedAppointment.date ? new Date(selectedAppointment.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
+                      </div>
+                    </div>
+                    <div style={{ background: '#FFFFFF', borderRadius: '10px', padding: '10px 12px', border: `1px solid ${statusColors.border}` }}>
+                      <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>🕐 Time Slot</div>
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', marginTop: '4px' }}>
+                        {selectedAppointment.time || 'Standard Slot'}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* SECTION: IF COMPLETED — CONSULTATION SUMMARY */}
-              {(() => {
-                const originalStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
-                const isCompleted = originalStatus === 'Completed' || originalStatus === 'Checked Out';
+                {/* Live Queue Token (only if token exists AND not cancelled) */}
+                {selectedAppointment.tokenNumber && !isCancelled && (
+                  <div style={{
+                    background: 'linear-gradient(135deg, #EFF6FF 0%, #FFFFFF 100%)',
+                    borderRadius: '16px', border: '1.5px solid #BFDBFE',
+                    padding: '16px', boxShadow: '0 4px 12px -2px rgba(37,99,235,0.08)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: '#2563EB', letterSpacing: '0.06em' }}>🎟 Live Queue Token</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#16A34A', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#16A34A', display: 'inline-block' }}></span>
+                        Live Sync
+                      </span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', textAlign: 'center' }}>
+                      {[
+                        { label: 'Your Token', value: `#${selectedAppointment.tokenNumber}`, color: '#2563EB' },
+                        { label: 'Now Serving', value: `#${patientQueue.currentToken ?? 'Wait'}`, color: '#0F172A' },
+                        { label: 'Ahead', value: patientQueue.patientsAhead !== null ? patientQueue.patientsAhead : 0, color: '#475569' }
+                      ].map(({ label, value, color }) => (
+                        <div key={label} style={{ background: '#FFFFFF', padding: '10px 6px', borderRadius: '12px', border: '1px solid #DBEAFE' }}>
+                          <div style={{ fontSize: '9.5px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>{label}</div>
+                          <div style={{ fontSize: '20px', fontWeight: 900, color, marginTop: '3px' }}>{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {patientQueue.currentToken && String(patientQueue.currentToken) === String(selectedAppointment.tokenNumber) && (
+                      <div style={{ marginTop: '10px', padding: '10px', background: '#DCFCE7', borderRadius: '10px', color: '#166534', fontWeight: 800, fontSize: '13px', textAlign: 'center' }}>
+                        🎉 It is YOUR TURN! Please proceed to the consultation room.
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                if (isCompleted) {
+                {/* Visit Details */}
+                <div style={{ background: '#F8FAFC', borderRadius: '14px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 14px', background: '#F1F5F9', borderBottom: '1px solid #E2E8F0' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📋 Visit Details</span>
+                  </div>
+                  <div style={{ padding: '4px 0' }}>
+                    {[
+                      { label: 'Reason / Type', value: selectedAppointment.reason || 'General Consultation', valueColor: '#0F172A' },
+                      { label: 'Payment Status', value: selectedAppointment.billingStatus === 'Paid' ? 'Paid ✓' : 'Unpaid — Pay at Reception', valueColor: selectedAppointment.billingStatus === 'Paid' ? '#16A34A' : '#D97706' },
+                      { label: 'Booking Source', value: selectedAppointment.source || 'Curoxa Patient Portal', valueColor: '#0F172A' },
+                    ].map(({ label, value, valueColor }, idx, arr) => (
+                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                        <span style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>{label}</span>
+                        <span style={{ fontSize: '12.5px', fontWeight: 800, color: valueColor, textAlign: 'right', maxWidth: '55%' }}>{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* SECTION: IF COMPLETED — CONSULTATION SUMMARY */}
+                {(() => {
+                  const originalStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
+                  const isComp = originalStatus === 'Completed' || originalStatus === 'Checked Out';
+                  if (!isComp) return null;
                   return (
-                    <div style={{ background: '#F0FDF4', borderRadius: '16px', border: '1px solid #BBF7D0', padding: '18px', marginBottom: '20px' }}>
+                    <div style={{ background: '#F0FDF4', borderRadius: '16px', border: '1px solid #BBF7D0', padding: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                         <i data-lucide="clipboard-check" style={{ color: '#16A34A', width: '18px', height: '18px' }}></i>
-                        <h4 style={{ fontSize: '14px', fontWeight: 800, color: '#166534', margin: 0 }}>
-                          Consultation Summary
-                        </h4>
+                        <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#166534', margin: 0 }}>Consultation Summary</h4>
                       </div>
-
-                      <div style={{ fontSize: '13px', color: '#334155', marginBottom: '12px', lineHeight: 1.5 }}>
+                      <div style={{ fontSize: '13px', color: '#334155', marginBottom: '12px', lineHeight: 1.6 }}>
                         <div><strong>Attending Doctor:</strong> {selectedAppointment.doctorId?.name || 'Dr. Specialist'}</div>
                         <div><strong>Visit Date:</strong> {selectedAppointment.date ? new Date(selectedAppointment.date).toLocaleDateString() : 'Recorded'}</div>
-                        {selectedAppointment.diagnosis && (
-                          <div style={{ marginTop: '4px' }}><strong>Diagnosis:</strong> {selectedAppointment.diagnosis}</div>
-                        )}
+                        {selectedAppointment.diagnosis && <div style={{ marginTop: '4px' }}><strong>Diagnosis:</strong> <span dangerouslySetInnerHTML={{ __html: selectedAppointment.diagnosis }} /></div>}
                       </div>
-
-                      {/* PRESCRIPTION ACTION */}
                       <div style={{ paddingTop: '10px', borderTop: '1px solid #DCFCE7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                         <div>
                           <div style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B' }}>Prescription</div>
                           <div style={{ fontSize: '11px', color: '#64748B' }}>
-                            {selectedAppointmentDetails.prescriptions.length > 0
-                              ? `${selectedAppointmentDetails.prescriptions[0].items?.length || 0} medicine(s) prescribed`
-                              : 'No medicines recorded'}
+                            {selectedAppointmentDetails.prescriptions.length > 0 ? `${selectedAppointmentDetails.prescriptions[0].items?.length || 0} medicine(s) prescribed` : 'No medicines recorded'}
                           </div>
                         </div>
                         {selectedAppointmentDetails.prescriptions.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedPrescription(selectedAppointmentDetails.prescriptions[0]);
-                              setPrescriptionModalOpen(true);
-                            }}
-                            style={{
-                              padding: '6px 14px',
-                              borderRadius: '8px',
-                              border: 'none',
-                              background: '#2563EB',
-                              color: '#FFFFFF',
-                              fontSize: '12px',
-                              fontWeight: 800,
-                              cursor: 'pointer'
-                            }}
-                          >
+                          <button type="button" onClick={() => { setSelectedPrescription(selectedAppointmentDetails.prescriptions[0]); setPrescriptionModalOpen(true); }}
+                            style={{ padding: '6px 14px', borderRadius: '8px', border: 'none', background: '#2563EB', color: '#FFFFFF', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}>
                             View Prescription
                           </button>
                         )}
                       </div>
-
-                      {/* LAB / DOCUMENTS ACTION */}
                       {selectedAppointmentDetails.labs.length > 0 && (
                         <div style={{ paddingTop: '10px', marginTop: '10px', borderTop: '1px solid #DCFCE7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                           <div>
                             <div style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B' }}>Ordered Laboratory Tests</div>
-                            <div style={{ fontSize: '11px', color: '#64748B' }}>
-                              {selectedAppointmentDetails.labs.map(l => l.testName).join(', ')}
-                            </div>
+                            <div style={{ fontSize: '11px', color: '#64748B' }}>{selectedAppointmentDetails.labs.map(l => l.testName).join(', ')}</div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedLabReport(selectedAppointmentDetails.labs[0]);
-                              setLabModalOpen(true);
-                            }}
-                            style={{
-                              padding: '6px 14px',
-                              borderRadius: '8px',
-                              border: '1px solid #9333EA',
-                              background: '#FAF5FF',
-                              color: '#9333EA',
-                              fontSize: '12px',
-                              fontWeight: 800,
-                              cursor: 'pointer'
-                            }}
-                          >
+                          <button type="button" onClick={() => { setSelectedLabReport(selectedAppointmentDetails.labs[0]); setLabModalOpen(true); }}
+                            style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid #9333EA', background: '#FAF5FF', color: '#9333EA', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}>
                             View Lab Report
                           </button>
                         </div>
                       )}
                     </div>
                   );
-                }
+                })()}
 
-                return null;
-              })()}
+                {/* SECTION: RESCHEDULE / CANCEL */}
+                {(() => {
+                  const originalStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
+                  const isLocked = originalStatus === 'Cancelled' || originalStatus === 'Completed' || originalStatus === 'Checked Out';
 
-              {/* SECTION: RESCHEDULE / CANCEL (Only for active pending appointments) */}
-              {(() => {
-                const originalStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
-                const isLocked = originalStatus === 'Cancelled' || originalStatus === 'Completed' || originalStatus === 'Checked Out';
+                  if (isLocked) {
+                    return (
+                      <div style={{ padding: '12px 14px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#475569' }}>
+                          🔒 Status Lock: This appointment is <strong>{originalStatus}</strong>. It cannot be rescheduled or modified.
+                        </span>
+                      </div>
+                    );
+                  }
 
-                if (isLocked) {
                   return (
-                    <div style={{ padding: '12px 16px', background: '#F1F5F9', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#475569' }}>
-                        🔒 Status Lock: This appointment is {originalStatus}. It cannot be rescheduled or modified.
-                      </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: '#F8FAFC', padding: '16px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em' }}>🔄 Reschedule Appointment</div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1A1D23' }}>Select New Date</label>
+                        <input type="date" className="form-control" style={{ background: 'white', border: '1px solid #CBD5E1', borderRadius: '8px', height: '40px', width: '100%', padding: '0 12px', fontWeight: 600 }}
+                          value={selectedAppointment.date ? new Date(selectedAppointment.date).toISOString().split('T')[0] : ''} min={getLocalDateString()}
+                          onChange={(e) => setSelectedAppointment({...selectedAppointment, date: e.target.value})} />
+                      </div>
+                      {!rescheduleAvailability.available && (
+                        <div style={{ color: '#EF4444', background: '#FEF2F2', padding: '10px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, border: '1px solid #FEE2E2' }}>
+                          Doctor Unavailable: {rescheduleAvailability.reason || 'Doctor is on leave or weekly off'}
+                        </div>
+                      )}
+                      {rescheduleAvailability.available && (
+                        <div>
+                          <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1A1D23' }}>Select New Time Slot</label>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(95px, 1fr))', gap: '6px', maxHeight: '120px', overflowY: 'auto', paddingRight: '4px' }}>
+                            {(rescheduleAvailability.slots && rescheduleAvailability.slots.length > 0 ? rescheduleAvailability.slots : DEFAULT_TIME_SLOTS).map(time => {
+                              const isSelected = selectedAppointment.time === time;
+                              const displayTime = time.split(/\(Limit:/i)[0].trim();
+                              return (
+                                <button key={time} type="button" onClick={() => setSelectedAppointment({ ...selectedAppointment, time })}
+                                  style={{ minHeight: '34px', padding: '4px 6px', borderRadius: '6px', border: isSelected ? '2px solid #2563EB' : '1px solid #CBD5E1', background: isSelected ? '#EFF6FF' : 'white', color: isSelected ? '#2563EB' : '#1E293B', fontWeight: isSelected ? 800 : 600, fontSize: '11px', cursor: 'pointer' }}>
+                                  {displayTime}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1A1D23' }}>Appointment Status</label>
+                        <select className="form-control" style={{ background: 'white', border: '1px solid #CBD5E1', borderRadius: '8px', height: '40px', width: '100%', padding: '0 12px', fontWeight: 600 }}
+                          value={selectedAppointment.status} onChange={(e) => setSelectedAppointment({...selectedAppointment, status: e.target.value})}>
+                          <option value="Pending">Keep Active (Pending)</option>
+                          <option value="Cancelled">Cancel Appointment</option>
+                        </select>
+                      </div>
                     </div>
                   );
-                }
+                })()}
+              </div>
 
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: '#F8FAFC', padding: '16px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Reschedule Appointment
-                    </div>
-
-                    <div>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1A1D23' }}>Select New Date</label>
-                      <input 
-                        type="date" 
-                        className="form-control" 
-                        style={{ background: 'white', border: '1px solid #CBD5E1', borderRadius: '8px', height: '40px', width: '100%', padding: '0 12px', fontWeight: 600 }} 
-                        value={selectedAppointment.date ? new Date(selectedAppointment.date).toISOString().split('T')[0] : ''} 
-                        min={getLocalDateString()} 
-                        onChange={(e) => setSelectedAppointment({...selectedAppointment, date: e.target.value})} 
-                      />
-                    </div>
-
-                    {!rescheduleAvailability.available && (
-                      <div style={{ color: '#EF4444', background: '#FEF2F2', padding: '10px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, border: '1px solid #FEE2E2' }}>
-                        Doctor Unavailable: {rescheduleAvailability.reason || 'Doctor is on leave or weekly off'}
-                      </div>
-                    )}
-
-                    {rescheduleAvailability.available && (
-                      <div>
-                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1A1D23' }}>Select New Time Slot</label>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(95px, 1fr))', gap: '6px', maxHeight: '120px', overflowY: 'auto', paddingRight: '4px' }}>
-                          {(rescheduleAvailability.slots && rescheduleAvailability.slots.length > 0 ? rescheduleAvailability.slots : DEFAULT_TIME_SLOTS).map(time => {
-                            const isSelected = selectedAppointment.time === time;
-                            const displayTime = time.split(/\(Limit:/i)[0].trim();
-                            return (
-                              <button
-                                key={time}
-                                type="button"
-                                onClick={() => setSelectedAppointment({ ...selectedAppointment, time })}
-                                style={{
-                                  minHeight: '34px',
-                                  padding: '4px 6px',
-                                  borderRadius: '6px',
-                                  border: isSelected ? '2px solid #2563EB' : '1px solid #CBD5E1',
-                                  background: isSelected ? '#EFF6FF' : 'white',
-                                  color: isSelected ? '#2563EB' : '#1E293B',
-                                  fontWeight: isSelected ? 800 : 600,
-                                  fontSize: '11px',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                {displayTime}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    <div>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1A1D23' }}>Appointment Status</label>
-                      <select 
-                        className="form-control" 
-                        style={{ background: 'white', border: '1px solid #CBD5E1', borderRadius: '8px', height: '40px', width: '100%', padding: '0 12px', fontWeight: 600 }} 
-                        value={selectedAppointment.status} 
-                        onChange={(e) => setSelectedAppointment({...selectedAppointment, status: e.target.value})}
-                      >
-                        <option value="Pending">Keep Active (Pending)</option>
-                        <option value="Cancelled">Cancel Appointment</option>
-                      </select>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Sticky Sheet Footer Actions */}
-            <div style={{ display: 'flex', gap: '12px', padding: '18px 24px', borderTop: '1px solid #E2E8F0', flexShrink: 0, justifyContent: 'flex-end', background: '#FFFFFF' }}>
-              <button 
-                className="btn" 
-                style={{ background: '#FEE2E2', color: '#EF4444', fontWeight: 800, padding: '0 16px', borderRadius: '10px', height: '42px', fontSize: '13px' }} 
-                onClick={() => handleDeleteAppointment(selectedAppointment._id)}
-              >
-                Delete Record
-              </button>
-              {(() => {
-                const originalStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
-                const isLocked = originalStatus === 'Cancelled' || originalStatus === 'Completed' || originalStatus === 'Checked Out';
-                if (!isLocked) {
+              {/* ── FOOTER ── */}
+              <div style={{ display: 'flex', gap: '10px', padding: '16px 22px', borderTop: '1px solid #E8EEF4', flexShrink: 0, justifyContent: 'flex-end', background: '#FAFBFC' }}>
+                <button className="btn" style={{ background: '#FEE2E2', color: '#DC2626', fontWeight: 800, padding: '0 16px', borderRadius: '10px', height: '40px', fontSize: '13px', border: 'none', cursor: 'pointer' }}
+                  onClick={() => handleDeleteAppointment(selectedAppointment._id)}>
+                  🗑 Delete
+                </button>
+                {(() => {
+                  const originalStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
+                  const isLocked = originalStatus === 'Cancelled' || originalStatus === 'Completed' || originalStatus === 'Checked Out';
+                  if (!isLocked) {
+                    return (
+                      <button className="btn btn-primary" style={{ fontWeight: 800, padding: '0 20px', borderRadius: '10px', height: '40px', fontSize: '13px', cursor: 'pointer' }}
+                        onClick={() => handleUpdateAppointment(selectedAppointment)}>
+                        Save Changes
+                      </button>
+                    );
+                  }
                   return (
-                    <button 
-                      className="btn btn-primary" 
-                      style={{ fontWeight: 800, padding: '0 20px', borderRadius: '10px', height: '42px', fontSize: '13px' }} 
-                      onClick={() => handleUpdateAppointment(selectedAppointment)}
-                    >
-                      Save Changes
+                    <button className="btn btn-secondary" style={{ fontWeight: 800, padding: '0 20px', borderRadius: '10px', height: '40px', background: '#F1F5F9', color: '#475569', fontSize: '13px', border: '1px solid #CBD5E1', cursor: 'pointer' }}
+                      onClick={() => setDetailsModalOpen(false)}>
+                      Close
                     </button>
                   );
-                }
-                return (
-                  <button 
-                    className="btn btn-secondary" 
-                    style={{ fontWeight: 800, padding: '0 20px', borderRadius: '10px', height: '42px', background: '#F1F5F9', color: '#475569', fontSize: '13px' }} 
-                    onClick={() => setDetailsModalOpen(false)}
-                  >
-                    Close
-                  </button>
-                );
-              })()}
+                })()}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 2. PRESCRIPTION DETAIL SHEET */}
       {prescriptionModalOpen && selectedPrescription && (

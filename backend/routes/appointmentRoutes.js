@@ -13,7 +13,25 @@ router.use(verifyToken);
 // Get all appointments (optionally filter by doctorId or patientId, scoped to tenant)
 router.get('/', async (req, res) => {
   try {
-
+    // Auto-cancel past appointments where patient didn't check in on the day of appointment
+    try {
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      await Appointment.updateMany(
+        {
+          date: { $lt: startOfToday },
+          status: { $nin: ['Completed', 'Cancelled'] }
+        },
+        {
+          $set: {
+            status: 'Cancelled',
+            notes: 'Auto-cancelled: Patient did not check in on appointment day'
+          }
+        }
+      );
+    } catch (autoCancelErr) {
+      console.error("Auto-cancel sweep error:", autoCancelErr);
+    }
 
     const query = {};
     let patientIds = [];

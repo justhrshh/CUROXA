@@ -1862,7 +1862,17 @@ const ReceptionistDashboard = () => {
 
     // 1. Doctor appointments
     if (appointments && Array.isArray(appointments)) {
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
       appointments.forEach(app => {
+        const isPastAppt = app.date ? new Date(app.date) < startOfToday : false;
+        let appStatus = app.status || 'Pending';
+        // Auto cancel if patient didn't check in on the day of appointment
+        if (isPastAppt && appStatus !== 'Completed' && appStatus !== 'Cancelled') {
+          appStatus = 'Cancelled';
+        }
+
         list.push({
           id: app._id || app.id,
           patientId: app.patientId,
@@ -1871,7 +1881,7 @@ const ReceptionistDashboard = () => {
           detailName: app.doctorId?.name ? `Dr. ${app.doctorId.name.replace(/^Dr\.\s*/i, '')}` : (app.doctor || 'OPD Consultation'),
           date: app.date,
           time: app.time || '',
-          status: app.status || 'Pending',
+          status: appStatus,
           tokenNumber: app.tokenNumber || null,
           tokenDisplay: app.tokenDisplay || (app.tokenNumber ? String(app.tokenNumber) : null),
           tokenDate: app.tokenDate || null,
@@ -4244,9 +4254,6 @@ const ReceptionistDashboard = () => {
             {/* SECTION 4: ACTIVE COVERAGES GROUP */}
             {(Object.keys(coverageState || {}).some(k => coverageState[k]?.on)) && (
               <div className="sidebar-group">
-                <div className="sidebar-group-title" style={{ color: '#EF4444' }}>
-                  <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> ACTIVE COVERAGES
-                </div>
                 {(Object.keys(coverageState || {}).some(k => (k.startsWith('dr-') || k.startsWith('doc-')) && coverageState[k]?.on)) && tenantModules.doctor?.enabled !== false && (
                   <div 
                     className="sidebar-link"
@@ -4526,62 +4533,6 @@ const ReceptionistDashboard = () => {
             </div>
           </div>
 
-          {/* Center: Live Platform Telemetry & Shortcuts */}
-          <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '14px' }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              borderRadius: '20px',
-              background: '#F8FAFC',
-              border: '1px solid #E2E8F0',
-              fontSize: '12px',
-              fontWeight: 650,
-              color: '#334155'
-            }}>
-              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 0 2px rgba(16,185,129,0.2)' }} />
-              <span>Network Status</span>
-            </div>
-
-            <button
-              onClick={() => switchTab('appointments')}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#64748B',
-                fontSize: '12.5px',
-                fontWeight: 650,
-                cursor: 'pointer',
-                padding: '6px 8px',
-                borderRadius: '6px',
-                transition: 'all 0.15s'
-              }}
-              onMouseEnter={e => e.currentTarget.style.color = '#2563EB'}
-              onMouseLeave={e => e.currentTarget.style.color = '#64748B'}
-            >
-              Logs
-            </button>
-
-            <button
-              onClick={() => setShowDashboardDateFilter(!showDashboardDateFilter)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#64748B',
-                fontSize: '12.5px',
-                fontWeight: 650,
-                cursor: 'pointer',
-                padding: '6px 8px',
-                borderRadius: '6px',
-                transition: 'all 0.15s'
-              }}
-              onMouseEnter={e => e.currentTarget.style.color = '#2563EB'}
-              onMouseLeave={e => e.currentTarget.style.color = '#64748B'}
-            >
-              Analytics
-            </button>
-          </div>
 
           {/* Right: Search, Notifications, Shortcuts, Avatar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -4767,94 +4718,9 @@ const ReceptionistDashboard = () => {
               )}
             </div>
 
-            {/* Help Button (?) */}
-            <div 
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '10px',
-                background: '#FFFFFF',
-                border: '1px solid #E2E8F0',
-                color: '#64748B',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: 800,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                transition: 'all 0.15s'
-              }}
-              title="Help &amp; Front Desk Guide"
-              onClick={() => window.open('https://curoxa.com/support', '_blank')}
-              onMouseEnter={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
-            </div>
-
-            {/* Grid / Module Switcher (::) */}
-            <div 
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '10px',
-                background: '#FFFFFF',
-                border: '1px solid #E2E8F0',
-                color: '#64748B',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                transition: 'all 0.15s'
-              }}
-              title="Modules"
-              onClick={() => switchTab('patients')}
-              onMouseEnter={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
-            </div>
-
-            {/* User Avatar Pill */}
-            <div 
-              onClick={(e) => { e.stopPropagation(); setShowProfileMenu(!showProfileMenu); }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '3px 10px 3px 3px',
-                borderRadius: '24px',
-                background: '#EFF6FF',
-                border: '1px solid #BFDBFE',
-                cursor: 'pointer',
-                transition: 'all 0.15s'
-              }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = '#93C5FD'}
-              onMouseLeave={e => e.currentTarget.style.borderColor = '#BFDBFE'}
-            >
-              <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #2563EB 0%, #7C3AED 100%)',
-                color: '#FFFFFF',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 800,
-                fontSize: '11.5px',
-                flexShrink: 0
-              }}>
-                {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'RC'}
-              </div>
-              <span className="desktop-only-flex" style={{ fontSize: '12px', fontWeight: 800, color: '#1E40AF' }}>
-                {currentUser.name || 'Receptionist'}
-              </span>
-            </div>
           </div>
         </div>
+
       )}
 
       <div className={"main-content " + (activeTab === 'hr-payroll' ? "fullscreen-portal" : (isSidebarCollapsed ? "collapsed" : ""))} data-lenis-prevent>
@@ -6233,7 +6099,8 @@ const ReceptionistDashboard = () => {
                   }}
                 >
                   <i data-lucide="plus" style={{ width: '16px', strokeWidth: 3 }}></i>
-                  + Register Patient
+                  Register Patient
+
                 </button>
 
                 <button 
@@ -6267,113 +6134,118 @@ const ReceptionistDashboard = () => {
 
             {/* Top KPI Demographic & Overview Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px', marginBottom: '20px' }}>
-              {/* Card 1: Total Patients */}
-              <div 
+
+              {/* Card 1: Total Patients — Blue */}
+              <div
+                className="p-5 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                style={{ background: 'radial-gradient(circle at 100% 100%, rgba(37,99,235,0.18) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)' }}
                 onClick={() => { setPatientGenderFilter('All'); setPatientPage(1); }}
-                style={{ 
-                  padding: '16px 20px', 
-                  borderRadius: '16px', 
-                  background: patientGenderFilter === 'All' ? 'linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 100%)' : '#FFFFFF', 
-                  border: patientGenderFilter === 'All' ? '2px solid #2563EB' : '1px solid #E2E8F0',
-                  boxShadow: patientGenderFilter === 'All' ? '0 4px 14px rgba(37, 99, 235, 0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total Patients</span>
-                  <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  </div>
+                  <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">Total Patients</span>
+                </div>
+                <div className="mt-4 flex items-end justify-between">
+                  <div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{totalPatients}</div>
+                    <div className="text-xs text-blue-700 font-bold mt-2 flex items-center gap-1">
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }}></span>
+                      Active patient registry
+                    </div>
+                  </div>
+                  <div className="w-16 h-8 shrink-0 relative">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                      <defs><linearGradient id="kpiPatBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/><stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/></linearGradient></defs>
+                      <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiPatBlue)" />
+                      <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
                   </div>
                 </div>
-                <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", marginTop: '6px', lineHeight: 1.1 }}>
-                  {totalPatients}
-                </div>
-                <div style={{ fontSize: '11.5px', color: '#2563EB', fontWeight: 700, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563EB' }}></span> Active patient registry
-                </div>
+                <div className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)' }} />
               </div>
 
-              {/* Card 2: Male Patients */}
-              <div 
+              {/* Card 2: Male Patients — Purple/Indigo */}
+              <div
+                className="p-5 rounded-2xl border border-indigo-200/90 shadow-[0_12px_28px_rgba(79,70,229,0.08)] hover:shadow-[0_16px_36px_rgba(79,70,229,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                style={{ background: 'radial-gradient(circle at 0% 0%, rgba(79,70,229,0.2) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EEF2FF 50%, #E0E7FF 100%)' }}
                 onClick={() => { setPatientGenderFilter('Male'); setPatientPage(1); }}
-                style={{ 
-                  padding: '16px 20px', 
-                  borderRadius: '16px', 
-                  background: patientGenderFilter === 'Male' ? 'linear-gradient(135deg, #FFFFFF 0%, #EEF2FF 100%)' : '#FFFFFF', 
-                  border: patientGenderFilter === 'Male' ? '2px solid #4F46E5' : '1px solid #E2E8F0',
-                  boxShadow: patientGenderFilter === 'Male' ? '0 4px 14px rgba(79, 70, 229, 0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#4F46E5', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Male Patients</span>
-                  <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#EEF2FF', color: '#4F46E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: '16px', fontWeight: 900 }}>♂</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-700 to-indigo-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-indigo-500/25" style={{ fontSize: '18px', fontWeight: 900 }}>♂</div>
+                  <span className="text-[10px] font-extrabold text-indigo-900 uppercase tracking-wider">Male Patients</span>
+                </div>
+                <div className="mt-4 flex items-end justify-between">
+                  <div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{maleCount}</div>
+                    <div className="text-xs text-indigo-700 font-bold mt-2">{totalPatients > 0 ? Math.round((maleCount / totalPatients) * 100) : 0}% of directory</div>
+                  </div>
+                  <div className="w-16 h-8 shrink-0 relative">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                      <defs><linearGradient id="kpiPatIndigo" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4F46E5" stopOpacity="0.45"/><stop offset="100%" stopColor="#4F46E5" stopOpacity="0.05"/></linearGradient></defs>
+                      <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiPatIndigo)" />
+                      <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#4F46E5" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
                   </div>
                 </div>
-                <div style={{ fontSize: '28px', fontWeight: 900, color: '#4F46E5', fontFamily: "'Outfit', sans-serif", marginTop: '6px', lineHeight: 1.1 }}>
-                  {maleCount}
-                </div>
-                <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, marginTop: '6px' }}>
-                  {totalPatients > 0 ? Math.round((maleCount / totalPatients) * 100) : 0}% of directory
-                </div>
+                <div className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #4F46E5 100%)' }} />
               </div>
 
-              {/* Card 3: Female Patients */}
-              <div 
+              {/* Card 3: Female Patients — Pink */}
+              <div
+                className="p-5 rounded-2xl border border-pink-200/90 shadow-[0_12px_28px_rgba(219,39,119,0.08)] hover:shadow-[0_16px_36px_rgba(219,39,119,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                style={{ background: 'radial-gradient(circle at 100% 0%, rgba(219,39,119,0.18) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FDF2F8 50%, #FCE7F3 100%)' }}
                 onClick={() => { setPatientGenderFilter('Female'); setPatientPage(1); }}
-                style={{ 
-                  padding: '16px 20px', 
-                  borderRadius: '16px', 
-                  background: patientGenderFilter === 'Female' ? 'linear-gradient(135deg, #FFFFFF 0%, #FDF2F8 100%)' : '#FFFFFF', 
-                  border: patientGenderFilter === 'Female' ? '2px solid #DB2777' : '1px solid #E2E8F0',
-                  boxShadow: patientGenderFilter === 'Female' ? '0 4px 14px rgba(219, 39, 119, 0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#DB2777', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Female Patients</span>
-                  <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#FDF2F8', color: '#DB2777', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: '16px', fontWeight: 900 }}>♀</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-pink-700 to-rose-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-pink-500/25" style={{ fontSize: '18px', fontWeight: 900 }}>♀</div>
+                  <span className="text-[10px] font-extrabold text-pink-900 uppercase tracking-wider">Female Patients</span>
+                </div>
+                <div className="mt-4 flex items-end justify-between">
+                  <div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{femaleCount}</div>
+                    <div className="text-xs text-pink-700 font-bold mt-2">{totalPatients > 0 ? Math.round((femaleCount / totalPatients) * 100) : 0}% of directory</div>
+                  </div>
+                  <div className="w-16 h-8 shrink-0 relative">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                      <defs><linearGradient id="kpiPatPink" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#DB2777" stopOpacity="0.45"/><stop offset="100%" stopColor="#DB2777" stopOpacity="0.05"/></linearGradient></defs>
+                      <path d="M 0 28 Q 14 28, 24 22 T 40 14 T 52 20 T 64 10 L 64 32 L 0 32 Z" fill="url(#kpiPatPink)" />
+                      <path d="M 0 28 Q 14 28, 24 22 T 40 14 T 52 20 T 64 10" fill="none" stroke="#DB2777" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
                   </div>
                 </div>
-                <div style={{ fontSize: '28px', fontWeight: 900, color: '#DB2777', fontFamily: "'Outfit', sans-serif", marginTop: '6px', lineHeight: 1.1 }}>
-                  {femaleCount}
-                </div>
-                <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, marginTop: '6px' }}>
-                  {totalPatients > 0 ? Math.round((femaleCount / totalPatients) * 100) : 0}% of directory
-                </div>
+                <div className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #DB2777 100%)' }} />
               </div>
 
-              {/* Card 4: Active Appointments */}
-              <div 
+              {/* Card 4: Appointments — Emerald Green */}
+              <div
+                className="p-5 rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                style={{ background: 'radial-gradient(circle at 0% 100%, rgba(16,185,129,0.2) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)' }}
                 onClick={() => switchTab('appointments')}
-                style={{ 
-                  padding: '16px 20px', 
-                  borderRadius: '16px', 
-                  background: '#FFFFFF', 
-                  border: '1px solid #E2E8F0',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Appointments</span>
-                  <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  </div>
+                  <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider">Appointments</span>
+                </div>
+                <div className="mt-4 flex items-end justify-between">
+                  <div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{appointmentsCount}</div>
+                    <div className="text-xs text-emerald-700 font-bold mt-2">Scheduled consultations →</div>
+                  </div>
+                  <div className="w-16 h-8 shrink-0 relative">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                      <defs><linearGradient id="kpiPatGreen" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10B981" stopOpacity="0.45"/><stop offset="100%" stopColor="#10B981" stopOpacity="0.05"/></linearGradient></defs>
+                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#kpiPatGreen)" />
+                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#10B981" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
                   </div>
                 </div>
-                <div style={{ fontSize: '28px', fontWeight: 900, color: '#059669', fontFamily: "'Outfit', sans-serif", marginTop: '6px', lineHeight: 1.1 }}>
-                  {appointmentsCount}
-                </div>
-                <div style={{ fontSize: '11.5px', color: '#059669', fontWeight: 700, marginTop: '6px' }}>
-                  Scheduled consultations →
-                </div>
+                <div className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #10B981 100%)' }} />
               </div>
+
             </div>
             
             {/* Main Content Card with Search & Filters */}
@@ -6621,20 +6493,8 @@ const ReceptionistDashboard = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
-                      <th style={{ width: '44px', padding: '12px 14px', textAlign: 'center' }}>
-                        <input 
-                          type="checkbox" 
-                          checked={allFiltered.length > 0 && selectedPatientIds.length === allFiltered.length}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedPatientIds(allFiltered.map(p => p._id));
-                            } else {
-                              setSelectedPatientIds([]);
-                            }
-                          }}
-                          style={{ cursor: 'pointer', width: '15px', height: '15px' }}
-                          title="Select All Patients"
-                        />
+                      <th style={{ width: '44px', padding: '12px 16px', textAlign: 'center', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        S.No
                       </th>
                       <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         Patient ID
@@ -6703,21 +6563,11 @@ const ReceptionistDashboard = () => {
                             onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#F8FAFC'; }}
                             onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = '#FFFFFF'; }}
                           >
-                            {/* Checkbox */}
-                            <td style={{ padding: '14px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                              <input 
-                                type="checkbox" 
-                                checked={isSelected}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  if (e.target.checked) {
-                                    setSelectedPatientIds(prev => [...prev, p._id]);
-                                  } else {
-                                    setSelectedPatientIds(prev => prev.filter(id => id !== p._id));
-                                  }
-                                }}
-                                style={{ cursor: 'pointer', width: '15px', height: '15px' }}
-                              />
+                             {/* Serial Number */}
+                            <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 700, color: '#94A3B8' }}>
+                                {(patientPage - 1) * 10 + idx + 1}
+                              </span>
                             </td>
 
                             {/* Patient ID */}
@@ -10119,6 +9969,13 @@ const ReceptionistDashboard = () => {
                               {/* Token */}
                               <td style={{ width: '120px', padding: '14px', verticalAlign: 'middle', textAlign: 'center' }}>
                                 {(() => {
+                                  if (primary.status === 'Cancelled') {
+                                    return (
+                                      <span style={{ color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
+                                        —
+                                      </span>
+                                    );
+                                  }
                                   const expired = isApptExpired24h(primary.date, primary.time);
                                   if (expired) {
                                     return (
@@ -10188,10 +10045,33 @@ const ReceptionistDashboard = () => {
                                   </button>
 
                                   {(() => {
-                                    if (primary.type !== 'Appointment' || primary.status === 'Cancelled' || primary.status === 'Completed') {
+                                    if (primary.type !== 'Appointment' || primary.status === 'Completed') {
                                       return null;
                                     }
                                     const isExpired = isApptExpired24h(primary.date, primary.time);
+                                    if (primary.status === 'Cancelled') {
+                                      return isExpired ? (
+                                        <span
+                                          style={{
+                                            padding: '0 10px',
+                                            height: '30px',
+                                            fontSize: '11.5px',
+                                            fontWeight: 700,
+                                            background: '#F1F5F9',
+                                            color: '#64748B',
+                                            border: '1px solid #CBD5E1',
+                                            borderRadius: '8px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                          title="Appointment auto-cancelled: Patient did not check in on appointment day"
+                                        >
+                                          Not Visited
+                                        </span>
+                                      ) : null;
+                                    }
                                     if (isExpired) {
                                       return (
                                         <span
@@ -10366,6 +10246,13 @@ const ReceptionistDashboard = () => {
                                 {/* Token */}
                                 <td style={{ width: '120px', padding: '12px 14px', verticalAlign: 'middle', textAlign: 'center' }}>
                                   {(() => {
+                                    if (addOn.status === 'Cancelled') {
+                                      return (
+                                        <span style={{ color: '#94A3B8', fontSize: '11.5px', fontWeight: 600 }}>
+                                          —
+                                        </span>
+                                      );
+                                    }
                                     const isExpired = isApptExpired24h(addOn.date, addOn.time);
                                     if (isExpired) {
                                       return (
@@ -10423,8 +10310,31 @@ const ReceptionistDashboard = () => {
                                       View Details
                                     </button>
                                     {(() => {
-                                      if (addOn.status === 'Cancelled' || addOn.status === 'Completed') return null;
+                                      if (addOn.status === 'Completed') return null;
                                       const isExpired = isApptExpired24h(addOn.date, addOn.time);
+                                      if (addOn.status === 'Cancelled') {
+                                        return isExpired ? (
+                                          <span 
+                                            style={{ 
+                                              padding: '0 8px', 
+                                              height: '28px', 
+                                              fontSize: '11px', 
+                                              fontWeight: 700, 
+                                              background: '#F1F5F9', 
+                                              color: '#64748B', 
+                                              border: '1px solid #CBD5E1', 
+                                              borderRadius: '6px', 
+                                              display: 'inline-flex', 
+                                              alignItems: 'center', 
+                                              justifyContent: 'center', 
+                                              whiteSpace: 'nowrap' 
+                                            }}
+                                            title="Appointment auto-cancelled: Patient did not check in on appointment day"
+                                          >
+                                            Not Visited
+                                          </span>
+                                        ) : null;
+                                      }
                                       if (isExpired) {
                                         return (
                                           <span 
@@ -11832,47 +11742,66 @@ const ReceptionistDashboard = () => {
           };
 
           return (
-            <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', paddingBottom: '40px' }}>
-              
-              {/* Back Link */}
-              <div style={{ marginBottom: '12px' }}>
-                <button
-                  onClick={() => switchTab('indent')}
-                  style={{ background: 'none', border: 'none', color: '#2563EB', fontWeight: 800, fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', padding: 0 }}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-                  Back to Indents
-                </button>
-              </div>
+            <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', paddingBottom: '60px' }}>
 
-              {/* Title Header */}
-              <div style={{ marginBottom: '16px' }}>
-                <h1 style={{ fontSize: '26px', fontWeight: 900, color: '#0F172A', margin: '0 0 8px 0' }}>New Indent Request</h1>
-                <p style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, margin: 0 }}>Request pharmaceuticals and medical supplies for your department.</p>
-              </div>
+            {/* Breadcrumb + Hero Header */}
+            <div style={{ marginBottom: '24px' }}>
+              <button
+                onClick={() => switchTab('indent')}
+                style={{ background: 'none', border: 'none', color: '#64748B', fontWeight: 700, fontSize: '12.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: 0, marginBottom: '16px' }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                Back to Indents
+              </button>
 
-              {/* Grid Container */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '32px', alignItems: 'start' }} className="mobile-stack">
-                
-                {/* LEFT COLUMN */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                  
-                  {/* Card 1: Indent Information */}
-                  <div className="glass-card" style={{ padding: '32px', position: 'relative' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', borderBottom: '1px solid #F1F5F9', paddingBottom: '16px' }}>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                      <span style={{ fontSize: '14px', fontWeight: 900, color: '#0F172A' }}>Indent Information</span>
+              {/* Hero Banner */}
+              <div style={{ background: 'linear-gradient(135deg, #1E40AF 0%, #2563EB 55%, #3B82F6 100%)', borderRadius: '20px', padding: '24px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', overflow: 'hidden', position: 'relative', boxShadow: '0 8px 24px rgba(37,99,235,0.2)' }}>
+                <div style={{ position: 'absolute', right: '-20px', top: '-20px', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', right: '60px', bottom: '-40px', width: '160px', height: '160px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                    <span style={{ background: 'rgba(255,255,255,0.15)', color: '#BFDBFE', fontSize: '10.5px', fontWeight: 800, padding: '3px 10px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.06em', border: '1px solid rgba(255,255,255,0.2)' }}>Utility Requests</span>
+                  </div>
+                  <h1 style={{ fontSize: '22px', fontWeight: 900, color: '#FFFFFF', margin: '0 0 4px 0', fontFamily: "'Outfit', sans-serif" }}>New Indent Request</h1>
+                  <p style={{ fontSize: '13px', color: '#BFDBFE', fontWeight: 600, margin: 0 }}>Request pharmaceuticals and medical supplies for your department</p>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.12)', borderRadius: '16px', padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Main Two-Column Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '24px', alignItems: 'start' }} className="mobile-stack">
+
+              {/* ─── LEFT COLUMN ─── */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+                {/* Card 1: Indent Information */}
+                <div style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #E2E8F0', boxShadow: '0 2px 12px rgba(15,23,42,0.04)', overflow: 'visible', position: 'relative' }}>
+                  {/* Card Header */}
+                  <div style={{ padding: '18px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '10px', background: '#FAFBFD', borderTopLeftRadius: '18px', borderTopRightRadius: '18px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                     </div>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>Indent Information</div>
+                      <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>Fill in department and request details</div>
+                    </div>
+                  </div>
 
-                    {/* Row 1 Grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }} className="mobile-stack">
+                  <div style={{ padding: '24px' }}>
+                    {/* Row 1: 3 columns */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }} className="mobile-stack">
                       {/* Department */}
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>Department <span style={{ color: '#EF4444' }}>*</span></label>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.05em' }}>Department <span style={{ color: '#EF4444' }}>*</span></label>
                         <select
                           value={newIndentDept}
                           onChange={e => setNewIndentDept(e.target.value)}
-                          style={{ width: '100%', height: '26px', border: '1px solid #E2E8F0', borderRadius: '2px', padding: '0 12px', fontSize: '12px', fontWeight: 600, outline: 'none', background: '#F8FAFC', fontFamily: 'inherit' }}
+                          style={{ width: '100%', height: '42px', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '0 14px', fontSize: '13px', fontWeight: 600, outline: 'none', background: '#F8FAFC', fontFamily: 'inherit', cursor: 'pointer', color: '#0F172A', boxSizing: 'border-box' }}
+                          onFocus={e => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.background = '#FFFFFF'; }}
+                          onBlur={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#F8FAFC'; }}
                         >
                           <option value="Pharmacy">Pharmacy</option>
                           <option value="Reception">Reception</option>
@@ -11883,11 +11812,13 @@ const ReceptionistDashboard = () => {
 
                       {/* Indent Type */}
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>Indent Type <span style={{ color: '#EF4444' }}>*</span></label>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.05em' }}>Indent Type <span style={{ color: '#EF4444' }}>*</span></label>
                         <select
                           value={newIndentType}
                           onChange={e => setNewIndentType(e.target.value)}
-                          style={{ width: '100%', height: '26px', border: '1px solid #E2E8F0', borderRadius: '2px', padding: '0 12px', fontSize: '12px', fontWeight: 600, outline: 'none', background: '#F8FAFC', fontFamily: 'inherit' }}
+                          style={{ width: '100%', height: '42px', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '0 14px', fontSize: '13px', fontWeight: 600, outline: 'none', background: '#F8FAFC', fontFamily: 'inherit', cursor: 'pointer', color: '#0F172A', boxSizing: 'border-box' }}
+                          onFocus={e => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.background = '#FFFFFF'; }}
+                          onBlur={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#F8FAFC'; }}
                         >
                           <option value="Pharmaceuticals">Pharmaceuticals</option>
                           <option value="Medical Supplies">Medical Supplies</option>
@@ -11898,91 +11829,94 @@ const ReceptionistDashboard = () => {
 
                       {/* Required Date */}
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>Required Date <span style={{ color: '#EF4444' }}>*</span></label>
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                          <input
-                            type="date"
-                            value={newIndentReqDate}
-                            min={getLocalDateString()}
-                            onChange={e => setNewIndentReqDate(e.target.value)}
-                            style={{ width: '100%', height: '26px', border: '1px solid #E2E8F0', borderRadius: '2px', padding: '0 12px', fontSize: '12px', fontWeight: 600, outline: 'none', background: '#F8FAFC', fontFamily: 'inherit' }}
-                          />
-                        </div>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.05em' }}>Required Date <span style={{ color: '#EF4444' }}>*</span></label>
+                        <input
+                          type="date"
+                          value={newIndentReqDate}
+                          min={getLocalDateString()}
+                          onChange={e => setNewIndentReqDate(e.target.value)}
+                          style={{ width: '100%', height: '42px', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '0 14px', fontSize: '13px', fontWeight: 600, outline: 'none', background: '#F8FAFC', fontFamily: 'inherit', color: '#0F172A', boxSizing: 'border-box' }}
+                          onFocus={e => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.background = '#FFFFFF'; }}
+                          onBlur={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#F8FAFC'; }}
+                        />
                       </div>
                     </div>
 
-                    {/* Row 2 Grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }} className="mobile-stack">
-                      {/* Requested By (Custom Dropdown) */}
-                      <div style={{ position: 'relative' }}>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>Requested By <span style={{ color: '#EF4444' }}>*</span></label>
-                        <div 
+                    {/* Row 2: Requested By + Contact + Priority */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '16px', position: 'relative', zIndex: showReqByDropdown ? 1000 : 10 }} className="mobile-stack">
+                      {/* Requested By */}
+                      <div style={{ position: 'relative', zIndex: showReqByDropdown ? 1001 : 1 }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.05em' }}>Requested By <span style={{ color: '#EF4444' }}>*</span></label>
+                        <div
                           onClick={() => setShowReqByDropdown(!showReqByDropdown)}
-                          style={{ width: '100%', height: '26px', border: '1px solid #E2E8F0', borderRadius: '2px', padding: '0 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#F8FAFC', cursor: 'pointer', userSelect: 'none' }}
+                          style={{ width: '100%', height: '42px', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '0 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#F8FAFC', cursor: 'pointer', userSelect: 'none', boxSizing: 'border-box' }}
                         >
                           {(() => {
                             const selectedUser = indentUsers.find(u => u.name === newIndentRequestedBy) || indentUsers[0];
                             return (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 900 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 100%)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 900 }}>
                                   {selectedUser.initials}
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', lineHeight: '1.2' }}>{selectedUser.name}</span>
-                                  <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>{selectedUser.role}</span>
+                                  <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#0F172A', lineHeight: '1.2' }}>{selectedUser.name}</span>
+                                  <span style={{ fontSize: '10px', color: '#64748B', fontWeight: 600 }}>{selectedUser.role}</span>
                                 </div>
                               </div>
                             );
                           })()}
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                         </div>
 
                         {showReqByDropdown && (
-                          <div style={{ position: 'absolute', top: '75px', left: 0, right: 0, background: 'white', borderRadius: '2px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)', border: '1px solid #E2E8F0', zIndex: 100, overflow: 'hidden' }}>
-                            {indentUsers.map(u => (
-                              <div
-                                key={u.name}
-                                onClick={() => {
-                                  setNewIndentRequestedBy(u.name);
-                                  setNewIndentContact(u.contact);
-                                  setShowReqByDropdown(false);
-                                }}
-                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #F1F5F9', transition: 'background 0.2s' }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                              >
-                                <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 900 }}>
-                                  {u.initials}
+                          <>
+                            <div
+                              onClick={() => setShowReqByDropdown(false)}
+                              style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+                            />
+                            <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, background: 'white', borderRadius: '12px', boxShadow: '0 16px 40px rgba(15,23,42,0.2)', border: '1.5px solid #CBD5E1', zIndex: 99999, maxHeight: '240px', overflowY: 'auto' }}>
+                              {indentUsers.map(u => (
+                                <div
+                                  key={u.name}
+                                  onClick={() => { setNewIndentRequestedBy(u.name); setNewIndentContact(u.contact); setShowReqByDropdown(false); }}
+                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s' }}
+                                  onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 100%)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 900 }}>{u.initials}</div>
+                                  <div>
+                                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>{u.name}</div>
+                                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>{u.role}</div>
+                                  </div>
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', lineHeight: '1.2' }}>{u.name}</span>
-                                  <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>{u.role}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                              ))}
+                            </div>
+                          </>
                         )}
                       </div>
 
+
                       {/* Contact Number */}
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>Contact Number</label>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.05em' }}>Contact Number</label>
                         <input
                           type="text"
                           placeholder="Enter contact number"
                           value={newIndentContact}
                           onChange={e => setNewIndentContact(e.target.value)}
-                          style={{ width: '100%', height: '26px', border: '1px solid #E2E8F0', borderRadius: '2px', padding: '0 12px', fontSize: '12px', fontWeight: 600, outline: 'none', background: '#F8FAFC', fontFamily: 'inherit' }}
+                          style={{ width: '100%', height: '42px', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '0 14px', fontSize: '13px', fontWeight: 600, outline: 'none', background: '#F8FAFC', fontFamily: 'inherit', color: '#0F172A', boxSizing: 'border-box' }}
+                          onFocus={e => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.background = '#FFFFFF'; }}
+                          onBlur={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#F8FAFC'; }}
                         />
                       </div>
 
                       {/* Priority */}
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>Priority</label>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.05em' }}>Priority</label>
                         <select
                           value={newIndentPriority}
                           onChange={e => setNewIndentPriority(e.target.value)}
-                          style={{ width: '100%', height: '26px', border: '1px solid #E2E8F0', borderRadius: '2px', padding: '0 12px', fontSize: '12px', fontWeight: 600, outline: 'none', background: '#F8FAFC', fontFamily: 'inherit' }}
+                          style={{ width: '100%', height: '42px', border: `1.5px solid ${newIndentPriority === 'Urgent' ? '#FCA5A5' : '#E2E8F0'}`, borderRadius: '10px', padding: '0 14px', fontSize: '13px', fontWeight: 700, outline: 'none', background: newIndentPriority === 'Urgent' ? '#FEF2F2' : '#F8FAFC', fontFamily: 'inherit', color: newIndentPriority === 'Urgent' ? '#DC2626' : '#0F172A', cursor: 'pointer', boxSizing: 'border-box' }}
                         >
                           <option value="Normal">Normal</option>
                           <option value="Urgent">Urgent</option>
@@ -11992,193 +11926,165 @@ const ReceptionistDashboard = () => {
 
                     {/* Remarks */}
                     <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Purpose / Remarks</label>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Purpose / Remarks</label>
                         <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 700 }}>{newIndentRemarks.length}/250</span>
                       </div>
                       <textarea
                         placeholder="Enter purpose or additional remarks (optional)"
                         value={newIndentRemarks}
                         onChange={e => setNewIndentRemarks(e.target.value.slice(0, 250))}
-                        style={{ width: '100%', height: '80px', border: '1px solid #E2E8F0', borderRadius: '2px', padding: '12px', fontSize: '12px', fontWeight: 600, outline: 'none', background: '#F8FAFC', resize: 'none', fontFamily: 'inherit' }}
+                        style={{ width: '100%', height: '88px', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '12px 14px', fontSize: '13px', fontWeight: 600, outline: 'none', background: '#F8FAFC', resize: 'none', fontFamily: 'inherit', color: '#0F172A', boxSizing: 'border-box' }}
+                        onFocus={e => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.background = '#FFFFFF'; }}
+                        onBlur={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#F8FAFC'; }}
                       />
                     </div>
                   </div>
+                </div>
 
-                  {/* Card 2: Add Pharmaceuticals */}
-                  <div className="glass-card" style={{ padding: '32px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', borderBottom: '1px solid #F1F5F9', paddingBottom: '16px' }}>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
-                      <span style={{ fontSize: '14px', fontWeight: 900, color: '#0F172A' }}>Add Pharmaceuticals</span>
-                    </div>
-
-                    {/* Search / Add Custom Item row */}
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', position: 'relative' }} className="mobile-stack">
-                      
-                      {/* Search box wrapper */}
-                      <div ref={medicineSearchContainerRef} style={{ flex: 1, position: 'relative' }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '16px', top: '14px' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        <input
-                          id="indent-medicine-search"
-                          type="text"
-                          placeholder="Search medicine by name, brand, or composition"
-                          value={medicineSearchQuery}
-                          onChange={e => {
-                            setMedicineSearchQuery(e.target.value);
-                            setShowMedicineSuggestions(true);
-                          }}
-                          onFocus={() => setShowMedicineSuggestions(true)}
-                          style={{ width: '100%', height: '26px', border: '1px solid #E2E8F0', borderRadius: '2px', paddingLeft: '44px', paddingRight: '16px', fontSize: '12px', fontWeight: 600, outline: 'none', background: '#F8FAFC', fontFamily: 'inherit' }}
-                        />
-
-                        {/* Autocomplete Dropdown */}
-                        {showMedicineSuggestions && medicineSearchQuery.trim() !== '' && (
-                          <div style={{ position: 'absolute', top: '48px', left: 0, right: 0, background: 'white', borderRadius: '2px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)', border: '1px solid #E2E8F0', zIndex: 100, overflow: 'hidden' }}>
-                            {filteredMeds.length === 0 ? (
-                              <div style={{ padding: '14px 16px', fontSize: '13px', color: '#94A3B8', fontWeight: 600 }}>No matching medicines found. Click "+ Add Another Item" below to add custom item.</div>
-                            ) : (
-                              filteredMeds.map(med => (
-                                <div
-                                  key={med._id}
-                                  onClick={() => handleAddMedicine(med)}
-                                  style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.2s' }}
-                                  onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                >
-                                  <div>
-                                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B' }}>{med.name}</div>
-                                    <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>{med.category} · SKU: {med.sku} · MRP: ₹{med.mrp || 50}</div>
-                                  </div>
-                                  <div style={{ fontSize: '12px', fontWeight: 700, color: med.stock > 20 ? '#16A34A' : med.stock > 0 ? '#D97706' : '#DC2626' }}>
-                                    Stock: {med.stock}
-                                  </div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        )}
+                {/* Card 2: Add Pharmaceuticals */}
+                <div style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #E2E8F0', boxShadow: '0 2px 12px rgba(15,23,42,0.04)', overflow: 'visible', position: 'relative' }}>
+                  <div style={{ padding: '18px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FAFBFD', borderTopLeftRadius: '18px', borderTopRightRadius: '18px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>Add Pharmaceuticals</div>
+                        <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>Search and add medicines or supplies</div>
                       </div>
                     </div>
+                    {selectedMedicines.length > 0 && (
+                      <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 10px', borderRadius: '20px', background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0' }}>
+                        {selectedMedicines.length} item{selectedMedicines.length !== 1 ? 's' : ''} added
+                      </span>
+                    )}
+                  </div>
 
-                    {/* Selected items list table */}
-                    <div style={{ overflowX: 'auto' }}>
+                  <div style={{ padding: '20px 24px' }}>
+                    {/* Search */}
+                    <div ref={medicineSearchContainerRef} style={{ position: 'relative', marginBottom: '16px', zIndex: showMedicineSuggestions ? 500 : 5 }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      <input
+                        id="indent-medicine-search"
+                        type="text"
+                        placeholder="Search medicine by name, brand, or composition..."
+                        value={medicineSearchQuery}
+                        onChange={e => { setMedicineSearchQuery(e.target.value); setShowMedicineSuggestions(true); }}
+                        onFocus={() => setShowMedicineSuggestions(true)}
+                        style={{ width: '100%', height: '44px', border: '1.5px solid #E2E8F0', borderRadius: '10px', paddingLeft: '44px', paddingRight: '16px', fontSize: '13px', fontWeight: 600, outline: 'none', background: '#F8FAFC', fontFamily: 'inherit', color: '#0F172A', boxSizing: 'border-box' }}
+                        onFocusCapture={e => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.background = '#FFFFFF'; }}
+                        onBlurCapture={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#F8FAFC'; }}
+                      />
+
+                      {showMedicineSuggestions && medicineSearchQuery.trim() !== '' && (
+                        <div style={{ position: 'absolute', top: '52px', left: 0, right: 0, background: 'white', borderRadius: '12px', boxShadow: '0 16px 40px rgba(15,23,42,0.2)', border: '1.5px solid #CBD5E1', zIndex: 99999, maxHeight: '250px', overflowY: 'auto' }}>
+                          {filteredMeds.length === 0 ? (
+                            <div style={{ padding: '14px 16px', fontSize: '13px', color: '#94A3B8', fontWeight: 600 }}>No matching medicines found. Use "+ Add Item" below for custom entry.</div>
+                          ) : (
+                            filteredMeds.map(med => (
+                              <div
+                                key={med._id}
+                                onClick={() => handleAddMedicine(med)}
+                                style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.15s' }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <div>
+                                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>{med.name}</div>
+                                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>{med.category} · SKU: {med.sku} · MRP: ₹{med.mrp || 50}</div>
+                                </div>
+                                <span style={{ fontSize: '12px', fontWeight: 700, color: med.stock > 20 ? '#16A34A' : med.stock > 0 ? '#D97706' : '#DC2626', background: med.stock > 20 ? '#F0FDF4' : med.stock > 0 ? '#FFFBEB' : '#FEF2F2', padding: '2px 8px', borderRadius: '6px' }}>
+                                  Stock: {med.stock}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Items Table */}
+                    <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'visible', position: 'relative' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                         <thead>
-                          <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '300px' }}>Medicine / Item</th>
-                            <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '130px' }}>Category</th>
-                            <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '110px' }}>Unit</th>
-                            <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', minWidth: '130px' }}>Required Qty</th>
-                            <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', minWidth: '110px' }}>Available Stock</th>
-                            <th style={{ padding: '12px 16px', width: '60px' }}></th>
+                          <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                            <th style={{ padding: '10px 16px', fontSize: '10.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', minWidth: '280px', borderTopLeftRadius: '12px' }}>Medicine / Item</th>
+                            <th style={{ padding: '10px 16px', fontSize: '10.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', minWidth: '120px' }}>Category</th>
+                            <th style={{ padding: '10px 16px', fontSize: '10.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', minWidth: '100px' }}>Unit</th>
+                            <th style={{ padding: '10px 16px', fontSize: '10.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', minWidth: '130px' }}>Qty</th>
+                            <th style={{ padding: '10px 16px', fontSize: '10.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', minWidth: '100px' }}>Stock</th>
+                            <th style={{ padding: '10px 16px', width: '50px', borderTopRightRadius: '12px' }}></th>
                           </tr>
                         </thead>
                         <tbody>
                           {selectedMedicines.length === 0 ? (
                             <tr>
-                              <td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: '#94A3B8', fontWeight: 600, fontSize: '12px' }}>
-                                No items added yet. Search above or click "+ Add Another Item" below to begin.
+                              <td colSpan={6} style={{ padding: '40px', textAlign: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#F1F5F9', color: '#94A3B8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/></svg>
+                                  </div>
+                                  <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#475569' }}>No items added yet</div>
+                                  <div style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 600 }}>Search above or click "+ Add Item" below</div>
+                                </div>
                               </td>
                             </tr>
                           ) : selectedMedicines.map((item, idx) => {
                             const theme = getCategoryTheme(item.category);
                             return (
-                              <tr key={idx} style={{ borderBottom: '1px solid #F8FAFC' }}>
-                                
-                                {/* Medicine / Item */}
-                                <td style={{ padding: '16px', minWidth: '300px' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
-                                    <div style={{ width: '36px', height: '36px', borderRadius: '2px', background: theme.bg, color: theme.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>
+                              <tr key={idx} style={{ borderBottom: idx < selectedMedicines.length - 1 ? '1px solid #F8FAFC' : 'none', transition: 'background 0.15s', position: 'relative', zIndex: activeCustomRowFocus === idx ? 1000 : 1 }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#FAFBFD'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <td style={{ padding: '14px 16px', minWidth: '280px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: theme.bg, color: theme.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
                                       {item.isCustom ? (
-                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%' }}>
-                                          <div style={{ position: 'relative', flex: 1, minWidth: '160px' }}>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                          <div style={{ position: 'relative', flex: 1, minWidth: '150px' }}>
                                             <input
                                               type="text"
-                                              placeholder="Enter medicine name..."
+                                              placeholder="Medicine name..."
                                               value={item.name}
                                               onChange={e => handleUpdateItem(idx, 'name', e.target.value)}
                                               onFocus={() => setActiveCustomRowFocus(idx)}
-                                              onBlur={() => {
-                                                setTimeout(() => {
-                                                  if (!isHoveringCustomSuggestions) {
-                                                    setActiveCustomRowFocus(null);
-                                                  }
-                                                }, 150);
-                                              }}
-                                              style={{ height: '36px', border: '1px solid #CBD5E1', borderRadius: '2px', padding: '0 10px', fontSize: '13px', fontWeight: 600, outline: 'none', width: '100%', background: '#FFFFFF', boxSizing: 'border-box' }}
+                                              onBlur={() => { setTimeout(() => { if (!isHoveringCustomSuggestions) { setActiveCustomRowFocus(null); } }, 150); }}
+                                              style={{ height: '36px', border: '1.5px solid #CBD5E1', borderRadius: '8px', padding: '0 10px', fontSize: '12.5px', fontWeight: 600, outline: 'none', width: '100%', background: '#FFFFFF', boxSizing: 'border-box' }}
                                             />
                                             {activeCustomRowFocus === idx && (() => {
                                               const typedVal = (item.name || '').trim().toLowerCase();
-                                              const filtered = typedVal
-                                                ? medicines.filter(m => 
-                                                    (m.name || '').toLowerCase().includes(typedVal) ||
-                                                    (m.category || '').toLowerCase().includes(typedVal)
-                                                  ).slice(0, 8)
-                                                : medicines.slice(0, 8);
-
+                                              const filtered = typedVal ? medicines.filter(m => (m.name || '').toLowerCase().includes(typedVal) || (m.category || '').toLowerCase().includes(typedVal)).slice(0, 8) : medicines.slice(0, 8);
                                               if (filtered.length === 0) return null;
-
                                               return (
-                                                <div 
-                                                  data-lenis-prevent 
+                                                <div
+                                                  data-lenis-prevent
                                                   onMouseEnter={() => setIsHoveringCustomSuggestions(true)}
                                                   onMouseLeave={() => setIsHoveringCustomSuggestions(false)}
-                                                  style={{ 
-                                                    position: 'absolute', 
-                                                    top: 'calc(100% + 4px)', 
-                                                    left: '0px', 
-                                                    width: '280px', 
-                                                    zIndex: 1200, 
-                                                    padding: '6px', 
-                                                    maxHeight: '220px', 
-                                                    boxShadow: '0 10px 25px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04)',
-                                                    borderRadius: '2px',
-                                                    border: '1px solid #E2E8F0',
-                                                    background: '#ffffff',
-                                                    overflowY: 'auto'
-                                                  }}
+                                                  style={{ position: 'absolute', top: 'calc(100% + 6px)', left: '0px', width: '320px', zIndex: 99999, padding: '8px', maxHeight: '240px', boxShadow: '0 16px 40px rgba(15,23,42,0.22)', borderRadius: '12px', border: '1.5px solid #CBD5E1', background: '#ffffff', overflowY: 'auto' }}
                                                 >
                                                   {filtered.map(med => (
                                                     <div
                                                       key={med._id}
                                                       onClick={() => {
                                                         const updated = [...selectedMedicines];
-                                                        updated[idx] = {
-                                                          name: med.name,
-                                                          category: med.category || 'General',
-                                                          unit: med.unit || 'Strip',
-                                                          requiredQty: updated[idx].requiredQty || 10,
-                                                          availableStock: med.stock !== undefined ? med.stock : 0,
-                                                          mrp: med.mrp !== undefined ? med.mrp : 50.00,
-                                                          isCustom: false
-                                                        };
+                                                        updated[idx] = { name: med.name, category: med.category || 'General', unit: med.unit || 'Strip', requiredQty: updated[idx].requiredQty || 10, availableStock: med.stock !== undefined ? med.stock : 0, mrp: med.mrp !== undefined ? med.mrp : 50.00, isCustom: false };
                                                         setSelectedMedicines(updated);
                                                         setActiveCustomRowFocus(null);
                                                         setIsHoveringCustomSuggestions(false);
                                                       }}
-                                                      style={{ 
-                                                        padding: '8px 12px', 
-                                                        borderBottom: '1px solid #F1F5F9', 
-                                                        cursor: 'pointer', 
-                                                        display: 'flex', 
-                                                        justifyContent: 'space-between', 
-                                                        alignItems: 'center', 
-                                                        transition: 'background 0.2s',
-                                                        borderRadius: '6px'
-                                                      }}
+                                                      style={{ padding: '8px 10px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '6px', transition: 'background 0.15s' }}
                                                       onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
                                                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                                     >
                                                       <div>
-                                                        <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B', textAlign: 'left' }}>{med.name}</div>
-                                                        <div style={{ fontSize: '10px', color: '#64748B', fontWeight: 600, textAlign: 'left' }}>{med.category} · MRP: ₹{med.mrp || 50}</div>
+                                                        <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>{med.name}</div>
+                                                        <div style={{ fontSize: '10px', color: '#64748B', fontWeight: 600 }}>{med.category} · ₹{med.mrp || 50}</div>
                                                       </div>
-                                                      <span style={{ fontSize: '11px', fontWeight: 700, color: med.stock > 0 ? '#16A34A' : '#DC2626' }}>
-                                                        Stock: {med.stock}
-                                                      </span>
+                                                      <span style={{ fontSize: '11px', fontWeight: 700, color: med.stock > 0 ? '#16A34A' : '#DC2626' }}>Stock: {med.stock}</span>
                                                     </div>
                                                   ))}
                                                 </div>
@@ -12192,43 +12098,33 @@ const ReceptionistDashboard = () => {
                                               placeholder="MRP"
                                               value={item.mrp !== undefined && item.mrp !== null ? item.mrp : ''}
                                               onChange={e => handleUpdateItem(idx, 'mrp', Math.max(0, Number(e.target.value) || 0))}
-                                              style={{ height: '36px', border: '1px solid #CBD5E1', borderRadius: '2px', padding: '0 8px', fontSize: '13px', fontWeight: 600, outline: 'none', width: '64px', background: '#FFFFFF' }}
-                                              title="Unit MRP Price"
+                                              style={{ height: '36px', border: '1.5px solid #CBD5E1', borderRadius: '8px', padding: '0 8px', fontSize: '12.5px', fontWeight: 600, outline: 'none', width: '60px', background: '#FFFFFF' }}
                                             />
                                           </div>
                                         </div>
                                       ) : (
                                         <>
-                                          <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '12px' }}>{item.name}</span>
-                                          <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>{item.unit} · MRP: ₹{item.mrp}</span>
+                                          <div style={{ fontWeight: 700, color: '#1E293B', fontSize: '13px' }}>{item.name}</div>
+                                          <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>{item.unit} · MRP: ₹{item.mrp}</div>
                                         </>
                                       )}
                                     </div>
                                   </div>
                                 </td>
 
-                                {/* Category */}
-                                <td style={{ padding: '16px' }}>
+
+                                <td style={{ padding: '14px 16px' }}>
                                   {item.isCustom ? (
-                                    <input
-                                      type="text"
-                                      placeholder="Category"
-                                      value={item.category}
-                                      onChange={e => handleUpdateItem(idx, 'category', e.target.value)}
-                                      style={{ height: '36px', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '0 8px', fontSize: '13px', fontWeight: 600, outline: 'none', width: '120px' }}
-                                    />
+                                    <input type="text" placeholder="Category" value={item.category} onChange={e => handleUpdateItem(idx, 'category', e.target.value)}
+                                      style={{ height: '36px', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '0 8px', fontSize: '12.5px', fontWeight: 600, outline: 'none', width: '110px', background: 'white', color: '#0F172A' }} />
                                   ) : (
-                                    <span style={{ fontSize: '13px', color: '#475569', fontWeight: 700 }}>{item.category}</span>
+                                    <span style={{ fontSize: '12.5px', color: '#475569', fontWeight: 700 }}>{item.category}</span>
                                   )}
                                 </td>
 
-                                {/* Unit */}
-                                <td style={{ padding: '16px' }}>
-                                  <select
-                                    value={item.unit}
-                                    onChange={e => handleUpdateItem(idx, 'unit', e.target.value)}
-                                    style={{ height: '36px', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '0 8px', fontSize: '13px', fontWeight: 600, outline: 'none', background: 'white', fontFamily: 'inherit' }}
-                                  >
+                                <td style={{ padding: '14px 16px' }}>
+                                  <select value={item.unit} onChange={e => handleUpdateItem(idx, 'unit', e.target.value)}
+                                    style={{ height: '36px', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '0 8px', fontSize: '12.5px', fontWeight: 600, outline: 'none', background: 'white', fontFamily: 'inherit', color: '#0F172A', cursor: 'pointer' }}>
                                     <option value="Strip">Strip</option>
                                     <option value="Capsule">Capsule</option>
                                     <option value="Tablet">Tablet</option>
@@ -12238,49 +12134,32 @@ const ReceptionistDashboard = () => {
                                   </select>
                                 </td>
 
-                                {/* Required Qty */}
-                                <td style={{ padding: '16px', textAlign: 'center' }}>
-                                  <div style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid #E2E8F0', borderRadius: '2px', overflow: 'hidden', background: '#F8FAFC' }}>
-                                    <button
-                                      onClick={() => handleUpdateItem(idx, 'requiredQty', Math.max(1, (Number(item.requiredQty) || 0) - 1))}
-                                      style={{ width: '32px', height: '22px', border: 'none', background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#475569', fontWeight: 800 }}
-                                    >
-                                      -
-                                    </button>
-                                    <input
-                                      type="number"
-                                      value={item.requiredQty}
-                                      onChange={e => handleUpdateItem(idx, 'requiredQty', Math.max(1, Number(e.target.value) || 0))}
-                                      style={{ width: '48px', height: '22px', border: 'none', borderLeft: '1px solid #E2E8F0', borderRight: '1px solid #E2E8F0', textAlign: 'center', fontSize: '13px', fontWeight: 800, background: 'white', outline: 'none' }}
-                                    />
-                                    <button
-                                      onClick={() => handleUpdateItem(idx, 'requiredQty', (Number(item.requiredQty) || 0) + 1)}
-                                      style={{ width: '32px', height: '22px', border: 'none', background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#475569', fontWeight: 800 }}
-                                    >
-                                      +
-                                    </button>
+                                <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', border: '1.5px solid #E2E8F0', borderRadius: '8px', overflow: 'hidden', background: '#F8FAFC' }}>
+                                    <button onClick={() => handleUpdateItem(idx, 'requiredQty', Math.max(1, (Number(item.requiredQty) || 0) - 1))}
+                                      style={{ width: '32px', height: '34px', border: 'none', background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#475569', fontWeight: 800, fontSize: '16px' }}>−</button>
+                                    <input type="number" value={item.requiredQty} onChange={e => handleUpdateItem(idx, 'requiredQty', Math.max(1, Number(e.target.value) || 0))}
+                                      style={{ width: '44px', height: '34px', border: 'none', borderLeft: '1px solid #E2E8F0', borderRight: '1px solid #E2E8F0', textAlign: 'center', fontSize: '13px', fontWeight: 800, background: 'white', outline: 'none' }} />
+                                    <button onClick={() => handleUpdateItem(idx, 'requiredQty', (Number(item.requiredQty) || 0) + 1)}
+                                      style={{ width: '32px', height: '34px', border: 'none', background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#475569', fontWeight: 800, fontSize: '16px' }}>+</button>
                                   </div>
                                 </td>
 
-                                {/* Available Stock */}
-                                <td style={{ padding: '16px', textAlign: 'center' }}>
-                                  <span style={{ fontSize: '12px', fontWeight: 800, color: item.availableStock > 20 ? '#10B981' : item.availableStock > 0 ? '#F59E0B' : '#EF4444' }}>
+                                <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                  <span style={{ fontSize: '12.5px', fontWeight: 800, color: item.availableStock > 20 ? '#10B981' : item.availableStock > 0 ? '#F59E0B' : '#EF4444', background: item.availableStock > 20 ? '#ECFDF5' : item.availableStock > 0 ? '#FFFBEB' : '#FEF2F2', padding: '3px 10px', borderRadius: '6px' }}>
                                     {item.availableStock}
                                   </span>
                                 </td>
 
-                                {/* Action (Remove) */}
-                                <td style={{ padding: '16px', textAlign: 'right' }}>
-                                  <button
-                                    onClick={() => handleRemoveItem(idx)}
-                                    style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px', transition: 'color 0.2s' }}
-                                    onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
-                                    onMouseLeave={e => e.currentTarget.style.color = '#94A3B8'}
+                                <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                                  <button onClick={() => handleRemoveItem(idx)}
+                                    style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#EF4444', cursor: 'pointer', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                                    onMouseEnter={e => { e.currentTarget.style.background = '#EF4444'; e.currentTarget.style.color = 'white'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.color = '#EF4444'; }}
                                   >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                                   </button>
                                 </td>
-
                               </tr>
                             );
                           })}
@@ -12288,111 +12167,89 @@ const ReceptionistDashboard = () => {
                       </table>
                     </div>
 
-                    {/* Add Another Item Button */}
-                    <div style={{ marginTop: '20px' }}>
-                      <button
-                        onClick={handleAddCustomItem}
-                        style={{ background: 'none', border: '1px solid #2563EB', color: '#2563EB', borderRadius: '2px', padding: '0 16px', height: '26px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                        Add Another Item
-                      </button>
-                    </div>
-
+                    {/* Add Item Button */}
+                    <button
+                      onClick={handleAddCustomItem}
+                      style={{ marginTop: '16px', background: 'none', border: '1.5px dashed #BFDBFE', color: '#2563EB', borderRadius: '10px', padding: '10px 20px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'center', transition: 'all 0.15s' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.borderColor = '#2563EB'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.borderColor = '#BFDBFE'; }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Add Another Item
+                    </button>
                   </div>
-
                 </div>
 
-                {/* RIGHT COLUMN */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                  
-                  {/* Card 3: Indent Summary */}
-                  <div className="glass-card" style={{ padding: '28px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-                      <span style={{ fontSize: '12px', fontWeight: 900, color: '#0F172A' }}>Indent Summary</span>
+              </div>
+
+              {/* ─── RIGHT COLUMN ─── */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                {/* Summary Card */}
+                <div style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #E2E8F0', boxShadow: '0 2px 12px rgba(15,23,42,0.04)', overflow: 'hidden' }}>
+                  <div style={{ padding: '16px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '10px', background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)' }}>
+                    <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#FFFFFF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(37,99,235,0.15)' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
                     </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Total Items</span>
-                        <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A' }}>{totalItems}</span>
+                    <span style={{ fontSize: '13.5px', fontWeight: 900, color: '#1E40AF' }}>Indent Summary</span>
+                  </div>
+                  <div style={{ padding: '20px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#F8FAFC', borderRadius: '10px' }}>
+                        <span style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>Total Items</span>
+                        <span style={{ fontSize: '14px', fontWeight: 900, color: '#0F172A' }}>{totalItems}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Total Quantity</span>
-                        <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A' }}>{totalQuantity}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#F8FAFC', borderRadius: '10px' }}>
+                        <span style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>Total Quantity</span>
+                        <span style={{ fontSize: '14px', fontWeight: 900, color: '#0F172A' }}>{totalQuantity}</span>
                       </div>
 
-                      <hr style={{ border: 'none', borderTop: '1px solid #E2E8F0', margin: '12px 0 6px 0' }} />
+                      <div style={{ height: '1px', background: '#E2E8F0', margin: '4px 0' }} />
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A' }}>Estimated Total</span>
-                        <span style={{ fontSize: '14px', fontWeight: 900, color: '#2563EB' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)', borderRadius: '10px', border: '1px solid #BFDBFE' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#1E40AF' }}>Estimated Total</span>
+                        <span style={{ fontSize: '15px', fontWeight: 900, color: '#2563EB' }}>
                           {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(estimatedTotal)}
                         </span>
                       </div>
 
-                      {/* Info Alert Box */}
-                      <div style={{ background: '#EFF6FF', border: '1px solid #DBEAFE', borderRadius: '2px', padding: '14px 16px', display: 'flex', gap: '12px', marginTop: '16px' }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: '2px' }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                        <div style={{ fontSize: '12.5px', color: '#1E40AF', fontWeight: 600, lineHeight: '1.4' }}>
+                      <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '10px', padding: '12px 14px', display: 'flex', gap: '10px', marginTop: '4px' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: '1px' }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                        <div style={{ fontSize: '12px', color: '#1E40AF', fontWeight: 600, lineHeight: '1.5' }}>
                           <div style={{ fontWeight: 800, marginBottom: '2px' }}>This is an indent request.</div>
                           Final approval and amount may vary based on stock and purchase.
                         </div>
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Card 4: Attachments */}
-                  <div className="glass-card" style={{ padding: '28px' }}>
-                    <span style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#0F172A', marginBottom: '16px' }}>Attachments (Optional)</span>
-                    
-                    <label 
+                {/* Attachments Card */}
+                <div style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #E2E8F0', boxShadow: '0 2px 12px rgba(15,23,42,0.04)', overflow: 'hidden' }}>
+                  <div style={{ padding: '16px 20px', borderBottom: '1px solid #F1F5F9', background: '#FAFBFD' }}>
+                    <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>Attachments</span>
+                    <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600, marginLeft: '6px' }}>(Optional)</span>
+                  </div>
+                  <div style={{ padding: '18px 20px' }}>
+                    <label
                       htmlFor="indent-attachments-file"
-                      style={{ 
-                        display: 'block', 
-                        border: '2px dashed #CBD5E1', 
-                        borderRadius: '4px', 
-                        padding: '32px 20px', 
-                        textAlign: 'center', 
-                        background: '#F8FAFC', 
-                        cursor: 'pointer', 
-                        transition: 'border-color 0.2s' 
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.borderColor = '#2563EB'}
-                      onMouseLeave={e => e.currentTarget.style.borderColor = '#CBD5E1'}
+                      style={{ display: 'block', border: '2px dashed #CBD5E1', borderRadius: '12px', padding: '28px 16px', textAlign: 'center', background: '#FAFBFD', cursor: 'pointer', transition: 'all 0.2s' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.background = '#EFF6FF'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.background = '#FAFBFD'; }}
                     >
-                      <input 
-                        type="file" 
-                        id="indent-attachments-file" 
-                        multiple 
-                        onChange={handleFileChange} 
-                        style={{ display: 'none' }} 
-                      />
-                      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '12px', color: '#94A3B8' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                        Drag & drop files here
-                      </div>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#2563EB', textDecoration: 'underline', marginBottom: '8px' }}>
-                        or browse
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 650 }}>
-                        Supports: PDF, JPG, PNG (Max 5MB)
-                      </div>
+                      <input type="file" id="indent-attachments-file" multiple onChange={handleFileChange} style={{ display: 'none' }} />
+                      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '10px' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                      <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>Drag & drop files here</div>
+                      <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#2563EB', textDecoration: 'underline', marginBottom: '6px' }}>or browse</div>
+                      <div style={{ fontSize: '10.5px', color: '#94A3B8', fontWeight: 600 }}>Supports: PDF, JPG, PNG (Max 5MB)</div>
                     </label>
 
-                    {/* File List */}
                     {newIndentAttachments.length > 0 && (
-                      <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {newIndentAttachments.map((fName, idx) => (
-                          <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#EFF6FF', borderRadius: '2px', padding: '8px 12px', border: '1px solid #DBEAFE' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#1E40AF', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '200px' }} title={fName}>
-                              {fName}
-                            </span>
-                            <button 
-                              onClick={() => setNewIndentAttachments(newIndentAttachments.filter((_, i) => i !== idx))} 
-                              style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
-                            >
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#EFF6FF', borderRadius: '8px', padding: '8px 12px', border: '1px solid #BFDBFE' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#1E40AF', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '180px' }} title={fName}>{fName}</span>
+                            <button onClick={() => setNewIndentAttachments(newIndentAttachments.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', transition: 'color 0.15s' }} onMouseEnter={e => e.currentTarget.style.color = '#EF4444'} onMouseLeave={e => e.currentTarget.style.color = '#94A3B8'}>
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                             </button>
                           </div>
@@ -12400,56 +12257,65 @@ const ReceptionistDashboard = () => {
                       </div>
                     )}
                   </div>
+                </div>
 
-                  {/* Card 5: Additional Notes */}
-                  <div className="glass-card" style={{ padding: '28px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 900, color: '#0F172A' }}>Additional Notes (Optional)</span>
-                      <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 700 }}>{newIndentAdditionalNotes.length}/250</span>
-                    </div>
+                {/* Additional Notes Card */}
+                <div style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #E2E8F0', boxShadow: '0 2px 12px rgba(15,23,42,0.04)', overflow: 'hidden' }}>
+                  <div style={{ padding: '14px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FAFBFD' }}>
+                    <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>Additional Notes <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>(Optional)</span></span>
+                    <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 700 }}>{newIndentAdditionalNotes.length}/250</span>
+                  </div>
+                  <div style={{ padding: '16px 20px' }}>
                     <textarea
                       placeholder="Enter any additional information..."
                       value={newIndentAdditionalNotes}
                       onChange={e => setNewIndentAdditionalNotes(e.target.value.slice(0, 250))}
-                      style={{ width: '100%', height: '80px', border: '1px solid #E2E8F0', borderRadius: '2px', padding: '12px', fontSize: '12px', fontWeight: 600, outline: 'none', background: '#F8FAFC', resize: 'none', fontFamily: 'inherit' }}
+                      style={{ width: '100%', height: '80px', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '12px 14px', fontSize: '13px', fontWeight: 600, outline: 'none', background: '#F8FAFC', resize: 'none', fontFamily: 'inherit', color: '#0F172A', boxSizing: 'border-box' }}
+                      onFocus={e => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.background = '#FFFFFF'; }}
+                      onBlur={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#F8FAFC'; }}
                     />
                   </div>
-
                 </div>
 
               </div>
-
-              {/* Submit Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '32px', borderTop: '1px solid #F1F5F9', paddingTop: '24px' }}>
-                <button
-                  onClick={() => switchTab('indent')}
-                  style={{ height: '26px', border: '1px solid #E2E8F0', background: 'white', color: '#475569', borderRadius: '2px', padding: '0 24px', fontWeight: 800, fontSize: '12px', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    onClick={() => handleSubmitIndent('Draft')}
-                    disabled={loading}
-                    style={{ height: '26px', border: '1.5px solid #2563EB', background: 'white', color: '#2563EB', borderRadius: '2px', padding: '0 24px', fontWeight: 800, fontSize: '12px', cursor: 'pointer', opacity: loading ? 0.7 : 1 }}
-                  >
-                    Save as Draft
-                  </button>
-                  <button
-                    onClick={() => handleSubmitIndent('Pending')}
-                    disabled={loading}
-                    style={{ height: '26px', border: 'none', background: '#2563EB', color: 'white', borderRadius: '2px', padding: '0 24px', fontWeight: 800, fontSize: '12px', cursor: 'pointer', opacity: loading ? 0.7 : 1 }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#1D4ED8'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#2563EB'}
-                  >
-                    Submit Indent
-                  </button>
-                </div>
-              </div>
-
             </div>
-          );
-        })()}
+
+            {/* Footer Submit Bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '28px', padding: '18px 24px', background: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 -2px 12px rgba(15,23,42,0.03)' }}>
+              <button
+                onClick={() => switchTab('indent')}
+                style={{ height: '40px', border: '1.5px solid #E2E8F0', background: 'white', color: '#475569', borderRadius: '10px', padding: '0 20px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.background = '#F8FAFC'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = 'white'; }}
+              >
+                Cancel
+              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => handleSubmitIndent('Draft')}
+                  disabled={loading}
+                  style={{ height: '40px', border: '1.5px solid #2563EB', background: 'white', color: '#2563EB', borderRadius: '10px', padding: '0 22px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', opacity: loading ? 0.7 : 1, transition: 'all 0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#EFF6FF'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'white'; }}
+                >
+                  Save as Draft
+                </button>
+                <button
+                  onClick={() => handleSubmitIndent('Pending')}
+                  disabled={loading}
+                  style={{ height: '40px', border: 'none', background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', color: 'white', borderRadius: '10px', padding: '0 24px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', opacity: loading ? 0.7 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.3)', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(37,99,235,0.4)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(37,99,235,0.3)'; }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Submit Indent
+                </button>
+              </div>
+            </div>
+
+          </div>
+        );
+      })()}
 
         {/* TAB: DOCTOR DYNAMIC COVERAGE */}
         {activeTab === 'doctor_cover' && (
