@@ -10,6 +10,7 @@ const tenantMiddleware = require("../middleware/tenantMiddleware");
 const AuditLog = require("../models/AuditLog");
 const { getJwtSecret } = require("../config/env");
 const { verifyToken, isAdmin } = require("../middleware/authMiddleware");
+const { isPatientProfileComplete } = require("../utils/patientProfileHelper");
 const router = express.Router();
 
 // Generate a unique, non-guessable placeholder hash for OAuth-created users.
@@ -179,13 +180,19 @@ router.post("/login", tenantMiddleware, async (req, res) => {
       passwordHash: user.password_hash,
       password_version: user.password_version || 0,
     };
+    let isPatientComplete = false;
     if (user.role === "patient") {
       const patient = await Patient.findOne({
         contact: user.staff_id,
         tenantId: user.tenantId,
-      });
+      }) || await Patient.findOne({ contact: user.staff_id });
       if (patient) {
         tokenPayload.id = patient._id;
+      }
+      isPatientComplete = Boolean(isPatientProfileComplete(patient) || user.isSetupComplete);
+      if (user.isSetupComplete !== isPatientComplete) {
+        user.isSetupComplete = isPatientComplete;
+        await user.save().catch(() => {});
       }
     }
 
@@ -223,7 +230,7 @@ router.post("/login", tenantMiddleware, async (req, res) => {
         email: user.email || '',
         avatar: user.avatar || '',
         specialty: user.specialty,
-        isSetupComplete: user.isSetupComplete,
+        isSetupComplete: user.role === 'patient' ? isPatientComplete : user.isSetupComplete,
         tenantId: user.tenantId,
         tenantName: hospital ? hospital.name : 'Sunrise Multispeciality',
         createdAt: user.createdAt,
@@ -512,6 +519,12 @@ router.post("/google-login", tenantMiddleware, async (req, res) => {
       const hospital = await SuperAdminHospital.findOne({ code: targetTenant });
       const tenantModules = { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } };
 
+      const isComplete = Boolean(isPatientProfileComplete(patient) || user.isSetupComplete);
+      if (user.isSetupComplete !== isComplete) {
+        user.isSetupComplete = isComplete;
+        await user.save().catch(() => {});
+      }
+
       return res.json({
         message: "Login successful via Google (Patient)",
         token,
@@ -523,7 +536,7 @@ router.post("/google-login", tenantMiddleware, async (req, res) => {
           email: patient.email || '',
           avatar: patient.avatar || '',
           tenantId: targetTenant,
-          isSetupComplete: user.isSetupComplete,
+          isSetupComplete: isComplete,
         },
         tenantModules,
         plan: hospital ? hospital.plan : null
@@ -1452,13 +1465,19 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
       passwordHash: user.password_hash,
       password_version: user.password_version || 0,
     };
+    let isPatientComplete = false;
     if (user.role === "patient") {
       const patient = await Patient.findOne({
         contact: user.staff_id,
         tenantId: user.tenantId,
-      });
+      }) || await Patient.findOne({ contact: user.staff_id });
       if (patient) {
         tokenPayload.id = patient._id;
+      }
+      isPatientComplete = Boolean(isPatientProfileComplete(patient) || user.isSetupComplete);
+      if (user.isSetupComplete !== isPatientComplete) {
+        user.isSetupComplete = isPatientComplete;
+        await user.save().catch(() => {});
       }
     }
 
@@ -1497,7 +1516,7 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
         email: user.email || '',
         avatar: user.avatar || '',
         specialty: user.specialty,
-        isSetupComplete: user.isSetupComplete,
+        isSetupComplete: user.role === 'patient' ? isPatientComplete : user.isSetupComplete,
         tenantId: user.tenantId,
         tenantName: hospital ? hospital.name : 'Sunrise Multispeciality',
         createdAt: user.createdAt,
@@ -1825,6 +1844,17 @@ router.post('/patient-portal/verify-otp', async (req, res) => {
 
     // 4. Handle Existing Patient or User
     if (patientDoc || user) {
+      // If user was found but not patientDoc, try looking up patientDoc by user.phone or staff_id
+      if (!patientDoc && user) {
+        const phoneToLookup = user.phone || (user.staff_id ? user.staff_id.split('_')[0] : '');
+        if (phoneToLookup) {
+          patientDoc = await Patient.findOne({ contact: phoneToLookup }).sort({ updatedAt: -1 });
+        }
+      }
+
+      // Check whether patient has complete clinical profile stored in MongoDB
+      const isComplete = Boolean(isPatientProfileComplete(patientDoc) || user?.isSetupComplete);
+
       // If patient exists but no User account was created yet, create a User record now
       if (!user && patientDoc) {
         user = await User.create({
@@ -1834,12 +1864,16 @@ router.post('/patient-portal/verify-otp', async (req, res) => {
           staff_id: patientDoc.contact,
           role: 'patient',
           tenantId: patientDoc.tenantId || 'city_hospital',
+          isSetupComplete: isComplete,
           password_hash: 'PATIENT_OTP_AUTH'
         });
       } else if (user) {
         user.login_otp_code = null;
         user.login_otp_expires_at = null;
         user.lastLogin = new Date();
+        if (user.isSetupComplete !== isComplete) {
+          user.isSetupComplete = isComplete;
+        }
         await user.save();
       }
 
@@ -1867,6 +1901,7 @@ router.post('/patient-portal/verify-otp', async (req, res) => {
           actualStaffRole: user.role,
           name: patientDoc ? patientDoc.name : user.name,
           avatar: (patientDoc && patientDoc.avatar) ? patientDoc.avatar : (user.avatar || ''),
+          isSetupComplete: isComplete,
           password_hash: undefined 
         },
         isNewUser: false

@@ -1585,7 +1585,6 @@ div[style*="textAlign: center"] {
     .mob-nav-item i { width: 22px; height: 22px; }
     .mob-nav-item.active {
         color: var(--primary);
-        transform: translateY(-4px);
     }
     
     /* Elegant table overflow handling */

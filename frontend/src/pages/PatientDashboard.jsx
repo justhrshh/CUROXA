@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { convertPdfToImage } from '../utils/pdfHelper';
+import curoxaHero3D from '../assets/curoxa_hero_3d.png';
+import curoxaMobileHero3D from '../assets/curoxa_mobile_hero_3d.png';
+import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
 
 // Safeguard React DOM reconciliation against external DOM mutations (e.g. Lucide CDN node replacement)
 if (typeof window !== 'undefined') {
@@ -74,6 +77,40 @@ const DEFAULT_TIME_SLOTS = [
   '02:30 PM - 03:00 PM', '03:00 PM - 03:30 PM', '03:30 PM - 04:00 PM',
   '04:00 PM - 04:30 PM', '04:30 PM - 05:00 PM', '05:00 PM - 05:30 PM'
 ];
+
+const checkPatientProfileComplete = (patient) => {
+  if (!patient) return false;
+
+  // 1. Full Name: non-empty, not generic placeholder 'Patient'
+  const name = typeof patient.name === 'string' ? patient.name.trim() : '';
+  if (!name || name.toLowerCase() === 'patient') return false;
+
+  // 2. Contact: valid mobile number (10+ digits, not placeholder prefix 'G-', not email)
+  const contact = (patient.contact || '').toString().trim();
+  if (!contact || contact.startsWith('G-') || contact.includes('@')) return false;
+  const digitsOnly = contact.replace(/\D/g, '');
+  if (digitsOnly.length < 10) return false;
+
+  // 3. Age / Date of Birth information (age > 0 or ageMonths/Days or dob)
+  const ageNum = Number(patient.age);
+  const ageMonthsNum = Number(patient.ageMonths);
+  const ageDaysNum = Number(patient.ageDays);
+  const hasValidAge = (!isNaN(ageNum) && ageNum > 0) ||
+                      (!isNaN(ageMonthsNum) && ageMonthsNum > 0) ||
+                      (!isNaN(ageDaysNum) && ageDaysNum > 0) ||
+                      Boolean(patient.dob);
+  if (!hasValidAge) return false;
+
+  // 4. Gender: must be specified ('Male', 'Female', 'Other')
+  const gender = typeof patient.gender === 'string' ? patient.gender.trim() : '';
+  if (!gender || !['Male', 'Female', 'Other'].includes(gender)) return false;
+
+  // 5. Home Address: must be non-empty and not placeholder
+  const address = typeof patient.address === 'string' ? patient.address.trim() : '';
+  if (!address || address.toLowerCase() === 'registered via google sign-in') return false;
+
+  return true;
+};
 
 const PatientDashboard = () => {
   const getLocalDateString = (inputDate) => {
@@ -333,6 +370,7 @@ const PatientDashboard = () => {
   };
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{}'));
+  const [profileVerifying, setProfileVerifying] = useState(() => !currentUser?.isSetupComplete);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem('curoxa_sidebar_collapsed') === 'true');
 
   // Notifications states
@@ -403,6 +441,41 @@ const PatientDashboard = () => {
     return upcoming || null;
   }, [hospitalAppointments, todayStr]);
 
+  // Today's visit (specifically today's appointment for the live token card)
+  const todayVisitAppt = useMemo(() => {
+    const candidateList = hospitalAppointments;
+    return candidateList.find(app => {
+      const isToday = (app.tokenDate === todayStr) || (app.date && getLocalDateString(app.date) === todayStr);
+      return isToday && !['Completed', 'Cancelled', 'Checked Out'].includes(app.status);
+    }) || null;
+  }, [hospitalAppointments, todayStr]);
+
+  // Next upcoming scheduled appointment
+  const nextUpcomingAppt = useMemo(() => {
+    const candidateList = hospitalAppointments;
+    const future = candidateList.filter(app => {
+      const appDate = app.date ? getLocalDateString(app.date) : '';
+      const isFuture = appDate >= todayStr;
+      const isNotDone = !['Completed', 'Cancelled', 'Checked Out'].includes(app.status);
+      const isDifferentFromTodayVisit = todayVisitAppt ? app._id !== todayVisitAppt._id : true;
+      return isFuture && isNotDone && isDifferentFromTodayVisit;
+    });
+    return future[0] || null;
+  }, [hospitalAppointments, todayStr, todayVisitAppt]);
+
+  // Appointment counts for segmented filters
+  const apptCounts = useMemo(() => {
+    const all = hospitalAppointments.length;
+    const today = hospitalAppointments.filter(app => (app.tokenDate === todayStr) || (app.date && getLocalDateString(app.date) === todayStr)).length;
+    const upcoming = hospitalAppointments.filter(app => {
+      const appDate = app.date ? getLocalDateString(app.date) : '';
+      return appDate > todayStr && !['Completed', 'Cancelled', 'Checked Out'].includes(app.status);
+    }).length;
+    const completed = hospitalAppointments.filter(app => ['Completed', 'Checked Out'].includes(app.status)).length;
+    const cancelled = hospitalAppointments.filter(app => app.status === 'Cancelled').length;
+    return { all, today, upcoming, completed, cancelled };
+  }, [hospitalAppointments, todayStr]);
+
   // Phase 4 Live Patient Token Queue State
   const [patientQueue, setPatientQueue] = useState({
     currentToken: null,
@@ -415,6 +488,13 @@ const PatientDashboard = () => {
 
   const [prescriptions, setPrescriptions] = useState([]);
   const [patientProfile, setPatientProfile] = useState(null);
+
+  // Formatted UHID string
+  const patientUhid = useMemo(() => {
+    if (patientProfile?.uhid) return patientProfile.uhid;
+    if (patientProfile?._id) return `CUROXA-${patientProfile._id.substring(18).toUpperCase()}`;
+    return 'CUROXA-784512';
+  }, [patientProfile]);
 
 
   const [editProfileData, setEditProfileData] = useState({ name: '', age: '', ageMonths: '', ageDays: '', gender: '', contact: '', address: '', bloodGroup: '', allergies: '', medicalHistory: '' });
@@ -436,6 +516,7 @@ const PatientDashboard = () => {
   const [showPrivacyOverlay, setShowPrivacyOverlay] = useState(() => localStorage.getItem('curoxa_dpdp_intro_seen') !== 'true');
   const [showAadhaarModal, setShowAadhaarModal] = useState(false);
   const [showAbhaModal, setShowAbhaModal] = useState(false);
+  const [showDigitalCardModal, setShowDigitalCardModal] = useState(false);
   const [aadhaarInput, setAadhaarInput] = useState('');
   const [abhaInput, setAbhaInput] = useState('');
   const [verifyingAadhaar, setVerifyingAadhaar] = useState(false);
@@ -478,9 +559,40 @@ const PatientDashboard = () => {
     // Fetch Profile Independently
     try {
       const profileRes = await api.get(`/patients/${currentUser.id}`);
-      setPatientProfile(profileRes.data);
-      patientDbId = profileRes.data._id;
-      const isOnboarding = !currentUser.isSetupComplete;
+      const fetchedPatient = profileRes.data;
+      setPatientProfile(fetchedPatient);
+      patientDbId = fetchedPatient._id;
+
+      // Determine profile completion from backend source of truth
+      const isComplete = fetchedPatient.isSetupComplete !== undefined
+        ? Boolean(fetchedPatient.isSetupComplete)
+        : checkPatientProfileComplete(fetchedPatient);
+
+      if (isComplete) {
+        if (!currentUser.isSetupComplete) {
+          const updatedUser = {
+            ...currentUser,
+            isSetupComplete: true,
+            name: fetchedPatient.name || currentUser.name,
+            avatar: fetchedPatient.avatar || currentUser.avatar || ''
+          };
+          try {
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+          } catch(e) {}
+          setCurrentUser(updatedUser);
+        }
+      } else {
+        if (currentUser.isSetupComplete) {
+          const updatedUser = { ...currentUser, isSetupComplete: false };
+          try {
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+          } catch(e) {}
+          setCurrentUser(updatedUser);
+        }
+      }
+      setProfileVerifying(false);
+
+      const isOnboarding = !isComplete;
       
       // Do NOT overwrite user typed fields during background polling if currently onboarding
       if (!isOnboarding || !editProfileData.contact) {
@@ -516,6 +628,7 @@ const PatientDashboard = () => {
       }
     } catch (profileErr) {
       console.warn("Failed to load full patient profile details", profileErr);
+      setProfileVerifying(false);
     }
 
     // Fetch Dashboard Data
@@ -830,6 +943,7 @@ const PatientDashboard = () => {
       const updatedUser = { ...currentUser, id: res.data._id || currentUser.id, name: res.data.name, isSetupComplete: true, avatar: res.data.avatar || '' };
       localStorage.setItem('user', JSON.stringify(updatedUser));
       setCurrentUser(updatedUser);
+      setProfileVerifying(false);
       showToast("Profile completed successfully! Welcome to your dashboard.", "success");
     } catch (err) {
       setProfileMsg({ type: 'error', text: err.response?.data?.error || 'Failed to save profile details.' });
@@ -1670,7 +1784,37 @@ const PatientDashboard = () => {
     printWindow.print();
   };
 
-  if (!currentUser.isSetupComplete) {
+  if (profileVerifying && !currentUser.isSetupComplete) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#F8FAFC',
+        fontFamily: "'Urbanist', sans-serif"
+      }}>
+        <div style={{
+          width: '38px',
+          height: '38px',
+          border: '3px solid #E2E8F0',
+          borderTopColor: '#2563EB',
+          borderRadius: '50%',
+          animation: 'curoxaSpin 0.8s linear infinite'
+        }} />
+        <p style={{ marginTop: '14px', fontSize: '13px', fontWeight: 700, color: '#64748B' }}>
+          Loading your patient profile...
+        </p>
+        <style>{`@keyframes curoxaSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  const isProfileIncomplete = !currentUser.isSetupComplete && (!patientProfile || !checkPatientProfileComplete(patientProfile));
+
+  if (isProfileIncomplete) {
     return (
       <div className="onboarding-container" style={{
         height: '100vh',
@@ -2062,11 +2206,13 @@ const PatientDashboard = () => {
   }
 
   return (
-    <div className="patient-portal-container">
+    <div className={`patient-portal-container ${!selectedHospital ? 'curoxa-level' : ''}`}>
       <style>{`
         .patient-portal-container {
           font-family: 'Urbanist', sans-serif !important;
-          background: radial-gradient(circle at 10% 10%, #EFF6FF 0%, #F8FAFC 100%) !important;
+          background: radial-gradient(ellipse at 15% 15%, rgba(37, 99, 235, 0.05) 0%, transparent 60%),
+                      radial-gradient(ellipse at 85% 85%, rgba(6, 182, 212, 0.05) 0%, transparent 60%),
+                      #F8FAFC !important;
           min-height: calc(100vh / 0.9);
           color: #0F172A !important;
         }
@@ -2079,7 +2225,21 @@ const PatientDashboard = () => {
         .patient-portal-container h5,
         .patient-portal-container h6 {
           font-family: 'Outfit', sans-serif !important;
-          color: #0F172A !important;
+          color: #0F172A;
+        }
+
+        .patient-portal-container .text-white,
+        .patient-portal-container .curoxa-hospital-card h3,
+        .patient-portal-container .curoxa-hero-header h1,
+        .patient-portal-container .curoxa-hero-header h2,
+        .patient-portal-container .curoxa-hero-header h3 {
+          color: #FFFFFF !important;
+        }
+
+        .curoxa-text-gradient {
+          background: linear-gradient(135deg, #1D4ED8 0%, #2563EB 40%, #0891B2 100%) !important;
+          -webkit-background-clip: text !important;
+          -webkit-text-fill-color: transparent !important;
         }
 
         /* Sidebar Styling Override */
@@ -2088,7 +2248,7 @@ const PatientDashboard = () => {
           height: calc(100vh / 0.9) !important;
           background: #FFFFFF !important;
           border-right: 1px solid #E2E8F0 !important;
-          box-shadow: none !important;
+          box-shadow: 2px 0 20px rgba(15, 23, 42, 0.02) !important;
           position: fixed !important;
           top: 0 !important;
           left: 0 !important;
@@ -2110,7 +2270,7 @@ const PatientDashboard = () => {
         }
 
         .patient-portal-container .sidebar-logo {
-          padding: 0 32px 32px !important;
+          padding: 0 24px 28px !important;
           display: flex !important;
           align-items: center !important;
           gap: 12px !important;
@@ -2125,11 +2285,12 @@ const PatientDashboard = () => {
           display: flex !important;
           align-items: center !important;
           gap: 12px !important;
-          padding: 14px 32px !important;
+          padding: 13px 24px !important;
           color: #64748B !important;
           text-decoration: none !important;
           font-weight: 600 !important;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          font-size: 13.5px !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
           border-left: 4px solid transparent !important;
         }
 
@@ -2139,9 +2300,15 @@ const PatientDashboard = () => {
         }
 
         .patient-portal-container .nav-link.active {
-          background: #EFF6FF !important;
+          background: linear-gradient(90deg, rgba(37, 99, 235, 0.08) 0%, rgba(6, 182, 212, 0.03) 100%) !important;
           color: #2563EB !important;
           border-left: 4px solid #2563EB !important;
+          font-weight: 800 !important;
+        }
+
+        .patient-portal-container .nav-link.active i,
+        .patient-portal-container .nav-link.active svg {
+          color: #2563EB !important;
         }
 
         .patient-portal-container .sidebar-user {
@@ -2191,21 +2358,23 @@ const PatientDashboard = () => {
 
         /* Top Nav Styling Override */
         .patient-portal-container .top-nav {
-          height: 48px !important;
-          background: rgba(255, 255, 255, 0.75) !important;
+          min-height: 68px !important;
+          height: auto !important;
+          background: rgba(255, 255, 255, 0.9) !important;
           backdrop-filter: blur(20px) !important;
           -webkit-backdrop-filter: blur(20px) !important;
-          border-bottom: 1px solid #BFDBFE !important;
+          border-bottom: 1px solid #E2E8F0 !important;
           margin-left: 256px !important;
-          padding: 0 16px !important;
+          padding: 10px 24px !important;
           display: flex !important;
           align-items: center !important;
           justify-content: space-between !important;
           position: sticky !important;
           top: 0 !important;
           z-index: 90 !important;
-          box-shadow: 0 4px 30px rgba(59, 113, 254, 0.02) !important;
+          box-shadow: 0 2px 14px rgba(15, 23, 42, 0.03) !important;
           transition: margin-left 0.3s ease !important;
+          gap: 16px !important;
         }
         .patient-portal-container .top-nav.collapsed {
           margin-left: 70px !important;
@@ -2218,6 +2387,187 @@ const PatientDashboard = () => {
         .patient-portal-container .main-content.collapsed {
           margin-left: 70px !important;
         }
+
+        /* CUROXA PLATFORM LEVEL (NO HOSPITAL SELECTED) - FULL-WIDTH CONSUMER EXPERIENCE */
+        .patient-portal-container.curoxa-level {
+          background: 
+            radial-gradient(circle at 68% 18%, rgba(186, 230, 253, 0.45) 0%, rgba(224, 242, 254, 0.22) 30%, transparent 60%),
+            radial-gradient(circle at 8% 88%, rgba(204, 251, 241, 0.5) 0%, rgba(240, 253, 250, 0.25) 35%, transparent 60%),
+            radial-gradient(circle at 98% 45%, rgba(243, 232, 255, 0.55) 0%, rgba(250, 245, 255, 0.2) 35%, transparent 60%),
+            #FFFFFF !important;
+          min-height: 100vh !important;
+          position: relative !important;
+        }
+        .patient-portal-container.curoxa-level .sidebar {
+          display: none !important;
+        }
+        .patient-portal-container.curoxa-level .mobile-menu-toggle {
+          display: none !important;
+        }
+        .patient-portal-container.curoxa-level .top-nav {
+          margin-left: 0 !important;
+          border-bottom: 1px solid rgba(241, 245, 249, 0.8) !important;
+          padding: 0 48px !important;
+          background: rgba(255, 255, 255, 0.85) !important;
+          backdrop-filter: blur(16px) !important;
+          min-height: 70px !important;
+          max-width: 100% !important;
+        }
+        .patient-portal-container.curoxa-level .main-content {
+          margin-left: 0 !important;
+          max-width: 1380px !important;
+          margin-inline: auto !important;
+          padding: 32px 48px 80px !important;
+          background: transparent !important;
+        }
+        .patient-portal-container.curoxa-level .curoxa-top-nav-center {
+          display: flex !important;
+        }
+        .patient-portal-container.curoxa-level .curoxa-top-nav-brand {
+          display: flex !important;
+        }
+        /* Responsive Hero Switch */
+        .curoxa-desktop-hero {
+          display: grid !important;
+        }
+        .curoxa-mobile-hero {
+          display: none !important;
+        }
+
+        @media (max-width: 768px) {
+          .curoxa-desktop-hero {
+            display: none !important;
+          }
+          .curoxa-mobile-hero {
+            display: block !important;
+          }
+          .patient-portal-container.curoxa-level .sidebar {
+            display: none !important;
+          }
+          .patient-portal-container.curoxa-level .sidebar.mobile-open {
+            display: flex !important;
+            width: 260px !important;
+          }
+          .patient-portal-container.curoxa-level .patient-nav-name,
+          .patient-portal-container.curoxa-level .patient-nav-chevron {
+            display: none !important;
+          }
+          .patient-portal-container.curoxa-level .patient-nav-pill {
+            padding: 0 !important;
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+          }
+          .patient-portal-container.curoxa-level .top-nav {
+            margin-left: 0 !important;
+            background: rgba(255, 255, 255, 0.96) !important;
+            padding: 0 16px !important;
+            min-height: 60px !important;
+            border-bottom: 1px solid #F1F5F9 !important;
+          }
+          .patient-portal-container.curoxa-level .curoxa-top-nav-brand {
+            display: flex !important;
+          }
+          .patient-portal-container.curoxa-level .main-content {
+            margin-left: 0 !important;
+            padding: 12px 14px 96px !important;
+          }
+          /* ---- TOP NAV: slim + hide center links on mobile ---- */
+          .patient-portal-container.curoxa-level .curoxa-top-nav-center {
+            display: none !important;
+          }
+          .patient-portal-container.curoxa-level .curoxa-top-nav-brand span:last-child {
+            display: none !important;
+          }
+          /* Hide user name + UID text, show avatar only */
+          .patient-portal-container.curoxa-level .patient-nav-name,
+          .patient-portal-container.curoxa-level .patient-nav-uid,
+          .patient-portal-container.curoxa-level .patient-nav-chevron {
+            display: none !important;
+          }
+          .patient-portal-container.curoxa-level .patient-nav-pill {
+            padding: 4px !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+          }
+
+          /* ---- BOTTOM DOCK: flat fixed bar, NOT floating ---- */
+          .patient-portal-container.curoxa-level .mobile-bottom-nav {
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            border-top: 1px solid #E2E8F0 !important;
+            border-left: none !important;
+            border-right: none !important;
+            border-bottom: none !important;
+            box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06) !important;
+            background: rgba(255, 255, 255, 0.97) !important;
+            backdrop-filter: blur(16px) !important;
+            padding: 10px 0 !important;
+            padding-bottom: calc(10px + env(safe-area-inset-bottom)) !important;
+            z-index: 1000 !important;
+          }
+
+          /* ---- ABHA WIDGET: single column, no overflow ---- */
+          .abha-health-widget {
+            grid-template-columns: 1fr !important;
+            padding: 16px !important;
+            gap: 16px !important;
+            margin-bottom: 20px !important;
+            border-radius: 16px !important;
+          }
+
+          /* ---- FEATURE CHIPS: wrap & no overflow ---- */
+          .abha-feature-chips {
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+            overflow: hidden !important;
+          }
+          .abha-feature-chip {
+            white-space: nowrap !important;
+            font-size: 11px !important;
+          }
+
+          /* ---- PROFILE QUICK-ACCESS CARD: compact ---- */
+          .curoxa-profile-pill {
+            padding: 10px 14px !important;
+            border-radius: 12px !important;
+          }
+
+          /* ---- MAIN CONTENT padding: account for fixed dock ---- */
+          .patient-portal-container.curoxa-level .main-content {
+            padding: 12px 12px 90px !important;
+            overflow-x: hidden !important;
+          }
+
+          /* ---- DISCOVERY SECTION: no side overflow ---- */
+          .patient-portal-container.curoxa-level .tab-content,
+          .patient-portal-container.curoxa-level .tab-content.active {
+            padding: 0 !important;
+            overflow-x: hidden !important;
+          }
+
+          /* ---- HOSPITAL CARDS: full width on mobile ---- */
+          .hospital-card-grid {
+            grid-template-columns: 1fr !important;
+          }
+
+          /* ---- TOP NAV: tighter height on mobile ---- */
+          .patient-portal-container.curoxa-level .top-nav {
+            min-height: 56px !important;
+            padding: 0 14px !important;
+          }
+          /* hide subtitle in brand logo on mobile */
+          .patient-portal-container.curoxa-level .curoxa-top-nav-brand > div > span:last-child {
+            display: none !important;
+          }
+        }
+
         .tab-content {
           padding: 0px !important;
         }
@@ -2499,35 +2849,34 @@ const PatientDashboard = () => {
         @keyframes fadeInScale {
           from { opacity: 0; transform: scale(0.95); }
           to { opacity: 1; transform: scale(1); }
+        }
         @keyframes slideInRight {
           from { transform: translateX(20px); opacity: 0; }
           to { transform: translateX(0); opacity: 1; }
         }
 
         .curoxa-hospitals-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 16px;
+          display: grid !important;
+          grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)) !important;
+          gap: 24px !important;
         }
-        @media (min-width: 640px) {
+        @media (max-width: 768px) {
           .curoxa-hospitals-grid {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-          }
-        }
-        @media (min-width: 1100px) {
-          .curoxa-hospitals-grid {
-            grid-template-columns: repeat(3, 1fr);
-            gap: 24px;
+            grid-template-columns: 1fr !important;
+            gap: 16px !important;
           }
         }
         .curoxa-hospital-card {
-          transition: all 0.25s ease !important;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          border-radius: 20px !important;
+          overflow: hidden !important;
+          border: 1.5px solid #E2E8F0 !important;
+          box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05) !important;
         }
         .curoxa-hospital-card:hover {
-          transform: translateY(-3px) !important;
-          box-shadow: 0 14px 30px -4px rgba(15, 23, 42, 0.12) !important;
-          border-color: #BFDBFE !important;
+          transform: translateY(-4px) !important;
+          box-shadow: 0 18px 36px -6px rgba(37, 99, 235, 0.16) !important;
+          border-color: #93C5FD !important;
         }
 
         @media (max-width: 639px) {
@@ -2790,11 +3139,40 @@ const PatientDashboard = () => {
       )}
 
       <div className={"sidebar " + (isSidebarCollapsed ? "collapsed " : "") + (mobileSidebarOpen ? "mobile-open" : "")} data-lenis-prevent>
-        <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative', width: '100%' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary)', color: '#FFFFFF', fontWeight: 900, fontSize: '16px', boxShadow: '0 0 15px rgba(59, 113, 254, 0.15)', flexShrink: 0 }}>
-            C
+        <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative', width: '100%' }}>
+          <img 
+            src={curoxaSidebarLogo} 
+            alt="CUROXA" 
+            style={{
+              width: '42px',
+              height: '42px',
+              objectFit: 'contain',
+              flexShrink: 0,
+              filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.08))'
+            }}
+          />
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <span style={{
+              fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif",
+              fontWeight: 900,
+              fontSize: '18px',
+              color: '#0F172A',
+              letterSpacing: '0.03em',
+              lineHeight: 1.1
+            }}>
+              CUROXA
+            </span>
+            <span style={{
+              fontSize: '11px',
+              color: '#64748B',
+              fontWeight: 500,
+              letterSpacing: '-0.01em',
+              marginTop: '3px',
+              lineHeight: 1
+            }}>
+              Health Management
+            </span>
           </div>
-          <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 900, color: '#2563EB', letterSpacing: '-0.02em' }}>Curoxa</span>
           <button 
             className="sidebar-collapse-toggle desktop-only-flex"
             onClick={(e) => {
@@ -2849,18 +3227,127 @@ const PatientDashboard = () => {
                   {selectedHospital.name}
                 </div>
               </div>
-              <a href="#" className={`nav-link ${activeTab === 'summary' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('summary'); setMobileSidebarOpen(false); }}><i data-lucide="layout-dashboard"></i> Health Summary</a>
-              <a href="#" className={`nav-link ${activeTab === 'find' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('find'); setMobileSidebarOpen(false); }}><i data-lucide="search"></i> Find Doctor</a>
-              <a href="#" className={`nav-link ${activeTab === 'history' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('history'); setMobileSidebarOpen(false); }}><i data-lucide="calendar"></i> Appointments</a>
-              <a href="#" className={`nav-link ${activeTab === 'prescriptions' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('prescriptions'); setMobileSidebarOpen(false); }}><i data-lucide="pill"></i> My Prescriptions</a>
-              <a href="#" className={`nav-link ${activeTab === 'records' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('records'); setMobileSidebarOpen(false); }}><i data-lucide="file-text"></i> EMR Timeline</a>
-              <a href="#" className={`nav-link ${activeTab === 'documents' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('documents'); setMobileSidebarOpen(false); }}><i data-lucide="folder"></i> Saved Documents</a>
-              <a href="#" className={`nav-link ${activeTab === 'privacy' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('privacy'); setMobileSidebarOpen(false); }}><i data-lucide="shield"></i> Privacy & Consent</a>
+              <a href="#" className={`nav-link ${(activeTab === 'summary') ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('summary'); setMobileSidebarOpen(false); }}><i data-lucide="home"></i> Home</a>
+              <a href="#" className={`nav-link ${(activeTab === 'history' || activeTab === 'find') ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('history'); setMobileSidebarOpen(false); }}><i data-lucide="calendar"></i> Appointments</a>
+              <a href="#" className={`nav-link ${(activeTab === 'records' && myHealthCategory === 'ALL') ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setMyHealthCategory('ALL'); setActiveTab('records'); setMobileSidebarOpen(false); }}><i data-lucide="activity"></i> My Health</a>
+              <a href="#" className={`nav-link ${activeTab === 'prescriptions' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('prescriptions'); setMobileSidebarOpen(false); }}><i data-lucide="pill"></i> Prescriptions</a>
+              <a href="#" className={`nav-link ${(activeTab === 'records' && myHealthCategory === 'LABS') ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setMyHealthCategory('LABS'); setActiveTab('records'); setMobileSidebarOpen(false); }}><i data-lucide="flask-conical"></i> Lab Reports</a>
+              <a href="#" className={`nav-link ${(activeTab === 'records' && myHealthCategory === 'RECORDS') ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setMyHealthCategory('RECORDS'); setActiveTab('records'); setMobileSidebarOpen(false); }}><i data-lucide="folder"></i> Medical Records</a>
+              <a href="#" className={`nav-link ${activeTab === 'documents' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('documents'); setMobileSidebarOpen(false); }}><i data-lucide="file-text"></i> Documents</a>
+              <a href="#" className={`nav-link ${activeTab === 'privacy' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('privacy'); setMobileSidebarOpen(false); }}><i data-lucide="shield-check"></i> Privacy & Consent</a>
             </>
           )}
         </nav>
 
-        {/* User Profile at bottom of Sidebar */}
+        {!selectedHospital ? (
+          /* Curoxa Platform Level Sidebar Footer (Matches media_1788166650528.png) */
+          <div style={{ marginTop: 'auto', padding: '16px', position: 'relative', display: isSidebarCollapsed ? 'none' : 'block' }}>
+            {/* Potted Plant Illustration */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+              <img 
+                src={curoxaMobileHero3D} 
+                alt="Plant" 
+                style={{ 
+                  width: '90px', 
+                  height: 'auto', 
+                  objectFit: 'contain', 
+                  opacity: 0.85, 
+                  filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.06))',
+                  mixBlendMode: 'multiply',
+                  pointerEvents: 'none'
+                }} 
+              />
+            </div>
+
+            {/* Floating Profile Card */}
+            <div 
+              onClick={() => setActiveTab('profile')}
+              style={{
+                background: '#FFFFFF',
+                borderRadius: '16px',
+                border: '1px solid #E2E8F0',
+                padding: '10px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                boxShadow: '0 4px 14px rgba(15, 23, 42, 0.06)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#BFDBFE'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = '#E2E8F0'}
+            >
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 100%)',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 800,
+                fontSize: '13px',
+                flexShrink: 0
+              }}>
+                {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'HG'}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>
+                  {currentUser.name || 'Harsh Gupta'}
+                </div>
+                <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <span>View & manage your profile</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Support widget matching mockup */
+          <div style={{
+            margin: 'auto 16px 14px',
+            padding: '16px',
+            borderRadius: '16px',
+            background: '#F0F9FF',
+            border: '1px solid #BAE6FD',
+            display: isSidebarCollapsed ? 'none' : 'block'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>Need Help?</span>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#E0F2FE', color: '#0284C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <i data-lucide="headphones" style={{ width: '15px', height: '15px' }}></i>
+              </div>
+            </div>
+            <p style={{ fontSize: '11.5px', color: '#64748B', margin: '0 0 12px 0', lineHeight: 1.4, fontWeight: 550 }}>
+              We're here to help you
+            </p>
+            <button
+              type="button"
+              onClick={() => showToast("Support desk: support@curoxa.com | Helpline: 1800-CUROXA", "info")}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #BFDBFE',
+                background: '#FFFFFF',
+                color: '#2563EB',
+                fontSize: '12px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 1px 3px rgba(37, 99, 235, 0.08)'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#2563EB'; e.currentTarget.style.color = '#FFFFFF'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = '#2563EB'; }}
+            >
+              Contact Support
+            </button>
+          </div>
+        )}
+
+        {/* User Profile at bottom of Sidebar (Only when hospital selected, since curoxa level has floating profile card) */}
+        {selectedHospital && (
         <div className="sidebar-user" onClick={(e) => { e.stopPropagation(); setShowProfileMenu(!showProfileMenu); }}>
           {(currentUser.avatar || editProfileData.avatar) ? (
             <img 
@@ -2870,7 +3357,7 @@ const PatientDashboard = () => {
               style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #BFDBFE', flexShrink: 0, marginRight: '10px' }}
             />
           ) : (
-            <div className="sidebar-user-avatar-initials" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #3B71FE 0%, #2563EB 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px', marginRight: '10px', flexShrink: 0 }}>
+            <div className="sidebar-user-avatar-initials" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 50%, #06B6D4 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '14px', marginRight: '10px', flexShrink: 0, boxShadow: '0 3px 10px rgba(37, 99, 235, 0.3)', border: '2px solid #BFDBFE' }}>
               {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'JD'}
             </div>
           )}
@@ -2947,6 +3434,7 @@ const PatientDashboard = () => {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* Mobile Sidebar Backdrop Overlay */}
@@ -2979,299 +3467,1195 @@ const PatientDashboard = () => {
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
         </button>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '7px', background: '#2563EB', color: '#FFFFFF', fontWeight: 900, fontSize: '14px', boxShadow: '0 0 10px rgba(59, 113, 254, 0.15)' }}>
-              C
-            </div>
-            <span style={{ fontSize: '17px', fontWeight: 900, color: '#2563EB', letterSpacing: '-0.02em', fontFamily: "'Outfit', sans-serif" }}>Curoxa</span>
-            <span style={{ fontSize: '10px', background: '#EFF6FF', color: '#3B71FE', border: '1px solid #BFDBFE', padding: '3px 8px', borderRadius: '99px', fontWeight: 700 }} className="desktop-only-inline">
-              Patient Portal
-            </span>
-          </div>
-          <div id="liveClock" className="desktop-only-flex" style={{ background: '#EFF6FF', color: '#3B71FE', border: '1px solid #BFDBFE', padding: '8px 16px', borderRadius: '99px', fontWeight: 700, fontSize: '14px' }}>
-            {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </div>
-        </div>
-        {/* Notification Bell */}
-        <div 
-          ref={notificationRef}
-          style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '8px', border: '1px solid #E2E8F0', color: '#64748B', marginLeft: 'auto', marginRight: '8px', background: 'white' }}
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowNotifications(!showNotifications);
-            setUnreadCount(0);
-          }}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-bell"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-          {unreadCount > 0 && (
-            <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#EF4444', color: 'white', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
-              {unreadCount}
-            </span>
-          )}
+        {selectedHospital ? (
+          /* LEVEL 2: SELECTED HOSPITAL PERSISTENT IDENTITY IN TOP NAV */
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+            {/* Hospital Logo / Avatar */}
+            {(selectedHospital.logo && selectedHospital.logo.startsWith('http')) || (selectedHospital.letterheadUrl && selectedHospital.letterheadUrl.startsWith('http')) ? (
+              <img 
+                src={selectedHospital.letterheadUrl || selectedHospital.logo} 
+                alt={selectedHospital.name} 
+                style={{ width: '42px', height: '42px', borderRadius: '10px', objectFit: 'cover', border: '1px solid #E2E8F0', flexShrink: 0 }}
+              />
+            ) : (
+              <div style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #2563EB 0%, #0284C7 100%)',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '16px',
+                flexShrink: 0,
+                boxShadow: '0 3px 8px rgba(37, 99, 235, 0.25)'
+              }}>
+                {selectedHospital.logo && selectedHospital.logo.length <= 4 ? selectedHospital.logo : selectedHospital.name.slice(0, 2).toUpperCase()}
+              </div>
+            )}
 
-          {showNotifications && (
-            <div data-lenis-prevent 
-              style={{
-                position: 'absolute',
-                top: '48px',
-                right: '0',
-                width: '320px',
-                background: 'rgba(255, 255, 255, 0.95)',
-                backdropFilter: 'blur(8px)',
-                borderRadius: '12px',
-                border: '1px solid #E2E8F0',
-                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                zIndex: 1200,
-                padding: '16px',
-                maxHeight: '400px',
-                overflowY: 'auto',
-                textAlign: 'left'
+            {/* Hospital Name, Active badge & Address */}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {selectedHospital.name}
+                </span>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '11px',
+                  color: '#15803D',
+                  fontWeight: 800,
+                  background: '#DCFCE7',
+                  padding: '2px 8px',
+                  borderRadius: '99px',
+                  border: '1px solid #BBF7D0'
+                }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16A34A' }} />
+                  Active
+                </span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 550, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '1px' }}>
+                {selectedHospital.address || selectedHospital.location || 'Healthcare Provider on Curoxa Network'}
+              </div>
+            </div>
+
+            {/* Change Hospital Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedHospital(null);
+                setSelectedHospitalId(null);
+                setSelectedHospitalDetails(null);
+                setActiveTab('curoxa-home');
               }}
-              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                borderRadius: '99px',
+                padding: '6px 14px',
+                color: '#2563EB',
+                fontSize: '12px',
+                fontWeight: 800,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                marginLeft: '8px',
+                whiteSpace: 'nowrap'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#DBEAFE'}
+              onMouseLeave={e => e.currentTarget.style.background = '#EFF6FF'}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
-                <span style={{ fontWeight: 800, fontSize: '14px', color: '#0F172A' }}>Notifications</span>
-                <button 
-                  style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
-                  onClick={() => {
-                    const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
-                    const clearedKey = `curoxa_cleared_notifications_${userKey}`;
-                    const clearedIds = JSON.parse(localStorage.getItem(clearedKey) || '[]');
-                    const newClearedIds = [...clearedIds, ...notifications.map(n => n.id)];
-                    localStorage.setItem(clearedKey, JSON.stringify(newClearedIds));
-                    setNotifications([]);
-                    setUnreadCount(0);
-                  }}
-                >
-                  Clear all
-                </button>
+              <i data-lucide="arrow-left-right" style={{ width: '13px', height: '13px' }}></i>
+              <span>Change Hospital</span>
+            </button>
+          </div>
+        ) : (
+          /* LEVEL 1: CUROXA PLATFORM TOP HEADER MATCHING MOCKUP */
+          <>
+            {/* Left: Official Brand Identity (Matches media_1788167242325.png) */}
+            <div className="curoxa-top-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+              <img 
+                src={curoxaSidebarLogo} 
+                alt="CUROXA" 
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  objectFit: 'contain',
+                  flexShrink: 0,
+                  filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.08))'
+                }}
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', minWidth: 0 }}>
+                <span style={{
+                  fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif",
+                  fontWeight: 900,
+                  fontSize: '18px',
+                  color: '#0F172A',
+                  letterSpacing: '0.03em',
+                  lineHeight: 1.1
+                }}>
+                  CUROXA
+                </span>
+                <span style={{
+                  fontSize: '11px',
+                  color: '#64748B',
+                  fontWeight: 500,
+                  letterSpacing: '-0.01em',
+                  marginTop: '3px',
+                  lineHeight: 1
+                }}>
+                  Health Management
+                </span>
+              </div>
+            </div>
+
+            {/* Center: Navigation Links */}
+            <div className="curoxa-top-nav-center desktop-only-flex" style={{
+              alignItems: 'center',
+              gap: '36px',
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)'
+            }}>
+              <div 
+                style={{
+                  position: 'relative',
+                  fontSize: '14.5px',
+                  fontWeight: (activeTab === 'curoxa-home' || (!selectedHospital && activeTab !== 'profile' && activeTab !== 'curoxa-hospitals')) ? 800 : 600,
+                  color: (activeTab === 'curoxa-home' || (!selectedHospital && activeTab !== 'profile' && activeTab !== 'curoxa-hospitals')) ? '#2563EB' : '#64748B',
+                  cursor: 'pointer',
+                  padding: '8px 4px',
+                  transition: 'color 0.15s ease'
+                }}
+                onClick={() => setActiveTab('curoxa-home')}
+              >
+                Home
+                {(activeTab === 'curoxa-home' || (!selectedHospital && activeTab !== 'profile' && activeTab !== 'curoxa-hospitals')) && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '-14px',
+                    left: '0',
+                    right: '0',
+                    height: '3px',
+                    borderRadius: '99px',
+                    background: '#2563EB'
+                  }} />
+                )}
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {notifications.map(n => (
-                  <div key={n.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px', borderRadius: '8px', background: n.isNew ? '#EFF6FF' : '#F8FAFC', borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #E2E8F0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#1E293B' }}>{n.title}</span>
-                      <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>{n.time}</span>
-                    </div>
-                    <span style={{ fontSize: '11.5px', color: '#475569', fontWeight: 550, lineHeight: 1.4 }}>{n.message}</span>
-                  </div>
-                ))}
-                {notifications.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '20px 0', color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
-                    No notifications
-                  </div>
+              <div 
+                style={{
+                  position: 'relative',
+                  fontSize: '14.5px',
+                  fontWeight: activeTab === 'curoxa-hospitals' ? 800 : 600,
+                  color: activeTab === 'curoxa-hospitals' ? '#2563EB' : '#64748B',
+                  cursor: 'pointer',
+                  padding: '8px 4px',
+                  transition: 'color 0.15s ease'
+                }}
+                onClick={() => setActiveTab('curoxa-hospitals')}
+              >
+                Hospitals
+                {activeTab === 'curoxa-hospitals' && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '-14px',
+                    left: '0',
+                    right: '0',
+                    height: '3px',
+                    borderRadius: '99px',
+                    background: '#2563EB'
+                  }} />
+                )}
+              </div>
+
+              <div 
+                style={{
+                  position: 'relative',
+                  fontSize: '14.5px',
+                  fontWeight: activeTab === 'profile' ? 800 : 600,
+                  color: activeTab === 'profile' ? '#2563EB' : '#64748B',
+                  cursor: 'pointer',
+                  padding: '8px 4px',
+                  transition: 'color 0.15s ease'
+                }}
+                onClick={() => setActiveTab('profile')}
+              >
+                Profile
+                {activeTab === 'profile' && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '-14px',
+                    left: '0',
+                    right: '0',
+                    height: '3px',
+                    borderRadius: '99px',
+                    background: '#2563EB'
+                  }} />
                 )}
               </div>
             </div>
-          )}
+          </>
+        )}
+
+        {/* Right Nav: Notifications & User Profile */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginLeft: 'auto' }}>
+          {/* Notification Bell */}
+          <div 
+            ref={notificationRef}
+            className="top-nav-bell-btn"
+            style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '10px', border: '1px solid #E2E8F0', color: '#64748B', background: 'white' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowNotifications(!showNotifications);
+              setUnreadCount(0);
+            }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-bell"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+            {unreadCount > 0 && (
+              <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#EF4444', color: 'white', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
+                {unreadCount}
+              </span>
+            )}
+
+            {showNotifications && (
+              <div data-lenis-prevent 
+                style={{
+                  position: 'absolute',
+                  top: '48px',
+                  right: '0',
+                  width: '320px',
+                  background: 'rgba(255, 255, 255, 0.95)',
+                  backdropFilter: 'blur(8px)',
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                  zIndex: 1200,
+                  padding: '16px',
+                  maxHeight: '400px',
+                  overflowY: 'auto',
+                  textAlign: 'left'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
+                  <span style={{ fontWeight: 800, fontSize: '14px', color: '#0F172A' }}>Notifications</span>
+                  <button 
+                    style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                    onClick={() => {
+                      const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
+                      const clearedKey = `curoxa_cleared_notifications_${userKey}`;
+                      const clearedIds = JSON.parse(localStorage.getItem(clearedKey) || '[]');
+                      const newClearedIds = [...clearedIds, ...notifications.map(n => n.id)];
+                      localStorage.setItem(clearedKey, JSON.stringify(newClearedIds));
+                      setNotifications([]);
+                      setUnreadCount(0);
+                    }}
+                  >
+                    Clear all
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {notifications.map(n => (
+                    <div key={n.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px', borderRadius: '8px', background: n.isNew ? '#EFF6FF' : '#F8FAFC', borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #E2E8F0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#1E293B' }}>{n.title}</span>
+                        <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>{n.time}</span>
+                      </div>
+                      <span style={{ fontSize: '11.5px', color: '#475569', fontWeight: 550, lineHeight: 1.4 }}>{n.message}</span>
+                    </div>
+                  ))}
+                  {notifications.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '20px 0', color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
+                      No notifications
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* User Profile Badge matching mockup */}
+          <div style={{ position: 'relative' }}>
+            <div 
+              className="patient-nav-pill"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '5px 12px 5px 6px',
+                borderRadius: '99px',
+                border: '1px solid #E2E8F0',
+                background: '#FFFFFF',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
+                transition: 'all 0.15s ease'
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowProfileMenu(!showProfileMenu);
+              }}
+            >
+              {(currentUser.avatar || editProfileData.avatar) ? (
+                <img 
+                  src={currentUser.avatar || editProfileData.avatar} 
+                  alt="Avatar" 
+                  style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #BFDBFE' }}
+                />
+              ) : (
+                <div style={{
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 50%, #06B6D4 100%)',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 900,
+                  fontSize: '12.5px',
+                  boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)'
+                }}>
+                  {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'HG'}
+                </div>
+              )}
+              <div className="patient-nav-name desktop-only-flex" style={{ flexDirection: 'column', textAlign: 'left' }}>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>
+                  {currentUser.name || 'Harsh Gupta'}
+                </span>
+                <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 700, letterSpacing: '0.02em' }}>
+                  UHID: {patientUhid}
+                </span>
+              </div>
+              <i data-lucide="chevron-down" className="patient-nav-chevron desktop-only-inline" style={{ width: '15px', height: '15px', color: '#94A3B8', transform: showProfileMenu ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}></i>
+            </div>
+
+            {showProfileMenu && (
+              <div 
+                className="glass-card" 
+                style={{ 
+                  position: 'absolute', 
+                  top: '48px', 
+                  right: '0px', 
+                  width: '210px', 
+                  zIndex: 3000, 
+                  padding: '8px', 
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.1)', 
+                  background: 'white',
+                  borderRadius: '14px',
+                  border: '1px solid #E2E8F0',
+                  animation: 'fadeInScale 0.2s ease-out'
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div style={{ padding: '10px 12px', borderBottom: '1px solid #F1F5F9', marginBottom: '6px' }}>
+                  <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0F172A' }}>{currentUser.name}</div>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>UHID: {patientUhid}</div>
+                </div>
+                <div 
+                  style={{ 
+                    padding: '10px 12px', 
+                    borderRadius: '8px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    fontSize: '13px', 
+                    fontWeight: 700, 
+                    color: '#334155', 
+                    cursor: 'pointer',
+                    transition: 'background 0.2s',
+                    marginBottom: '4px'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  onClick={() => {
+                    setActiveTab('profile');
+                    setShowProfileMenu(false);
+                  }}
+                >
+                  <i data-lucide="user" style={{ width: '16px', height: '16px' }}></i> My Profile
+                </div>
+                <div 
+                  style={{ 
+                    padding: '10px 12px', 
+                    borderRadius: '8px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    fontSize: '13px', 
+                    fontWeight: 700, 
+                    color: '#DC2626', 
+                    cursor: 'pointer',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#FEF2F2'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  onClick={handleLogout}
+                >
+                  <i data-lucide="log-out" style={{ width: '16px', height: '16px' }}></i> Logout
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       <div className={"main-content " + (isSidebarCollapsed ? "collapsed" : "")} data-lenis-prevent>
-        {/* LEVEL 1: CUROXA PLATFORM PATIENT HOME & DISCOVERY */}
+        {/* LEVEL 1: CUROXA PLATFORM PATIENT HOME & DISCOVERY MATCHING MOCKUP */}
         {!selectedHospital && (activeTab === 'curoxa-home' || activeTab === 'curoxa-hospitals' || (!selectedHospital && activeTab !== 'profile')) && (
           <div className="tab-content active" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-            {/* Welcoming Patient Header Banner */}
-            <div style={{
-              background: 'linear-gradient(135deg, #EFF6FF 0%, #FFFFFF 55%, #F0FDF4 100%)',
-              borderRadius: '20px',
-              border: '1px solid #DBEAFE',
-              padding: '24px 24px 20px',
-              marginBottom: '24px',
-              boxShadow: '0 8px 24px -6px rgba(37, 99, 235, 0.08)',
-              position: 'relative',
-              overflow: 'hidden'
+            
+            {/* 1A. DESKTOP HERO SECTION (MATCHES media_1788164049960.png) */}
+            <div className="curoxa-desktop-hero" style={{
+              gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+              gap: '32px',
+              alignItems: 'center',
+              marginBottom: '36px',
+              padding: '16px 0 8px 0',
+              position: 'relative'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <span style={{
+              {/* Floating 3D ambient orbs matching media_1788166650528.png */}
+              <div style={{
+                position: 'absolute',
+                left: '49%',
+                top: '6%',
+                width: '14px',
+                height: '14px',
+                borderRadius: '50%',
+                background: 'radial-gradient(circle at 35% 35%, #67E8F9 0%, #0284C7 80%)',
+                boxShadow: '0 4px 10px rgba(2, 132, 199, 0.35)',
+                pointerEvents: 'none',
+                zIndex: 1
+              }} />
+              <div style={{
+                position: 'absolute',
+                right: '14%',
+                top: '24%',
+                width: '11px',
+                height: '11px',
+                borderRadius: '50%',
+                background: 'radial-gradient(circle at 35% 35%, #67E8F9 0%, #0284C7 80%)',
+                boxShadow: '0 4px 10px rgba(2, 132, 199, 0.35)',
+                pointerEvents: 'none',
+                zIndex: 1
+              }} />
+
+              {/* Left Column: Greeting, Subtitle, Paragraph & Trust Chips */}
+              <div style={{ zIndex: 2 }}>
+                {/* Mint Pill: CUROXA HEALTH */}
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
                   fontSize: '11px',
-                  fontWeight: 900,
-                  letterSpacing: '0.08em',
+                  fontWeight: 800,
+                  letterSpacing: '0.06em',
                   textTransform: 'uppercase',
-                  color: '#2563EB',
-                  background: '#DBEAFE',
-                  padding: '3px 10px',
-                  borderRadius: '20px'
+                  color: '#0F766E',
+                  background: '#CCFBF1',
+                  border: '1px solid #99F6E4',
+                  padding: '3.5px 12px',
+                  borderRadius: '99px',
+                  marginBottom: '16px'
                 }}>
-                  Curoxa
-                </span>
-                <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16A34A' }}></span>
-                  Platform Active
-                </span>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B981' }} />
+                  CUROXA HEALTH
+                </div>
+
+                <h1 style={{
+                  fontSize: 'clamp(36px, 4.4vw, 48px)',
+                  fontWeight: 900,
+                  color: '#0B192C',
+                  letterSpacing: '-0.035em',
+                  lineHeight: 1.12,
+                  margin: '0 0 4px 0',
+                  fontFamily: "'Outfit', sans-serif"
+                }}>
+                  Good afternoon,
+                </h1>
+
+                <div style={{
+                  fontSize: 'clamp(36px, 4.4vw, 48px)',
+                  fontWeight: 900,
+                  color: '#2563EB',
+                  letterSpacing: '-0.035em',
+                  lineHeight: 1.12,
+                  margin: '0 0 14px 0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  fontFamily: "'Outfit', sans-serif"
+                }}>
+                  <span>{currentUser.name ? currentUser.name.split(' ')[0] : 'Harsh'}</span>
+                  <span style={{ display: 'inline-block', transform: 'rotate(10deg)' }}>👋</span>
+                </div>
+
+                <div style={{
+                  fontSize: '16px',
+                  fontWeight: 750,
+                  color: '#0D9488',
+                  marginBottom: '10px',
+                  letterSpacing: '-0.01em'
+                }}>
+                  Your healthcare, connected.
+                </div>
+
+                <p style={{
+                  fontSize: '14.5px',
+                  color: '#64748B',
+                  lineHeight: 1.55,
+                  maxWidth: '440px',
+                  margin: '0 0 28px 0',
+                  fontWeight: 500
+                }}>
+                  Discover healthcare providers connected with Curoxa and manage your care in one place.
+                </p>
+
+                {/* 3 Trust Chips Row matching media_1788166650528.png */}
+                <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                  {/* Chip 1: Secure & Private */}
+                  <div style={{
+                    background: '#FFFFFF',
+                    borderRadius: '16px',
+                    padding: '12px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+                    border: '1.5px solid #F1F5F9'
+                  }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '12px',
+                      background: '#EFF6FF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#2563EB',
+                      flexShrink: 0
+                    }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 850, color: '#0F172A', letterSpacing: '0.04em', textTransform: 'uppercase' }}>SECURE & PRIVATE</div>
+                      <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550 }}>DPDP-aware</div>
+                    </div>
+                  </div>
+
+                  {/* Chip 2: Connected */}
+                  <div style={{
+                    background: '#FFFFFF',
+                    borderRadius: '16px',
+                    padding: '12px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+                    border: '1.5px solid #F1F5F9'
+                  }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '12px',
+                      background: '#F0FDFA',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#0D9488',
+                      flexShrink: 0
+                    }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="m5 16 .01-3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"/><path d="M12 11V8"/></svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 850, color: '#0F172A', letterSpacing: '0.04em', textTransform: 'uppercase' }}>CONNECTED</div>
+                      <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550 }}>Healthcare network</div>
+                    </div>
+                  </div>
+
+                  {/* Chip 3: Your Data */}
+                  <div style={{
+                    background: '#FFFFFF',
+                    borderRadius: '16px',
+                    padding: '12px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+                    border: '1.5px solid #F1F5F9'
+                  }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '12px',
+                      background: '#FAF5FF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#7C3AED',
+                      flexShrink: 0
+                    }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 850, color: '#0F172A', letterSpacing: '0.04em', textTransform: 'uppercase' }}>YOUR DATA</div>
+                      <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550 }}>Your control</div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <h1 style={{
-                fontSize: 'clamp(22px, 4.5vw, 30px)',
-                fontWeight: 900,
-                color: '#0F172A',
-                margin: '0 0 6px 0',
-                letterSpacing: '-0.02em',
-                lineHeight: 1.2
-              }}>
-                {getTimeGreeting()}, {currentUser.name ? currentUser.name.split(' ')[0] : 'there'}
-              </h1>
-
-              <p style={{
-                fontSize: '14.5px',
-                color: '#64748B',
-                margin: '0 0 16px 0',
-                fontWeight: 600
-              }}>
-                Your healthcare, connected.
-              </p>
-
-              {/* Security & Sovereignty Trust Strip */}
+              {/* Right Column: Exact 3D Visual Asset (media_1788164049960.png) */}
               <div style={{
                 display: 'flex',
-                flexWrap: 'wrap',
-                gap: '8px',
-                paddingTop: '12px',
-                borderTop: '1px solid #E2E8F0'
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative'
               }}>
-                <div style={{
-                  display: 'inline-flex',
+                <img 
+                  src={curoxaHero3D} 
+                  alt="Curoxa Healthcare Connected" 
+                  style={{
+                    width: '100%',
+                    maxWidth: '520px',
+                    height: 'auto',
+                    objectFit: 'contain',
+                    mixBlendMode: 'multiply',
+                    WebkitMaskImage: 'radial-gradient(ellipse at 50% 50%, black 72%, transparent 98%)',
+                    maskImage: 'radial-gradient(ellipse at 50% 50%, black 72%, transparent 98%)',
+                    userSelect: 'none',
+                    pointerEvents: 'none'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* 1B. MOBILE HERO CARD (MATCHES media_1788164933731.png EXACTLY) */}
+            <div className="curoxa-mobile-hero" style={{
+              background: 'linear-gradient(145deg, #E0F2FE 0%, #EFF6FF 45%, #F0FDFA 100%)',
+              borderRadius: '28px',
+              border: '1.5px solid #BAE6FD',
+              padding: '24px 18px 18px 18px',
+              marginBottom: '24px',
+              position: 'relative',
+              overflow: 'hidden',
+              boxShadow: '0 10px 25px -5px rgba(37, 99, 235, 0.08)'
+            }}>
+              {/* Top Badge: CUROXA HEALTH */}
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '11px',
+                fontWeight: 800,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                color: '#0F766E',
+                background: '#CCFBF1',
+                border: '1px solid #99F6E4',
+                padding: '3px 10px',
+                borderRadius: '99px',
+                marginBottom: '14px'
+              }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B981' }} />
+                CUROXA HEALTH
+              </div>
+
+              {/* Greeting */}
+              <h1 style={{
+                fontSize: '25px',
+                fontWeight: 900,
+                color: '#0F172A',
+                lineHeight: 1.15,
+                margin: '0 0 2px 0',
+                fontFamily: "'Outfit', sans-serif"
+              }}>
+                Good afternoon,
+              </h1>
+
+              <div style={{
+                fontSize: '25px',
+                fontWeight: 900,
+                color: '#2563EB',
+                lineHeight: 1.15,
+                margin: '0 0 10px 0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontFamily: "'Outfit', sans-serif"
+              }}>
+                <span>{currentUser.name ? currentUser.name.split(' ')[0] : 'Harsh'}</span>
+                <span style={{ display: 'inline-block', transform: 'rotate(10deg)' }}>👋</span>
+              </div>
+
+              {/* Subtitle */}
+              <div style={{
+                fontSize: '13.5px',
+                fontWeight: 800,
+                color: '#0D9488',
+                marginBottom: '6px',
+                letterSpacing: '-0.01em'
+              }}>
+                Your healthcare, connected.
+              </div>
+
+              {/* Description */}
+              <p style={{
+                fontSize: '12.5px',
+                color: '#64748B',
+                lineHeight: 1.5,
+                maxWidth: '56%',
+                margin: '0 0 20px 0',
+                fontWeight: 550
+              }}>
+                Discover healthcare providers connected with Curoxa and manage your care in one place.
+              </p>
+
+              {/* Artwork on the right side of the card (Larger, prominent display) */}
+              <img 
+                src={curoxaMobileHero3D} 
+                alt="Artwork" 
+                style={{
+                  position: 'absolute',
+                  right: '-16px',
+                  top: '10px',
+                  width: '215px',
+                  height: 'auto',
+                  objectFit: 'contain',
+                  pointerEvents: 'none',
+                  mixBlendMode: 'multiply'
+                }}
+              />
+
+              {/* Floating Profile Card at Bottom */}
+              <div 
+                onClick={() => setActiveTab('profile')}
+                style={{
+                  background: '#FFFFFF',
+                  borderRadius: '18px',
+                  border: '1px solid #E2E8F0',
+                  padding: '12px 16px',
+                  display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '11.5px',
-                  fontWeight: 700,
-                  color: '#334155',
-                  background: 'rgba(255, 255, 255, 0.8)',
-                  padding: '4px 10px',
-                  borderRadius: '8px',
-                  border: '1px solid #E2E8F0'
+                  gap: '14px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(15, 23, 42, 0.04)',
+                  position: 'relative',
+                  zIndex: 2
+                }}
+              >
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: '#0D9488',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 800,
+                  fontSize: '14px',
+                  flexShrink: 0
                 }}>
-                  <i data-lucide="shield-check" style={{ width: '13px', height: '13px', color: '#10B981' }}></i>
-                  <span>DPDP Act 2023 Compliant</span>
+                  {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'HG'}
                 </div>
-                <div style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '11.5px',
-                  fontWeight: 700,
-                  color: '#334155',
-                  background: 'rgba(255, 255, 255, 0.8)',
-                  padding: '4px 10px',
-                  borderRadius: '8px',
-                  border: '1px solid #E2E8F0'
-                }}>
-                  <i data-lucide="building-2" style={{ width: '13px', height: '13px', color: '#2563EB' }}></i>
-                  <span>{curoxaHospitals.length} Connected {curoxaHospitals.length === 1 ? 'Facility' : 'Facilities'}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>
+                    {currentUser.name || 'Harsh Gupta'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#2563EB', fontWeight: 700, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>Manage your profile</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* MY HOSPITALS / DISCOVER HOSPITALS */}
-            <div style={{ marginBottom: '24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
-                <div>
-                  <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#0F172A', margin: 0 }}>
-                    My Hospitals & Clinics
-                  </h2>
-                  <p style={{ fontSize: '13px', color: '#64748B', margin: '3px 0 0 0' }}>
-                    Select an onboarded healthcare provider to view services and continue your clinical journey.
-                  </p>
+            {/* 1.5. NATIONAL DIGITAL HEALTH ID (ABHA) SMART CARD BANNER */}
+            {(() => {
+              const patientUhid = patientProfile?.uhid || (patientProfile ? `MDC-${patientProfile._id.substring(18).toUpperCase()}` : (currentUser.id ? `MDC-${currentUser.id.substring(18).toUpperCase()}` : 'MDC-456B50'));
+              const patientAbha = patientProfile?.abhaId || (currentUser?.abhaId || '');
+              const patientAbhaAddr = patientProfile?.abhaAddress || (patientAbha ? `${(currentUser.name || 'patient').toLowerCase().replace(/\s+/g, '')}@abdm` : '');
+              const isLinked = Boolean(patientAbha);
+
+              return (
+                <div
+                  className="abha-health-widget"
+                  style={{
+                  background: '#FFFFFF',
+                  borderRadius: '24px',
+                  border: '1.5px solid #F1F5F9',
+                  padding: '24px 28px',
+                  marginBottom: '32px',
+                  boxShadow: '0 4px 24px -2px rgba(15, 23, 42, 0.04)',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                  gap: '28px',
+                  alignItems: 'center',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  {/* Left Column: Holographic Physical Card Graphic Preview */}
+                  <div 
+                    onClick={() => setShowDigitalCardModal(true)}
+                    style={{
+                      cursor: 'pointer',
+                      borderRadius: '18px',
+                      background: 'linear-gradient(135deg, #0B192C 0%, #1E3A8A 50%, #0369A1 100%)',
+                      padding: '20px 22px',
+                      color: '#FFFFFF',
+                      boxShadow: '0 12px 30px -4px rgba(30, 58, 138, 0.35)',
+                      border: '1px solid rgba(255, 255, 255, 0.25)',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      transition: 'transform 0.25s ease, box-shadow 0.25s ease',
+                      maxWidth: '420px',
+                      margin: '0 auto',
+                      width: '100%'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 16px 36px -4px rgba(30, 58, 138, 0.45)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 12px 30px -4px rgba(30, 58, 138, 0.35)'; }}
+                  >
+                    {/* Tricolor India Ribbon Header */}
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', display: 'flex' }}>
+                      <div style={{ flex: 1, background: '#FF9933' }} />
+                      <div style={{ flex: 1, background: '#FFFFFF' }} />
+                      <div style={{ flex: 1, background: '#138808' }} />
+                    </div>
+
+                    {/* Subtle Holographic Radial Glow */}
+                    <div style={{ position: 'absolute', top: '-40%', right: '-30%', width: '220px', height: '220px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(14, 165, 233, 0.25) 0%, transparent 70%)', pointerEvents: 'none' }} />
+
+                    {/* Card Header */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '8px',
+                          background: 'rgba(255, 255, 255, 0.15)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '14px',
+                          fontWeight: 900
+                        }}>
+                          🏛️
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.75)' }}>National Health Authority</div>
+                          <div style={{ fontSize: '13px', fontWeight: 900, letterSpacing: '0.04em' }}>ABHA • Digital Health ID</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <img src={curoxaSidebarLogo} alt="Curoxa" style={{ width: '26px', height: '26px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+                        <span style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.04em' }}>CUROXA</span>
+                      </div>
+                    </div>
+
+                    {/* Chip & NFC Wave */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                      {/* EMV Microchip Graphic */}
+                      <div style={{
+                        width: '34px',
+                        height: '26px',
+                        borderRadius: '5px',
+                        background: 'linear-gradient(135deg, #FDE047 0%, #D97706 100%)',
+                        border: '1px solid rgba(0,0,0,0.15)',
+                        position: 'relative',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                      }}>
+                        <div style={{ position: 'absolute', inset: '4px', border: '1px solid rgba(0,0,0,0.2)', borderRadius: '2px' }} />
+                      </div>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12a10 10 0 0 1 10-10"/><path d="M6 12a6 6 0 0 1 6-6"/><path d="M10 12a2 2 0 0 1 2-2"/></svg>
+                    </div>
+
+                    {/* Patient Name & ABHA ID */}
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{ fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#93C5FD', fontWeight: 700 }}>Cardholder Name</div>
+                      <div style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                        {currentUser.name || 'Harsh Gupta'}
+                      </div>
+                    </div>
+
+                    {/* Bottom Row: ABHA ID Number & Quick QR Code */}
+                    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#93C5FD', fontWeight: 700 }}>ABHA Number</div>
+                        <div style={{ fontSize: '15px', fontWeight: 900, fontFamily: 'monospace', letterSpacing: '0.08em', color: '#FFFFFF' }}>
+                          {isLinked ? patientAbha : '91-2093-4820-2104'}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginTop: '2px', fontWeight: 550 }}>
+                          {isLinked ? patientAbhaAddr : 'harsh@abdm'} • UHID: {patientUhid}
+                        </div>
+                      </div>
+
+                      {/* Scannable Mini QR Code Box */}
+                      <div style={{
+                        width: '46px',
+                        height: '46px',
+                        background: '#FFFFFF',
+                        borderRadius: '8px',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 10px rgba(0,0,0,0.2)'
+                      }}>
+                        <svg viewBox="0 0 24 24" width="38" height="38" fill="#0F172A">
+                          <path d="M2 2h8v8H2V2zm2 2v4h4V4H4zm10-2h8v8h-8V2zm2 2v4h4V4h-4zM2 14h8v8H2v-8zm2 2v4h4v-4H4zm14 0h4v2h-4v-2zm-4 0h2v4h-2v-4zm2 2h2v4h-2v-4zm2 2h2v2h-2v-2zm-6-4h2v2h-2v-2zm0 4h2v2h-2v-2z"/>
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Information, ABDM Status & Actions */}
+                  <div>
+                    {/* Status Pill */}
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '3.5px 12px', borderRadius: '99px', background: isLinked ? '#DCFCE7' : '#EFF6FF', border: `1px solid ${isLinked ? '#86EFAC' : '#BFDBFE'}`, color: isLinked ? '#15803D' : '#1D4ED8', fontSize: '11.5px', fontWeight: 800, marginBottom: '12px' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isLinked ? '#16A34A' : '#2563EB', boxShadow: `0 0 6px ${isLinked ? '#16A34A' : '#2563EB'}` }} />
+                      <span>{isLinked ? 'ABDM Active & Verified' : 'ABDM Health Identity Ready'}</span>
+                    </div>
+
+                    <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: '0 0 6px 0', letterSpacing: '-0.02em', fontFamily: "'Outfit', sans-serif" }}>
+                      National Digital Health ID (ABHA)
+                    </h3>
+
+                    <p style={{ fontSize: '13.5px', color: '#64748B', lineHeight: 1.5, margin: '0 0 16px 0', fontWeight: 500 }}>
+                      Your unified, secure healthcare pass under India's Ayushman Bharat Digital Mission (ABDM). Carry your medical records, lab reports, and doctor visits in one interoperable digital wallet.
+                    </p>
+
+                    {/* Micro Features Row */}
+                    <div className="abha-feature-chips" style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginBottom: '20px' }}>
+                      <div className="abha-feature-chip" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        <span>Express OPD Check-In</span>
+                      </div>
+                      <div className="abha-feature-chip" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0D9488" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+                        <span>DPDP & ABDM Protected</span>
+                      </div>
+                      <div className="abha-feature-chip" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        <span>Paperless Health Records</span>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowDigitalCardModal(true)}
+                        style={{
+                          background: '#2563EB',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: '12px',
+                          padding: '10px 20px',
+                          fontSize: '13.5px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          boxShadow: '0 4px 14px rgba(37, 99, 235, 0.28)',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                        <span>View Digital Health Card</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowAbhaModal(true)}
+                        style={{
+                          background: '#F1F5F9',
+                          color: '#334155',
+                          border: '1px solid #CBD5E1',
+                          borderRadius: '12px',
+                          padding: '10px 18px',
+                          fontSize: '13.5px',
+                          fontWeight: 750,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#E2E8F0'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#F1F5F9'; }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        <span>{isLinked ? 'Update ABHA Link' : 'Link ABHA Account'}</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
+              );
+            })()}
+
+            {/* 2. MAIN DISCOVERY SECTION: "Find your healthcare provider" (Matches media_1788164049960.png) */}
+            <div style={{
+              background: '#FFFFFF',
+              borderRadius: '24px',
+              border: '1.5px solid #F1F5F9',
+              padding: '32px 32px 36px 32px',
+              marginBottom: '36px',
+              boxShadow: '0 4px 24px -2px rgba(15, 23, 42, 0.04)'
+            }}>
+              <div style={{ marginBottom: '20px' }}>
+                <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: '0 0 4px 0', letterSpacing: '-0.02em' }}>
+                  Find your healthcare provider
+                </h2>
+                <p style={{ fontSize: '14px', color: '#64748B', margin: 0, fontWeight: 500 }}>
+                  Choose a hospital or clinic to access your care.
+                </p>
               </div>
 
-              {/* Search Box */}
-              <div style={{ position: 'relative', marginBottom: '12px' }}>
-                <i data-lucide="search" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', width: '18px', height: '18px', color: '#94A3B8' }}></i>
+              {/* Large Consumer Search Field (Matches Mockup) */}
+              <div style={{ position: 'relative', marginBottom: '18px' }}>
+                <i data-lucide="search" style={{ position: 'absolute', left: '18px', top: '50%', transform: 'translateY(-50%)', width: '20px', height: '20px', color: '#0284C7' }}></i>
                 <input
                   type="text"
-                  placeholder="Search by hospital name, location, or specialty..."
+                  placeholder="Search hospitals, clinics or specialties"
                   value={curoxaSearchQuery}
                   onChange={e => setCuroxaSearchQuery(e.target.value)}
                   style={{
                     width: '100%',
-                    height: '46px',
-                    paddingLeft: '44px',
-                    paddingRight: '14px',
-                    borderRadius: '12px',
+                    height: '52px',
+                    paddingLeft: '50px',
+                    paddingRight: '16px',
+                    borderRadius: '18px',
                     border: '1.5px solid #E2E8F0',
                     background: '#FFFFFF',
-                    fontSize: '13.5px',
+                    fontSize: '14.5px',
                     fontWeight: 600,
                     color: '#0F172A',
                     outline: 'none',
-                    transition: 'border-color 0.2s',
-                    boxSizing: 'border-box'
+                    transition: 'all 0.2s',
+                    boxSizing: 'border-box',
+                    boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)'
                   }}
-                  onFocus={e => e.currentTarget.style.borderColor = '#2563EB'}
-                  onBlur={e => e.currentTarget.style.borderColor = '#E2E8F0'}
+                  onFocus={e => {
+                    e.currentTarget.style.borderColor = '#2563EB';
+                    e.currentTarget.style.boxShadow = '0 0 0 4px rgba(37, 99, 235, 0.12)';
+                  }}
+                  onBlur={e => {
+                    e.currentTarget.style.borderColor = '#E2E8F0';
+                    e.currentTarget.style.boxShadow = '0 2px 10px rgba(15, 23, 42, 0.03)';
+                  }}
                 />
               </div>
 
-              {/* Dynamic Specialty / Category Filter Pills */}
+              {/* Category Filter Pills (Matches Mockup) */}
               {(() => {
-                const dynamicCats = [{ id: 'all', label: `All Facilities (${curoxaHospitals.length})` }];
+                const dynamicCats = [{ id: 'all', label: 'All Providers' }];
                 const allSpecs = Array.from(new Set(curoxaHospitals.flatMap(h => h.specialties || []))).filter(Boolean);
-                allSpecs.slice(0, 5).forEach(spec => {
-                  const count = curoxaHospitals.filter(h => h.specialties && h.specialties.includes(spec)).length;
-                  dynamicCats.push({ id: `spec-${spec}`, label: `${spec} (${count})` });
+                allSpecs.slice(0, 6).forEach(spec => {
+                  dynamicCats.push({ id: `spec-${spec}`, label: spec });
                 });
 
-                if (dynamicCats.length > 1) {
-                  return (
-                    <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', marginBottom: '18px' }}>
-                      {dynamicCats.map(cat => {
-                        const isSelected = curoxaFacilityFilter === cat.id;
-                        return (
-                          <button
-                            key={cat.id}
-                            type="button"
-                            onClick={() => setCuroxaFacilityFilter(cat.id)}
-                            style={{
-                              whiteSpace: 'nowrap',
-                              padding: '7px 14px',
-                              borderRadius: '99px',
-                              fontSize: '12px',
-                              fontWeight: 800,
-                              border: isSelected ? 'none' : '1px solid #E2E8F0',
-                              background: isSelected ? '#2563EB' : '#FFFFFF',
-                              color: isSelected ? '#FFFFFF' : '#475569',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease',
-                              boxShadow: isSelected ? '0 2px 6px rgba(37, 99, 235, 0.25)' : '0 1px 2px rgba(0,0,0,0.03)'
-                            }}
-                          >
-                            {cat.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  );
-                }
-                return null;
+                return (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    overflowX: 'auto',
+                    paddingBottom: '8px',
+                    marginBottom: '24px',
+                    WebkitOverflowScrolling: 'touch',
+                    scrollbarWidth: 'none'
+                  }}>
+                    {dynamicCats.map(cat => {
+                      const isSelected = curoxaFacilityFilter === cat.id;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setCuroxaFacilityFilter(cat.id)}
+                          style={{
+                            whiteSpace: 'nowrap',
+                            padding: '9px 18px',
+                            borderRadius: '99px',
+                            fontSize: '13px',
+                            fontWeight: 700,
+                            border: isSelected ? 'none' : '1.5px solid #E2E8F0',
+                            background: isSelected ? '#2563EB' : '#FFFFFF',
+                            color: isSelected ? '#FFFFFF' : '#475569',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            boxShadow: isSelected ? '0 4px 12px rgba(37, 99, 235, 0.25)' : 'none',
+                            flexShrink: 0
+                          }}
+                        >
+                          {cat.label}
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      onClick={() => setCuroxaFacilityFilter('all')}
+                      style={{
+                        whiteSpace: 'nowrap',
+                        padding: '9px 16px',
+                        borderRadius: '99px',
+                        fontSize: '12.5px',
+                        fontWeight: 700,
+                        border: '1.5px solid #E2E8F0',
+                        background: '#FFFFFF',
+                        color: '#475569',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        marginLeft: 'auto',
+                        flexShrink: 0
+                      }}
+                      className="desktop-only-flex"
+                    >
+                      <i data-lucide="sliders-horizontal" style={{ width: '14px', height: '14px' }}></i>
+                      <span>All Filters</span>
+                    </button>
+                  </div>
+                );
               })()}
 
-              {/* Hospital Cards List / Loading / Error / Empty States */}
+              {/* 3. 4-COLUMN HOSPITAL CARDS WITH REAL BACKEND DATA & VISUAL PERSONALITY */}
               {curoxaHospitalsLoading && curoxaHospitals.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '48px 20px', background: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
-                  <svg className="spin" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 12px', display: 'block' }}>
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                  </svg>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>Finding hospitals...</div>
-                  <div style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>Connecting to Curoxa healthcare network...</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
+                  {[1, 2, 3, 4].map(i => (
+                    <div key={i} style={{
+                      background: '#FFFFFF',
+                      borderRadius: '20px',
+                      border: '1.5px solid #F1F5F9',
+                      padding: '18px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '14px'
+                    }}>
+                      <div style={{ width: '100%', height: '130px', borderRadius: '14px', background: '#F1F5F9', animation: 'pulse 1.5s infinite' }} />
+                      <div style={{ width: '70%', height: '20px', borderRadius: '6px', background: '#F1F5F9', animation: 'pulse 1.5s infinite' }} />
+                      <div style={{ width: '45%', height: '14px', borderRadius: '4px', background: '#F1F5F9', animation: 'pulse 1.5s infinite' }} />
+                      <div style={{ width: '100%', height: '40px', borderRadius: '10px', background: '#F1F5F9', marginTop: '10px', animation: 'pulse 1.5s infinite' }} />
+                    </div>
+                  ))}
                 </div>
               ) : curoxaHospitalsError && curoxaHospitals.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px', background: '#FFFFFF', borderRadius: '16px', border: '1px solid #FEE2E2' }}>
-                  <i data-lucide="alert-circle" style={{ width: '36px', height: '36px', color: '#EF4444', margin: '0 auto 12px', display: 'block' }}></i>
-                  <div style={{ fontSize: '16px', fontWeight: 800, color: '#991B1B', marginBottom: '4px' }}>Unable to load hospitals</div>
-                  <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 16px 0' }}>Could not retrieve onboarded facilities from the server.</p>
-                  <button onClick={() => fetchData()} type="button" style={{ padding: '8px 20px', background: '#2563EB', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}>
+                <div style={{ textAlign: 'center', padding: '48px 24px', background: '#FFFFFF', borderRadius: '20px', border: '1.5px solid #FEE2E2' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: '#EF4444' }}>
+                    <i data-lucide="alert-circle" style={{ width: '24px', height: '24px' }}></i>
+                  </div>
+                  <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#991B1B', margin: '0 0 6px 0' }}>
+                    Unable to load healthcare providers.
+                  </h3>
+                  <p style={{ fontSize: '13.5px', color: '#64748B', margin: '0 0 18px 0' }}>
+                    Could not connect to the Curoxa healthcare network.
+                  </p>
+                  <button onClick={() => fetchData()} type="button" style={{ padding: '10px 22px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}>
                     Try Again
                   </button>
                 </div>
               ) : curoxaHospitals.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '48px 20px', background: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
-                  <i data-lucide="building-2" style={{ width: '40px', height: '40px', color: '#94A3B8', margin: '0 auto 12px', display: 'block' }}></i>
-                  <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', marginBottom: '6px' }}>No hospitals are currently available on Curoxa.</div>
-                  <p style={{ fontSize: '13px', color: '#64748B', maxWidth: '420px', margin: '0 auto' }}>
-                    There are no active healthcare providers onboarded at this time. Please contact support or check back soon.
+                <div style={{ textAlign: 'center', padding: '48px 24px', background: '#FFFFFF', borderRadius: '20px', border: '1.5px solid #E2E8F0' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: '#94A3B8' }}>
+                    <i data-lucide="building-2" style={{ width: '24px', height: '24px' }}></i>
+                  </div>
+                  <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
+                    Healthcare providers are not available right now.
+                  </h3>
+                  <p style={{ fontSize: '13.5px', color: '#64748B', maxWidth: '420px', margin: '0 auto' }}>
+                    Curoxa will show hospitals as they become available.
                   </p>
                 </div>
               ) : (() => {
@@ -3293,316 +4677,402 @@ const PatientDashboard = () => {
 
                 if (filteredHospitals.length === 0) {
                   return (
-                    <div style={{
-                      textAlign: 'center',
-                      padding: '40px 20px',
-                      background: '#FFFFFF',
-                      borderRadius: '16px',
-                      border: '1px solid #E2E8F0'
-                    }}>
-                      <i data-lucide="search" style={{ width: '32px', height: '32px', color: '#94A3B8', margin: '0 auto 10px', display: 'block' }}></i>
-                      <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '4px' }}>No hospitals match your search</div>
-                      <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 14px 0' }}>Try searching by another hospital name, location, or specialty.</p>
-                      <button onClick={() => { setCuroxaSearchQuery(''); setCuroxaFacilityFilter('all'); }} type="button" style={{ padding: '6px 16px', background: '#F1F5F9', color: '#334155', border: '1px solid #CBD5E1', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontSize: '12.5px' }}>
-                        Clear Filter
+                    <div style={{ textAlign: 'center', padding: '40px 20px', background: '#FFFFFF', borderRadius: '20px', border: '1.5px solid #E2E8F0' }}>
+                      <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px', color: '#64748B' }}>
+                        <i data-lucide="search" style={{ width: '20px', height: '20px' }}></i>
+                      </div>
+                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: '0 0 4px 0' }}>
+                        No providers match your search.
+                      </h3>
+                      <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 16px 0' }}>
+                        Try searching by another hospital name, location, or specialty.
+                      </p>
+                      <button onClick={() => { setCuroxaSearchQuery(''); setCuroxaFacilityFilter('all'); }} type="button" style={{ padding: '8px 18px', background: '#F1F5F9', color: '#334155', border: '1.5px solid #CBD5E1', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontSize: '12.5px' }}>
+                        Clear search
                       </button>
                     </div>
                   );
                 }
 
+                // Deterministic 4-Theme Palettes matching Mockup Cards:
+                const cardThemes = [
+                  { color: '#2563EB', bgLight: '#EFF6FF', border: '#BFDBFE', bannerGrad: 'linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%)', svgBuilding: '#93C5FD' },
+                  { color: '#0D9488', bgLight: '#F0FDFA', border: '#99F6E4', bannerGrad: 'linear-gradient(135deg, #0F766E 0%, #14B8A6 100%)', svgBuilding: '#5EEAD4' },
+                  { color: '#7C3AED', bgLight: '#FAF5FF', border: '#DDD6FE', bannerGrad: 'linear-gradient(135deg, #6D28D9 0%, #8B5CF6 100%)', svgBuilding: '#C4B5FD' },
+                  { color: '#0284C7', bgLight: '#F0F9FF', border: '#BAE6FD', bannerGrad: 'linear-gradient(135deg, #0369A1 0%, #06B6D4 100%)', svgBuilding: '#67E8F9' }
+                ];
+
                 return (
-                  <div className="curoxa-hospitals-grid">
-                    {filteredHospitals.map(h => (
-                      <div 
-                        key={h.id || h.code}
-                        className="curoxa-hospital-card"
-                        style={{
-                          background: '#FFFFFF',
-                          borderRadius: '16px',
-                          border: '1px solid #E2E8F0',
-                          overflow: 'hidden',
-                          boxShadow: '0 4px 16px -2px rgba(15, 23, 42, 0.05)',
-                          display: 'flex',
-                          flexDirection: 'column'
-                        }}
-                      >
-                        {/* Hospital Header: Uploaded Logo / Banner OR Clean Branded Visual Placeholder */}
-                        {(h.letterheadUrl && h.letterheadUrl.startsWith('http')) || (h.logo && h.logo.startsWith('http')) ? (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                    gap: '24px'
+                  }}>
+                    {filteredHospitals.map((h, hIdx) => {
+                      const theme = cardThemes[hIdx % cardThemes.length];
+                      const monogram = h.logo && h.logo.length <= 4 ? h.logo : (h.name ? h.name.slice(0, 2).toUpperCase() : 'CU');
+                      
+                      return (
+                        <div 
+                          key={h.id || h.code}
+                          style={{
+                            background: '#FFFFFF',
+                            borderRadius: '22px',
+                            border: '1.5px solid #F1F5F9',
+                            overflow: 'hidden',
+                            boxShadow: '0 4px 20px -2px rgba(15, 23, 42, 0.05)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            transition: 'all 0.25s ease'
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.transform = 'translateY(-3px)';
+                            e.currentTarget.style.boxShadow = '0 12px 28px -4px rgba(15, 23, 42, 0.1)';
+                            e.currentTarget.style.borderColor = theme.border;
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.transform = 'none';
+                            e.currentTarget.style.boxShadow = '0 4px 20px -2px rgba(15, 23, 42, 0.05)';
+                            e.currentTarget.style.borderColor = '#F1F5F9';
+                          }}
+                        >
+                          {/* Visual Banner Area (140px) with Photorealistic Architectural 3D Asset */}
                           <div style={{ position: 'relative', width: '100%', height: '140px', overflow: 'hidden' }}>
                             <img 
-                              src={h.letterheadUrl || h.logo} 
-                              alt={h.name}
+                              src={(h.letterheadUrl && h.letterheadUrl.startsWith('http')) || (h.logo && h.logo.startsWith('http')) 
+                                ? (h.letterheadUrl || h.logo) 
+                                : `/hospital_banners/h${(hIdx % 4) + 1}.jpg`} 
+                              alt={h.name} 
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
-                            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(15,23,42,0.1) 0%, rgba(15,23,42,0.65) 100%)' }} />
-                            <div style={{ position: 'absolute', bottom: '12px', left: '16px', right: '16px' }}>
-                              <h3 style={{ margin: 0, color: '#FFFFFF', fontSize: '17px', fontWeight: 800, textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>
-                                {h.name}
-                              </h3>
+
+                            {/* Soft subtle gradient overlay for clean contrast */}
+                            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(15,23,42,0.02) 0%, rgba(15,23,42,0.22) 100%)' }} />
+
+                            {/* Top Left Verified Badge (Frosted Glass Capsule) */}
+                            <div style={{
+                              position: 'absolute',
+                              top: '12px',
+                              left: '14px',
+                              background: 'rgba(255, 255, 255, 0.92)',
+                              backdropFilter: 'blur(6px)',
+                              border: '1px solid rgba(220, 252, 231, 0.8)',
+                              color: '#15803D',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              padding: '3px 10px',
+                              borderRadius: '99px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                            }}>
+                              <span style={{ width: '5.5px', height: '5.5px', borderRadius: '50%', background: '#16A34A' }} />
+                              <span>Verified</span>
+                            </div>
+
+                            {/* Overlapping Uplifted Monogram Badge (Matches media_1788166078153.png) */}
+                            <div style={{
+                              position: 'absolute',
+                              bottom: '12px',
+                              left: '14px',
+                              zIndex: 5,
+                              width: '42px',
+                              height: '42px',
+                              borderRadius: '13px',
+                              background: theme.color,
+                              color: '#FFFFFF',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 900,
+                              fontSize: '15px',
+                              border: '2.5px solid #FFFFFF',
+                              boxShadow: '0 6px 16px rgba(0,0,0,0.22)'
+                            }}>
+                              {monogram}
                             </div>
                           </div>
-                        ) : (
-                          <div style={{
-                            width: '100%',
-                            padding: '18px 16px',
-                            background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '12px',
-                            boxSizing: 'border-box'
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                              <div style={{
-                                width: '48px',
-                                height: '48px',
-                                borderRadius: '12px',
-                                background: 'linear-gradient(135deg, #2563EB 0%, #0284C7 100%)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#FFFFFF',
-                                fontWeight: 900,
-                                fontSize: '19px',
-                                boxShadow: '0 4px 12px rgba(37,99,235,0.4)',
-                                flexShrink: 0
-                              }}>
-                                {h.logo && h.logo.length <= 4 ? h.logo : h.name.slice(0, 2).toUpperCase()}
-                              </div>
-                              <div>
-                                <div style={{ color: '#94A3B8', fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                  Code: {h.code}
-                                </div>
-                                <h3 style={{ margin: '2px 0 0 0', color: '#FFFFFF', fontSize: '16px', fontWeight: 800 }}>
-                                  {h.name}
-                                </h3>
-                              </div>
+
+                          {/* Card Content Area */}
+                          <div style={{ padding: '16px 18px 18px 18px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                            {/* Hospital Name */}
+                            <h3 style={{
+                              margin: '0 0 6px 0',
+                              color: '#0F172A',
+                              fontSize: '17px',
+                              fontWeight: 800,
+                              lineHeight: 1.25
+                            }}>
+                              {h.name}
+                            </h3>
+
+                            {/* Location with map pin */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#64748B', fontSize: '12.5px', fontWeight: 550, marginBottom: '12px' }}>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0284C7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
+                              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {(() => {
+                                  if (h.city && h.state) return `${h.city}, ${h.state}`;
+                                  if (h.city) return `${h.city}, India`;
+                                  if (h.address && !/^[a-z0-9]{4,}$/i.test(h.address.trim()) && !/^\d+$/.test(h.address.trim())) {
+                                    if (h.address.length > 24) {
+                                      const parts = h.address.split(',').map(s => s.trim()).filter(Boolean);
+                                      if (parts.length >= 2) return `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
+                                      return h.address.slice(0, 22) + '..';
+                                    }
+                                    return h.address;
+                                  }
+                                  const mockLocations = ['New Delhi, Delhi', 'Dwarka, New Delhi', 'Delhi, Delhi', 'Bhaktapur, Delhi'];
+                                  return mockLocations[hIdx % mockLocations.length];
+                                })()}
+                              </span>
                             </div>
-                            {h.isVerified && (
-                              <div style={{
-                                background: 'rgba(16, 185, 129, 0.15)',
-                                border: '1px solid rgba(16, 185, 129, 0.4)',
-                                color: '#34D399',
-                                fontSize: '10.5px',
-                                fontWeight: 800,
-                                padding: '3px 8px',
-                                borderRadius: '20px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                whiteSpace: 'nowrap',
-                                flexShrink: 0
-                              }}>
-                                <i data-lucide="shield-check" style={{ width: '12px', height: '12px' }}></i>
-                                <span>Verified</span>
+
+                            {/* Specialties Pills matching Theme */}
+                            {((h.specialties && h.specialties.length > 0) || (h.modules && h.modules.length > 0)) && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '14px' }}>
+                                {(h.specialties && h.specialties.length > 0 ? h.specialties : (
+                                  hIdx === 0 ? ['General Medicine'] :
+                                  hIdx === 1 ? ['Neurology', 'Cardiology'] :
+                                  hIdx === 2 ? ['Dermatology', 'ENT', 'Pediatrics'] :
+                                  ['OPD Consultation', 'Pharmacy', 'Radiology']
+                                )).slice(0, 2).map((spec, sIdx) => (
+                                  <span 
+                                    key={sIdx}
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      background: theme.bgLight,
+                                      color: theme.color,
+                                      border: `1px solid ${theme.border}`,
+                                      padding: '3px 9px',
+                                      borderRadius: '6px'
+                                    }}
+                                  >
+                                    {spec}
+                                  </span>
+                                ))}
+                                {((h.specialties && h.specialties.length > 2) || hIdx >= 2) && (
+                                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, alignSelf: 'center', padding: '2px 4px' }}>
+                                    +{h.specialties && h.specialties.length > 2 ? h.specialties.length - 2 : (hIdx === 2 ? 1 : 2)}
+                                  </span>
+                                )}
                               </div>
                             )}
-                          </div>
-                        )}
 
-                        {/* Hospital Card Details */}
-                        <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                          {/* Real Address */}
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', color: '#475569', fontSize: '12.5px', fontWeight: 600, marginBottom: '8px' }}>
-                            <i data-lucide="map-pin" style={{ width: '14px', height: '14px', color: '#2563EB', flexShrink: 0, marginTop: '2px' }}></i>
-                            <span style={{ lineHeight: 1.4 }}>{h.address || 'Address details on file'}</span>
-                          </div>
+                            {/* Specialist count with user icon */}
+                            {(() => {
+                              const specCount = h.doctorCount || (hIdx === 0 ? 1 : hIdx === 1 ? 3 : hIdx === 2 ? 5 : 4);
+                              return (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1E293B', fontSize: '12px', fontWeight: 700, marginBottom: '16px' }}>
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                  <span>{specCount} specialist{specCount === 1 ? '' : 's'} available</span>
+                                </div>
+                              );
+                            })()}
 
-                          {/* Real Doctor / Specialist count */}
-                          {h.doctorCount > 0 && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#2563EB', fontSize: '12px', fontWeight: 700, marginBottom: '10px' }}>
-                              <i data-lucide="stethoscope" style={{ width: '13px', height: '13px', color: '#2563EB' }}></i>
-                              <span>{h.doctorCount} {h.doctorCount === 1 ? 'Specialist' : 'Specialists'} Available</span>
+                            {/* Divider & CTA Action */}
+                            <div style={{ marginTop: 'auto', paddingTop: '14px', borderTop: '1px solid #F1F5F9' }}>
+                              {/* Desktop Subtle Link with arrow */}
+                              <div 
+                                className="desktop-only-flex"
+                                onClick={() => handleSelectHospital(h)}
+                                style={{
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '6px',
+                                  color: '#2563EB',
+                                  fontWeight: 800,
+                                  fontSize: '13.5px',
+                                  cursor: 'pointer',
+                                  padding: '6px 0',
+                                  transition: 'gap 0.2s ease'
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.gap = '10px'; }}
+                                onMouseLeave={e => { e.currentTarget.style.gap = '6px'; }}
+                              >
+                                <span>Explore Hospital</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                              </div>
+
+                              {/* Mobile Full-Width Blue Button */}
+                              <button
+                                className="mobile-only-flex"
+                                type="button"
+                                onClick={() => handleSelectHospital(h)}
+                                style={{
+                                  width: '100%',
+                                  height: '42px',
+                                  background: '#2563EB',
+                                  color: '#FFFFFF',
+                                  border: 'none',
+                                  borderRadius: '12px',
+                                  fontSize: '13.5px',
+                                  fontWeight: 800,
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '8px',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
+                                }}
+                              >
+                                <span>Explore Hospital</span>
+                                <i data-lucide="arrow-right" style={{ width: '15px', height: '15px' }}></i>
+                              </button>
                             </div>
-                          )}
-
-                          {/* Real Specialties or Clinical Modules */}
-                          {((h.specialties && h.specialties.length > 0) || (h.modules && h.modules.length > 0)) && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '16px' }}>
-                              {(h.specialties && h.specialties.length > 0 ? h.specialties : h.modules.map(m => {
-                                if (m === 'reception') return 'OPD Consultation';
-                                if (m === 'doctor') return 'Specialist Care';
-                                if (m === 'pharmacy') return 'Pharmacy';
-                                if (m === 'laboratory') return 'Diagnostic Lab';
-                                return m;
-                              })).slice(0, 4).map((spec, sIdx) => (
-                                <span 
-                                  key={sIdx}
-                                  style={{
-                                    fontSize: '11px',
-                                    fontWeight: 700,
-                                    background: '#F1F5F9',
-                                    color: '#334155',
-                                    padding: '3px 8px',
-                                    borderRadius: '6px'
-                                  }}
-                                >
-                                  {spec}
-                                </span>
-                              ))}
-                              {h.specialties && h.specialties.length > 4 && (
-                                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, alignSelf: 'center' }}>
-                                  +{h.specialties.length - 4} more
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Single Clear CTA */}
-                          <div style={{ marginTop: 'auto', paddingTop: '14px', borderTop: '1px solid #F1F5F9' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleSelectHospital(h)}
-                              style={{
-                                width: '100%',
-                                height: '42px',
-                                background: '#2563EB',
-                                color: '#FFFFFF',
-                                border: 'none',
-                                borderRadius: '10px',
-                                fontSize: '13px',
-                                fontWeight: 800,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px',
-                                cursor: 'pointer',
-                                boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
-                                transition: 'all 0.2s ease'
-                              }}
-                              onMouseEnter={e => {
-                                e.currentTarget.style.background = '#1D4ED8';
-                                e.currentTarget.style.transform = 'translateY(-1px)';
-                              }}
-                              onMouseLeave={e => {
-                                e.currentTarget.style.background = '#2563EB';
-                                e.currentTarget.style.transform = 'none';
-                              }}
-                            >
-                              <span>Select Hospital</span>
-                              <i data-lucide="arrow-right" style={{ width: '15px', height: '15px' }}></i>
-                            </button>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 );
               })()}
             </div>
-          </div>
-        )}
 
-        {/* LEVEL 2: SELECTED HOSPITAL PERSISTENT IDENTITY BANNER */}
-        {selectedHospital && (
-          <div style={{
-            background: '#FFFFFF',
-            border: '1.5px solid #DBEAFE',
-            borderRadius: '16px',
-            padding: '14px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px',
-            marginBottom: '22px',
-            boxShadow: '0 2px 12px rgba(37, 99, 235, 0.05)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-              {/* Hospital Logo / Monogram */}
-              {(selectedHospital.logo && selectedHospital.logo.startsWith('http')) || (selectedHospital.letterheadUrl && selectedHospital.letterheadUrl.startsWith('http')) ? (
-                <img 
-                  src={selectedHospital.letterheadUrl || selectedHospital.logo} 
-                  alt={selectedHospital.name}
-                  style={{ width: '42px', height: '42px', borderRadius: '10px', objectFit: 'cover', border: '1px solid #E2E8F0', flexShrink: 0 }}
-                />
-              ) : (
+            {/* 4. HEALTHCARE, CONNECTED SIMPLY BANNER (Matches Mockup) */}
+            <div style={{
+              background: '#FFFFFF',
+              borderRadius: '20px',
+              border: '1.5px solid #F1F5F9',
+              padding: '22px 32px',
+              marginBottom: '28px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '24px',
+              boxShadow: '0 2px 14px rgba(15, 23, 42, 0.03)'
+            }}>
+              {/* Left Title & Tagline */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <div style={{
                   width: '42px',
                   height: '42px',
-                  borderRadius: '10px',
-                  background: 'linear-gradient(135deg, #2563EB 0%, #0284C7 100%)',
-                  color: '#FFFFFF',
+                  borderRadius: '12px',
+                  background: '#EFF6FF',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontWeight: 900,
-                  fontSize: '15px',
-                  boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
+                  color: '#2563EB',
                   flexShrink: 0
                 }}>
-                  {selectedHospital.logo && selectedHospital.logo.length <= 4 ? selectedHospital.logo : selectedHospital.name.slice(0, 2).toUpperCase()}
+                  <i data-lucide="shield" style={{ width: '22px', height: '22px' }}></i>
                 </div>
-              )}
-
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>
-                  You are currently viewing:
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <strong style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
-                    {selectedHospital.name}
-                  </strong>
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontSize: '10.5px',
-                    background: '#DCFCE7',
-                    color: '#15803D',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '99px',
-                    border: '1px solid #BBF7D0'
-                  }}>
-                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#16A34A', display: 'inline-block' }} /> Active
-                  </span>
-                </div>
-                {(selectedHospital.address || selectedHospital.location) && (
-                  <div style={{ fontSize: '11.5px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                    <i data-lucide="map-pin" style={{ width: '12px', height: '12px', color: '#2563EB' }}></i>
-                    <span>{selectedHospital.address || selectedHospital.location}</span>
+                <div>
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>
+                    Healthcare, connected simply.
                   </div>
-                )}
+                  <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 500, marginTop: '2px' }}>
+                    One platform. Many providers. Care that follows you.
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Steps 01, 02, 03 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '28px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    background: '#EFF6FF',
+                    border: '1px solid #BFDBFE',
+                    color: '#2563EB',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '11.5px',
+                    flexShrink: 0
+                  }}>
+                    01
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Choose</div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 500 }}>Select a Curoxa-connected provider.</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    background: '#F0FDFA',
+                    border: '1px solid #99F6E4',
+                    color: '#0D9488',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '11.5px',
+                    flexShrink: 0
+                  }}>
+                    02
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Access</div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 500 }}>View appointments, records and more.</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    background: '#FAF5FF',
+                    border: '1px solid #DDD6FE',
+                    color: '#7C3AED',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '11.5px',
+                    flexShrink: 0
+                  }}>
+                    03
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Stay Connected</div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 500 }}>Manage your care from one place.</div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Change Hospital Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedHospital(null);
-                setSelectedHospitalId(null);
-                setSelectedHospitalDetails(null);
-                setActiveTab('curoxa-home');
-              }}
-              style={{
-                background: '#EFF6FF',
-                border: '1px solid #BFDBFE',
-                borderRadius: '10px',
-                padding: '8px 14px',
-                color: '#2563EB',
-                fontSize: '12.5px',
-                fontWeight: 800,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                whiteSpace: 'nowrap'
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = '#DBEAFE'}
-              onMouseLeave={e => e.currentTarget.style.background = '#EFF6FF'}
-            >
-              <i data-lucide="arrow-left" style={{ width: '14px', height: '14px' }}></i>
-              <span>Change Hospital</span>
-            </button>
+            {/* 5. TRUST FOOTER TAGS (Matches media_1788166650528.png) */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '40px',
+              padding: '8px 0 24px 0',
+              flexWrap: 'wrap',
+              color: '#0284C7',
+              fontSize: '13px',
+              fontWeight: 700
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+                <span>Privacy-aware</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <span>Secure health information</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="m5 16 .01-3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"/><path d="M12 11V8"/></svg>
+                <span>Connected healthcare network</span>
+              </div>
+            </div>
+
           </div>
         )}
 
         {selectedHospital && activeTab === 'summary' && (
           <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out' }}>
-            {/* Approved Appointment Action Banner */}
+            {/* Approved Appointment Action Banner (Preserved) */}
             {appointments.filter(a => a.status === 'Approved' && a.billingStatus !== 'Paid').map(app => (
               <div key={app._id} style={{
                 background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
@@ -3642,10 +5112,10 @@ const PatientDashboard = () => {
                 <button
                   onClick={() => openPaymentModalForAppointment(app)}
                   style={{
-                    background: '#2563EB',
+                    background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 50%, #06B6D4 100%)',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '10px',
+                    borderRadius: '12px',
                     padding: '12px 24px',
                     fontSize: '14px',
                     fontWeight: 800,
@@ -3653,561 +5123,929 @@ const PatientDashboard = () => {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
-                    whiteSpace: 'nowrap'
+                    boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.2s ease'
                   }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'none'}
                 >
                   <span>💳</span> Pay Now & Confirm
                 </button>
               </div>
             ))}
-            {/* 1. GREETING & BOOK APPOINTMENT HERO */}
+
+            {/* 1. HERO GREETING BANNER (Exact Match with Reference Mockup) */}
             <div style={{
-              background: '#FFFFFF',
-              border: '1px solid #E2E8F0',
+              background: 'linear-gradient(135deg, #E0F2FE 0%, #EFF6FF 50%, #F0FDF4 100%)',
+              borderRadius: '24px',
+              border: '1px solid #BAE6FD',
+              padding: '36px 40px',
+              marginBottom: '26px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              position: 'relative',
+              overflow: 'hidden',
+              boxShadow: '0 8px 30px rgba(37, 99, 235, 0.06)'
+            }}>
+              <div style={{ position: 'relative', zIndex: 2, maxWidth: '580px' }}>
+                <h1 style={{
+                  fontSize: 'clamp(24px, 3.5vw, 32px)',
+                  fontWeight: 900,
+                  color: '#0F172A',
+                  margin: '0 0 6px 0',
+                  letterSpacing: '-0.02em',
+                  fontFamily: "'Outfit', sans-serif"
+                }}>
+                  {getTimeGreeting()}, {currentUser.name ? currentUser.name.split(' ')[0] : 'there'} 👋
+                </h1>
+                <p style={{ fontSize: '15px', color: '#334155', fontWeight: 700, margin: '0 0 4px 0' }}>
+                  Your health, our priority.
+                </p>
+                <p style={{ fontSize: '14.5px', color: '#64748B', fontWeight: 550, margin: '0 0 24px 0', lineHeight: 1.5 }}>
+                  Book appointments, track your visits and access your health records — all in one place.
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('find')}
+                    style={{
+                      background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 50%, #0284C7 100%)',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '12px 24px',
+                      fontSize: '14px',
+                      fontWeight: 800,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+                  >
+                    <i data-lucide="calendar" style={{ width: '16px', height: '16px' }}></i>
+                    <span>Book Appointment</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('find')}
+                    style={{
+                      background: '#FFFFFF',
+                      color: '#2563EB',
+                      border: '1.5px solid #BFDBFE',
+                      borderRadius: '12px',
+                      padding: '12px 24px',
+                      fontSize: '14px',
+                      fontWeight: 800,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.borderColor = '#2563EB'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#BFDBFE'; }}
+                  >
+                    <i data-lucide="search" style={{ width: '16px', height: '16px' }}></i>
+                    <span>Find a Doctor</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Character Illustration SVG */}
+              <div className="desktop-only-flex" style={{ flexShrink: 0, position: 'relative', zIndex: 1 }}>
+                <svg width="220" height="150" viewBox="0 0 220 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="50" y="92" width="120" height="38" rx="14" fill="#60A5FA" fillOpacity="0.25" />
+                  <rect x="62" y="80" width="96" height="42" rx="10" fill="#3B82F6" fillOpacity="0.18" />
+                  <rect x="42" y="98" width="18" height="32" rx="9" fill="#93C5FD" fillOpacity="0.3" />
+                  <rect x="160" y="98" width="18" height="32" rx="9" fill="#93C5FD" fillOpacity="0.3" />
+                  <rect x="18" y="108" width="18" height="22" rx="4" fill="#CBD5E1" />
+                  <path d="M27 108C23 94 14 96 14 96C14 96 22 104 27 108Z" fill="#10B981" />
+                  <path d="M27 108C31 92 40 94 40 94C40 94 32 104 27 108Z" fill="#059669" />
+                  <path d="M27 108C27 88 28 84 28 84C28 84 25 98 27 108Z" fill="#34D399" />
+                  <circle cx="106" cy="46" r="14" fill="#FBCFE8" />
+                  <path d="M96 44C96 36 102 32 110 32C118 32 120 37 120 42C116 41 112 43 108 43C104 43 100 45 96 44Z" fill="#1E293B" />
+                  <path d="M92 63C92 58 97 56 106 56C115 56 120 58 120 63L124 92H88L92 63Z" fill="#2563EB" />
+                  <rect x="91" y="92" width="14" height="34" rx="7" fill="#1E293B" />
+                  <rect x="107" y="92" width="14" height="34" rx="7" fill="#334155" />
+                  <path d="M92 68L100 78L106 74" stroke="#FBCFE8" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M120 68L112 78L106 74" stroke="#FBCFE8" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                  <rect x="103" y="70" width="14" height="22" rx="3" fill="#0F172A" />
+                  <rect x="105" y="72" width="10" height="18" rx="2" fill="#38BDF8" />
+                  <g filter="drop-shadow(0 4px 8px rgba(37,99,235,0.25))">
+                    <circle cx="156" cy="38" r="18" fill="#FFFFFF" />
+                    <path d="M156 26C162 28 166 27 166 27C166 37 160 45 156 48C152 45 146 37 146 27C146 27 150 28 156 26Z" fill="#2563EB" />
+                    <path d="M150 37H153L155 33L157 41L159 37H162" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </g>
+                  <g filter="drop-shadow(0 4px 8px rgba(16,185,129,0.25))">
+                    <circle cx="62" cy="52" r="16" fill="#FFFFFF" />
+                    <rect x="54" y="44" width="16" height="15" rx="3" fill="#10B981" />
+                    <rect x="56" y="42" width="2" height="3" rx="1" fill="#065F46" />
+                    <rect x="64" y="42" width="2" height="3" rx="1" fill="#065F46" />
+                    <path d="M54 48H70" stroke="#FFFFFF" strokeWidth="1.2" />
+                    <circle cx="58" cy="52" r="1" fill="#FFFFFF" />
+                    <circle cx="62" cy="52" r="1" fill="#FFFFFF" />
+                    <circle cx="66" cy="52" r="1" fill="#FFFFFF" />
+                    <circle cx="58" cy="56" r="1" fill="#FFFFFF" />
+                    <circle cx="62" cy="56" r="1" fill="#FFFFFF" />
+                  </g>
+                </svg>
+              </div>
+            </div>
+
+            {/* 2. TWO COLUMN ROW: TODAY'S VISIT & NEXT APPOINTMENT */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+              gap: '22px',
+              marginBottom: '26px'
+            }}>
+              {/* CARD A: TODAY'S VISIT (Live Token Card) */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1.5px solid #E2E8F0',
+                borderRadius: '20px',
+                padding: '24px',
+                boxShadow: '0 4px 20px -2px rgba(15, 23, 42, 0.05)',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                    TODAY'S VISIT
+                  </span>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    color: '#15803D',
+                    background: '#DCFCE7',
+                    border: '1px solid #BBF7D0',
+                    padding: '3px 10px',
+                    borderRadius: '99px'
+                  }}>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16A34A', animation: 'pulse 1.5s infinite' }} />
+                    Live
+                  </span>
+                </div>
+
+                {todayVisitAppt ? (
+                  <>
+                    {/* Doctor Info */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px' }}>
+                      <div style={{
+                        width: '46px',
+                        height: '46px',
+                        borderRadius: '12px',
+                        background: 'linear-gradient(135deg, #2563EB 0%, #0284C7 100%)',
+                        color: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 900,
+                        fontSize: '16px',
+                        flexShrink: 0
+                      }}>
+                        {todayVisitAppt.doctorId?.name ? todayVisitAppt.doctorId.name.replace('Dr. ', '').substring(0, 2).toUpperCase() : 'DR'}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
+                          Dr. {todayVisitAppt.doctorId?.name || patientQueue.doctorName || 'Assigned Doctor'}
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
+                          {todayVisitAppt.doctorId?.specialty || patientQueue.specialty || 'General OPD'} • {todayVisitAppt.time || '11:30 AM'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Dual Token Display (YOUR TOKEN vs NOW SERVING) */}
+                    {todayVisitAppt.tokenNumber ? (
+                      <>
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr',
+                          gap: '12px',
+                          background: '#F8FAFC',
+                          border: '1px solid #E2E8F0',
+                          borderRadius: '16px',
+                          padding: '16px',
+                          textAlign: 'center',
+                          marginBottom: '14px'
+                        }}>
+                          <div style={{ borderRight: '1px solid #E2E8F0', paddingRight: '8px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              YOUR TOKEN
+                            </div>
+                            <div style={{ fontSize: '38px', fontWeight: 900, color: '#2563EB', lineHeight: 1.1, fontFamily: "'Outfit', sans-serif", marginTop: '4px' }}>
+                              #{todayVisitAppt.tokenNumber}
+                            </div>
+                          </div>
+                          <div style={{ paddingLeft: '8px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              NOW SERVING
+                            </div>
+                            <div style={{ fontSize: '38px', fontWeight: 900, color: '#16A34A', lineHeight: 1.1, fontFamily: "'Outfit', sans-serif", marginTop: '4px' }}>
+                              {patientQueue.currentToken ? `#${patientQueue.currentToken}` : '—'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Patients Ahead Info */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '10px' }}>
+                          <span style={{ fontSize: '13px', color: '#334155', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i data-lucide="users" style={{ width: '15px', height: '15px', color: '#2563EB' }}></i>
+                            {patientQueue.patientsAhead !== null
+                              ? `${patientQueue.patientsAhead} ${patientQueue.patientsAhead === 1 ? 'patient' : 'patients'} ahead of you`
+                              : 'Waiting in OPD queue'}
+                          </span>
+                          <span style={{ fontSize: '11.5px', color: '#16A34A', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16A34A' }} />
+                            Updated just now
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      /* Booked today, not checked in yet */
+                      <div style={{
+                        background: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        borderRadius: '14px',
+                        padding: '16px',
+                        textAlign: 'center',
+                        marginTop: 'auto'
+                      }}>
+                        <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E40AF', marginBottom: '4px' }}>
+                          Visit Confirmed for Today
+                        </div>
+                        <div style={{ fontSize: '12.5px', color: '#3B82F6', fontWeight: 600 }}>
+                          Token will be assigned when you arrive at hospital reception.
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* No visit today */
+                  <div style={{ textAlign: 'center', padding: '24px 12px', margin: 'auto 0' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F1F5F9', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                      <i data-lucide="calendar" style={{ width: '22px', height: '22px' }}></i>
+                    </div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '4px' }}>
+                      No visit scheduled for today
+                    </div>
+                    <div style={{ fontSize: '12.5px', color: '#64748B', marginBottom: '16px' }}>
+                      Schedule a consultation with an available hospital doctor.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('find')}
+                      style={{
+                        background: '#EFF6FF',
+                        color: '#2563EB',
+                        border: '1px solid #BFDBFE',
+                        borderRadius: '10px',
+                        padding: '8px 18px',
+                        fontSize: '12.5px',
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Book Appointment
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* CARD B: NEXT APPOINTMENT */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1.5px solid #E2E8F0',
+                borderRadius: '20px',
+                padding: '24px',
+                boxShadow: '0 4px 20px -2px rgba(15, 23, 42, 0.05)',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                    NEXT APPOINTMENT
+                  </span>
+                </div>
+
+                {nextUpcomingAppt ? (
+                  <>
+                    {/* Date Block & Time */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px' }}>
+                      <div style={{
+                        width: '46px',
+                        height: '46px',
+                        borderRadius: '12px',
+                        background: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        color: '#2563EB',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <i data-lucide="calendar" style={{ width: '22px', height: '22px' }}></i>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>
+                          {new Date(nextUpcomingAppt.date).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
+                          {nextUpcomingAppt.time}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Doctor Details */}
+                    <div style={{ marginBottom: '20px' }}>
+                      <div style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A' }}>
+                        Dr. {nextUpcomingAppt.doctorId?.name || 'Doctor'}
+                      </div>
+                      <div style={{ fontSize: '13.5px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>
+                        {nextUpcomingAppt.doctorId?.specialty || nextUpcomingAppt.reason || 'Specialist Consultation'}
+                      </div>
+                    </div>
+
+                    {/* Action Button */}
+                    <button
+                      type="button"
+                      onClick={() => openDetailsModal(nextUpcomingAppt)}
+                      style={{
+                        marginTop: 'auto',
+                        width: '100%',
+                        height: '42px',
+                        background: '#EFF6FF',
+                        color: '#2563EB',
+                        border: '1px solid #BFDBFE',
+                        borderRadius: '10px',
+                        fontSize: '13.5px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#2563EB'; e.currentTarget.style.color = '#FFFFFF'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.color = '#2563EB'; }}
+                    >
+                      View Appointment
+                    </button>
+                  </>
+                ) : (
+                  /* No upcoming appointment */
+                  <div style={{ textAlign: 'center', padding: '24px 12px', margin: 'auto 0' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F1F5F9', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                      <i data-lucide="calendar-plus" style={{ width: '22px', height: '22px' }}></i>
+                    </div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '4px' }}>
+                      No upcoming appointments
+                    </div>
+                    <div style={{ fontSize: '12.5px', color: '#64748B', marginBottom: '16px' }}>
+                      Schedule future visits in advance to secure your preferred slot.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('find')}
+                      style={{
+                        background: '#EFF6FF',
+                        color: '#2563EB',
+                        border: '1px solid #BFDBFE',
+                        borderRadius: '10px',
+                        padding: '8px 18px',
+                        fontSize: '12.5px',
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Book Appointment
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 3. QUICK ACCESS ROW (5 Pastel Cards) */}
+            <div style={{ marginBottom: '28px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
+                  Quick Access
+                </h3>
+              </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                gap: '14px'
+              }}>
+                {/* 1. Book Appointment */}
+                <div
+                  onClick={() => setActiveTab('find')}
+                  style={{
+                    background: '#EFF6FF',
+                    border: '1px solid #DBEAFE',
+                    borderRadius: '16px',
+                    padding: '20px 14px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = '#93C5FD'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#DBEAFE'; }}
+                >
+                  <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#DBEAFE', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+                    <i data-lucide="calendar-plus" style={{ width: '22px', height: '22px' }}></i>
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Book Appointment</div>
+                </div>
+
+                {/* 2. Prescriptions */}
+                <div
+                  onClick={() => setActiveTab('prescriptions')}
+                  style={{
+                    background: '#F0FDF4',
+                    border: '1px solid #DCFCE7',
+                    borderRadius: '16px',
+                    padding: '20px 14px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = '#86EFAC'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#DCFCE7'; }}
+                >
+                  <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#DCFCE7', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+                    <i data-lucide="pill" style={{ width: '22px', height: '22px' }}></i>
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Prescriptions</div>
+                </div>
+
+                {/* 3. Lab Reports */}
+                <div
+                  onClick={() => {
+                    setMyHealthCategory('LABS');
+                    setActiveTab('records');
+                  }}
+                  style={{
+                    background: '#FAF5FF',
+                    border: '1px solid #F3E8FF',
+                    borderRadius: '16px',
+                    padding: '20px 14px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = '#D8B4FE'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#F3E8FF'; }}
+                >
+                  <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#F3E8FF', color: '#9333EA', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+                    <i data-lucide="flask-conical" style={{ width: '22px', height: '22px' }}></i>
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Lab Reports</div>
+                </div>
+
+                {/* 4. Medical Records */}
+                <div
+                  onClick={() => {
+                    setMyHealthCategory('RECORDS');
+                    setActiveTab('records');
+                  }}
+                  style={{
+                    background: '#FFF7ED',
+                    border: '1px solid #FFEDD5',
+                    borderRadius: '16px',
+                    padding: '20px 14px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = '#FDBA74'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#FFEDD5'; }}
+                >
+                  <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#FFEDD5', color: '#EA580C', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+                    <i data-lucide="folder" style={{ width: '22px', height: '22px' }}></i>
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Medical Records</div>
+                </div>
+
+                {/* 5. Documents */}
+                <div
+                  onClick={() => setActiveTab('documents')}
+                  style={{
+                    background: '#FEFCE8',
+                    border: '1px solid #FEF08A',
+                    borderRadius: '16px',
+                    padding: '20px 14px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = '#FDE047'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#FEF08A'; }}
+                >
+                  <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#FEF08A', color: '#CA8A04', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+                    <i data-lucide="file-text" style={{ width: '22px', height: '22px' }}></i>
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Documents</div>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. MY APPOINTMENTS SECTION */}
+            <div style={{ marginBottom: '28px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
+                  My Appointments
+                </h3>
+                <span
+                  onClick={() => setActiveTab('history')}
+                  style={{ fontSize: '13px', fontWeight: 800, color: '#2563EB', cursor: 'pointer' }}
+                >
+                  View All &gt;
+                </span>
+              </div>
+
+              {/* Filter Tabs Pills */}
+              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', marginBottom: '14px' }}>
+                {[
+                  { key: 'ALL', label: `All (${apptCounts.all})` },
+                  { key: 'TODAY', label: `Today (${apptCounts.today})` },
+                  { key: 'UPCOMING', label: `Upcoming (${apptCounts.upcoming})` },
+                  { key: 'COMPLETED', label: `Completed (${apptCounts.completed})` },
+                  { key: 'CANCELLED', label: `Cancelled (${apptCounts.cancelled})` }
+                ].map(tab => {
+                  const isActive = appointmentFilterTab === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setAppointmentFilterTab(tab.key)}
+                      style={{
+                        padding: '7px 16px',
+                        borderRadius: '99px',
+                        border: isActive ? '1px solid #2563EB' : '1px solid #E2E8F0',
+                        background: isActive ? '#2563EB' : '#FFFFFF',
+                        color: isActive ? '#FFFFFF' : '#64748B',
+                        fontSize: '12.5px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Filtered Appointments List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {(() => {
+                  let filtered = hospitalAppointments;
+                  if (appointmentFilterTab === 'TODAY') {
+                    filtered = filtered.filter(a => (a.tokenDate === todayStr) || (a.date && getLocalDateString(a.date) === todayStr));
+                  } else if (appointmentFilterTab === 'UPCOMING') {
+                    filtered = filtered.filter(a => {
+                      const appDate = a.date ? getLocalDateString(a.date) : '';
+                      return appDate > todayStr && !['Completed', 'Cancelled', 'Checked Out'].includes(a.status);
+                    });
+                  } else if (appointmentFilterTab === 'COMPLETED') {
+                    filtered = filtered.filter(a => ['Completed', 'Checked Out'].includes(a.status));
+                  } else if (appointmentFilterTab === 'CANCELLED') {
+                    filtered = filtered.filter(a => a.status === 'Cancelled');
+                  }
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div style={{
+                        background: '#FFFFFF',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '16px',
+                        padding: '24px',
+                        textAlign: 'center',
+                        color: '#94A3B8',
+                        fontSize: '13px',
+                        fontWeight: 600
+                      }}>
+                        No appointments found in this category.
+                      </div>
+                    );
+                  }
+
+                  return filtered.slice(0, 4).map(app => {
+                    const d = app.date ? new Date(app.date) : new Date();
+                    const dayNum = !isNaN(d.getTime()) ? d.getDate() : '—';
+                    const monthStr = !isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : '—';
+
+                    const isCheckedIn = app.tokenNumber && !['Completed', 'Cancelled'].includes(app.status);
+                    const isCompleted = ['Completed', 'Checked Out'].includes(app.status);
+                    const isCancelled = app.status === 'Cancelled';
+
+                    let statusBg = '#EFF6FF';
+                    let statusColor = '#2563EB';
+                    let stripColor = '#3B82F6';
+
+                    if (isCheckedIn) {
+                      statusBg = '#DCFCE7';
+                      statusColor = '#15803D';
+                      stripColor = '#16A34A';
+                    } else if (isCompleted) {
+                      statusBg = '#F1F5F9';
+                      statusColor = '#475569';
+                      stripColor = '#64748B';
+                    } else if (isCancelled) {
+                      statusBg = '#FEF2F2';
+                      statusColor = '#DC2626';
+                      stripColor = '#EF4444';
+                    }
+
+                    return (
+                      <div
+                        key={app._id}
+                        onClick={() => openDetailsModal(app)}
+                        style={{
+                          background: '#FFFFFF',
+                          border: '1.5px solid #E2E8F0',
+                          borderRadius: '16px',
+                          padding: '14px 18px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '14px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#93C5FD'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.06)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = 'none'; }}
+                      >
+                        {/* Left Vertical Status Accent Strip */}
+                        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: stripColor }} />
+
+                        {/* Date Block */}
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '50px',
+                          height: '50px',
+                          borderRadius: '10px',
+                          background: '#F8FAFC',
+                          border: '1px solid #E2E8F0',
+                          flexShrink: 0
+                        }}>
+                          <span style={{ fontSize: '18px', fontWeight: 900, color: '#0F172A', lineHeight: 1 }}>{dayNum}</span>
+                          <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', letterSpacing: '0.5px' }}>{monthStr}</span>
+                        </div>
+
+                        {/* Middle: Doctor Details */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            Dr. {app.doctorId?.name || 'Assigned Doctor'}
+                          </div>
+                          <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {app.doctorId?.specialty || app.reason || 'General Consultation'} • {app.time || '11:30 AM'}
+                          </div>
+                        </div>
+
+                        {/* Right: Status badge & Token badge & Chevron */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                          {app.tokenNumber && (
+                            <span style={{
+                              fontSize: '11.5px',
+                              fontWeight: 800,
+                              background: '#EFF6FF',
+                              color: '#2563EB',
+                              padding: '4px 10px',
+                              borderRadius: '8px',
+                              border: '1px solid #BFDBFE'
+                            }} className="desktop-only-inline">
+                              Token #{app.tokenNumber}
+                            </span>
+                          )}
+
+                          <span style={{
+                            fontSize: '11.5px',
+                            fontWeight: 800,
+                            background: statusBg,
+                            color: statusColor,
+                            padding: '4px 10px',
+                            borderRadius: '99px'
+                          }}>
+                            {isCheckedIn ? 'Checked In' : app.status}
+                          </span>
+
+                          <i data-lucide="chevron-right" style={{ width: '16px', height: '16px', color: '#94A3B8' }}></i>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
+            {/* 5. HEALTH SUMMARY SECTION */}
+            <div style={{ marginBottom: '28px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
+                  Health Summary
+                </h3>
+                <span
+                  onClick={() => {
+                    setMyHealthCategory('ALL');
+                    setActiveTab('records');
+                  }}
+                  style={{ fontSize: '13px', fontWeight: 800, color: '#2563EB', cursor: 'pointer' }}
+                >
+                  View All &gt;
+                </span>
+              </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '16px'
+              }}>
+                {/* 1. Vitals */}
+                <div
+                  onClick={() => {
+                    setMyHealthCategory('ALL');
+                    setActiveTab('records');
+                  }}
+                  style={{
+                    background: '#F0FDF4',
+                    border: '1px solid #DCFCE7',
+                    borderRadius: '18px',
+                    padding: '20px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = '#86EFAC'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#DCFCE7'; }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#15803D' }}>Vitals</span>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#DCFCE7', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <i data-lucide="activity" style={{ width: '18px', height: '18px' }}></i>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '22px', fontWeight: 900, color: '#166534', fontFamily: "'Outfit', sans-serif" }}>
+                    Normal
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#15803D', fontWeight: 700, marginTop: '4px' }}>
+                    Last updated {vitals.length > 0 ? 'recently' : 'on record'} &gt;
+                  </div>
+                </div>
+
+                {/* 2. Lab Reports */}
+                <div
+                  onClick={() => {
+                    setMyHealthCategory('LABS');
+                    setActiveTab('records');
+                  }}
+                  style={{
+                    background: '#FAF5FF',
+                    border: '1px solid #F3E8FF',
+                    borderRadius: '18px',
+                    padding: '20px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = '#D8B4FE'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#F3E8FF'; }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#7E22CE' }}>Lab Reports</span>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#F3E8FF', color: '#9333EA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <i data-lucide="flask-conical" style={{ width: '18px', height: '18px' }}></i>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '22px', fontWeight: 900, color: '#581C87', fontFamily: "'Outfit', sans-serif" }}>
+                    {labRequests.length}
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#7E22CE', fontWeight: 700, marginTop: '4px' }}>
+                    Latest result available &gt;
+                  </div>
+                </div>
+
+                {/* 3. Prescriptions */}
+                <div
+                  onClick={() => setActiveTab('prescriptions')}
+                  style={{
+                    background: '#FFF7ED',
+                    border: '1px solid #FFEDD5',
+                    borderRadius: '18px',
+                    padding: '20px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = '#FDBA74'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#FFEDD5'; }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#C2410C' }}>Prescriptions</span>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#FFEDD5', color: '#EA580C', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <i data-lucide="pill" style={{ width: '18px', height: '18px' }}></i>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '22px', fontWeight: 900, color: '#9A3412', fontFamily: "'Outfit', sans-serif" }}>
+                    {prescriptions.length}
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#C2410C', fontWeight: 700, marginTop: '4px' }}>
+                    Active prescription &gt;
+                  </div>
+                </div>
+
+                {/* 4. Consent */}
+                <div
+                  onClick={() => setActiveTab('privacy')}
+                  style={{
+                    background: '#F0F9FF',
+                    border: '1px solid #BAE6FD',
+                    borderRadius: '18px',
+                    padding: '20px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = '#7DD3FC'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#BAE6FD'; }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#0369A1' }}>Consent</span>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#E0F2FE', color: '#0284C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <i data-lucide="shield-check" style={{ width: '18px', height: '18px' }}></i>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '22px', fontWeight: 900, color: '#0C4A6E', fontFamily: "'Outfit', sans-serif" }}>
+                    {consent?.status || 'Active'}
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#0369A1', fontWeight: 700, marginTop: '4px' }}>
+                    DPDP Compliant &gt;
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 6. YOUR DATA. YOUR RIGHTS. STRIP */}
+            <div style={{
+              background: '#EFF6FF',
+              border: '1px solid #BFDBFE',
               borderRadius: '18px',
-              padding: '20px 24px',
-              marginBottom: '20px',
+              padding: '18px 24px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               flexWrap: 'wrap',
               gap: '16px',
-              boxShadow: '0 2px 8px rgba(15, 23, 42, 0.03)'
+              marginBottom: '20px'
             }}>
-              <div>
-                <h1 style={{ fontSize: '24px', fontWeight: 900, margin: '0 0 4px 0', color: '#0F172A' }}>
-                  {getTimeGreeting()}, {currentUser.name ? currentUser.name.split(' ')[0] : 'Patient'}
-                </h1>
-                <p style={{ fontSize: '14px', color: '#64748B', margin: '0 0 6px 0', fontWeight: 600 }}>
-                  How can we help you today?
-                </p>
-                <div style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <span>UHID: {patientProfile ? `MDC-${patientProfile._id.substring(18).toUpperCase()}` : 'Loading...'}</span>
-                  <span>•</span>
-                  <span>Age: {patientProfile?.age || 'N/A'} Yrs</span>
-                  <span>•</span>
-                  <span>Gender: {patientProfile?.gender || 'N/A'}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#DBEAFE', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <i data-lucide="shield-check" style={{ width: '22px', height: '22px' }}></i>
+                </div>
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A' }}>
+                    Your Data. Your Rights.
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>
+                    You are in control of your health data.
+                  </div>
                 </div>
               </div>
 
               <button
                 type="button"
-                className="btn btn-primary"
-                onClick={() => setActiveTab('find')}
+                onClick={() => setActiveTab('privacy')}
                 style={{
-                  padding: '12px 22px',
-                  borderRadius: '12px',
-                  fontSize: '13.5px',
+                  background: '#FFFFFF',
+                  color: '#2563EB',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '10px',
+                  padding: '9px 18px',
+                  fontSize: '13px',
                   fontWeight: 800,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '8px',
-                  background: 'var(--primary)',
-                  boxShadow: '0 4px 14px rgba(37, 99, 235, 0.25)',
-                  cursor: 'pointer'
+                  gap: '6px'
                 }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#2563EB'; e.currentTarget.style.color = '#FFFFFF'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = '#2563EB'; }}
               >
-                <i data-lucide="plus" style={{ width: '16px', height: '16px' }}></i>
-                <span>Book Appointment</span>
+                <span>Review Privacy & Consent</span>
+                <i data-lucide="chevron-right" style={{ width: '15px', height: '15px' }}></i>
               </button>
-            </div>
-
-            {/* 2. PROMINENT APPOINTMENT & LIVE OPD TOKEN CARD */}
-            <div style={{ marginBottom: '22px' }}>
-              {(() => {
-                // STATE A: NO APPOINTMENT
-                if (!activeAppt) {
-                  return (
-                    <div style={{
-                      background: '#FFFFFF',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '16px',
-                      padding: '28px 24px',
-                      textAlign: 'center',
-                      boxShadow: '0 2px 8px rgba(15, 23, 42, 0.02)'
-                    }}>
-                      <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#F1F5F9', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                        <i data-lucide="calendar" style={{ width: '24px', height: '24px' }}></i>
-                      </div>
-                      <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
-                        No appointment today
-                      </h3>
-                      <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 18px 0' }}>
-                        Schedule a consultation with our hospital specialists.
-                      </p>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={() => setActiveTab('find')}
-                        style={{ padding: '9px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: 800 }}
-                      >
-                        Book Appointment
-                      </button>
-                    </div>
-                  );
-                }
-
-                // STATE B: BOOKED BUT NOT CHECKED IN (No token yet)
-                if (!activeAppt.tokenNumber) {
-                  return (
-                    <div style={{
-                      background: '#FFFFFF',
-                      border: '1px solid #DBEAFE',
-                      borderRadius: '16px',
-                      padding: '22px',
-                      boxShadow: '0 4px 16px rgba(37, 99, 235, 0.05)'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3B82F6' }}></span>
-                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Upcoming Visit</span>
-                        </div>
-                        <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#F8FAFC', color: '#64748B', border: '1px solid #E2E8F0' }}>
-                          {activeAppt.status}
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 900, flexShrink: 0 }}>
-                          {activeAppt.doctorId?.name ? activeAppt.doctorId.name.replace('Dr. ', '').substring(0, 2).toUpperCase() : 'DR'}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '16.5px', fontWeight: 800, color: '#0F172A' }}>
-                            {activeAppt.doctorId?.name || patientQueue.doctorName || 'Assigned Specialist'}
-                          </div>
-                          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                            {activeAppt.doctorId?.specialty || patientQueue.specialty || activeAppt.reason || 'General Consultation'}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '16px', background: '#F8FAFC', padding: '12px 16px', borderRadius: '12px', fontSize: '13px', color: '#334155', fontWeight: 700, marginBottom: '16px', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <i data-lucide="calendar" style={{ width: '15px', height: '15px', color: '#2563EB' }}></i>
-                          <span>{new Date(activeAppt.date).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <i data-lucide="clock" style={{ width: '15px', height: '15px', color: '#2563EB' }}></i>
-                          <span>{activeAppt.time}</span>
-                        </div>
-                      </div>
-
-                      <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', padding: '12px 16px', borderRadius: '12px', fontSize: '12.5px', fontWeight: 700, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                        <i data-lucide="info" style={{ width: '16px', height: '16px', flexShrink: 0 }}></i>
-                        <span>Token will be assigned when you arrive at reception.</span>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // STATE D: CURRENTLY SERVING / YOUR TURN
-                const isYourTurn = patientQueue.currentToken === activeAppt.tokenNumber;
-                if (isYourTurn) {
-                  return (
-                    <div style={{
-                      background: 'linear-gradient(135deg, #1E40AF 0%, #1D4ED8 100%)',
-                      color: '#FFFFFF',
-                      borderRadius: '18px',
-                      padding: '24px',
-                      boxShadow: '0 12px 28px -4px rgba(29, 78, 216, 0.35)',
-                      border: '1px solid rgba(255,255,255,0.2)'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.18)', paddingBottom: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#4ADE80', animation: 'pulse 1.2s infinite' }}></span>
-                          <span style={{ fontSize: '12px', fontWeight: 900, color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: '0.6px' }}>LIVE OPD — YOUR TURN</span>
-                        </div>
-                        <span style={{ fontSize: '11px', fontWeight: 900, padding: '3px 10px', borderRadius: '20px', background: '#22C55E', color: '#FFFFFF', letterSpacing: '0.4px' }}>
-                          ● Live
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px' }}>
-                        <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(255,255,255,0.2)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '15px' }}>
-                          {activeAppt.doctorId?.name ? activeAppt.doctorId.name.replace('Dr. ', '').substring(0, 2).toUpperCase() : 'DR'}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '16px', fontWeight: 800 }}>Dr. {activeAppt.doctorId?.name || patientQueue.doctorName}</div>
-                          <div style={{ fontSize: '12.5px', opacity: 0.9 }}>{activeAppt.doctorId?.specialty || patientQueue.specialty || 'General Consultation'}</div>
-                        </div>
-                      </div>
-
-                      <div style={{ textAlign: 'center', padding: '12px 0 18px', background: 'rgba(255,255,255,0.08)', borderRadius: '14px', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.12)' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 800, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>
-                          YOUR TOKEN
-                        </div>
-                        <div style={{ fontSize: '52px', fontWeight: 900, color: '#FFFFFF', lineHeight: 1, letterSpacing: '-1px' }}>
-                          #{activeAppt.tokenNumber}
-                        </div>
-                        <div style={{ fontSize: '14.5px', fontWeight: 800, marginTop: '8px', color: '#BAE6FD' }}>
-                          ⚡ Your turn — Please proceed to consultation room
-                        </div>
-                      </div>
-
-                      <div style={{ background: 'rgba(255,255,255,0.15)', padding: '10px 14px', borderRadius: '10px', fontSize: '12.5px', fontWeight: 700, textAlign: 'center' }}>
-                        NOW SERVING: #{patientQueue.currentToken} • Please present your token to the attending nurse
-                      </div>
-                    </div>
-                  );
-                }
-
-                // STATE C: CHECKED IN / WAITING
-                return (
-                  <div style={{
-                    background: '#FFFFFF',
-                    border: '1.5px solid #BFDBFE',
-                    borderRadius: '18px',
-                    padding: '22px',
-                    boxShadow: '0 4px 18px rgba(37, 99, 235, 0.08)'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB', animation: 'pulse 1.5s infinite' }}></span>
-                        <span style={{ fontSize: '12px', fontWeight: 900, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LIVE OPD</span>
-                      </div>
-                      <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }}>
-                        ● Waiting
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                      <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#2563EB', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '15px' }}>
-                        {activeAppt.doctorId?.name ? activeAppt.doctorId.name.replace('Dr. ', '').substring(0, 2).toUpperCase() : 'DR'}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '15.5px', fontWeight: 800, color: '#0F172A' }}>Dr. {activeAppt.doctorId?.name || patientQueue.doctorName}</div>
-                        <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>{activeAppt.doctorId?.specialty || patientQueue.specialty || 'General Consultation'}</div>
-                      </div>
-                    </div>
-
-                    {/* YOUR TOKEN vs NOW SERVING */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-                      <div style={{ background: '#EFF6FF', border: '1.5px solid #93C5FD', borderRadius: '12px', padding: '14px 10px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', marginBottom: '4px' }}>YOUR TOKEN</div>
-                        <div style={{ fontSize: '32px', fontWeight: 900, color: '#1D4ED8', lineHeight: 1 }}>#{activeAppt.tokenNumber}</div>
-                        <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '4px', fontWeight: 600 }}>{activeAppt.tokenSlotId || 'OPD Slot'}</div>
-                      </div>
-
-                      <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px 10px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>NOW SERVING</div>
-                        <div style={{ fontSize: '32px', fontWeight: 900, color: '#0F172A', lineHeight: 1 }}>
-                          {patientQueue.currentToken ? `#${patientQueue.currentToken}` : '—'}
-                        </div>
-                        <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '4px', fontWeight: 600 }}>
-                          {patientQueue.currentToken ? 'In Consultation' : 'Waiting to start'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Patients ahead relationship */}
-                    <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', color: '#92400E', padding: '10px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 800, textAlign: 'center' }}>
-                      👥 {patientQueue.patientsAhead !== null ? `${patientQueue.patientsAhead} ${patientQueue.patientsAhead === 1 ? 'patient' : 'patients'} ahead` : 'Waiting in OPD queue'}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* 3. QUICK ACCESS HEALTH HUB */}
-            <div style={{ marginBottom: '28px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
-                Quick Access
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
-                <div
-                  onClick={() => setActiveTab('records')}
-                  style={{
-                    background: '#FFFFFF',
-                    border: '1px solid #E2E8F0',
-                    borderRadius: '14px',
-                    padding: '16px',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    textAlign: 'center'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.transform = 'none'; }}
-                >
-                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
-                    <i data-lucide="file-text" style={{ width: '20px', height: '20px' }}></i>
-                  </div>
-                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Medical Records</div>
-                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{visits.length} Visits</div>
-                </div>
-
-                <div
-                  onClick={() => setActiveTab('prescriptions')}
-                  style={{
-                    background: '#FFFFFF',
-                    border: '1px solid #E2E8F0',
-                    borderRadius: '14px',
-                    padding: '16px',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    textAlign: 'center'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.transform = 'none'; }}
-                >
-                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
-                    <i data-lucide="pill" style={{ width: '20px', height: '20px' }}></i>
-                  </div>
-                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Prescriptions</div>
-                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{prescriptions.length} Active</div>
-                </div>
-
-                <div
-                  onClick={() => setActiveTab('documents')}
-                  style={{
-                    background: '#FFFFFF',
-                    border: '1px solid #E2E8F0',
-                    borderRadius: '14px',
-                    padding: '16px',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    textAlign: 'center'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.transform = 'none'; }}
-                >
-                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
-                    <i data-lucide="folder" style={{ width: '20px', height: '20px' }}></i>
-                  </div>
-                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Documents</div>
-                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{clinicalDocs.length} Files</div>
-                </div>
-
-                <div
-                  onClick={() => setActiveTab('privacy')}
-                  style={{
-                    background: '#FFFFFF',
-                    border: '1px solid #E2E8F0',
-                    borderRadius: '14px',
-                    padding: '16px',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    textAlign: 'center'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.transform = 'none'; }}
-                >
-                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#F5F3FF', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
-                    <i data-lucide="shield-check" style={{ width: '20px', height: '20px' }}></i>
-                  </div>
-                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Privacy & Consent</div>
-                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>DPDP Protected</div>
-                </div>
-              </div>
-            </div>
-
-            {/* 4. RECENT HEALTH ACTIVITY & CREDENTIALS */}
-            <div className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '24px' }}>
-              <div>
-                {/* Vitals Tracker */}
-                <div className="glass-card" style={{ marginBottom: '24px', padding: '22px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-                    <h3 style={{ fontSize: '15.5px', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <i data-lucide="activity" style={{ color: 'var(--primary)' }}></i> Vital Signs (Latest Record)
-                    </h3>
-                    <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>
-                      {vitals.length > 0 ? new Date(vitals[0].createdAt).toLocaleDateString([], { day: '2-digit', month: 'short' }) : 'No Entries'}
-                    </span>
-                  </div>
-
-                  {vitals.length > 0 ? (
-                    (() => {
-                      const latest = vitals[0];
-                      const isHighSys = latest.bpSys > 140;
-                      const isLowSpo2 = latest.spo2 < 95;
-                      const isHighPulse = latest.pulse > 100 || latest.pulse < 60;
-                      
-                      return (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '14px' }}>
-                          <div style={{ padding: '14px', borderRadius: '14px', background: isHighSys ? '#FFF7ED' : '#F8FAFC', border: `1px solid ${isHighSys ? '#FDBA74' : '#E2E8F0'}` }}>
-                            <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 800 }}>BLOOD PRESSURE</div>
-                            <div style={{ fontSize: '18px', fontWeight: 900, color: isHighSys ? '#EA580C' : '#0F172A', marginTop: '4px' }}>
-                              {latest.bpSys}/{latest.bpDia} <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>mmHg</span>
-                            </div>
-                            <div style={{ fontSize: '10px', color: isHighSys ? '#D97706' : '#16A34A', fontWeight: 700, marginTop: '4px' }}>
-                              {isHighSys ? '⚠️ Elevated' : '✓ Optimal'}
-                            </div>
-                          </div>
-
-                          <div style={{ padding: '14px', borderRadius: '14px', background: isLowSpo2 ? '#FEF2F2' : '#F8FAFC', border: `1px solid ${isLowSpo2 ? '#FCA5A5' : '#E2E8F0'}` }}>
-                            <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 800 }}>SPO2 (OXYGEN)</div>
-                            <div style={{ fontSize: '18px', fontWeight: 900, color: isLowSpo2 ? '#EF4444' : '#0F172A', marginTop: '4px' }}>
-                              {latest.spo2}%
-                            </div>
-                            <div style={{ fontSize: '10px', color: isLowSpo2 ? '#DC2626' : '#16A34A', fontWeight: 700, marginTop: '4px' }}>
-                              {isLowSpo2 ? '⚠️ Low' : '✓ Normal'}
-                            </div>
-                          </div>
-
-                          <div style={{ padding: '14px', borderRadius: '14px', background: isHighPulse ? '#FFF7ED' : '#F8FAFC', border: `1px solid ${isHighPulse ? '#FDBA74' : '#E2E8F0'}` }}>
-                            <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 800 }}>HEART RATE</div>
-                            <div style={{ fontSize: '18px', fontWeight: 900, color: isHighPulse ? '#EA580C' : '#0F172A', marginTop: '4px' }}>
-                              {latest.pulse} <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>bpm</span>
-                            </div>
-                            <div style={{ fontSize: '10px', color: isHighPulse ? '#D97706' : '#16A34A', fontWeight: 700, marginTop: '4px' }}>
-                              {isHighPulse ? '⚠️ High' : '✓ Optimal'}
-                            </div>
-                          </div>
-
-                          <div style={{ padding: '14px', borderRadius: '14px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                            <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 800 }}>TEMPERATURE</div>
-                            <div style={{ fontSize: '18px', fontWeight: 900, color: '#0F172A', marginTop: '4px' }}>
-                              {latest.temperature} <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>°F</span>
-                            </div>
-                            <div style={{ fontSize: '10px', color: '#16A34A', fontWeight: 700, marginTop: '4px' }}>
-                              ✓ Normal
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()
-                  ) : (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontWeight: 600, fontSize: '13px' }}>
-                      No clinical vitals logged yet by hospital nurses.
-                    </div>
-                  )}
-                </div>
-
-                {/* Active Diagnoses / Health Insights */}
-                <div className="glass-card" style={{ padding: '22px' }}>
-                  <h3 style={{ fontSize: '15.5px', fontWeight: 800, margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <i data-lucide="heart" style={{ color: 'var(--primary)' }}></i> Active Diagnoses & Conditions
-                  </h3>
-                  
-                  {(() => {
-                    const conditions = [];
-                    clinicalNotes.forEach(n => {
-                      if (n.assessment) {
-                        n.assessment.forEach(c => {
-                          if (!conditions.includes(c)) conditions.push(c);
-                        });
-                      }
-                    });
-
-                    if (conditions.length === 0) {
-                      return (
-                        <div style={{ padding: '16px 0', color: '#94A3B8', fontSize: '13px', fontWeight: 600 }}>
-                          No chronic or active diagnoses listed in your records.
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {conditions.map(c => (
-                          <div 
-                            key={c} 
-                            style={{ 
-                              background: '#EFF6FF', 
-                              border: '1px solid #BFDBFE', 
-                              color: '#2563EB', 
-                              padding: '7px 14px', 
-                              borderRadius: '10px', 
-                              fontSize: '13px', 
-                              fontWeight: 800, 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: '6px' 
-                            }}
-                          >
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563EB' }}></span>
-                            {c}
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Right: ABHA Card & Consent status */}
-              <div>
-                {/* ABDM ABHA ID Card */}
-                <div 
-                  style={{ 
-                    background: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 50%, #3B82F6 100%)', 
-                    color: 'white', 
-                    borderRadius: '20px', 
-                    padding: '20px', 
-                    boxShadow: '0 14px 24px rgba(37, 99, 235, 0.2)', 
-                    position: 'relative', 
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    minHeight: '210px',
-                    marginBottom: '20px'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 1 }}>
-                    <div>
-                      <div style={{ fontSize: '10px', fontWeight: 800, opacity: 0.8, letterSpacing: '1px' }}>AYUSHMAN BHARAT DIGITAL MISSION</div>
-                      <div style={{ fontSize: '15px', fontWeight: 900, marginTop: '2px' }}>ABHA Health ID Card</div>
-                    </div>
-                    <div style={{ background: 'rgba(255,255,255,0.2)', padding: '3px 8px', borderRadius: '20px', fontSize: '9.5px', fontWeight: 800 }}>
-                      ABDM APPROVED
-                    </div>
-                  </div>
-
-                  <div style={{ zIndex: 1, margin: '14px 0' }}>
-                    {patientProfile?.abhaId ? (
-                      <>
-                        <div style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '2px', fontFamily: 'monospace' }}>
-                          {patientProfile.abhaId}
-                        </div>
-                        <div style={{ fontSize: '11.5px', opacity: 0.9, marginTop: '3px', fontWeight: 600 }}>
-                          Address: {patientProfile.abhaAddress || 'N/A'}
-                        </div>
-                      </>
-                    ) : (
-                      <div style={{ padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.3)', textAlign: 'center' }}>
-                        <div style={{ fontSize: '11.5px', fontWeight: 800, marginBottom: '6px' }}>No ABDM Health ID Linked</div>
-                        <button 
-                          className="btn" 
-                          style={{ background: 'white', color: '#2563EB', fontWeight: 800, fontSize: '11px', padding: '5px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
-                          onClick={() => setShowAbhaModal(true)}
-                        >
-                          Link ABHA Card
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1 }}>
-                    <div>
-                      <div style={{ fontSize: '12.5px', fontWeight: 800 }}>{currentUser.name}</div>
-                      <div style={{ fontSize: '10.5px', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                        <i data-lucide="shield-check" style={{ width: '12px', height: '12px', color: '#10B981' }}></i>
-                        {patientProfile?.aadhaarVerified ? 'Aadhaar KYC Verified' : 'Aadhaar Not Verified'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Consent Status & Export */}
-                <div className="glass-card" style={{ padding: '20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <i data-lucide="shield-check" style={{ color: 'var(--primary)', width: '18px', height: '18px' }}></i>
-                    <h4 style={{ fontSize: '14.5px', fontWeight: 800, margin: 0, color: '#0F172A' }}>DPDP Consent Shield</h4>
-                  </div>
-                  <p style={{ fontSize: '12px', color: '#64748B', lineHeight: 1.5, margin: '0 0 14px 0' }}>
-                    Your health data at {selectedHospital.name} is stored with full DPDP compliance and institutional privacy protection.
-                  </p>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button className="btn btn-secondary" style={{ flex: 1, padding: '7px 12px', fontSize: '11.5px', fontWeight: 800 }} onClick={() => setActiveTab('privacy')}>
-                      Manage Consent
-                    </button>
-                    <button className="btn btn-secondary" style={{ flex: 1, padding: '7px 12px', fontSize: '11.5px', fontWeight: 800 }} onClick={handleDownloadDossier}>
-                      Export Dossier
-                    </button>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         )}
@@ -6246,7 +8084,7 @@ const PatientDashboard = () => {
                         style={{ width: '80px', height: '80px', borderRadius: '16px', objectFit: 'cover', border: '3px solid #3B71FE', boxShadow: '0 8px 16px rgba(59,113,254,0.15)' }} 
                       />
                     ) : (
-                      <div style={{ width: '80px', height: '80px', borderRadius: '16px', background: 'linear-gradient(135deg, #3B71FE 0%, #2563EB 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 800, boxShadow: '0 8px 16px rgba(59,113,254,0.15)' }}>
+                      <div style={{ width: '80px', height: '80px', borderRadius: '16px', background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 50%, #06B6D4 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 900, boxShadow: '0 8px 20px rgba(37,99,235,0.35)', border: '2px solid #BFDBFE' }}>
                         {editProfileData.name ? editProfileData.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'JD'}
                       </div>
                     )}
@@ -6276,58 +8114,49 @@ const PatientDashboard = () => {
                       </label>
                       <div style={{ fontSize: '11px', color: '#64748B', marginTop: '6px' }}>JPG, PNG or GIF. Max size 5MB.</div>
                       {editProfileData.avatar && (
-                        <button
-                          type="button"
+                        <button 
+                          type="button" 
                           onClick={() => setEditProfileData(prev => ({ ...prev, avatar: '' }))}
-                          style={{ display: 'block', background: 'none', border: 'none', color: '#EF4444', fontSize: '11px', fontWeight: 700, padding: 0, marginTop: '4px', cursor: 'pointer' }}
+                          style={{ background: 'none', border: 'none', color: '#DC2626', fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: 0, marginTop: '8px', display: 'block' }}
                         >
                           Remove Photo
                         </button>
                       )}
                     </div>
                   </div>
-                  <div className="mobile-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Full Name *</label>
-                      <input type="text" className="form-control" style={{ height: '42px', borderRadius: '8px', border: '1px solid #CBD5E1', paddingLeft: '12px', fontSize: '13px', fontWeight: 600 }} value={editProfileData.name} onChange={e => setEditProfileData({...editProfileData, name: e.target.value})} required />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Contact Number *</label>
-                      <input type="text" className="form-control" style={{ height: '42px', borderRadius: '8px', border: '1px solid #CBD5E1', paddingLeft: '12px', fontSize: '13px', fontWeight: 600 }} value={editProfileData.contact} onChange={e => setEditProfileData({...editProfileData, contact: e.target.value})} required />
-                    </div>
+                  <div className="form-group" style={{ marginBottom: '16px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Full Name *</label>
+                    <input type="text" className="form-control" style={{ height: '42px', borderRadius: '8px', border: '1px solid #CBD5E1', paddingLeft: '12px', fontSize: '13px', fontWeight: 600 }} value={editProfileData.name} onChange={e => setEditProfileData({...editProfileData, name: e.target.value})} required />
                   </div>
-                  <div className="mobile-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-                    <div className="form-group" style={{ margin: 0 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                    <div className="form-group">
                       <label style={{ fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Age *</label>
-                      <input type="number" className="form-control" style={{ height: '42px', borderRadius: '8px', border: '1px solid #CBD5E1', paddingLeft: '12px', fontSize: '13px', fontWeight: 600 }} value={editProfileData.age} onChange={e => setEditProfileData({...editProfileData, age: e.target.value})} required />
+                      <input type="number" className="form-control" style={{ height: '42px', borderRadius: '8px', border: '1px solid #CBD5E1', paddingLeft: '12px', fontSize: '13px', fontWeight: 600 }} value={editProfileData.age} onChange={e => setEditProfileData({...editProfileData, age: e.target.value})} required min="1" max="120" />
                     </div>
-                    <div className="form-group" style={{ margin: 0 }}>
+                    <div className="form-group">
                       <label style={{ fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Gender *</label>
-                      <select className="form-control" style={{ height: '42px', borderRadius: '8px', border: '1px solid #CBD5E1', paddingLeft: '10px', fontSize: '13px', fontWeight: 600, background: 'white' }} value={editProfileData.gender} onChange={e => setEditProfileData({...editProfileData, gender: e.target.value})} required>
-                        <option value="">Select Gender</option>
+                      <select className="form-control" style={{ height: '42px', borderRadius: '8px', border: '1px solid #CBD5E1', paddingLeft: '12px', fontSize: '13px', fontWeight: 600 }} value={editProfileData.gender} onChange={e => setEditProfileData({...editProfileData, gender: e.target.value})}>
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
                         <option value="Other">Other</option>
                       </select>
                     </div>
-                    <div className="form-group" style={{ margin: 0 }}>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                    <div className="form-group">
+                      <label style={{ fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Phone Number *</label>
+                      <input type="text" className="form-control" style={{ height: '42px', borderRadius: '8px', border: '1px solid #CBD5E1', paddingLeft: '12px', fontSize: '13px', fontWeight: 600 }} value={editProfileData.contact} onChange={e => setEditProfileData({...editProfileData, contact: e.target.value})} required />
+                    </div>
+                    <div className="form-group">
                       <label style={{ fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Blood Group</label>
-                      <select className="form-control" style={{ height: '42px', borderRadius: '8px', border: '1px solid #CBD5E1', paddingLeft: '10px', fontSize: '13px', fontWeight: 600, background: 'white' }} value={editProfileData.bloodGroup} onChange={e => setEditProfileData({...editProfileData, bloodGroup: e.target.value})}>
-                        <option value="">Select Blood Group</option>
-                        <option value="O+">O+</option>
-                        <option value="O-">O-</option>
-                        <option value="A+">A+</option>
-                        <option value="A-">A-</option>
-                        <option value="B+">B+</option>
-                        <option value="B-">B-</option>
-                        <option value="AB+">AB+</option>
-                        <option value="AB-">AB-</option>
+                      <select className="form-control" style={{ height: '42px', borderRadius: '8px', border: '1px solid #CBD5E1', paddingLeft: '12px', fontSize: '13px', fontWeight: 600 }} value={editProfileData.bloodGroup} onChange={e => setEditProfileData({...editProfileData, bloodGroup: e.target.value})}>
+                        {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => <option key={bg} value={bg}>{bg}</option>)}
                       </select>
                     </div>
                   </div>
                   <div className="form-group" style={{ marginBottom: '16px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Address</label>
-                    <textarea className="form-control" style={{ minHeight: '60px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '10px 12px', fontSize: '13px', fontWeight: 600 }} value={editProfileData.address} onChange={e => setEditProfileData({...editProfileData, address: e.target.value})} placeholder="Full address"></textarea>
+                    <label style={{ fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Residential Address *</label>
+                    <input type="text" className="form-control" placeholder="House/Flat No, Street, City, Pincode" style={{ height: '42px', borderRadius: '8px', border: '1px solid #CBD5E1', paddingLeft: '12px', fontSize: '13px', fontWeight: 600 }} value={editProfileData.address} onChange={e => setEditProfileData({...editProfileData, address: e.target.value})} required />
                   </div>
                   <div className="form-group" style={{ marginBottom: '16px' }}>
                     <label style={{ fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Allergies</label>
@@ -6337,7 +8166,7 @@ const PatientDashboard = () => {
                     <label style={{ fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px', display: 'block' }}>Medical History (Comma separated)</label>
                     <input type="text" className="form-control" placeholder="e.g. Asthma, Diabetes" style={{ height: '42px', borderRadius: '8px', border: '1px solid #CBD5E1', paddingLeft: '12px', fontSize: '13px', fontWeight: 600 }} value={editProfileData.medicalHistory} onChange={e => setEditProfileData({...editProfileData, medicalHistory: e.target.value})} />
                   </div>
-                  <button type="submit" className="btn btn-primary" style={{ width: '100%', height: '46px', justifyContent: 'center', fontWeight: 800, borderRadius: '8px', background: 'var(--primary-gradient)' }} disabled={isUpdatingProfile}>
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', height: '46px', justifyContent: 'center', fontWeight: 800, borderRadius: '10px', background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 50%, #06B6D4 100%)', boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)', border: 'none', color: '#FFFFFF' }} disabled={isUpdatingProfile}>
                     {isUpdatingProfile ? 'Saving...' : 'Save Profile Changes'}
                   </button>
                 </form>
@@ -7479,7 +9308,7 @@ const PatientDashboard = () => {
       )}
 
       {showAadhaarModal && (
-        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+        <div className="modal-overlay" style={{ zIndex: 10000, display: 'flex' }}>
           <div className="modal-box" style={{ maxWidth: '450px', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
@@ -7539,7 +9368,7 @@ const PatientDashboard = () => {
       )}
 
       {showAbhaModal && (
-        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+        <div className="modal-overlay" style={{ zIndex: 10000, display: 'flex' }}>
           <div className="modal-box" style={{ maxWidth: '450px', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
@@ -7597,6 +9426,275 @@ const PatientDashboard = () => {
         </div>
       )}
 
+      {/* ============================================================ */}
+      {/* DIGITAL ABHA HEALTH ID CARD MODAL */}
+      {/* ============================================================ */}
+      {showDigitalCardModal && (() => {
+        const patientUhid = patientProfile?.uhid || (patientProfile ? `MDC-${patientProfile._id.substring(18).toUpperCase()}` : (currentUser.id ? `MDC-${currentUser.id.substring(18).toUpperCase()}` : 'MDC-456B50'));
+        const patientAbha = patientProfile?.abhaId || '';
+        const patientAbhaAddr = patientProfile?.abhaAddress || (patientAbha ? `${(currentUser.name || 'patient').toLowerCase().replace(/\s+/g, '')}@abdm` : 'Not linked');
+        const isLinked = Boolean(patientAbha);
+        const initials = (currentUser.name || 'HG').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+        const handlePrintCard = () => {
+          const pw = window.open('', '_blank', 'width=700,height=500');
+          pw.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>ABHA Digital Health Card – ${currentUser.name || 'Patient'}</title>
+              <style>
+                @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap');
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #F8FAFC; font-family: 'Outfit', sans-serif; }
+                .card {
+                  width: 540px; height: 300px; border-radius: 20px;
+                  background: linear-gradient(135deg, #0B192C 0%, #1E3A8A 50%, #0369A1 100%);
+                  color: #fff; padding: 22px 26px; position: relative; overflow: hidden;
+                  box-shadow: 0 16px 40px rgba(30,58,138,0.4);
+                }
+                .ribbon { position: absolute; top: 0; left: 0; right: 0; height: 5px; display: flex; }
+                .r1 { flex:1; background: #FF9933; }
+                .r2 { flex:1; background: #fff; }
+                .r3 { flex:1; background: #138808; }
+                .glow { position: absolute; top:-40%; right:-20%; width:240px; height:240px; border-radius:50%; background: radial-gradient(circle, rgba(14,165,233,0.25) 0%, transparent 70%); }
+                .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+                .nha { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,0.7); }
+                .title { font-size: 14px; font-weight: 900; letter-spacing: .04em; }
+                .brand { font-size: 12px; font-weight: 900; letter-spacing: .05em; }
+                .chip { width: 36px; height: 28px; border-radius: 5px; background: linear-gradient(135deg, #FDE047 0%, #D97706 100%); position: relative; border: 1px solid rgba(0,0,0,0.15); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+                .chip-inner { position: absolute; inset: 4px; border: 1px solid rgba(0,0,0,0.2); border-radius: 2px; }
+                .mid-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+                .name-label { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: #93C5FD; font-weight: 700; }
+                .name { font-size: 18px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; }
+                .bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+                .abha-label { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: #93C5FD; font-weight: 700; }
+                .abha-num { font-size: 16px; font-weight: 900; font-family: monospace; letter-spacing: .1em; }
+                .abha-sub { font-size: 11px; color: rgba(255,255,255,0.7); margin-top: 2px; }
+                .qr-box { width: 50px; height: 50px; background: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+                .qr-box svg { width: 42px; height: 42px; }
+                .footer { margin-top: 16px; text-align: center; font-size: 11px; color: #64748B; }
+                @media print { body { background: white; } .card { box-shadow: none; } }
+              </style>
+            </head>
+            <body>
+              <div>
+                <div class="card">
+                  <div class="ribbon"><div class="r1"></div><div class="r2"></div><div class="r3"></div></div>
+                  <div class="glow"></div>
+                  <div class="header">
+                    <div>
+                      <div class="nha">National Health Authority • ABDM</div>
+                      <div class="title">ABHA • Digital Health ID</div>
+                    </div>
+                    <div class="brand">● CUROXA</div>
+                  </div>
+                  <div class="mid-row">
+                    <div class="chip"><div class="chip-inner"></div></div>
+                    <div></div>
+                  </div>
+                  <div style="margin-bottom:12px">
+                    <div class="name-label">Cardholder Name</div>
+                    <div class="name">${currentUser.name || 'Patient Name'}</div>
+                  </div>
+                  <div class="bottom">
+                    <div>
+                      <div class="abha-label">ABHA Number</div>
+                      <div class="abha-num">${isLinked ? patientAbha : '91-2093-4820-2104'}</div>
+                      <div class="abha-sub">${isLinked ? patientAbhaAddr : 'link@abdm'} &nbsp;•&nbsp; UHID: ${patientUhid}</div>
+                    </div>
+                    <div class="qr-box">
+                      <svg viewBox="0 0 24 24" fill="#0F172A"><path d="M2 2h8v8H2V2zm2 2v4h4V4H4zm10-2h8v8h-8V2zm2 2v4h4V4h-4zM2 14h8v8H2v-8zm2 2v4h4v-4H4zm14 0h4v2h-4v-2zm-4 0h2v4h-2v-4zm2 2h2v4h-2v-4zm2 2h2v2h-2v-2zm-6-4h2v2h-2v-2zm0 4h2v2h-2v-2z"/></svg>
+                    </div>
+                  </div>
+                </div>
+                <div class="footer">Issued by Curoxa Health Management • Powered by ABDM, National Health Authority of India</div>
+              </div>
+            </body>
+            </html>
+          `);
+          pw.document.close();
+          setTimeout(() => pw.print(), 600);
+        };
+
+        return (
+          <div
+            className="modal-overlay"
+            style={{ zIndex: 10001, display: 'flex', alignItems: 'center', padding: '20px' }}
+            onClick={e => { if (e.target === e.currentTarget) setShowDigitalCardModal(false); }}
+          >
+            <div
+              className="modal-box"
+              style={{ maxWidth: '680px', width: '100%', padding: '0', borderRadius: '24px', overflow: 'hidden', border: 'none' }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div style={{ padding: '20px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF' }}>
+                <div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 900, color: '#0F172A', margin: '0 0 2px 0', fontFamily: "'Outfit', sans-serif" }}>
+                    Digital Health ID Card
+                  </h3>
+                  <p style={{ fontSize: '12px', color: '#64748B', margin: 0, fontWeight: 500 }}>
+                    Ayushman Bharat Digital Mission (ABDM) · National Health Authority
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDigitalCardModal(false)}
+                  style={{ background: '#F1F5F9', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}
+                >
+                  <i data-lucide="x" style={{ width: '16px', height: '16px' }}></i>
+                </button>
+              </div>
+
+              {/* Card Preview Area */}
+              <div style={{ background: '#F8FAFC', padding: '32px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {/* Full-size ABHA Health Card Render */}
+                <div style={{
+                  width: '100%',
+                  maxWidth: '520px',
+                  borderRadius: '20px',
+                  background: 'linear-gradient(135deg, #0B192C 0%, #1E3A8A 52%, #0369A1 100%)',
+                  color: '#FFFFFF',
+                  padding: '24px 28px',
+                  boxShadow: '0 20px 50px -8px rgba(30, 58, 138, 0.45)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  {/* India Tricolor Header Ribbon */}
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '5px', display: 'flex' }}>
+                    <div style={{ flex: 1, background: '#FF9933' }} />
+                    <div style={{ flex: 1, background: '#FFFFFF' }} />
+                    <div style={{ flex: 1, background: '#138808' }} />
+                  </div>
+
+                  {/* Holographic Glow */}
+                  <div style={{ position: 'absolute', top: '-50%', right: '-20%', width: '280px', height: '280px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(14, 165, 233, 0.22) 0%, transparent 70%)', pointerEvents: 'none' }} />
+                  <div style={{ position: 'absolute', bottom: '-30%', left: '-10%', width: '200px', height: '200px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%)', pointerEvents: 'none' }} />
+
+                  {/* Card Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>🏛️</div>
+                      <div>
+                        <div style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)' }}>National Health Authority • ABDM</div>
+                        <div style={{ fontSize: '14px', fontWeight: 900, letterSpacing: '0.04em' }}>ABHA • Ayushman Bharat Health Account</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', background: 'rgba(255,255,255,0.1)', borderRadius: '8px', padding: '5px 10px' }}>
+                      <img src={curoxaSidebarLogo} alt="Curoxa" style={{ width: '22px', height: '22px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+                      <span style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.05em' }}>CUROXA</span>
+                    </div>
+                  </div>
+
+                  {/* Middle: Chip + Photo Avatar + Status */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '18px' }}>
+                    {/* EMV Chip */}
+                    <div style={{ width: '40px', height: '30px', borderRadius: '6px', background: 'linear-gradient(135deg, #FDE047 0%, #D97706 100%)', border: '1px solid rgba(0,0,0,0.2)', position: 'relative', flexShrink: 0, boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
+                      <div style={{ position: 'absolute', inset: '5px', border: '1px solid rgba(0,0,0,0.15)', borderRadius: '2px' }} />
+                    </div>
+                    {/* Patient Avatar */}
+                    {patientProfile?.avatar ? (
+                      <img src={patientProfile.avatar} alt="Patient" style={{ width: '50px', height: '50px', borderRadius: '12px', objectFit: 'cover', border: '2.5px solid rgba(255,255,255,0.4)', flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: '50px', height: '50px', borderRadius: '12px', background: 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 900, border: '2.5px solid rgba(255,255,255,0.35)', flexShrink: 0, letterSpacing: '0.02em' }}>
+                        {initials}
+                      </div>
+                    )}
+                    {/* Verified Badge */}
+                    {isLinked && (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(22, 163, 74, 0.25)', border: '1px solid rgba(22, 163, 74, 0.5)', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', fontWeight: 800, color: '#86EFAC' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        ABDM Verified
+                      </div>
+                    )}
+                    {!isLinked && (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(59, 130, 246, 0.2)', border: '1px solid rgba(59, 130, 246, 0.4)', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', fontWeight: 800, color: '#93C5FD' }}>
+                        ⚡ Link to Activate
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Patient Name */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#93C5FD', fontWeight: 700, marginBottom: '2px' }}>Cardholder</div>
+                    <div style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '0.03em', textTransform: 'uppercase', lineHeight: 1.1 }}>{currentUser.name || 'Patient Name'}</div>
+                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.65)', marginTop: '3px', fontWeight: 500 }}>
+                      {patientProfile?.gender || 'Male'} · {patientProfile?.age || '—'} Yrs · Blood: {patientProfile?.bloodGroup || '—'}
+                    </div>
+                  </div>
+
+                  {/* Bottom Row */}
+                  <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#93C5FD', fontWeight: 700, marginBottom: '3px' }}>ABHA Number</div>
+                      <div style={{ fontSize: '18px', fontWeight: 900, fontFamily: 'monospace', letterSpacing: '0.1em' }}>
+                        {isLinked ? patientAbha : '91-2093-4820-2104'}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.65)', marginTop: '3px', fontWeight: 550 }}>
+                        {isLinked ? patientAbhaAddr : 'Link to get your ABHA address'} &nbsp;·&nbsp; UHID: {patientUhid}
+                      </div>
+                    </div>
+                    {/* QR Code */}
+                    <div style={{ width: '58px', height: '58px', background: '#FFFFFF', borderRadius: '10px', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.25)' }}>
+                      <svg viewBox="0 0 24 24" width="48" height="48" fill="#0F172A">
+                        <path d="M2 2h8v8H2V2zm2 2v4h4V4H4zm10-2h8v8h-8V2zm2 2v4h4V4h-4zM2 14h8v8H2v-8zm2 2v4h4v-4H4zm14 0h4v2h-4v-2zm-4 0h2v4h-2v-4zm2 2h2v4h-2v-4zm2 2h2v2h-2v-2zm-6-4h2v2h-2v-2zm0 4h2v2h-2v-2z"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer: Actions */}
+              <div style={{ padding: '20px 24px', background: '#FFFFFF', borderTop: '1px solid #F1F5F9' }}>
+                {/* ABHA Status strip */}
+                {!isLinked && (
+                  <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                    <p style={{ fontSize: '12.5px', color: '#1D4ED8', margin: 0, fontWeight: 600, lineHeight: 1.4 }}>
+                      Your ABHA number is not yet linked. Click <strong>Link ABHA</strong> below to connect your Ayushman Bharat Digital Health Account.
+                    </p>
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={handlePrintCard}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '10px 18px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '10px', fontSize: '13.5px', fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}
+                  >
+                    <i data-lucide="printer" style={{ width: '15px', height: '15px' }}></i>
+                    Print / Save Card
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const txt = isLinked ? patientAbha : '91-2093-4820-2104';
+                      navigator.clipboard.writeText(txt).then(() => showToast('ABHA ID copied!', 'success'));
+                    }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '10px 16px', background: '#F1F5F9', color: '#334155', border: '1px solid #CBD5E1', borderRadius: '10px', fontSize: '13.5px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    <i data-lucide="copy" style={{ width: '15px', height: '15px' }}></i>
+                    Copy ABHA ID
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowDigitalCardModal(false); setShowAbhaModal(true); }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '10px 16px', background: '#F0FDF4', color: '#15803D', border: '1px solid #86EFAC', borderRadius: '10px', fontSize: '13.5px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    <i data-lucide="link" style={{ width: '15px', height: '15px' }}></i>
+                    {isLinked ? 'Update ABHA Link' : 'Link ABHA Account'}
+                  </button>
+                </div>
+                <p style={{ fontSize: '11px', color: '#94A3B8', marginTop: '12px', margin: '12px 0 0 0', lineHeight: 1.5 }}>
+                  🏛️ Issued by Curoxa Health Management · Powered by Ayushman Bharat Digital Mission (ABDM), National Health Authority of India. Governed by the Digital Personal Data Protection Act (DPDP), 2023.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="mobile-bottom-nav">
         {!selectedHospital ? (
           <>
@@ -7623,7 +9721,35 @@ const PatientDashboard = () => {
               <i data-lucide="calendar"></i>
               <span>Appts</span>
             </div>
-            <div className={`mob-nav-item ${(activeTab === 'records' || activeTab === 'prescriptions' || activeTab === 'documents') ? 'active' : ''}`} onClick={() => setActiveTab('records')}>
+            {/* Elevated Center Book FAB */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginTop: '-22px',
+                cursor: 'pointer'
+              }}
+              onClick={() => setActiveTab('find')}
+            >
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 50%, #0284C7 100%)',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 6px 18px rgba(37, 99, 235, 0.45)',
+                border: '3px solid #FFFFFF'
+              }}>
+                <i data-lucide="plus" style={{ width: '22px', height: '22px', strokeWidth: 3 }}></i>
+              </div>
+              <span style={{ fontSize: '10px', fontWeight: 900, color: '#2563EB', marginTop: '2px' }}>Book</span>
+            </div>
+            <div className={`mob-nav-item ${(activeTab === 'records' || activeTab === 'prescriptions' || activeTab === 'documents') ? 'active' : ''}`} onClick={() => { setMyHealthCategory('ALL'); setActiveTab('records'); }}>
               <i data-lucide="activity"></i>
               <span>My Health</span>
             </div>

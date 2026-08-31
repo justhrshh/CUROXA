@@ -2,6 +2,7 @@ const express = require('express');
 const Patient = require('../models/Patient');
 const User = require('../models/User');
 const { verifyToken } = require('../middleware/authMiddleware');
+const { isPatientProfileComplete } = require('../utils/patientProfileHelper');
 const router = express.Router();
 
 router.use(verifyToken);
@@ -262,11 +263,29 @@ router.get('/:id', async (req, res) => {
           io.to(effectiveTenant).emit("data_changed", { type: "patients" });
         }
 
-        return res.json(patient);
+        const isComplete = isPatientProfileComplete(patient);
+        return res.json({
+          ...patient.toObject(),
+          isSetupComplete: isComplete
+        });
       }
       return res.status(404).json({ error: 'Patient not found' });
     }
-    res.json(patient);
+
+    const isComplete = isPatientProfileComplete(patient);
+    // Sync with User table if user exists
+    try {
+      const u = await User.findOne({ staff_id: patient.contact }) || await User.findOne({ phone: patient.contact });
+      if (u && u.isSetupComplete !== isComplete) {
+        u.isSetupComplete = isComplete;
+        await u.save();
+      }
+    } catch (e) {}
+
+    res.json({
+      ...patient.toObject(),
+      isSetupComplete: isComplete
+    });
   } catch (error) {
     console.error("Get patient error:", error);
     res.status(500).json({ error: 'Internal server error' });
@@ -344,12 +363,14 @@ router.put('/:id', async (req, res) => {
 
     await patient.save();
 
+    const isComplete = isPatientProfileComplete(patient);
+
     // Sync with User authentication table
     if (user) {
       user.name = patient.name;
       user.staff_id = patient.contact;
       user.avatar = patient.avatar;
-      user.isSetupComplete = true;
+      user.isSetupComplete = isComplete;
       await user.save();
     }
 
@@ -358,7 +379,10 @@ router.put('/:id', async (req, res) => {
       io.to(req.tenantId).emit("data_changed", { type: "patients" });
     }
 
-    res.json(patient);
+    res.json({
+      ...patient.toObject(),
+      isSetupComplete: isComplete
+    });
   } catch (error) {
     console.error("Update patient error:", error);
     res.status(500).json({ error: 'Internal server error' });
