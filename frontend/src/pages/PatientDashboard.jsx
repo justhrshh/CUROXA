@@ -5,6 +5,11 @@ import { convertPdfToImage } from '../utils/pdfHelper';
 import curoxaHero3D from '../assets/curoxa_hero_3d.png';
 import curoxaMobileHero3D from '../assets/curoxa_mobile_hero_3d.png';
 import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import HospitalLoadingTransition from '../components/patient/hospital/HospitalLoadingTransition';
+import HospitalTopNav from '../components/patient/hospital/HospitalTopNav';
+import HospitalBottomNav from '../components/patient/hospital/HospitalBottomNav';
+import PatientHospitalHome from '../components/patient/hospital/PatientHospitalHome';
+import WithdrawConsentNoticeModal from '../components/patient/hospital/WithdrawConsentNoticeModal';
 
 // Safeguard React DOM reconciliation against external DOM mutations (e.g. Lucide CDN node replacement)
 if (typeof window !== 'undefined') {
@@ -123,8 +128,25 @@ const PatientDashboard = () => {
   };
 
 
-  const [selectedHospital, setSelectedHospital] = useState(null);
-  const [activeTab, setActiveTab] = useState('curoxa-home');
+  const [selectedHospital, setSelectedHospital] = useState(() => {
+    try {
+      const saved = localStorage.getItem('curoxa_selected_hospital');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [isTransitioningHospital, setIsTransitioningHospital] = useState(false);
+  const [transitionHospitalTarget, setTransitionHospitalTarget] = useState(null);
+
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const savedHosp = localStorage.getItem('curoxa_selected_hospital');
+      return savedHosp ? 'summary' : 'curoxa-home';
+    } catch (e) {
+      return 'curoxa-home';
+    }
+  });
   const [curoxaHospitals, setCuroxaHospitals] = useState([]);
   const [curoxaHospitalsLoading, setCuroxaHospitalsLoading] = useState(true);
   const [curoxaHospitalsError, setCuroxaHospitalsError] = useState(null);
@@ -140,14 +162,45 @@ const PatientDashboard = () => {
 
   const handleSelectHospital = (h) => {
     if (!h) return;
-    setSelectedHospital(h);
-    setSelectedHospitalId(h.code || h.id);
-    setSelectedHospitalDetails(h);
+    setTransitionHospitalTarget(h);
+    setIsTransitioningHospital(true);
     try {
       localStorage.setItem('tenantId', h.code || h.id);
       localStorage.setItem('tenantName', h.name);
+      localStorage.setItem('curoxa_selected_hospital', JSON.stringify(h));
     } catch (e) {}
-    setActiveTab('summary');
+    
+    // Fetch hospital-scoped data
+    fetchData(false);
+
+    // Subtle 450ms polished micro-transition
+    setTimeout(() => {
+      setSelectedHospital(h);
+      setSelectedHospitalId(h.code || h.id);
+      setSelectedHospitalDetails(h);
+      setActiveTab('summary');
+      setIsTransitioningHospital(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 450);
+  };
+
+  const handleChangeHospital = () => {
+    try {
+      localStorage.removeItem('curoxa_selected_hospital');
+    } catch (e) {}
+    setSelectedHospital(null);
+    setSelectedHospitalId(null);
+    setSelectedHospitalDetails(null);
+    setActiveTab('curoxa-home');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleOpenBookingFlow = () => {
+    if (selectedDoctor) {
+      setActiveTab('book-appointment');
+    } else {
+      setActiveTab('find');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -409,10 +462,15 @@ const PatientDashboard = () => {
   // Hospital-scoped appointments
   const hospitalAppointments = useMemo(() => {
     if (!selectedHospital) return appointments;
-    const targetTenant = String(selectedHospital.code || selectedHospital.id).toLowerCase();
+    const targetTenant = String(selectedHospital.code || selectedHospital.id || '').toLowerCase();
+    const targetObjId = String(selectedHospital._id || '').toLowerCase();
     return appointments.filter(app => {
       const appTenant = String(app.tenantId || '').toLowerCase();
-      return !appTenant || appTenant === targetTenant;
+      const appHospId = String(app.hospitalId || '').toLowerCase();
+      return !appTenant ||
+             appTenant === targetTenant ||
+             (targetObjId && appTenant === targetObjId) ||
+             (appHospId && (appHospId === targetTenant || appHospId === targetObjId));
     });
   }, [appointments, selectedHospital]);
 
@@ -2835,12 +2893,21 @@ const PatientDashboard = () => {
             transform: translateX(0) !important;
           }
           .patient-portal-container .top-nav,
-          .patient-portal-container .main-content {
+          .patient-portal-container .top-nav.collapsed {
             margin-left: 0 !important;
           }
-          .patient-portal-container .top-nav.collapsed,
+          .patient-portal-container .main-content,
           .patient-portal-container .main-content.collapsed {
             margin-left: 0 !important;
+            padding-left: 14px !important;
+            padding-right: 14px !important;
+            padding-top: 12px !important;
+            padding-bottom: 120px !important;
+            box-sizing: border-box !important;
+          }
+          .patient-portal-container .tab-content.active,
+          .patient-portal-container .tab-content {
+            padding-bottom: 100px !important;
           }
           .mobile-menu-toggle {
             display: flex !important;
@@ -3461,6 +3528,9 @@ const PatientDashboard = () => {
         <div className="mobile-backdrop" onClick={() => setMobileSidebarOpen(false)} />
       )}
 
+      {/* Micro-loading transition when entering a hospital space */}
+      <HospitalLoadingTransition hospital={transitionHospitalTarget || selectedHospital} visible={isTransitioningHospital} />
+
       <div className={"top-nav " + (isSidebarCollapsed ? "collapsed" : "")} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         {/* Hamburger Mobile Menu Toggle Button */}
         <button 
@@ -3485,21 +3555,21 @@ const PatientDashboard = () => {
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
         </button>
-        
+
         {selectedHospital ? (
           /* LEVEL 2: SELECTED HOSPITAL PERSISTENT IDENTITY IN TOP NAV */
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, overflow: 'hidden' }}>
             {/* Hospital Logo / Avatar */}
             {(selectedHospital.logo && selectedHospital.logo.startsWith('http')) || (selectedHospital.letterheadUrl && selectedHospital.letterheadUrl.startsWith('http')) ? (
               <img 
                 src={selectedHospital.letterheadUrl || selectedHospital.logo} 
                 alt={selectedHospital.name} 
-                style={{ width: '42px', height: '42px', borderRadius: '10px', objectFit: 'cover', border: '1px solid #E2E8F0', flexShrink: 0 }}
+                style={{ width: '38px', height: '38px', borderRadius: '10px', objectFit: 'cover', border: '1px solid #E2E8F0', flexShrink: 0 }}
               />
             ) : (
               <div style={{
-                width: '42px',
-                height: '42px',
+                width: '38px',
+                height: '38px',
                 borderRadius: '10px',
                 background: 'linear-gradient(135deg, #2563EB 0%, #0284C7 100%)',
                 color: '#FFFFFF',
@@ -3507,7 +3577,7 @@ const PatientDashboard = () => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontWeight: 900,
-                fontSize: '16px',
+                fontSize: '15px',
                 flexShrink: 0,
                 boxShadow: '0 3px 8px rgba(37, 99, 235, 0.25)'
               }}>
@@ -3516,66 +3586,34 @@ const PatientDashboard = () => {
             )}
 
             {/* Hospital Name, Active badge & Address */}
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
                   {selectedHospital.name}
                 </span>
                 <span style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '4px',
-                  fontSize: '11px',
+                  gap: '3px',
+                  fontSize: '10.5px',
                   color: '#15803D',
                   fontWeight: 800,
                   background: '#DCFCE7',
-                  padding: '2px 8px',
+                  padding: '2px 7px',
                   borderRadius: '99px',
-                  border: '1px solid #BBF7D0'
+                  border: '1px solid #BBF7D0',
+                  flexShrink: 0
                 }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16A34A' }} />
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#16A34A' }} />
                   Active
                 </span>
               </div>
-              <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 550, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '1px' }}>
+              <div className="desktop-only-block" style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '1px' }}>
                 {selectedHospital.address || selectedHospital.location || 'Healthcare Provider on Curoxa Network'}
               </div>
             </div>
-
-            {/* Change Hospital Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedHospital(null);
-                setSelectedHospitalId(null);
-                setSelectedHospitalDetails(null);
-                setActiveTab('curoxa-home');
-              }}
-              style={{
-                background: '#EFF6FF',
-                border: '1px solid #BFDBFE',
-                borderRadius: '99px',
-                padding: '6px 14px',
-                color: '#2563EB',
-                fontSize: '12px',
-                fontWeight: 800,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                marginLeft: '8px',
-                whiteSpace: 'nowrap'
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = '#DBEAFE'}
-              onMouseLeave={e => e.currentTarget.style.background = '#EFF6FF'}
-            >
-              <i data-lucide="arrow-left-right" style={{ width: '13px', height: '13px' }}></i>
-              <span>Change Hospital</span>
-            </button>
           </div>
         ) : (
-          /* LEVEL 1: CUROXA PLATFORM TOP HEADER MATCHING MOCKUP */
           <>
             {/* Left: Official Brand Identity (Matches media_1788167242325.png) */}
             <div className="curoxa-top-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
@@ -3704,12 +3742,66 @@ const PatientDashboard = () => {
         )}
 
         {/* Right Nav: Notifications & User Profile */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', flexShrink: 0 }}>
+          {selectedHospital && (
+            <>
+              {/* Desktop View: Full Pill */}
+              <button
+                type="button"
+                className="desktop-only-flex"
+                onClick={handleChangeHospital}
+                style={{
+                  background: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '99px',
+                  padding: '6px 14px',
+                  color: '#2563EB',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#DBEAFE'}
+                onMouseLeave={e => e.currentTarget.style.background = '#EFF6FF'}
+              >
+                <i data-lucide="arrow-left-right" style={{ width: '13px', height: '13px' }}></i>
+                <span>Change Hospital</span>
+              </button>
+
+              {/* Mobile View: Compact Pill */}
+              <button
+                type="button"
+                className="mobile-only-flex"
+                onClick={handleChangeHospital}
+                style={{
+                  background: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '99px',
+                  padding: '5px 10px',
+                  color: '#2563EB',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  alignItems: 'center',
+                  gap: '4px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+                title="Change Hospital"
+              >
+                <i data-lucide="arrow-left-right" style={{ width: '12px', height: '12px' }}></i>
+                <span>Change</span>
+              </button>
+            </>
+          )}
+
           {/* Notification Bell */}
           <div 
             ref={notificationRef}
             className="top-nav-bell-btn"
-            style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '10px', border: '1px solid #E2E8F0', color: '#64748B', background: 'white' }}
+            style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', borderRadius: '10px', border: '1px solid #E2E8F0', color: '#64748B', background: 'white', flexShrink: 0 }}
             onClick={(e) => {
               e.stopPropagation();
               setShowNotifications(!showNotifications);
@@ -5094,1603 +5186,169 @@ const PatientDashboard = () => {
         )}
 
         {selectedHospital && activeTab === 'summary' && (
-          <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out' }}>
-            {/* Approved Appointment Action Banner (Preserved) */}
-            {appointments.filter(a => a.status === 'Approved' && a.billingStatus !== 'Paid').map(app => (
-              <div key={app._id} style={{
-                background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
-                border: '1.5px solid #3B82F6',
-                borderRadius: '16px',
-                padding: '20px 24px',
-                marginBottom: '24px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '16px',
-                boxShadow: '0 10px 20px -5px rgba(59, 130, 246, 0.15)',
-                flexWrap: 'wrap'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#2563EB', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <i data-lucide="check-circle" style={{ width: '24px', height: '24px' }}></i>
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <span style={{ background: '#2563EB', color: 'white', fontSize: '11px', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', textTransform: 'uppercase' }}>
-                        Request Approved
-                      </span>
-                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>
-                        {new Date(app.date).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} at {app.time}
-                      </span>
-                    </div>
-                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
-                      Appointment with {app.doctorId?.name || 'Doctor'}
-                    </h3>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#475569', fontWeight: 500 }}>
-                      Your appointment request has been approved by the hospital. Complete your payment to confirm your booking.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => openPaymentModalForAppointment(app)}
-                  style={{
-                    background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 50%, #06B6D4 100%)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    padding: '12px 24px',
-                    fontSize: '14px',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
-                    whiteSpace: 'nowrap',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'none'}
-                >
-                  <span>💳</span> Pay Now & Confirm
-                </button>
-              </div>
-            ))}
-
-            {/* 1. HERO GREETING BANNER (Exact Match with Reference Mockup) */}
-            <div style={{
-              background: 'linear-gradient(135deg, #E0F2FE 0%, #EFF6FF 50%, #F0FDF4 100%)',
-              borderRadius: '24px',
-              border: '1px solid #BAE6FD',
-              padding: '36px 40px',
-              marginBottom: '26px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              position: 'relative',
-              overflow: 'hidden',
-              boxShadow: '0 8px 30px rgba(37, 99, 235, 0.06)'
-            }}>
-              <div style={{ position: 'relative', zIndex: 2, maxWidth: '580px' }}>
-                <h1 style={{
-                  fontSize: 'clamp(24px, 3.5vw, 32px)',
-                  fontWeight: 900,
-                  color: '#0F172A',
-                  margin: '0 0 6px 0',
-                  letterSpacing: '-0.02em',
-                  fontFamily: "'Outfit', sans-serif"
-                }}>
-                  {getTimeGreeting()}, {currentUser.name ? currentUser.name.split(' ')[0] : 'there'} 👋
-                </h1>
-                <p style={{ fontSize: '15px', color: '#334155', fontWeight: 700, margin: '0 0 4px 0' }}>
-                  Your health, our priority.
-                </p>
-                <p style={{ fontSize: '14.5px', color: '#64748B', fontWeight: 550, margin: '0 0 24px 0', lineHeight: 1.5 }}>
-                  Book appointments, track your visits and access your health records — all in one place.
-                </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('find')}
-                    style={{
-                      background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 50%, #0284C7 100%)',
-                      color: '#FFFFFF',
-                      border: 'none',
-                      borderRadius: '12px',
-                      padding: '12px 24px',
-                      fontSize: '14px',
-                      fontWeight: 800,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                    onMouseLeave={e => e.currentTarget.style.transform = 'none'}
-                  >
-                    <i data-lucide="calendar" style={{ width: '16px', height: '16px' }}></i>
-                    <span>Book Appointment</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('find')}
-                    style={{
-                      background: '#FFFFFF',
-                      color: '#2563EB',
-                      border: '1.5px solid #BFDBFE',
-                      borderRadius: '12px',
-                      padding: '12px 24px',
-                      fontSize: '14px',
-                      fontWeight: 800,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.borderColor = '#2563EB'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#BFDBFE'; }}
-                  >
-                    <i data-lucide="search" style={{ width: '16px', height: '16px' }}></i>
-                    <span>Find a Doctor</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Character Illustration SVG */}
-              <div className="desktop-only-flex" style={{ flexShrink: 0, position: 'relative', zIndex: 1 }}>
-                <svg width="220" height="150" viewBox="0 0 220 150" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="50" y="92" width="120" height="38" rx="14" fill="#60A5FA" fillOpacity="0.25" />
-                  <rect x="62" y="80" width="96" height="42" rx="10" fill="#3B82F6" fillOpacity="0.18" />
-                  <rect x="42" y="98" width="18" height="32" rx="9" fill="#93C5FD" fillOpacity="0.3" />
-                  <rect x="160" y="98" width="18" height="32" rx="9" fill="#93C5FD" fillOpacity="0.3" />
-                  <rect x="18" y="108" width="18" height="22" rx="4" fill="#CBD5E1" />
-                  <path d="M27 108C23 94 14 96 14 96C14 96 22 104 27 108Z" fill="#10B981" />
-                  <path d="M27 108C31 92 40 94 40 94C40 94 32 104 27 108Z" fill="#059669" />
-                  <path d="M27 108C27 88 28 84 28 84C28 84 25 98 27 108Z" fill="#34D399" />
-                  <circle cx="106" cy="46" r="14" fill="#FBCFE8" />
-                  <path d="M96 44C96 36 102 32 110 32C118 32 120 37 120 42C116 41 112 43 108 43C104 43 100 45 96 44Z" fill="#1E293B" />
-                  <path d="M92 63C92 58 97 56 106 56C115 56 120 58 120 63L124 92H88L92 63Z" fill="#2563EB" />
-                  <rect x="91" y="92" width="14" height="34" rx="7" fill="#1E293B" />
-                  <rect x="107" y="92" width="14" height="34" rx="7" fill="#334155" />
-                  <path d="M92 68L100 78L106 74" stroke="#FBCFE8" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M120 68L112 78L106 74" stroke="#FBCFE8" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-                  <rect x="103" y="70" width="14" height="22" rx="3" fill="#0F172A" />
-                  <rect x="105" y="72" width="10" height="18" rx="2" fill="#38BDF8" />
-                  <g filter="drop-shadow(0 4px 8px rgba(37,99,235,0.25))">
-                    <circle cx="156" cy="38" r="18" fill="#FFFFFF" />
-                    <path d="M156 26C162 28 166 27 166 27C166 37 160 45 156 48C152 45 146 37 146 27C146 27 150 28 156 26Z" fill="#2563EB" />
-                    <path d="M150 37H153L155 33L157 41L159 37H162" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                  </g>
-                  <g filter="drop-shadow(0 4px 8px rgba(16,185,129,0.25))">
-                    <circle cx="62" cy="52" r="16" fill="#FFFFFF" />
-                    <rect x="54" y="44" width="16" height="15" rx="3" fill="#10B981" />
-                    <rect x="56" y="42" width="2" height="3" rx="1" fill="#065F46" />
-                    <rect x="64" y="42" width="2" height="3" rx="1" fill="#065F46" />
-                    <path d="M54 48H70" stroke="#FFFFFF" strokeWidth="1.2" />
-                    <circle cx="58" cy="52" r="1" fill="#FFFFFF" />
-                    <circle cx="62" cy="52" r="1" fill="#FFFFFF" />
-                    <circle cx="66" cy="52" r="1" fill="#FFFFFF" />
-                    <circle cx="58" cy="56" r="1" fill="#FFFFFF" />
-                    <circle cx="62" cy="56" r="1" fill="#FFFFFF" />
-                  </g>
-                </svg>
-              </div>
-            </div>
-
-            {/* 2. TWO COLUMN ROW: TODAY'S VISIT & NEXT APPOINTMENT */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-              gap: '22px',
-              marginBottom: '26px'
-            }}>
-              {/* CARD A: TODAY'S VISIT (Live Token Card) */}
-              <div style={{
-                background: '#FFFFFF',
-                border: '1.5px solid #E2E8F0',
-                borderRadius: '20px',
-                padding: '24px',
-                boxShadow: '0 4px 20px -2px rgba(15, 23, 42, 0.05)',
-                display: 'flex',
-                flexDirection: 'column'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                    TODAY'S VISIT
-                  </span>
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    fontSize: '11px',
-                    fontWeight: 800,
-                    color: '#15803D',
-                    background: '#DCFCE7',
-                    border: '1px solid #BBF7D0',
-                    padding: '3px 10px',
-                    borderRadius: '99px'
-                  }}>
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16A34A', animation: 'pulse 1.5s infinite' }} />
-                    Live
-                  </span>
-                </div>
-
-                {todayVisitAppt ? (
-                  <>
-                    {/* Doctor Info */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px' }}>
-                      <div style={{
-                        width: '46px',
-                        height: '46px',
-                        borderRadius: '12px',
-                        background: 'linear-gradient(135deg, #2563EB 0%, #0284C7 100%)',
-                        color: '#FFFFFF',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 900,
-                        fontSize: '16px',
-                        flexShrink: 0
-                      }}>
-                        {todayVisitAppt.doctorId?.name ? todayVisitAppt.doctorId.name.replace('Dr. ', '').substring(0, 2).toUpperCase() : 'DR'}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
-                          Dr. {todayVisitAppt.doctorId?.name || patientQueue.doctorName || 'Assigned Doctor'}
-                        </div>
-                        <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                          {todayVisitAppt.doctorId?.specialty || patientQueue.specialty || 'General OPD'} • {todayVisitAppt.time || '11:30 AM'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Dual Token Display (YOUR TOKEN vs NOW SERVING) */}
-                    {todayVisitAppt.tokenNumber ? (
-                      <>
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 1fr',
-                          gap: '12px',
-                          background: '#F8FAFC',
-                          border: '1px solid #E2E8F0',
-                          borderRadius: '16px',
-                          padding: '16px',
-                          textAlign: 'center',
-                          marginBottom: '14px'
-                        }}>
-                          <div style={{ borderRight: '1px solid #E2E8F0', paddingRight: '8px' }}>
-                            <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                              YOUR TOKEN
-                            </div>
-                            <div style={{ fontSize: '38px', fontWeight: 900, color: '#2563EB', lineHeight: 1.1, fontFamily: "'Outfit', sans-serif", marginTop: '4px' }}>
-                              #{todayVisitAppt.tokenNumber}
-                            </div>
-                          </div>
-                          <div style={{ paddingLeft: '8px' }}>
-                            <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                              NOW SERVING
-                            </div>
-                            <div style={{ fontSize: '38px', fontWeight: 900, color: '#16A34A', lineHeight: 1.1, fontFamily: "'Outfit', sans-serif", marginTop: '4px' }}>
-                              {patientQueue.currentToken ? `#${patientQueue.currentToken}` : '—'}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Patients Ahead Info */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '10px' }}>
-                          <span style={{ fontSize: '13px', color: '#334155', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <i data-lucide="users" style={{ width: '15px', height: '15px', color: '#2563EB' }}></i>
-                            {patientQueue.patientsAhead !== null
-                              ? `${patientQueue.patientsAhead} ${patientQueue.patientsAhead === 1 ? 'patient' : 'patients'} ahead of you`
-                              : 'Waiting in OPD queue'}
-                          </span>
-                          <span style={{ fontSize: '11.5px', color: '#16A34A', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16A34A' }} />
-                            Updated just now
-                          </span>
-                        </div>
-                      </>
-                    ) : (
-                      /* Booked today, not checked in yet */
-                      <div style={{
-                        background: '#EFF6FF',
-                        border: '1px solid #BFDBFE',
-                        borderRadius: '14px',
-                        padding: '16px',
-                        textAlign: 'center',
-                        marginTop: 'auto'
-                      }}>
-                        <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E40AF', marginBottom: '4px' }}>
-                          Visit Confirmed for Today
-                        </div>
-                        <div style={{ fontSize: '12.5px', color: '#3B82F6', fontWeight: 600 }}>
-                          Token will be assigned when you arrive at hospital reception.
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  /* No visit today */
-                  <div style={{ textAlign: 'center', padding: '24px 12px', margin: 'auto 0' }}>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F1F5F9', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                      <i data-lucide="calendar" style={{ width: '22px', height: '22px' }}></i>
-                    </div>
-                    <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '4px' }}>
-                      No visit scheduled for today
-                    </div>
-                    <div style={{ fontSize: '12.5px', color: '#64748B', marginBottom: '16px' }}>
-                      Schedule a consultation with an available hospital doctor.
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('find')}
-                      style={{
-                        background: '#EFF6FF',
-                        color: '#2563EB',
-                        border: '1px solid #BFDBFE',
-                        borderRadius: '10px',
-                        padding: '8px 18px',
-                        fontSize: '12.5px',
-                        fontWeight: 800,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Book Appointment
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* CARD B: NEXT APPOINTMENT */}
-              <div style={{
-                background: '#FFFFFF',
-                border: '1.5px solid #E2E8F0',
-                borderRadius: '20px',
-                padding: '24px',
-                boxShadow: '0 4px 20px -2px rgba(15, 23, 42, 0.05)',
-                display: 'flex',
-                flexDirection: 'column'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                    NEXT APPOINTMENT
-                  </span>
-                </div>
-
-                {nextUpcomingAppt ? (
-                  <>
-                    {/* Date Block & Time */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px' }}>
-                      <div style={{
-                        width: '46px',
-                        height: '46px',
-                        borderRadius: '12px',
-                        background: '#EFF6FF',
-                        border: '1px solid #BFDBFE',
-                        color: '#2563EB',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0
-                      }}>
-                        <i data-lucide="calendar" style={{ width: '22px', height: '22px' }}></i>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>
-                          {new Date(nextUpcomingAppt.date).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                        </div>
-                        <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                          {nextUpcomingAppt.time}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Doctor Details */}
-                    <div style={{ marginBottom: '20px' }}>
-                      <div style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A' }}>
-                        Dr. {nextUpcomingAppt.doctorId?.name || 'Doctor'}
-                      </div>
-                      <div style={{ fontSize: '13.5px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>
-                        {nextUpcomingAppt.doctorId?.specialty || nextUpcomingAppt.reason || 'Specialist Consultation'}
-                      </div>
-                    </div>
-
-                    {/* Action Button */}
-                    <button
-                      type="button"
-                      onClick={() => openDetailsModal(nextUpcomingAppt)}
-                      style={{
-                        marginTop: 'auto',
-                        width: '100%',
-                        height: '42px',
-                        background: '#EFF6FF',
-                        color: '#2563EB',
-                        border: '1px solid #BFDBFE',
-                        borderRadius: '10px',
-                        fontSize: '13.5px',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#2563EB'; e.currentTarget.style.color = '#FFFFFF'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.color = '#2563EB'; }}
-                    >
-                      View Appointment
-                    </button>
-                  </>
-                ) : (
-                  /* No upcoming appointment */
-                  <div style={{ textAlign: 'center', padding: '24px 12px', margin: 'auto 0' }}>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F1F5F9', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                      <i data-lucide="calendar-plus" style={{ width: '22px', height: '22px' }}></i>
-                    </div>
-                    <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '4px' }}>
-                      No upcoming appointments
-                    </div>
-                    <div style={{ fontSize: '12.5px', color: '#64748B', marginBottom: '16px' }}>
-                      Schedule future visits in advance to secure your preferred slot.
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('find')}
-                      style={{
-                        background: '#EFF6FF',
-                        color: '#2563EB',
-                        border: '1px solid #BFDBFE',
-                        borderRadius: '10px',
-                        padding: '8px 18px',
-                        fontSize: '12.5px',
-                        fontWeight: 800,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Book Appointment
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* 3. QUICK ACCESS ROW (5 Pastel Cards) */}
-            <div style={{ marginBottom: '28px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
-                  Quick Access
-                </h3>
-              </div>
-
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-                gap: '14px'
-              }}>
-                {/* 1. Book Appointment */}
-                <div
-                  onClick={() => setActiveTab('find')}
-                  style={{
-                    background: '#EFF6FF',
-                    border: '1px solid #DBEAFE',
-                    borderRadius: '16px',
-                    padding: '20px 14px',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = '#93C5FD'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#DBEAFE'; }}
-                >
-                  <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#DBEAFE', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-                    <i data-lucide="calendar-plus" style={{ width: '22px', height: '22px' }}></i>
-                  </div>
-                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Book Appointment</div>
-                </div>
-
-                {/* 2. Prescriptions */}
-                <div
-                  onClick={() => setActiveTab('prescriptions')}
-                  style={{
-                    background: '#F0FDF4',
-                    border: '1px solid #DCFCE7',
-                    borderRadius: '16px',
-                    padding: '20px 14px',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = '#86EFAC'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#DCFCE7'; }}
-                >
-                  <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#DCFCE7', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-                    <i data-lucide="pill" style={{ width: '22px', height: '22px' }}></i>
-                  </div>
-                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Prescriptions</div>
-                </div>
-
-                {/* 3. Lab Reports */}
-                <div
-                  onClick={() => {
-                    setMyHealthCategory('LABS');
-                    setActiveTab('records');
-                  }}
-                  style={{
-                    background: '#FAF5FF',
-                    border: '1px solid #F3E8FF',
-                    borderRadius: '16px',
-                    padding: '20px 14px',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = '#D8B4FE'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#F3E8FF'; }}
-                >
-                  <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#F3E8FF', color: '#9333EA', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-                    <i data-lucide="flask-conical" style={{ width: '22px', height: '22px' }}></i>
-                  </div>
-                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Lab Reports</div>
-                </div>
-
-                {/* 4. Medical Records */}
-                <div
-                  onClick={() => {
-                    setMyHealthCategory('RECORDS');
-                    setActiveTab('records');
-                  }}
-                  style={{
-                    background: '#FFF7ED',
-                    border: '1px solid #FFEDD5',
-                    borderRadius: '16px',
-                    padding: '20px 14px',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = '#FDBA74'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#FFEDD5'; }}
-                >
-                  <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#FFEDD5', color: '#EA580C', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-                    <i data-lucide="folder" style={{ width: '22px', height: '22px' }}></i>
-                  </div>
-                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Medical Records</div>
-                </div>
-
-                {/* 5. Documents */}
-                <div
-                  onClick={() => setActiveTab('documents')}
-                  style={{
-                    background: '#FEFCE8',
-                    border: '1px solid #FEF08A',
-                    borderRadius: '16px',
-                    padding: '20px 14px',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = '#FDE047'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#FEF08A'; }}
-                >
-                  <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#FEF08A', color: '#CA8A04', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-                    <i data-lucide="file-text" style={{ width: '22px', height: '22px' }}></i>
-                  </div>
-                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Documents</div>
-                </div>
-              </div>
-            </div>
-
-            {/* 4. MY APPOINTMENTS SECTION */}
-            <div style={{ marginBottom: '28px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
-                  My Appointments
-                </h3>
-                <span
-                  onClick={() => setActiveTab('history')}
-                  style={{ fontSize: '13px', fontWeight: 800, color: '#2563EB', cursor: 'pointer' }}
-                >
-                  View All &gt;
-                </span>
-              </div>
-
-              {/* Filter Tabs Pills */}
-              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', marginBottom: '14px' }}>
-                {[
-                  { key: 'ALL', label: `All (${apptCounts.all})` },
-                  { key: 'TODAY', label: `Today (${apptCounts.today})` },
-                  { key: 'UPCOMING', label: `Upcoming (${apptCounts.upcoming})` },
-                  { key: 'COMPLETED', label: `Completed (${apptCounts.completed})` },
-                  { key: 'CANCELLED', label: `Cancelled (${apptCounts.cancelled})` }
-                ].map(tab => {
-                  const isActive = appointmentFilterTab === tab.key;
-                  return (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      onClick={() => setAppointmentFilterTab(tab.key)}
-                      style={{
-                        padding: '7px 16px',
-                        borderRadius: '99px',
-                        border: isActive ? '1px solid #2563EB' : '1px solid #E2E8F0',
-                        background: isActive ? '#2563EB' : '#FFFFFF',
-                        color: isActive ? '#FFFFFF' : '#64748B',
-                        fontSize: '12.5px',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      {tab.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Filtered Appointments List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {(() => {
-                  let filtered = hospitalAppointments;
-                  if (appointmentFilterTab === 'TODAY') {
-                    filtered = filtered.filter(a => (a.tokenDate === todayStr) || (a.date && getLocalDateString(a.date) === todayStr));
-                  } else if (appointmentFilterTab === 'UPCOMING') {
-                    filtered = filtered.filter(a => {
-                      const appDate = a.date ? getLocalDateString(a.date) : '';
-                      return appDate > todayStr && !['Completed', 'Cancelled', 'Checked Out'].includes(a.status);
-                    });
-                  } else if (appointmentFilterTab === 'COMPLETED') {
-                    filtered = filtered.filter(a => ['Completed', 'Checked Out'].includes(a.status));
-                  } else if (appointmentFilterTab === 'CANCELLED') {
-                    filtered = filtered.filter(a => a.status === 'Cancelled');
-                  }
-
-                  if (filtered.length === 0) {
-                    return (
-                      <div style={{
-                        background: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        borderRadius: '16px',
-                        padding: '24px',
-                        textAlign: 'center',
-                        color: '#94A3B8',
-                        fontSize: '13px',
-                        fontWeight: 600
-                      }}>
-                        No appointments found in this category.
-                      </div>
-                    );
-                  }
-
-                  return filtered.slice(0, 4).map(app => {
-                    const d = app.date ? new Date(app.date) : new Date();
-                    const dayNum = !isNaN(d.getTime()) ? d.getDate() : '—';
-                    const monthStr = !isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : '—';
-
-                    const isCheckedIn = app.tokenNumber && !['Completed', 'Cancelled'].includes(app.status);
-                    const isCompleted = ['Completed', 'Checked Out'].includes(app.status);
-                    const isCancelled = app.status === 'Cancelled';
-
-                    let statusBg = '#EFF6FF';
-                    let statusColor = '#2563EB';
-                    let stripColor = '#3B82F6';
-
-                    if (isCheckedIn) {
-                      statusBg = '#DCFCE7';
-                      statusColor = '#15803D';
-                      stripColor = '#16A34A';
-                    } else if (isCompleted) {
-                      statusBg = '#F1F5F9';
-                      statusColor = '#475569';
-                      stripColor = '#64748B';
-                    } else if (isCancelled) {
-                      statusBg = '#FEF2F2';
-                      statusColor = '#DC2626';
-                      stripColor = '#EF4444';
-                    }
-
-                    return (
-                      <div
-                        key={app._id}
-                        onClick={() => openDetailsModal(app)}
-                        style={{
-                          background: '#FFFFFF',
-                          border: '1.5px solid #E2E8F0',
-                          borderRadius: '16px',
-                          padding: '14px 18px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '14px',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          position: 'relative',
-                          overflow: 'hidden'
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#93C5FD'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.06)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = 'none'; }}
-                      >
-                        {/* Left Vertical Status Accent Strip */}
-                        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: stripColor }} />
-
-                        {/* Date Block */}
-                        <div style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: '50px',
-                          height: '50px',
-                          borderRadius: '10px',
-                          background: '#F8FAFC',
-                          border: '1px solid #E2E8F0',
-                          flexShrink: 0
-                        }}>
-                          <span style={{ fontSize: '18px', fontWeight: 900, color: '#0F172A', lineHeight: 1 }}>{dayNum}</span>
-                          <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', letterSpacing: '0.5px' }}>{monthStr}</span>
-                        </div>
-
-                        {/* Middle: Doctor Details */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            Dr. {app.doctorId?.name || 'Assigned Doctor'}
-                          </div>
-                          <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {app.doctorId?.specialty || app.reason || 'General Consultation'} • {app.time || '11:30 AM'}
-                          </div>
-                        </div>
-
-                        {/* Right: Status badge & Token badge & Chevron */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                          {app.tokenNumber && (
-                            <span style={{
-                              fontSize: '11.5px',
-                              fontWeight: 800,
-                              background: '#EFF6FF',
-                              color: '#2563EB',
-                              padding: '4px 10px',
-                              borderRadius: '8px',
-                              border: '1px solid #BFDBFE'
-                            }} className="desktop-only-inline">
-                              Token #{app.tokenNumber}
-                            </span>
-                          )}
-
-                          <span style={{
-                            fontSize: '11.5px',
-                            fontWeight: 800,
-                            background: statusBg,
-                            color: statusColor,
-                            padding: '4px 10px',
-                            borderRadius: '99px'
-                          }}>
-                            {isCheckedIn ? 'Checked In' : app.status}
-                          </span>
-
-                          <i data-lucide="chevron-right" style={{ width: '16px', height: '16px', color: '#94A3B8' }}></i>
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            </div>
-
-            {/* 5. HEALTH SUMMARY SECTION */}
-            <div style={{ marginBottom: '28px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
-                  Health Summary
-                </h3>
-                <span
-                  onClick={() => {
-                    setMyHealthCategory('ALL');
-                    setActiveTab('records');
-                  }}
-                  style={{ fontSize: '13px', fontWeight: 800, color: '#2563EB', cursor: 'pointer' }}
-                >
-                  View All &gt;
-                </span>
-              </div>
-
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: '16px'
-              }}>
-                {/* 1. Vitals */}
-                <div
-                  onClick={() => {
-                    setMyHealthCategory('ALL');
-                    setActiveTab('records');
-                  }}
-                  style={{
-                    background: '#F0FDF4',
-                    border: '1px solid #DCFCE7',
-                    borderRadius: '18px',
-                    padding: '20px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = '#86EFAC'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#DCFCE7'; }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#15803D' }}>Vitals</span>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#DCFCE7', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <i data-lucide="activity" style={{ width: '18px', height: '18px' }}></i>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '22px', fontWeight: 900, color: '#166534', fontFamily: "'Outfit', sans-serif" }}>
-                    Normal
-                  </div>
-                  <div style={{ fontSize: '11.5px', color: '#15803D', fontWeight: 700, marginTop: '4px' }}>
-                    Last updated {vitals.length > 0 ? 'recently' : 'on record'} &gt;
-                  </div>
-                </div>
-
-                {/* 2. Lab Reports */}
-                <div
-                  onClick={() => {
-                    setMyHealthCategory('LABS');
-                    setActiveTab('records');
-                  }}
-                  style={{
-                    background: '#FAF5FF',
-                    border: '1px solid #F3E8FF',
-                    borderRadius: '18px',
-                    padding: '20px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = '#D8B4FE'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#F3E8FF'; }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#7E22CE' }}>Lab Reports</span>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#F3E8FF', color: '#9333EA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <i data-lucide="flask-conical" style={{ width: '18px', height: '18px' }}></i>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '22px', fontWeight: 900, color: '#581C87', fontFamily: "'Outfit', sans-serif" }}>
-                    {labRequests.length}
-                  </div>
-                  <div style={{ fontSize: '11.5px', color: '#7E22CE', fontWeight: 700, marginTop: '4px' }}>
-                    Latest result available &gt;
-                  </div>
-                </div>
-
-                {/* 3. Prescriptions */}
-                <div
-                  onClick={() => setActiveTab('prescriptions')}
-                  style={{
-                    background: '#FFF7ED',
-                    border: '1px solid #FFEDD5',
-                    borderRadius: '18px',
-                    padding: '20px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = '#FDBA74'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#FFEDD5'; }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#C2410C' }}>Prescriptions</span>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#FFEDD5', color: '#EA580C', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <i data-lucide="pill" style={{ width: '18px', height: '18px' }}></i>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '22px', fontWeight: 900, color: '#9A3412', fontFamily: "'Outfit', sans-serif" }}>
-                    {prescriptions.length}
-                  </div>
-                  <div style={{ fontSize: '11.5px', color: '#C2410C', fontWeight: 700, marginTop: '4px' }}>
-                    Active prescription &gt;
-                  </div>
-                </div>
-
-                {/* 4. Consent */}
-                <div
-                  onClick={() => setActiveTab('privacy')}
-                  style={{
-                    background: '#F0F9FF',
-                    border: '1px solid #BAE6FD',
-                    borderRadius: '18px',
-                    padding: '20px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = '#7DD3FC'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#BAE6FD'; }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#0369A1' }}>Consent</span>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#E0F2FE', color: '#0284C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <i data-lucide="shield-check" style={{ width: '18px', height: '18px' }}></i>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '22px', fontWeight: 900, color: '#0C4A6E', fontFamily: "'Outfit', sans-serif" }}>
-                    {consent?.status || 'Active'}
-                  </div>
-                  <div style={{ fontSize: '11.5px', color: '#0369A1', fontWeight: 700, marginTop: '4px' }}>
-                    DPDP Compliant &gt;
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 6. YOUR DATA. YOUR RIGHTS. STRIP */}
-            <div style={{
-              background: '#EFF6FF',
-              border: '1px solid #BFDBFE',
-              borderRadius: '18px',
-              padding: '18px 24px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '16px',
-              marginBottom: '20px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#DBEAFE', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <i data-lucide="shield-check" style={{ width: '22px', height: '22px' }}></i>
-                </div>
-                <div>
-                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A' }}>
-                    Your Data. Your Rights.
-                  </div>
-                  <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>
-                    You are in control of your health data.
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('privacy')}
-                style={{
-                  background: '#FFFFFF',
-                  color: '#2563EB',
-                  border: '1px solid #BFDBFE',
-                  borderRadius: '10px',
-                  padding: '9px 18px',
-                  fontSize: '13px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#2563EB'; e.currentTarget.style.color = '#FFFFFF'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = '#2563EB'; }}
-              >
-                <span>Review Privacy & Consent</span>
-                <i data-lucide="chevron-right" style={{ width: '15px', height: '15px' }}></i>
-              </button>
-            </div>
+          <div className="tab-content active" style={{ animation: 'slideUp 0.3s ease-out' }}>
+            <PatientHospitalHome
+              hospital={selectedHospital}
+              currentUser={currentUser}
+              patientProfile={patientProfile}
+              todayVisitAppt={todayVisitAppt}
+              nextUpcomingAppt={nextUpcomingAppt}
+              patientQueue={patientQueue}
+              appointments={hospitalAppointments}
+              prescriptions={prescriptions}
+              labRequests={labRequests}
+              visits={visits}
+              onNavigateTab={(tab) => {
+                if (tab === 'labs') {
+                  setMyHealthCategory('LABS');
+                  setActiveTab('records');
+                } else {
+                  setActiveTab(tab);
+                }
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              onViewAppointmentDetails={openDetailsModal}
+              onOpenBooking={handleOpenBookingFlow}
+              onPayAppointment={openPaymentModalForAppointment}
+              onViewPrescription={(rx) => {
+                setSelectedPrescription(rx);
+                setPrescriptionModalOpen(true);
+              }}
+              onViewLabReport={(lab) => {
+                setSelectedLab(lab);
+                setLabModalOpen(true);
+              }}
+              onViewVisit={(visit) => {
+                setSelectedEmrDoc(visit);
+                setEmrModalOpen(true);
+              }}
+            />
           </div>
         )}
 
         {selectedHospital && activeTab === 'find' && (
           <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out' }}>
-            <div className="dashboard-header" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <div className="dashboard-header" style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
-                  <h1 style={{ fontSize: '24px', fontWeight: 800 }}>Universal Discovery Portal</h1>
-                  <p className="text-muted" style={{ fontWeight: 600 }}>Find hospitals and schedule appointments across the whole network</p>
+                  <h1 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 4px 0', color: '#0F172A' }}>Doctors & Specialists</h1>
+                  <p className="text-muted" style={{ fontWeight: 600, margin: 0, fontSize: '13.5px' }}>
+                    Consult verified specialists and book appointments at {selectedHospital.name}
+                  </p>
                 </div>
               </div>
-              
-              {/* Dual Tab Control & Search */}
-              {!selectedHospitalDetails && (
-                <>
-                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', background: '#F1F5F9', padding: '6px', borderRadius: '12px', width: 'fit-content' }}>
-                      <button 
-                        onClick={() => { setDiscoveryTab('hospitals'); setSelectedHospitalId(null); }}
-                        style={{ padding: '8px 20px', border: 'none', background: discoveryTab === 'hospitals' ? 'white' : 'transparent', color: discoveryTab === 'hospitals' ? 'var(--primary)' : '#64748B', fontWeight: 800, fontSize: '13px', borderRadius: '8px', cursor: 'pointer', transition: '0.2s', boxShadow: discoveryTab === 'hospitals' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}
-                      >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><i data-lucide="building-2" style={{ width: '16px' }}></i> Hospitals & Clinics</span>
-                      </button>
-                      <button 
-                        onClick={() => { setDiscoveryTab('doctors'); }}
-                        style={{ padding: '8px 20px', border: 'none', background: discoveryTab === 'doctors' ? 'white' : 'transparent', color: discoveryTab === 'doctors' ? 'var(--primary)' : '#64748B', fontWeight: 800, fontSize: '13px', borderRadius: '8px', cursor: 'pointer', transition: '0.2s', boxShadow: discoveryTab === 'doctors' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}
-                      >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><i data-lucide="users" style={{ width: '16px' }}></i> All Doctors</span>
-                      </button>
-                    </div>
 
-                    {/* Facility Dynamic Category Filter Pills */}
-                    {discoveryTab === 'hospitals' && (() => {
-                      const dynamicFilters = [{ key: 'all', label: `All Facilities (${curoxaHospitals.length})` }];
-                      const allSpecs = Array.from(new Set(curoxaHospitals.flatMap(h => h.specialties || []))).filter(Boolean);
-                      allSpecs.slice(0, 5).forEach(spec => {
-                        const count = curoxaHospitals.filter(h => h.specialties && h.specialties.includes(spec)).length;
-                        dynamicFilters.push({ key: `spec-${spec}`, label: `${spec} (${count})` });
-                      });
-
-                      if (dynamicFilters.length <= 1) return null;
-
-                      return (
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          {dynamicFilters.map(f => (
-                            <button
-                              key={f.key}
-                              type="button"
-                              onClick={() => setFacilityTypeFilter(f.key)}
-                              style={{
-                                padding: '7px 14px',
-                                borderRadius: '20px',
-                                border: facilityTypeFilter === f.key ? 'none' : '1px solid #CBD5E1',
-                                background: facilityTypeFilter === f.key ? 'var(--primary)' : 'white',
-                                color: facilityTypeFilter === f.key ? 'white' : '#475569',
-                                fontWeight: 800,
-                                fontSize: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease',
-                                boxShadow: facilityTypeFilter === f.key ? '0 2px 6px rgba(0,0,0,0.1)' : 'none'
-                              }}
-                            >
-                              {f.label}
-                            </button>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Reactive Search Bar & Location Detector */}
-                  <div style={{ display: 'flex', gap: '12px', width: '100%', alignItems: 'center' }} className="mobile-stack">
-                    <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
-                      <i data-lucide="search" style={{ position: 'absolute', left: '16px', color: '#64748B', width: '18px' }}></i>
-                      <input 
-                        type="text" 
-                        placeholder={discoveryTab === 'hospitals' ? "Search hospitals by name, location, or contact..." : "Search doctors by name, specialization, or hospital..."}
-                        style={{ background: 'white', border: '1px solid #CBD5E1', paddingLeft: '48px', height: '46px', width: '100%', borderRadius: '12px', fontSize: '14px', fontWeight: 600, outline: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}
-                        value={discoverySearch}
-                        onChange={(e) => setDiscoverySearch(e.target.value)}
-                      />
-                    </div>
-                    
-                    {discoveryTab === 'hospitals' && (
-                      <button 
-                        onClick={detectLocation}
-                        disabled={detectingLocation}
-                        style={{ 
-                          height: '46px', 
-                          padding: '0 20px', 
-                          borderRadius: '12px', 
-                          border: '1px solid var(--primary)', 
-                          background: userLocation ? 'var(--primary-light)' : 'white', 
-                          color: 'var(--primary)', 
-                          fontWeight: 800, 
-                          fontSize: '13px', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '8px', 
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap',
-                          transition: '0.2s',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-                        }}
-                      >
-                        {detectingLocation ? (
-                          <svg className="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                          </svg>
-                        ) : (
-                          <i data-lucide="map-pin" style={{ width: '16px' }}></i>
-                        )}
-                        {detectingLocation ? "Detecting..." : (userLocation ? "Location Active" : "Detect Location")}
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
+              {/* Reactive Search Bar for Doctors at this Hospital */}
+              <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
+                <i data-lucide="search" style={{ position: 'absolute', left: '16px', color: '#64748B', width: '18px' }}></i>
+                <input 
+                  type="text" 
+                  placeholder={`Search doctors at ${selectedHospital.name} by name or specialty...`}
+                  style={{ background: 'white', border: '1px solid #CBD5E1', paddingLeft: '48px', height: '46px', width: '100%', borderRadius: '12px', fontSize: '14px', fontWeight: 600, outline: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}
+                  value={discoverySearch}
+                  onChange={(e) => setDiscoverySearch(e.target.value)}
+                />
+              </div>
             </div>
 
-            {discoveryTab === 'hospitals' && selectedHospitalDetails && (
-              <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                  <button 
-                    className="btn btn-secondary" 
-                    style={{ width: 'fit-content', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '10px' }}
-                    onClick={() => setSelectedHospitalDetails(null)}
-                  >
-                    <i data-lucide="arrow-left" style={{ width: '16px' }}></i> Back to Hospitals
-                  </button>
+            {/* Doctors at Selected Hospital */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Specialty quick filter pills */}
+              {(() => {
+                const hospitalTenant = selectedHospital.code || selectedHospital.id || selectedHospital._id;
+                const hospitalDocs = doctors.filter(doc => !doc.tenantId || doc.tenantId === hospitalTenant || doc.tenantId === selectedHospital.id || doc.tenantId === selectedHospital.code);
+                const activeDocs = hospitalDocs.length > 0 ? hospitalDocs : doctors;
+                const specs = ['All', ...Array.from(new Set(activeDocs.map(d => d.specialty).filter(Boolean)))];
 
-                  <button
-                    className="btn btn-primary"
-                    style={{ padding: '9px 20px', borderRadius: '10px', fontWeight: 800, fontSize: '13px' }}
-                    onClick={() => {
-                      selectHospital(selectedHospitalDetails);
-                      setSelectedHospitalDetails(null);
-                    }}
-                  >
-                    Enter This Hospital Portal →
-                  </button>
-                </div>
-
-                <div className="glass-card" style={{ padding: '0', overflow: 'hidden', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                  {(selectedHospitalDetails.letterheadUrl && selectedHospitalDetails.letterheadUrl.startsWith('http')) || (selectedHospitalDetails.logo && selectedHospitalDetails.logo.startsWith('http')) ? (
-                    <div style={{ height: '200px', position: 'relative', width: '100%' }}>
-                      <img 
-                        src={selectedHospitalDetails.letterheadUrl || selectedHospitalDetails.logo} 
-                        alt={selectedHospitalDetails.name} 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                      />
-                      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'end', padding: '24px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                          <span style={{ background: 'var(--primary)', color: 'white', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase' }}>
-                            {selectedHospitalDetails.status || 'Active Hospital'}
-                          </span>
-                          {selectedHospitalDetails.doctorCount !== undefined && (
-                            <span style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 800 }}>
-                              👨‍⚕️ {selectedHospitalDetails.doctorCount} Doctors
-                            </span>
-                          )}
-                        </div>
-                        <h2 style={{ color: 'white', fontSize: '26px', fontWeight: 900, margin: 0 }}>{selectedHospitalDetails.name}</h2>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{
-                      height: '150px',
-                      background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '0 28px',
-                      gap: '18px'
-                    }}>
-                      <div style={{
-                        width: '54px',
-                        height: '54px',
-                        borderRadius: '14px',
-                        background: 'linear-gradient(135deg, #2563EB 0%, #0284C7 100%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'white',
-                        fontWeight: 900,
-                        fontSize: '20px',
-                        flexShrink: 0
-                      }}>
-                        {selectedHospitalDetails.logo && selectedHospitalDetails.logo.length <= 4 ? selectedHospitalDetails.logo : selectedHospitalDetails.name.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span style={{ background: '#2563EB', color: 'white', padding: '3px 8px', borderRadius: '6px', fontSize: '10.5px', fontWeight: 800 }}>
-                            {selectedHospitalDetails.status || 'Active Hospital'}
-                          </span>
-                          <span style={{ color: '#94A3B8', fontSize: '12px', fontWeight: 700 }}>
-                            Code: {selectedHospitalDetails.code || selectedHospitalDetails.id}
-                          </span>
-                        </div>
-                        <h2 style={{ color: 'white', fontSize: '22px', fontWeight: 900, margin: 0 }}>{selectedHospitalDetails.name}</h2>
-                      </div>
-                    </div>
-                  )}
-
-                  <div style={{ padding: '28px', display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '28px' }} className="mobile-stack">
-                    <div>
-                      <h4 style={{ fontSize: '15px', fontWeight: 800, color: '#1E293B', marginBottom: '10px' }}>About Hospital</h4>
-                      <p style={{ fontSize: '13.5px', color: '#64748B', lineHeight: 1.6, marginBottom: '22px' }}>
-                        {selectedHospitalDetails.description || `${selectedHospitalDetails.name} is an active verified clinical healthcare facility integrated with the Curoxa Platform.`}
-                      </p>
-                      
-                      <h4 style={{ fontSize: '15px', fontWeight: 800, color: '#1E293B', marginBottom: '10px' }}>Clinical Specialties</h4>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {(selectedHospitalDetails.specialties || selectedHospitalDetails.departments || ['General Medicine']).map((spec, i) => (
-                          <span key={i} style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1D4ED8', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700 }}>
-                            {spec}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div style={{ borderLeft: '1px solid #E2E8F0', paddingLeft: '28px' }} className="mobile-no-border">
-                      <h4 style={{ fontSize: '15px', fontWeight: 800, color: '#1E293B', marginBottom: '16px' }}>Contact & Location</h4>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'start', gap: '12px' }}>
-                          <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <i data-lucide="map-pin" style={{ width: '18px' }}></i>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800 }}>ADDRESS</div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
-                              {selectedHospitalDetails.address || selectedHospitalDetails.location || 'Hospital Campus'}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'start', gap: '12px' }}>
-                          <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <i data-lucide="phone" style={{ width: '18px' }}></i>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800 }}>PHONE / CONTACT</div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
-                              {selectedHospitalDetails.contact || selectedHospitalDetails.phone || 'Available at Front Desk'}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'start', gap: '12px' }}>
-                          <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <i data-lucide="shield-check" style={{ width: '18px' }}></i>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800 }}>VERIFICATION</div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#16A34A' }}>
-                              {selectedHospitalDetails.isGstVerified ? '✓ GST & Clinical Establishment Verified' : '✓ Active Registered Facility'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Specialized Dental Procedure Catalog (For Dental SaaS Clinics) */}
-                {(() => {
-                  let effectiveProcedures = selectedHospitalDetails.dentalProcedures || [];
-                  const saved = localStorage.getItem('curoxa_clinic_pricing_catalog');
-                  if (saved) {
-                    try {
-                      const parsed = JSON.parse(saved);
-                      if (Array.isArray(parsed) && parsed.length > 0) {
-                        effectiveProcedures = parsed.filter(p => p.active !== false);
-                      }
-                    } catch (e) {}
-                  }
-
-                  if (!effectiveProcedures || effectiveProcedures.length === 0) return null;
-
-                  return (
-                    <div style={{ marginBottom: '32px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                        <div>
-                          <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span>🦷</span> Specialized Dental Procedures & Chair Slot Pricing
-                          </h3>
-                          <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0', fontWeight: 600 }}>Select a procedure to book your appointment & chair time slot directly with transparent pricing set by clinic owner</p>
-                        </div>
-                        <span style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', color: '#166534', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 800 }}>
-                          {effectiveProcedures.length} Procedures Available
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-                        {effectiveProcedures.map((proc, idx) => (
-                        <div 
-                          key={idx} 
-                          style={{ 
-                            background: '#FFFFFF', 
-                            border: '1px solid #E2E8F0', 
-                            borderRadius: '16px', 
-                            padding: '20px', 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            justify: 'space-between',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.02)',
-                            transition: 'all 0.2s ease'
+                return (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                    {specs.map(spec => {
+                      const isSelected = (spec === 'All' && !selectedSpecialtyFilter) || selectedSpecialtyFilter === spec;
+                      return (
+                        <button
+                          key={spec}
+                          type="button"
+                          onClick={() => setSelectedSpecialtyFilter(spec === 'All' ? null : spec)}
+                          style={{
+                            background: isSelected ? 'var(--primary)' : 'white',
+                            color: isSelected ? 'white' : '#64748B',
+                            border: isSelected ? 'none' : '1px solid #CBD5E1',
+                            padding: '6px 16px',
+                            borderRadius: '20px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: '0.2s',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
                           }}
                         >
-                          <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '8px' }}>
-                              <div style={{ fontSize: '16px', fontWeight: 850, color: '#0F172A' }}>{proc.name}</div>
-                              <div style={{ fontSize: '18px', fontWeight: 900, color: '#10B981', whiteSpace: 'nowrap' }}>₹{proc.fee.toLocaleString()}</div>
-                            </div>
-                            <div style={{ fontSize: '12px', color: '#64748B', lineHeight: 1.5, marginBottom: '12px', fontWeight: 600 }}>{proc.desc}</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#2563EB', fontWeight: 700, marginBottom: '16px' }}>
-                              <span>⏱️ Chair Slot Duration: <b>{proc.duration}</b></span>
-                            </div>
-                          </div>
-
-                          <button 
-                            className="btn btn-primary"
-                            style={{ width: '100%', borderRadius: '10px', height: '40px', fontWeight: 800, fontSize: '13px', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer' }}
-                            onClick={() => {
-                              setSelectedDentalProcedure(proc);
-                              setAppointmentReason(`${proc.name} (Fee: ₹${proc.fee})`);
-                              // Pick first doctor or generic specialist
-                              const hospitalDocs = doctors.filter(doc => doc.tenantId === (selectedHospitalDetails.code || selectedHospitalDetails.id));
-                              if (hospitalDocs.length > 0) {
-                                bookDoctor(hospitalDocs[0]);
-                              } else {
-                                bookDoctor({ _id: 'dental_specialist', name: `${selectedHospitalDetails.name} Specialist`, specialty: 'Dental Surgeon', tenantId: (selectedHospitalDetails.code || selectedHospitalDetails.id) });
-                              }
-                            }}
-                          >
-                            <span>Book Procedure Slot</span>
-                            <i data-lucide="arrow-right" style={{ width: '14px' }}></i>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                          {spec}
+                        </button>
+                      );
+                    })}
                   </div>
                 );
               })()}
 
-                <div>
-                  <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#1E293B', marginBottom: '20px' }}>Consulting Doctors & Specialists</h3>
-                  
-                  {(() => {
-                    const hospitalDocs = doctors.filter(doc => doc.tenantId === (selectedHospitalDetails.code || selectedHospitalDetails.id));
-                    if (hospitalDocs.length === 0) {
-                      return (
-                        <div className="glass-card" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', fontWeight: 700 }}>
-                          No specialists are currently registered online for {selectedHospitalDetails.name}.
-                        </div>
-                      );
-                    }
-                    return (
-                      <div className="doctor-grid-pro">
-                        {hospitalDocs.map(doc => (
-                          <div key={doc._id} className="doctor-card-pro animate-in" onClick={() => bookDoctor(doc)}>
-                            <div className="doc-avatar-wrapper">
-                              <div style={{ width: '100%', height: '180px', background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 800, borderRadius: '16px' }}>
-                                {doc.name ? doc.name.substring(0,2).toUpperCase() : 'DR'}
-                              </div>
-                              <div className="doc-rating-badge">★ 4.9</div>
-                              <div style={{ position: 'absolute', bottom: '0', right: '0', width: '12px', height: '12px', background: '#10B981', border: '2px solid white', borderRadius: '50%' }} />
-                            </div>
-                            <div style={{ fontWeight: 800, fontSize: '18px', color: '#1E293B' }}>{doc.name}</div>
-                            <div style={{ fontSize: '13px', color: 'var(--primary)', fontWeight: 700, margin: '4px 0 8px' }}>{doc.specialty || ''}</div>
-                            
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, margin: '0 0 16px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <i data-lucide="building-2" style={{ width: '12px' }}></i> {selectedHospitalDetails.name}
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <i data-lucide="calendar" style={{ width: '12px' }}></i> Available: Mon - Fri
-                              </div>
-                            </div>
+              <div className="doctor-grid-pro">
+                {(() => {
+                  const hospitalTenant = selectedHospital.code || selectedHospital.id || selectedHospital._id;
+                  const hospitalDocs = doctors.filter(doc => !doc.tenantId || doc.tenantId === hospitalTenant || doc.tenantId === selectedHospital.id || doc.tenantId === selectedHospital.code);
+                  const activeDocs = hospitalDocs.length > 0 ? hospitalDocs : doctors;
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>10+ Years Exp</span>
-                              <button 
-                                className="btn btn-primary" 
-                                style={{ padding: '8px 16px', fontSize: '12px', borderRadius: '8px', fontWeight: 800 }}
-                                onClick={(e) => { e.stopPropagation(); bookDoctor(doc); }}
-                              >
-                                Book Now
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                  const filteredDocs = activeDocs.filter(doc => {
+                    const query = discoverySearch.toLowerCase().trim();
+                    const matchesSearch = !query || 
+                                         doc.name.toLowerCase().includes(query) || 
+                                         (doc.specialty || '').toLowerCase().includes(query);
+                    const matchesSpecialty = !selectedSpecialtyFilter || doc.specialty === selectedSpecialtyFilter;
+                    return matchesSearch && matchesSpecialty;
+                  });
+
+                  if (filteredDocs.length === 0) {
+                    return (
+                      <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '40px', color: '#64748B', fontWeight: 700 }}>
+                        No doctors found at {selectedHospital.name} matching your search.
                       </div>
                     );
-                  })()}
-                </div>
-              </div>
-            )}
+                  }
 
-            {discoveryTab === 'hospitals' && !selectedHospitalDetails && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}>
-                  {(() => {
-                    const sortedHospitals = [...curoxaHospitals].filter(h => {
-                      const query = discoverySearch.toLowerCase().trim();
-                      const matchesQuery = !query || 
-                        (h.name && h.name.toLowerCase().includes(query)) || 
-                        (h.address && h.address.toLowerCase().includes(query)) || 
-                        (h.code && h.code.toLowerCase().includes(query)) ||
-                        (h.specialties && h.specialties.some(s => s.toLowerCase().includes(query)));
-                      
-                      let matchesFilter = true;
-                      if (facilityTypeFilter !== 'all' && facilityTypeFilter.startsWith('spec-')) {
-                        const targetSpec = facilityTypeFilter.replace('spec-', '');
-                        matchesFilter = h.specialties && h.specialties.includes(targetSpec);
-                      }
-                      return matchesQuery && matchesFilter;
-                    });
-
-                    if (sortedHospitals.length === 0) {
-                      return (
-                        <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '40px', color: '#64748B', fontWeight: 700 }}>
-                          No clinics found matching "{discoverySearch}".
+                  return filteredDocs.map(doc => (
+                    <div key={doc._id} className="doctor-card-pro animate-in" onClick={() => bookDoctor(doc)}>
+                      <div className="doc-avatar-wrapper">
+                        <div style={{ width: '100%', height: '180px', background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 800, borderRadius: '16px' }}>
+                          {doc.name ? doc.name.substring(0, 2).toUpperCase() : 'DR'}
                         </div>
-                      );
-                    }
+                        <div className="doc-rating-badge">★ 4.9</div>
+                        <div style={{ position: 'absolute', bottom: '0', right: '0', width: '12px', height: '12px', background: '#10B981', border: '2px solid white', borderRadius: '50%' }} />
+                      </div>
+                      <div style={{ fontWeight: 800, fontSize: '18px', color: '#1E293B' }}>{doc.name}</div>
+                      <div style={{ fontSize: '13px', color: 'var(--primary)', fontWeight: 700, margin: '4px 0 8px' }}>{doc.specialty || ''}</div>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, margin: '0 0 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <i data-lucide="building-2" style={{ width: '12px' }}></i> {selectedHospital.name}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <i data-lucide="calendar" style={{ width: '12px' }}></i> Available: Mon - Fri
+                        </div>
+                      </div>
 
-                    return sortedHospitals.map(h => {
-                      const hospitalDocs = doctors.filter(doc => doc.tenantId === h.id || doc.tenantId === h.code);
-                      const availableDocs = hospitalDocs.length > 0 ? hospitalDocs.length : (h.doctorCount || 0);
-
-                      return (
-                        <div 
-                          key={h.id || h.code} 
-                          className="glass-card animate-in" 
-                          style={{ 
-                            padding: '0', 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            overflow: 'hidden', 
-                            border: '1px solid var(--border)',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s ease'
-                          }}
-                          onClick={() => setSelectedHospitalDetails(h)}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>Verified Specialist</span>
+                        <button 
+                          className="btn btn-primary" 
+                          style={{ padding: '8px 16px', fontSize: '12px', borderRadius: '8px', fontWeight: 800 }}
+                          onClick={(e) => { e.stopPropagation(); bookDoctor(doc); }}
                         >
-                          {(h.letterheadUrl && h.letterheadUrl.startsWith('http')) || (h.logo && h.logo.startsWith('http')) ? (
-                            <div style={{ height: '140px', position: 'relative' }}>
-                              <img src={h.letterheadUrl || h.logo} alt={h.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            </div>
-                          ) : (
-                            <div style={{
-                              height: '100px',
-                              background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              padding: '0 20px',
-                              gap: '14px'
-                            }}>
-                              <div style={{
-                                width: '44px',
-                                height: '44px',
-                                borderRadius: '10px',
-                                background: 'linear-gradient(135deg, #2563EB 0%, #0284C7 100%)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#FFFFFF',
-                                fontWeight: 900,
-                                fontSize: '18px'
-                              }}>
-                                {h.logo && h.logo.length <= 4 ? h.logo : h.name.slice(0, 2).toUpperCase()}
-                              </div>
-                              <div>
-                                <div style={{ color: '#94A3B8', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' }}>
-                                  Code: {h.code}
-                                </div>
-                                <div style={{ color: '#FFFFFF', fontSize: '15px', fontWeight: 800 }}>
-                                  {h.name}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                          
-                          <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '8px', marginBottom: '8px' }}>
-                              <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: '#1E293B' }}>{h.name}</h3>
-                              {h.isVerified && (
-                                <span 
-                                  style={{ 
-                                    fontSize: '10px', 
-                                    fontWeight: 800, 
-                                    padding: '3px 8px', 
-                                    borderRadius: '20px', 
-                                    background: '#F0FDF4', 
-                                    color: '#166534', 
-                                    border: '1px solid #BBF7D0',
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                >
-                                  Verified
-                                </span>
-                              )}
-                            </div>
-                            
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '16px' }}>
-                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
-                                <i data-lucide="map-pin" style={{ width: '14px', color: 'var(--primary)', marginTop: '2px', flexShrink: 0 }}></i> 
-                                <span>{h.address || 'Address details on file'}</span>
-                              </div>
-                            </div>
-
-                            <div style={{ marginTop: 'auto', borderTop: '1px solid #F1F5F9', paddingTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 800 }}>
-                                {availableDocs > 0 ? `${availableDocs} Specialists Available` : 'Healthcare Facility'}
-                              </span>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--primary)', fontWeight: 800 }}>
-                                View Details <i data-lucide="arrow-right" style={{ width: '14px' }}></i>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
+                          Book Now
+                        </button>
+                      </div>
+                    </div>
+                  ));
+                })()}
               </div>
-            )}
-
-            {discoveryTab === 'doctors' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                  {['All', 'General Medicine', 'Neuro Specialist', 'Pediatrics', 'Cardiology'].map(spec => {
-                    const isSelected = (spec === 'All' && !selectedSpecialtyFilter) || selectedSpecialtyFilter === spec;
-                    return (
-                      <button
-                        key={spec}
-                        onClick={() => setSelectedSpecialtyFilter(spec === 'All' ? null : spec)}
-                        style={{
-                          background: isSelected ? 'var(--primary)' : 'white',
-                          color: isSelected ? 'white' : '#64748B',
-                          border: isSelected ? 'none' : '1px solid #CBD5E1',
-                          padding: '6px 16px',
-                          borderRadius: '20px',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          transition: '0.2s',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-                        }}
-                      >
-                        {spec}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="doctor-grid-pro">
-                  {(() => {
-                    const filteredDocs = doctors.filter(doc => {
-                      const query = discoverySearch.toLowerCase();
-                      const hDetails = getHospitalDetails(doc.tenantId);
-                      
-                      const matchesSearch = doc.name.toLowerCase().includes(query) || 
-                                           (doc.specialty || '').toLowerCase().includes(query) ||
-                                           hDetails.name.toLowerCase().includes(query) ||
-                                           hDetails.location.toLowerCase().includes(query);
-                                           
-                      const matchesSpecialty = !selectedSpecialtyFilter || doc.specialty === selectedSpecialtyFilter;
-                      
-                      return matchesSearch && matchesSpecialty;
-                    });
-
-                    if (filteredDocs.length === 0) {
-                      return (
-                        <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '40px', color: '#64748B', fontWeight: 700 }}>
-                          No doctors found matching your criteria.
-                        </div>
-                      );
-                    }
-
-                    return filteredDocs.map(doc => {
-                      const hDetails = getHospitalDetails(doc.tenantId);
-                      return (
-                        <div key={doc._id} className="doctor-card-pro animate-in" onClick={() => bookDoctor(doc)}>
-                          <div className="doc-avatar-wrapper">
-                            <div style={{ width: '100%', height: '180px', background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 800, borderRadius: '16px' }}>
-                              {doc.name ? doc.name.substring(0,2).toUpperCase() : 'DR'}
-                            </div>
-                            <div className="doc-rating-badge">★ 4.9</div>
-                            <div style={{ position: 'absolute', bottom: '0', right: '0', width: '12px', height: '12px', background: '#10B981', border: '2px solid white', borderRadius: '50%' }} />
-                          </div>
-                          <div style={{ fontWeight: 800, fontSize: '18px', color: '#1E293B' }}>{doc.name}</div>
-                          <div style={{ fontSize: '13px', color: 'var(--primary)', fontWeight: 700, margin: '4px 0 8px' }}>{doc.specialty || ''}</div>
-                          
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, margin: '0 0 16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <i data-lucide="building-2" style={{ width: '12px' }}></i> {hDetails.name}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <i data-lucide="map-pin" style={{ width: '12px' }}></i> {hDetails.location}
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>10+ Years Experience</span>
-                            <button 
-                              className="btn btn-primary" 
-                              style={{ padding: '8px 16px', fontSize: '12px', borderRadius: '8px', fontWeight: 800 }}
-                              onClick={(e) => { e.stopPropagation(); bookDoctor(doc); }}
-                            >
-                              Book Now
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -8214,6 +6872,39 @@ const PatientDashboard = () => {
                     {isUpdatingPassword ? 'Updating...' : 'Update Password'}
                   </button>
                 </form>
+
+                <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #F1F5F9' }}>
+                  <h4 style={{ fontSize: '15px', fontWeight: 800, marginBottom: '6px', color: '#0F172A' }}>Privacy & Data Rights</h4>
+                  <p style={{ fontSize: '12px', color: '#64748B', lineHeight: 1.45, marginBottom: '14px' }}>
+                    Under the DPDP Act, you maintain sovereignty over your clinical data and consent.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowWithdrawConsentModal(true)}
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      borderRadius: '8px',
+                      background: '#FEF2F2',
+                      border: '1.5px solid #FCA5A5',
+                      color: '#DC2626',
+                      fontSize: '12.5px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#FEE2E2'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#FEF2F2'}
+                    title="Consent withdrawal will be available soon. This feature is currently being prepared."
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span>Withdraw Consent</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -9449,6 +8140,51 @@ const PatientDashboard = () => {
         </div>
       )}
 
+      {/* WITHDRAW CONSENT NOTICE MODAL (UI ONLY, NON-DESTRUCTIVE) */}
+      {showWithdrawConsentModal && (
+        <div className="modal-overlay" style={{ zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(6px)' }}>
+          <div className="modal-box" style={{ maxWidth: '440px', padding: '24px', borderRadius: '20px', background: '#FFFFFF', border: '1px solid #E2E8F0', boxShadow: '0 20px 40px -8px rgba(15, 23, 42, 0.16)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#FEF2F2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              </div>
+              <div>
+                <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Withdraw Consent</h3>
+                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Privacy & Data Rights</span>
+              </div>
+            </div>
+
+            <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px 16px', marginBottom: '18px' }}>
+              <p style={{ fontSize: '13px', color: '#334155', lineHeight: 1.5, margin: 0, fontWeight: 600 }}>
+                Consent withdrawal will be available soon. This feature is currently being prepared in compliance with the Digital Personal Data Protection (DPDP) Act.
+              </p>
+              <p style={{ fontSize: '11.5px', color: '#64748B', lineHeight: 1.4, margin: '8px 0 0 0' }}>
+                Your clinical records remain strictly confidential and protected under hospital governance.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowWithdrawConsentModal(false)}
+                style={{
+                  background: '#2563EB',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '10px 20px',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ============================================================ */}
       {/* DIGITAL ABHA HEALTH ID CARD MODAL */}
       {/* ============================================================ */}
@@ -9718,71 +8454,34 @@ const PatientDashboard = () => {
         );
       })()}
 
-      <div className="mobile-bottom-nav">
-        {!selectedHospital ? (
-          <>
-            <div className={`mob-nav-item ${(activeTab === 'curoxa-home' || (!selectedHospital && activeTab !== 'profile' && activeTab !== 'curoxa-hospitals')) ? 'active' : ''}`} onClick={() => setActiveTab('curoxa-home')}>
-              <i data-lucide="home"></i>
-              <span>Home</span>
-            </div>
-            <div className={`mob-nav-item ${activeTab === 'curoxa-hospitals' ? 'active' : ''}`} onClick={() => setActiveTab('curoxa-hospitals')}>
-              <i data-lucide="building-2"></i>
-              <span>Hospitals</span>
-            </div>
-            <div className={`mob-nav-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
-              <i data-lucide="user"></i>
-              <span>Profile</span>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className={`mob-nav-item ${activeTab === 'summary' ? 'active' : ''}`} onClick={() => setActiveTab('summary')}>
-              <i data-lucide="home"></i>
-              <span>Home</span>
-            </div>
-            <div className={`mob-nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
-              <i data-lucide="calendar"></i>
-              <span>Appts</span>
-            </div>
-            {/* Elevated Center Book FAB */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginTop: '-22px',
-                cursor: 'pointer'
-              }}
-              onClick={() => setActiveTab('find')}
-            >
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 50%, #0284C7 100%)',
-                color: '#FFFFFF',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 6px 18px rgba(37, 99, 235, 0.45)',
-                border: '3px solid #FFFFFF'
-              }}>
-                <i data-lucide="plus" style={{ width: '22px', height: '22px', strokeWidth: 3 }}></i>
-              </div>
-              <span style={{ fontSize: '10px', fontWeight: 900, color: '#2563EB', marginTop: '2px' }}>Book</span>
-            </div>
-            <div className={`mob-nav-item ${(activeTab === 'records' || activeTab === 'prescriptions' || activeTab === 'documents') ? 'active' : ''}`} onClick={() => { setMyHealthCategory('ALL'); setActiveTab('records'); }}>
-              <i data-lucide="activity"></i>
-              <span>My Health</span>
-            </div>
-            <div className={`mob-nav-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
-              <i data-lucide="user"></i>
-              <span>Profile</span>
-            </div>
-          </>
-        )}
-      </div>
+      {!selectedHospital ? (
+        <div className="mobile-bottom-nav">
+          <div className={`mob-nav-item ${(activeTab === 'curoxa-home' || (!selectedHospital && activeTab !== 'profile' && activeTab !== 'curoxa-hospitals')) ? 'active' : ''}`} onClick={() => setActiveTab('curoxa-home')}>
+            <i data-lucide="home"></i>
+            <span>Home</span>
+          </div>
+          <div className={`mob-nav-item ${activeTab === 'curoxa-hospitals' ? 'active' : ''}`} onClick={() => setActiveTab('curoxa-hospitals')}>
+            <i data-lucide="building-2"></i>
+            <span>Hospitals</span>
+          </div>
+          <div className={`mob-nav-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
+            <i data-lucide="user"></i>
+            <span>Profile</span>
+          </div>
+        </div>
+      ) : (
+        <HospitalBottomNav
+          activeTab={activeTab}
+          onSelectTab={(tab) => {
+            if (tab === 'records') {
+              setMyHealthCategory('ALL');
+            }
+            setActiveTab(tab);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onOpenBooking={handleOpenBookingFlow}
+        />
+      )}
 
       {/* INFORMATIONAL WITHDRAW CONSENT NOTICE MODAL */}
       {showWithdrawConsentModal && (

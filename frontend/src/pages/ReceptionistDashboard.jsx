@@ -77,18 +77,8 @@ const ReceptionistDashboard = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window !== 'undefined' && (window.location.pathname === '/receptionist/waiting-queue' || window.location.pathname.endsWith('/waiting-queue'))) {
-      return 'waiting-queue';
-    }
-    return 'dash';
-  });
-
-  useEffect(() => {
-    if (location.pathname === '/receptionist/waiting-queue' || location.pathname.endsWith('/waiting-queue')) {
-      setActiveTab('waiting-queue');
-    }
-  }, [location.pathname]);
+  // Always default to 'dash' (Overview Dashboard)
+  const [activeTab, setActiveTab] = useState('dash');
 
   const [registrationStep, setRegistrationStep] = useState(1);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -764,6 +754,10 @@ const ReceptionistDashboard = () => {
   const [apptTypeFilter, setApptTypeFilter] = useState('All');
   const [staffSearch, setStaffSearch] = useState('');
   const [billingSearch, setBillingSearch] = useState('');
+  const [billingStatusFilter, setBillingStatusFilter] = useState('All');
+  const [billingPage, setBillingPage] = useState(1);
+  const [patientPage, setPatientPage] = useState(1);
+  const [appointmentPage, setAppointmentPage] = useState(1);
   const [patientVitals, setPatientVitals] = useState([]);
   const [patientClinicalNotes, setPatientClinicalNotes] = useState([]);
   const [patientPrescriptions, setPatientPrescriptions] = useState([]);
@@ -2286,9 +2280,7 @@ const ReceptionistDashboard = () => {
   const switchTab = (tabId, bypassReset = false) => {
     fetchData().catch(e => console.error("Error refreshing data:", e));
     setActiveTab(tabId);
-    if (tabId === 'waiting-queue') {
-      navigate('/receptionist/waiting-queue', { replace: true });
-    } else if (tabId === 'dash') {
+    if (location.pathname !== '/receptionist') {
       navigate('/receptionist', { replace: true });
     }
     setMobileSidebarOpen(false);
@@ -6277,7 +6269,7 @@ const ReceptionistDashboard = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px', marginBottom: '20px' }}>
               {/* Card 1: Total Patients */}
               <div 
-                onClick={() => setPatientGenderFilter('All')}
+                onClick={() => { setPatientGenderFilter('All'); setPatientPage(1); }}
                 style={{ 
                   padding: '16px 20px', 
                   borderRadius: '16px', 
@@ -6304,7 +6296,7 @@ const ReceptionistDashboard = () => {
 
               {/* Card 2: Male Patients */}
               <div 
-                onClick={() => setPatientGenderFilter('Male')}
+                onClick={() => { setPatientGenderFilter('Male'); setPatientPage(1); }}
                 style={{ 
                   padding: '16px 20px', 
                   borderRadius: '16px', 
@@ -6331,7 +6323,7 @@ const ReceptionistDashboard = () => {
 
               {/* Card 3: Female Patients */}
               <div 
-                onClick={() => setPatientGenderFilter('Female')}
+                onClick={() => { setPatientGenderFilter('Female'); setPatientPage(1); }}
                 style={{ 
                   padding: '16px 20px', 
                   borderRadius: '16px', 
@@ -6397,7 +6389,7 @@ const ReceptionistDashboard = () => {
                     type="text" 
                     placeholder="Search by name, ID, phone, email..." 
                     value={patientSearchText}
-                    onChange={e => setPatientSearchText(e.target.value)}
+                    onChange={e => { setPatientSearchText(e.target.value); setPatientPage(1); }}
                     style={{ 
                       background: '#F8FAFC', 
                       border: '1.5px solid #E2E8F0', 
@@ -6907,15 +6899,99 @@ const ReceptionistDashboard = () => {
                 </table>
               </div>
 
-              {/* Table Footer with Record Count */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #F1F5F9', fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
-                <span>
-                  Showing <strong>{allFiltered.length}</strong> of <strong>{totalPatients}</strong> patient record{totalPatients === 1 ? '' : 's'}
-                </span>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', color: '#94A3B8' }}>Click row or Profile button to view clinical records</span>
-                </div>
-              </div>
+              {/* Table Footer with Record Count & 10-Row Pagination */}
+              {(() => {
+                const pageSize = 10;
+                const totalPatientPages = Math.ceil(allFiltered.length / pageSize) || 1;
+                const currentPatientPage = Math.min(Math.max(1, patientPage), totalPatientPages);
+                const startItem = allFiltered.length === 0 ? 0 : (currentPatientPage - 1) * pageSize + 1;
+                const endItem = Math.min(currentPatientPage * pageSize, allFiltered.length);
+
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #F1F5F9', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ fontSize: '12.5px', color: '#475569', fontWeight: 600 }}>
+                        Showing <strong>{startItem} - {endItem}</strong> of <strong>{allFiltered.length}</strong> patient record{allFiltered.length === 1 ? '' : 's'}
+                        {allFiltered.length < totalPatients && ` (filtered from ${totalPatients})`}
+                      </span>
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {totalPatientPages > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setPatientPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPatientPage === 1}
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            borderRadius: '8px',
+                            border: '1px solid #CBD5E1',
+                            background: currentPatientPage === 1 ? '#F8FAFC' : '#FFFFFF',
+                            color: currentPatientPage === 1 ? '#94A3B8' : '#334155',
+                            cursor: currentPatientPage === 1 ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                          Prev
+                        </button>
+
+                        {Array.from({ length: totalPatientPages }, (_, i) => i + 1).map(pageNum => (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => setPatientPage(pageNum)}
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              fontSize: '12px',
+                              fontWeight: 800,
+                              borderRadius: '8px',
+                              border: pageNum === currentPatientPage ? 'none' : '1px solid #E2E8F0',
+                              background: pageNum === currentPatientPage ? '#2563EB' : '#FFFFFF',
+                              color: pageNum === currentPatientPage ? '#FFFFFF' : '#475569',
+                              boxShadow: pageNum === currentPatientPage ? '0 2px 6px rgba(37, 99, 235, 0.25)' : 'none',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            {pageNum}
+                          </button>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => setPatientPage(prev => Math.min(totalPatientPages, prev + 1))}
+                          disabled={currentPatientPage === totalPatientPages}
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            borderRadius: '8px',
+                            border: '1px solid #CBD5E1',
+                            background: currentPatientPage === totalPatientPages ? '#F8FAFC' : '#FFFFFF',
+                            color: currentPatientPage === totalPatientPages ? '#94A3B8' : '#334155',
+                            cursor: currentPatientPage === totalPatientPages ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          Next
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
             </div>
 
@@ -9498,122 +9574,268 @@ const ReceptionistDashboard = () => {
         )}
 
         {/* APPOINTMENTS TAB */}
-        {activeTab === 'appointments' && (
-          <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out' }}>
+        {activeTab === 'appointments' && (() => {
+            // Helper to get normalized YYYY-MM-DD for SAME SINGLE DAY comparison
+                        // Helper to check if appointment is TODAY
+            const isAppointmentToday = (dateVal) => {
+              if (!dateVal) return false;
+              try {
+                const d = new Date(dateVal);
+                const now = new Date();
+                return d.getFullYear() === now.getFullYear() &&
+                       d.getMonth() === now.getMonth() &&
+                       d.getDate() === now.getDate();
+              } catch (e) {
+                return false;
+              }
+            };
+
+            // Helper to check if 24 hours have elapsed after the appointment day/time
+            const isApptExpired24h = (dateVal, timeVal) => {
+              if (!dateVal) return false;
+              try {
+                const d = new Date(dateVal);
+                if (isNaN(d.getTime())) return false;
+                
+                let apptTimeMs = null;
+                if (timeVal) {
+                  const match = String(timeVal).match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+                  if (match) {
+                    let h = parseInt(match[1], 10);
+                    const m = parseInt(match[2], 10);
+                    const meridiem = (match[3] || '').toUpperCase();
+                    if (meridiem === 'PM' && h < 12) h += 12;
+                    if (meridiem === 'AM' && h === 12) h = 0;
+                    const apptDateObj = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0);
+                    apptTimeMs = apptDateObj.getTime();
+                  }
+                }
+                
+                if (!apptTimeMs) {
+                  apptTimeMs = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+                }
+                
+                const expiryCutoff = apptTimeMs + (24 * 60 * 60 * 1000);
+                return Date.now() > expiryCutoff;
+              } catch (e) {
+                return false;
+              }
+            };
+
+            const getDayKey = (d) => {
+              if (!d) return 'no-date';
+              try {
+                const dt = new Date(d);
+                if (isNaN(dt.getTime())) return String(d).split('T')[0];
+                return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+              } catch (e) {
+                return String(d);
+              }
+            };
+
+            const unifiedList = getUnifiedAppointmentsList();
+            const counts = { All: unifiedList.length, Appointment: 0, 'Lab Test': 0, 'Clinical Service': 0 };
+            unifiedList.forEach(item => {
+              if (counts[item.type] !== undefined) counts[item.type]++;
+            });
+            const pendingReqCount = unifiedList.filter(item => 
+              item.status === 'Pending Approval' || item.status === 'Pending' || 
+              item.rawItem?.status === 'Pending Approval' || item.rawItem?.status === 'Pending'
+            ).length;
+
+            const filteredList = getFilteredAppointments();
+
+            // CRITICAL USER REQUIREMENT:
+            // Multi-visit is shown ONLY when a patient has multiple appointments on the SAME DAY!
+            // Appointments on different days are recorded and shown separately as standalone rows.
+            const groupedBookings = [];
+            const visitedIds = new Set();
+
+            filteredList.forEach(item => {
+              if (visitedIds.has(item.id)) return;
+
+              if (item.type !== 'Appointment') {
+                visitedIds.add(item.id);
+                groupedBookings.push({ isMulti: false, primary: item, addOns: [] });
+                return;
+              }
+
+              const patId = String(item.patientId?._id || item.patientId || item.patientName || item.id);
+              const dayStr = getDayKey(item.date);
+
+              // Find matching appointments for the SAME PATIENT on the SAME CALENDAR DAY ONLY
+              const sameDayMatches = filteredList.filter(other => 
+                other.type === 'Appointment' &&
+                String(other.patientId?._id || other.patientId || other.patientName || other.id) === patId &&
+                getDayKey(other.date) === dayStr
+              );
+
+              sameDayMatches.forEach(m => visitedIds.add(m.id));
+
+              if (sameDayMatches.length > 1) {
+                groupedBookings.push({
+                  isMulti: true,
+                  primary: sameDayMatches[0],
+                  addOns: sameDayMatches.slice(1)
+                });
+              } else {
+                groupedBookings.push({
+                  isMulti: false,
+                  primary: item,
+                  addOns: []
+                });
+              }
+            });
+
+            // Pagination of 10 bookings per page
+            const pageSize = 10;
+            const totalApptPages = Math.ceil(groupedBookings.length / pageSize) || 1;
+            const currentApptPage = Math.min(Math.max(1, appointmentPage), totalApptPages);
+            const startIdx = (currentApptPage - 1) * pageSize;
+            const paginatedGroups = groupedBookings.slice(startIdx, startIdx + pageSize);
+
+            const startItem = groupedBookings.length === 0 ? 0 : startIdx + 1;
+            const endItem = Math.min(startIdx + pageSize, groupedBookings.length);
+
+            return (
+          <div className="tab-content active" style={{ animation: 'slideUp 0.3s ease-out' }}>
             
-            {/* Header: Title + Button Group */}
-            <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1A1D23' }}>Appointments</h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B', fontWeight: 600, marginBottom: '4px' }}>
+                  <span>Patient Services</span>
+                  <span style={{ color: '#CBD5E1' }}>/</span>
+                  <span style={{ color: '#2563EB', fontWeight: 700 }}>Appointments &amp; Bookings</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
+                    Appointments
+                  </h2>
+                  <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 9px', borderRadius: '20px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }}>
+                    {counts.All} Total Bookings
+                  </span>
+                </div>
+                <p style={{ color: '#64748B', fontSize: '13px', margin: '4px 0 0', fontWeight: 500 }}>
+                  Manage patient consultations, same-day multiple visits, queues, and clinical bookings.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button 
+                  type="button"
                   className="btn btn-primary" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '20px', padding: '0 16px', borderRadius: '2px', fontWeight: 700, fontSize: '11px' }} 
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '40px', padding: '0 18px', borderRadius: '10px', fontWeight: 700, fontSize: '13px', background: '#2563EB', color: '#FFFFFF', border: 'none', cursor: 'pointer', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
                   onClick={() => switchTab('registration-form')}
                 >
-                  <i data-lucide="plus" style={{ width: '16px', height: '16px' }}></i> Create Appointment
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Create Appointment
                 </button>
                 <button 
-                  className="btn" 
+                  type="button"
                   style={{ 
-                    width: '38px', 
-                    height: '20px', 
+                    width: '40px', 
+                    height: '40px', 
                     padding: 0,
-                    borderRadius: '2px', 
-                    background: showDateFilter ? '#2563EB' : '#EFF6FF', 
-                    color: showDateFilter ? '#FFFFFF' : '#2563EB', 
+                    borderRadius: '10px', 
+                    background: (showDateFilter || startDate || endDate) ? '#EFF6FF' : '#FFFFFF', 
+                    color: (showDateFilter || startDate || endDate) ? '#2563EB' : '#64748B', 
                     display: 'flex', 
                     alignItems: 'center', 
-                    justifyContent: 'center',
-                    border: 'none',
+                    justifyContent: 'center', 
+                    border: (showDateFilter || startDate || endDate) ? '1.5px solid #BFDBFE' : '1px solid #E2E8F0',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease'
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                    transition: 'all 0.15s ease'
                   }}
                   onClick={() => {
                     setShowDateFilter(!showDateFilter);
                     setTimeout(() => window.lucide && window.lucide.createIcons(), 100);
                   }}
-                  title="Filter appointments by date"
+                  title="Filter appointments by date range"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 </button>
               </div>
             </div>
 
             {/* Sliding Date Range Filter Panel */}
             {showDateFilter && (
-              <div className="glass-card" style={{ padding: '4px', marginBottom: '4px', animation: 'slideDown 0.3s ease-out', border: '1px solid #BFDBFE', background: '#F8FAFC' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <h4 style={{ fontSize: '10px', fontWeight: 800, color: '#1E293B', margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <i data-lucide="calendar-days" style={{ width: '18px', color: 'var(--primary)' }}></i> Select Appointment Date Range
-                  </h4>
+              <div style={{ padding: '16px 20px', marginBottom: '16px', borderRadius: '12px', border: '1px solid #BFDBFE', background: '#F8FAFC', animation: 'slideDown 0.25s ease-out' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span>Filter Appointments by Date Range</span>
+                  </div>
                   {(startDate || endDate) && (
                     <button 
-                      className="btn" 
-                      style={{ fontSize: '10px', padding: '4px 10px', background: 'transparent', color: '#EF4444', fontWeight: 700, border: 'none', cursor: 'pointer' }}
-                      onClick={() => { setStartDate(''); setEndDate(''); }}
+                      type="button"
+                      style={{ fontSize: '12px', padding: '4px 10px', background: 'transparent', color: '#EF4444', fontWeight: 700, border: 'none', cursor: 'pointer' }}
+                      onClick={() => { setStartDate(''); setEndDate(''); setAppointmentPage(1); }}
                     >
-                      Clear Filter
+                      Clear Date Filter
                     </button>
                   )}
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                  <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '180px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', marginBottom: '2px', display: 'block', textTransform: 'uppercase' }}>From Date</label>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div style={{ flex: '1 1 180px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '4px', display: 'block', textTransform: 'uppercase' }}>From Date</label>
                     <input 
                       type="date" 
-                      className="form-control" 
-                      style={{ height: '40px', borderRadius: '2px', border: '1px solid #CBD5E1', padding: '0 12px' }} 
+                      style={{ height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', width: '100%', outline: 'none', fontSize: '13px', fontWeight: 600, background: '#FFFFFF' }} 
                       value={startDate} 
-                      onChange={e => setStartDate(e.target.value)} 
+                      onChange={e => { setStartDate(e.target.value); setAppointmentPage(1); }} 
                     />
                   </div>
-                  <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '180px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', marginBottom: '2px', display: 'block', textTransform: 'uppercase' }}>To Date</label>
+                  <div style={{ flex: '1 1 180px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '4px', display: 'block', textTransform: 'uppercase' }}>To Date</label>
                     <input 
                       type="date" 
-                      className="form-control" 
-                      style={{ height: '40px', borderRadius: '2px', border: '1px solid #CBD5E1', padding: '0 12px' }} 
+                      style={{ height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', width: '100%', outline: 'none', fontSize: '13px', fontWeight: 600, background: '#FFFFFF' }} 
                       value={endDate} 
-                      onChange={e => setEndDate(e.target.value)} 
+                      onChange={e => { setEndDate(e.target.value); setAppointmentPage(1); }} 
                     />
                   </div>
 
-                  {/* Preset Shortcuts */}
-                  <div style={{ display: 'flex', gap: '4px' }}>
+                  {/* Date Preset Buttons */}
+                  <div style={{ display: 'flex', gap: '6px' }}>
                     <button 
-                      className="btn btn-secondary" 
-                      style={{ height: '40px', fontSize: '10px', fontWeight: 700, padding: '0 16px', borderRadius: '2px', border: '1px solid #E2E8F0', background: 'white' }} 
+                      type="button"
+                      style={{ height: '38px', fontSize: '12px', fontWeight: 700, padding: '0 14px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#FFFFFF', cursor: 'pointer' }} 
                       onClick={() => {
                         const todayStr = new Date().toISOString().split('T')[0];
                         setStartDate(todayStr);
                         setEndDate(todayStr);
+                        setAppointmentPage(1);
                       }}
                     >
                       Today
                     </button>
                     <button 
-                      className="btn btn-secondary" 
-                      style={{ height: '40px', fontSize: '10px', fontWeight: 700, padding: '0 16px', borderRadius: '2px', border: '1px solid #E2E8F0', background: 'white' }} 
+                      type="button"
+                      style={{ height: '38px', fontSize: '12px', fontWeight: 700, padding: '0 14px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#FFFFFF', cursor: 'pointer' }} 
                       onClick={() => {
                         const today = new Date();
                         const past7 = new Date();
                         past7.setDate(today.getDate() - 7);
                         setStartDate(past7.toISOString().split('T')[0]);
                         setEndDate(today.toISOString().split('T')[0]);
+                        setAppointmentPage(1);
                       }}
                     >
                       Last 7 Days
                     </button>
                     <button 
-                      className="btn btn-secondary" 
-                      style={{ height: '40px', fontSize: '10px', fontWeight: 700, padding: '0 16px', borderRadius: '2px', border: '1px solid #E2E8F0', background: 'white' }} 
+                      type="button"
+                      style={{ height: '38px', fontSize: '12px', fontWeight: 700, padding: '0 14px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#FFFFFF', cursor: 'pointer' }} 
                       onClick={() => {
                         const today = new Date();
                         const past30 = new Date();
                         past30.setDate(today.getDate() - 30);
                         setStartDate(past30.toISOString().split('T')[0]);
                         setEndDate(today.toISOString().split('T')[0]);
+                        setAppointmentPage(1);
                       }}
                     >
                       Last 30 Days
@@ -9621,352 +9843,433 @@ const ReceptionistDashboard = () => {
                   </div>
                 </div>
 
-                {/* Filter matches info */}
-                <div style={{ marginTop: '14px', fontSize: '10px', color: '#475569', fontWeight: 600 }}>
-                  Found <span style={{ color: 'var(--primary)', fontWeight: 800 }}>{getFilteredAppointments().length}</span> matching appointments.
+                <div style={{ marginTop: '10px', fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+                  Found <strong style={{ color: '#2563EB' }}>{filteredList.length}</strong> matching records in selected date range.
                 </div>
               </div>
             )}
 
-            {(() => {
-              const unifiedList = getUnifiedAppointmentsList();
-              const counts = { All: unifiedList.length, Appointment: 0, 'Lab Test': 0, 'Clinical Service': 0 };
-              unifiedList.forEach(item => {
-                if (counts[item.type] !== undefined) counts[item.type]++;
-              });
-              const pendingReqCount = unifiedList.filter(item => item.status === 'Pending Approval' || item.status === 'Pending' || item.rawItem?.status === 'Pending Approval' || item.rawItem?.status === 'Pending').length;
-
-              return (
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                  {[
-                    { key: 'All', label: 'All Bookings', count: counts.All, color: '#3B82F6', bg: '#EFF6FF' },
-                    { key: 'Pending Approval', label: 'Online Requests (Pending)', count: pendingReqCount, color: '#EA580C', bg: '#FFF7ED' },
-                    { key: 'Appointment', label: 'Appointments (OPD)', count: counts.Appointment, color: '#2563EB', bg: '#EFF6FF' },
-                    { key: 'Lab Test', label: 'Lab Tests', count: counts['Lab Test'], color: '#10B981', bg: '#ECFDF5' },
-                    { key: 'Clinical Service', label: 'Clinical Services', count: counts['Clinical Service'], color: '#8B5CF6', bg: '#F5F3FF' }
-                  ].map(pill => (
+            {/* Glass Container Card */}
+            <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', border: '1px solid #E2E8F0', background: '#FFFFFF', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+              
+              {/* Category Segmented Filter Pills */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {[
+                  { key: 'All', label: 'All Bookings', count: counts.All, color: '#2563EB', activeBg: '#EFF6FF' },
+                  { key: 'Pending Approval', label: 'Online Requests (Pending)', count: pendingReqCount, color: '#EA580C', activeBg: '#FFF7ED' },
+                  { key: 'Appointment', label: 'Appointments (OPD)', count: counts.Appointment, color: '#0D9488', activeBg: '#CCFBF1' },
+                  { key: 'Lab Test', label: 'Lab Tests', count: counts['Lab Test'], color: '#10B981', activeBg: '#ECFDF5' },
+                  { key: 'Clinical Service', label: 'Clinical Services', count: counts['Clinical Service'], color: '#8B5CF6', activeBg: '#F5F3FF' }
+                ].map(pill => {
+                  const isActive = apptTypeFilter === pill.key;
+                  return (
                     <button
                       key={pill.key}
-                      onClick={() => setApptTypeFilter(pill.key)}
+                      type="button"
+                      onClick={() => { setApptTypeFilter(pill.key); setAppointmentPage(1); }}
                       style={{
-                        padding: '8px 16px',
-                        borderRadius: '20px',
-                        fontWeight: 700,
-                        fontSize: '13px',
+                        padding: '7px 14px',
+                        borderRadius: '10px',
+                        fontWeight: 800,
+                        fontSize: '12.5px',
                         cursor: 'pointer',
-                        border: apptTypeFilter === pill.key ? `2px solid ${pill.color}` : '1.5px solid #E2E8F0',
-                        background: apptTypeFilter === pill.key ? pill.bg : 'white',
-                        color: apptTypeFilter === pill.key ? pill.color : '#64748B',
-                        display: 'flex',
+                        border: isActive ? `1.5px solid ${pill.color}` : '1px solid #E2E8F0',
+                        background: isActive ? pill.activeBg : '#F8FAFC',
+                        color: isActive ? pill.color : '#475569',
+                        display: 'inline-flex',
                         alignItems: 'center',
                         gap: '8px',
-                        transition: 'all 0.2s'
+                        transition: 'all 0.15s ease',
+                        boxShadow: isActive ? '0 2px 4px rgba(0,0,0,0.04)' : 'none'
                       }}
                     >
-                      {pill.label}
-                      <span style={{ fontSize: '11px', background: apptTypeFilter === pill.key ? 'rgba(255,255,255,0.7)' : '#F1F5F9', padding: '2px 6px', borderRadius: '2px', color: apptTypeFilter === pill.key ? pill.color : '#64748B' }}>
+                      <span>{pill.label}</span>
+                      <span style={{ 
+                        fontSize: '11px', 
+                        fontWeight: 900,
+                        background: isActive ? '#FFFFFF' : '#E2E8F0', 
+                        padding: '1px 7px', 
+                        borderRadius: '20px', 
+                        color: isActive ? pill.color : '#64748B',
+                        boxShadow: isActive ? '0 1px 2px rgba(0,0,0,0.08)' : 'none'
+                      }}>
                         {pill.count}
                       </span>
                     </button>
-                  ))}
-                </div>
-              );
-            })()}
-
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', alignItems: 'center' }}>
-              <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <i data-lucide="search" style={{ position: 'absolute', left: '16px', color: '#64748B', width: '16px' }}></i>
-                <input 
-                  type="text" 
-                  placeholder="Search appointments by patient name, doctor, test or service..." 
-                  style={{ background: 'white', border: '1px solid #CBD5E1', paddingLeft: '44px', height: '42px', width: '100%', borderRadius: '2px', fontSize: '13px', fontWeight: 600, outline: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
-                  value={appointmentSearch}
-                  onChange={(e) => setAppointmentSearch(e.target.value)}
-                />
+                  );
+                })}
               </div>
-            </div>
 
-            <div className="glass-card" style={{ padding: '12px' }}>
-              <div className="table-responsive">
-                <table className="elite-table" style={{ margin: 0 }}>
-                  <thead style={{ background: '#F8FAFC' }}>
-                    <tr>
-                      <th>Patient</th>
-                      <th>Type</th>
-                      <th>Doctor / Detail</th>
-                      <th>Time</th>
-                      <th>Token</th>
-                      <th>Status</th>
-                      <th>Action</th>
+              {/* Search Bar Toolbar */}
+              <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center' }}>
+                <div style={{ flex: '1 1 320px', maxWidth: '480px', position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '14px', pointerEvents: 'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input 
+                    type="text" 
+                    placeholder="Search appointments by patient name, doctor, test or service..." 
+                    value={appointmentSearch}
+                    onChange={(e) => { setAppointmentSearch(e.target.value); setAppointmentPage(1); }}
+                    style={{ 
+                      background: '#F8FAFC', 
+                      border: '1.5px solid #E2E8F0', 
+                      paddingLeft: '40px', 
+                      paddingRight: appointmentSearch ? '36px' : '14px',
+                      height: '40px', 
+                      width: '100%', 
+                      borderRadius: '10px', 
+                      fontSize: '13px', 
+                      fontWeight: 600, 
+                      color: '#0F172A',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      transition: 'all 0.15s'
+                    }}
+                    onFocus={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#2563EB'; }}
+                    onBlur={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                  />
+                  {appointmentSearch && (
+                    <button
+                      type="button"
+                      onClick={() => { setAppointmentSearch(''); setAppointmentPage(1); }}
+                      style={{ position: 'absolute', right: '10px', background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Table with Strictly Aligned Fixed Width Columns */}
+              <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1040px' }}>
+                  <thead>
+                    <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
+                      <th style={{ width: '56px', padding: '12px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        S.No.
+                      </th>
+                      <th style={{ width: '220px', padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Patient
+                      </th>
+                      <th style={{ width: '120px', padding: '12px 14px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Type
+                      </th>
+                      <th style={{ width: '180px', padding: '12px 14px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Doctor / Detail
+                      </th>
+                      <th style={{ width: '180px', padding: '12px 14px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Date &amp; Slot
+                      </th>
+                      <th style={{ width: '120px', padding: '12px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Token
+                      </th>
+                      <th style={{ width: '110px', padding: '12px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Status
+                      </th>
+                      <th style={{ width: '230px', padding: '12px 16px', textAlign: 'right', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Action
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(() => {
-                      const renderedIds = new Set();
-                      const filteredList = getFilteredAppointments();
+                    {paginatedGroups.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '32px' }}>📅</span>
+                            <span style={{ fontWeight: 800, fontSize: '16px', color: '#0F172A' }}>No Bookings Found</span>
+                            <span style={{ fontSize: '13px', color: '#64748B', maxWidth: '340px' }}>
+                              {appointmentSearch.trim() ? `No bookings match "${appointmentSearch}"` : "No bookings found for the selected category or date range."}
+                            </span>
+                            {(appointmentSearch || apptTypeFilter !== 'All' || startDate || endDate) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAppointmentSearch('');
+                                  setApptTypeFilter('All');
+                                  setStartDate('');
+                                  setEndDate('');
+                                  setAppointmentPage(1);
+                                }}
+                                style={{ marginTop: '8px', padding: '6px 14px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', fontWeight: 700, fontSize: '12.5px', cursor: 'pointer' }}
+                              >
+                                Clear All Filters
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedGroups.map((group, localIdx) => {
+                        const globalSerial = startIdx + localIdx + 1;
+                        const { isMulti, primary, addOns } = group;
 
-                      return filteredList.map(app => {
-                        if (renderedIds.has(app.id)) return null;
+                        return (
+                          <React.Fragment key={primary.id || globalSerial}>
+                            {/* Primary or Standalone Row */}
+                            <tr 
+                              style={{ 
+                                background: isMulti ? '#FAF5FF' : '#FFFFFF', 
+                                borderBottom: isMulti ? '1px dashed #EDE9FE' : '1px solid #F1F5F9',
+                                borderLeft: isMulti ? '4px solid #7C3AED' : '4px solid transparent',
+                                transition: 'background 0.15s ease'
+                              }}
+                              onMouseEnter={e => { if (!isMulti) e.currentTarget.style.background = '#F8FAFC'; }}
+                              onMouseLeave={e => { if (!isMulti) e.currentTarget.style.background = '#FFFFFF'; }}
+                            >
+                              {/* S.No. */}
+                              <td style={{ width: '56px', padding: '14px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                <span style={{ 
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  minWidth: '28px',
+                                  height: '26px',
+                                  padding: '0 6px',
+                                  borderRadius: '8px',
+                                  background: isMulti ? '#EDE9FE' : '#F1F5F9',
+                                  color: isMulti ? '#7C3AED' : '#475569',
+                                  fontWeight: 800,
+                                  fontSize: '12px',
+                                  fontFamily: "'Outfit', monospace"
+                                }}>
+                                  {globalSerial}
+                                </span>
+                              </td>
 
-                        // For non-appointments (Lab tests, Clinical services), render normally
-                        if (app.type !== 'Appointment') {
-                          renderedIds.add(app.id);
-                          return (
-                            <tr key={app.id}>
-                              <td>
+                              {/* Patient */}
+                              <td style={{ width: '220px', padding: '14px 16px', verticalAlign: 'middle' }}>
                                 <div 
-                                  style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
-                                  onClick={() => app.patientId && handleOpenPatientProfile(typeof app.patientId === 'object' ? app.patientId : { _id: app.patientId, name: app.patientName })}
-                                  onMouseEnter={(e) => { e.currentTarget.querySelector('.patient-name-span').style.color = '#2563EB'; }}
-                                  onMouseLeave={(e) => { e.currentTarget.querySelector('.patient-name-span').style.color = '#1A1D23'; }}
+                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+                                  onClick={() => primary.patientId && handleOpenPatientProfile(typeof primary.patientId === 'object' ? primary.patientId : { _id: primary.patientId, name: primary.patientName })}
                                 >
-                                  <div style={{ width: '32px', height: '22px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '12px' }}>
-                                    {getInitials(app.patientName)}
+                                  <div style={{ 
+                                    width: '32px', 
+                                    height: '32px', 
+                                    borderRadius: '50%', 
+                                    background: isMulti ? '#F3E8FF' : '#EFF6FF', 
+                                    color: isMulti ? '#7C3AED' : '#2563EB', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    fontWeight: 800, 
+                                    fontSize: '12px',
+                                    flexShrink: 0,
+                                    border: isMulti ? '1.5px solid #DDD6FE' : '1.5px solid #BFDBFE'
+                                  }}>
+                                    {getInitials(primary.patientName)}
                                   </div>
-                                  <span className="patient-name-span" style={{ fontWeight: 700, color: '#1A1D23', transition: 'color 0.2s' }}>{app.patientName}</span>
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                      <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>
+                                        {primary.patientName}
+                                      </span>
+                                      {isMulti && (
+                                        <span style={{ 
+                                          fontSize: '10px', 
+                                          background: '#7C3AED', 
+                                          color: '#FFFFFF', 
+                                          borderRadius: '6px', 
+                                          padding: '2px 7px', 
+                                          fontWeight: 800,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '3px',
+                                          boxShadow: '0 1px 3px rgba(124, 58, 237, 0.3)'
+                                        }} title="Patient has multiple booked consultations on this same date">
+                                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                                          Multi-Visit ({addOns.length + 1})
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                               </td>
-                              <td>
-                                <span style={{
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  fontSize: '12px',
-                                  fontWeight: 700,
-                                  background: app.type === 'Lab Test' ? '#ECFDF5' : '#F5F3FF',
-                                  color: app.type === 'Lab Test' ? '#10B981' : '#8B5CF6',
-                                  border: app.type === 'Lab Test' ? '1px solid #A7F3D0' : '1px solid #DDD6FE'
-                                }}>
-                                  {app.type}
-                                </span>
-                              </td>
-                              <td style={{ fontWeight: 700, color: '#334155' }}>{app.detailName}</td>
-                              <td style={{ fontWeight: 600 }}>
-                                {getFormattedDate(app.date)}
-                                {app.time}
-                              </td>
-                              <td>
-                                <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>—</span>
-                              </td>
-                              <td>
-                                <span className={`status-badge ${
-                                  app.status === 'Completed' || app.status === 'Paid' ? 'available' : 
-                                  app.status === 'Rescheduled' ? 'rescheduled' :
-                                  (app.status === 'Cancelled' ? 'critical' : 'pending')
-                                }`} style={app.status === 'Rescheduled' ? { background: '#E0F2FE', color: '#0369A1' } : {}}>
-                                  {app.status}
-                                </span>
-                              </td>
-                              <td>
-                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                  <button 
-                                    className="btn btn-secondary" 
-                                    style={{ padding: '0 12px', height: '32px', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', whiteSpace: 'nowrap' }} 
 
+                              {/* Type */}
+                              <td style={{ width: '120px', padding: '14px', verticalAlign: 'middle' }}>
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '3px 9px',
+                                  borderRadius: '6px',
+                                  fontSize: '11.5px',
+                                  fontWeight: 800,
+                                  background: primary.type === 'Lab Test' ? '#ECFDF5' : (primary.type === 'Clinical Service' ? '#F5F3FF' : '#EFF6FF'),
+                                  color: primary.type === 'Lab Test' ? '#059669' : (primary.type === 'Clinical Service' ? '#7C3AED' : '#2563EB'),
+                                  border: primary.type === 'Lab Test' ? '1px solid #A7F3D0' : (primary.type === 'Clinical Service' ? '1px solid #DDD6FE' : '1px solid #BFDBFE')
+                                }}>
+                                  {primary.type}
+                                </span>
+                              </td>
+
+                              {/* Doctor / Detail */}
+                              <td style={{ width: '180px', padding: '14px', verticalAlign: 'middle', fontWeight: 700, color: '#1E293B', fontSize: '13px' }}>
+                                {primary.detailName}
+                              </td>
+
+                              {/* Date & Slot */}
+                              <td style={{ width: '180px', padding: '14px', verticalAlign: 'middle', fontSize: '12.5px', fontWeight: 600, color: '#334155' }}>
+                                <div style={{ fontWeight: 700, color: '#0F172A' }}>
+                                  {primary.date ? new Date(primary.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                </div>
+                                <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                                  {primary.time || 'General Slot'}
+                                </div>
+                              </td>
+
+                              {/* Token */}
+                              <td style={{ width: '120px', padding: '14px', verticalAlign: 'middle', textAlign: 'center' }}>
+                                {(() => {
+                                  const expired = isApptExpired24h(primary.date, primary.time);
+                                  if (expired) {
+                                    return (
+                                      <span style={{ color: '#94A3B8', fontSize: '12px', fontWeight: 600 }} title="Token removed after 24 hrs of appointment day">
+                                        —
+                                      </span>
+                                    );
+                                  }
+                                  if (primary.tokenNumber) {
+                                    return (
+                                      <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '4px',
+                                        padding: '3px 9px',
+                                        borderRadius: '6px',
+                                        fontSize: '11.5px',
+                                        fontWeight: 800,
+                                        background: '#EFF6FF',
+                                        color: '#1D4ED8',
+                                        border: '1px solid #BFDBFE'
+                                      }}>
+                                        Token #{primary.tokenNumber}
+                                      </span>
+                                    );
+                                  }
+                                  return (
+                                    <span style={{ color: '#94A3B8', fontSize: '11.5px', fontWeight: 600 }}>
+                                      Not Checked In
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+
+                              {/* Status */}
+                              <td style={{ width: '110px', padding: '14px', verticalAlign: 'middle', textAlign: 'center' }}>
+                                <span className={`status-badge ${
+                                  primary.status === 'Completed' || primary.status === 'Paid' ? 'available' : 
+                                  primary.status === 'Rescheduled' ? 'rescheduled' :
+                                  (primary.status === 'Cancelled' ? 'critical' : 'pending')
+                                }`} style={{ fontSize: '11.5px', padding: '3px 9px' }}>
+                                  {primary.status}
+                                </span>
+                              </td>
+
+                              {/* Action Buttons */}
+                              <td style={{ width: '230px', padding: '14px 16px', verticalAlign: 'middle', textAlign: 'right' }}>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
+                                  <button 
+                                    type="button"
+                                    className="btn btn-secondary" 
+                                    style={{ padding: '0 10px', height: '30px', fontSize: '11.5px', fontWeight: 700, borderRadius: '8px', border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#334155', cursor: 'pointer', whiteSpace: 'nowrap' }} 
                                     onClick={() => {
-                                      if (app.type === 'Lab Test') {
+                                      if (primary.type === 'Lab Test') {
                                         setSelectedLabRequest({
-                                          testName: app.rawItem?.testName || app.rawItem?.test || app.detailName,
-                                          results: app.rawItem?.results || ''
+                                          testName: primary.rawItem?.testName || primary.rawItem?.test || primary.detailName,
+                                          results: primary.rawItem?.results || ''
                                         });
                                         setLabModalOpen(true);
                                       } else {
-                                        showToast(`${app.type}: ${app.detailName} (${app.status})`, 'info');
+                                        openDetailsModal(primary.rawItem);
                                       }
                                     }}
                                   >
                                     View Details
                                   </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        }
 
-                        // Group all appointments for the same patient together
-                        const sameDayAppts = filteredList.filter(a => 
-                          a.type === 'Appointment' && 
-                          String(a.patientId?._id || a.patientId) === String(app.patientId?._id || app.patientId)
-                        );
+                                  {(() => {
+                                    if (primary.type !== 'Appointment' || primary.status === 'Cancelled' || primary.status === 'Completed') {
+                                      return null;
+                                    }
+                                    const isExpired = isApptExpired24h(primary.date, primary.time);
+                                    if (isExpired) {
+                                      return (
+                                        <span
+                                          style={{
+                                            padding: '0 10px',
+                                            height: '30px',
+                                            fontSize: '11.5px',
+                                            fontWeight: 700,
+                                            background: '#F1F5F9',
+                                            color: '#64748B',
+                                            border: '1px solid #CBD5E1',
+                                            borderRadius: '8px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                          title="Appointment day has passed (24+ hrs ago)"
+                                        >
+                                          Not Visited
+                                        </span>
+                                      );
+                                    }
+                                    return (
+                                      <button
+                                        type="button"
+                                        style={{
+                                          padding: '0 11px',
+                                          height: '30px',
+                                          fontSize: '11.5px',
+                                          background: primary.tokenNumber ? '#ECFDF5' : '#2563EB',
+                                          color: primary.tokenNumber ? '#059669' : '#FFFFFF',
+                                          border: primary.tokenNumber ? '1px solid #A7F3D0' : 'none',
+                                          borderRadius: '8px',
+                                          fontWeight: 800,
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          gap: '4px',
+                                          whiteSpace: 'nowrap',
+                                          boxShadow: primary.tokenNumber ? 'none' : '0 2px 6px rgba(37, 99, 235, 0.25)'
+                                        }}
+                                        disabled={isCheckingIn}
+                                        onClick={() => handleCheckInAppointment(primary.rawItem)}
+                                        title={primary.tokenNumber ? "Patient is checked in" : "Check in patient and generate live queue token"}
+                                      >
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                        {primary.tokenNumber ? 'Checked In' : 'Check In'}
+                                      </button>
+                                    );
+                                  })()}
 
-                        // Mark all of these as rendered
-                        sameDayAppts.forEach(a => renderedIds.add(a.id));
-
-                        // The first one is the "primary" appointment
-                        const primaryApp = sameDayAppts[0];
-                        const addOnApps = sameDayAppts.slice(1);
-
-                        return (
-                          <React.Fragment key={primaryApp.id}>
-                            {/* Render the Primary Appointment Row */}
-                            <tr style={{ 
-                              background: sameDayAppts.length > 1 ? '#FAF5FF' : 'transparent', 
-                              borderLeft: sameDayAppts.length > 1 ? '4px solid #7C3AED' : 'none',
-                              borderBottom: sameDayAppts.length > 1 ? '1px dashed #EDE9FE' : '1px solid #F1F5F9' 
-                            }}>
-
-                              <td>
-                                <div 
-                                  style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
-                                  onClick={() => primaryApp.patientId && handleOpenPatientProfile(typeof primaryApp.patientId === 'object' ? primaryApp.patientId : { _id: primaryApp.patientId, name: primaryApp.patientName })}
-                                  onMouseEnter={(e) => { e.currentTarget.querySelector('.patient-name-span').style.color = '#2563EB'; }}
-                                  onMouseLeave={(e) => { e.currentTarget.querySelector('.patient-name-span').style.color = '#1A1D23'; }}
-                                >
-                                  <div style={{ width: '32px', height: '22px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '12px' }}>
-                                    {getInitials(primaryApp.patientName)}
-                                  </div>
-                                  <div>
-                                    <span className="patient-name-span" style={{ fontWeight: 700, color: '#1A1D23', transition: 'color 0.2s' }}>{primaryApp.patientName}</span>
-                                    {sameDayAppts.length > 1 && (
-                                      <span style={{ 
-                                        marginLeft: '8px', 
-                                        fontSize: '9.5px', 
-                                        background: '#7C3AED', 
-                                        color: '#FFFFFF', 
-                                        borderRadius: '4px', 
-                                        padding: '2px 6px', 
-                                        fontWeight: 800,
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '3px'
-                                      }}>
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-                                        Multi-Visit
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                              <td>
-                                <span style={{
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  fontSize: '12px',
-                                  fontWeight: 700,
-                                  background: '#EFF6FF',
-                                  color: '#2563EB',
-                                  border: '1px solid #BFDBFE'
-                                }}>
-                                  {primaryApp.type}
-                                </span>
-                              </td>
-                              <td style={{ fontWeight: 700, color: '#334155' }}>
-                                {primaryApp.detailName}
-                              </td>
-                              <td style={{ fontWeight: 600 }}>
-                                {getFormattedDate(primaryApp.date)}
-                                {primaryApp.time}
-                              </td>
-                              <td>
-                                {primaryApp.tokenNumber ? (
-                                  <span style={{
-                                    padding: '3px 8px',
-                                    borderRadius: '6px',
-                                    fontSize: '11.5px',
-                                    fontWeight: 800,
-                                    background: '#EFF6FF',
-                                    color: '#1D4ED8',
-                                    border: '1px solid #BFDBFE',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '4px'
-                                  }}>
-                                    Token #{primaryApp.tokenNumber}
-                                  </span>
-                                ) : (
-                                  <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>
-                                    Not Checked In
-                                  </span>
-                                )}
-                              </td>
-                              <td>
-                                <span className={`status-badge ${
-                                  primaryApp.status === 'Completed' || primaryApp.status === 'Paid' ? 'available' : 
-                                  primaryApp.status === 'Rescheduled' ? 'rescheduled' :
-                                  (primaryApp.status === 'Cancelled' ? 'critical' : 'pending')
-                                }`} style={primaryApp.status === 'Rescheduled' ? { background: '#E0F2FE', color: '#0369A1' } : {}}>
-                                  {primaryApp.status}
-                                </span>
-                              </td>
-                              <td>
-                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                  <button 
-                                    className="btn btn-secondary" 
-                                    style={{ padding: '0 12px', height: '32px', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', whiteSpace: 'nowrap' }} 
-                                    onClick={() => openDetailsModal(primaryApp.rawItem)}
-                                  >
-                                    View Details
-                                  </button>
-                                  {primaryApp.type === 'Appointment' && primaryApp.status !== 'Cancelled' && primaryApp.status !== 'Completed' && (
+                                  {/* Add-On button shown ONLY to patients who have appointments TODAY */}
+                                  {primary.type === 'Appointment' && (primary.status === 'Scheduled' || primary.status === 'Paid' || primary.status === 'Confirmed' || primary.status === 'In Progress') && isAppointmentToday(primary.date) && (
                                     <button
                                       type="button"
-                                      className="btn"
-                                      style={{
-                                        padding: '0 12px',
-                                        height: '32px',
-                                        fontSize: '12px',
-                                        background: primaryApp.tokenNumber ? '#ECFDF5' : '#2563EB',
-                                        color: primaryApp.tokenNumber ? '#059669' : '#FFFFFF',
-                                        border: primaryApp.tokenNumber ? '1px solid #A7F3D0' : 'none',
-                                        borderRadius: '6px',
-                                        fontWeight: 700,
+                                      style={{ 
+                                        padding: '0 10px', 
+                                        height: '30px', 
+                                        fontSize: '11.5px', 
+                                        background: '#8B5CF6', 
+                                        color: '#FFFFFF', 
+                                        border: 'none', 
+                                        borderRadius: '8px', 
+                                        fontWeight: 800, 
+                                        display: 'inline-flex', 
+                                        alignItems: 'center', 
+                                        gap: '4px', 
                                         cursor: 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '5px',
-                                        whiteSpace: 'nowrap'
+                                        whiteSpace: 'nowrap',
+                                        boxShadow: '0 2px 6px rgba(139, 92, 246, 0.25)'
                                       }}
-                                      disabled={isCheckingIn}
-                                      onClick={() => handleCheckInAppointment(primaryApp.rawItem)}
-                                      title={primaryApp.tokenNumber ? "Patient is checked in" : "Check in patient and generate live queue token"}
-                                    >
-                                      <i data-lucide={primaryApp.tokenNumber ? "check-check" : "check-circle-2"} style={{ width: '14px', height: '14px' }}></i>
-                                      {primaryApp.tokenNumber ? 'Checked In' : 'Check In'}
-                                    </button>
-                                  )}
-                                  {primaryApp.type === 'Appointment' && (primaryApp.status === 'Pending Approval' || (primaryApp.rawItem?.source === 'Online' && primaryApp.status === 'Pending')) && (
-                                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                      <button
-                                        className="btn btn-success"
-                                        style={{ padding: '0 12px', height: '32px', fontSize: '12px', background: '#10B981', borderColor: '#10B981', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                                        onClick={async () => {
-                                          try {
-                                            const res = await api.put('/appointments/' + primaryApp.rawItem._id + '/approve');
-                                            showToast('Appointment Approved! Payment request generated (with 1-time Reg Fee if applicable).', 'success');
-                                            fetchData();
-                                          } catch(e) {
-                                            showToast(e.response?.data?.error || 'Failed to approve', 'error');
-                                          }
-                                        }}
-                                      >
-                                        Approve & Request Payment
-                                      </button>
-                                      <button
-                                        className="btn btn-danger"
-                                        style={{ padding: '0 12px', height: '32px', fontSize: '12px', background: '#EF4444', borderColor: '#EF4444', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                                        onClick={async () => {
-                                          try {
-                                            await api.put('/appointments/' + primaryApp.rawItem._id + '/reject');
-                                            showToast('Appointment request rejected', 'info');
-                                            fetchData();
-                                          } catch(e) {
-                                            showToast('Failed to reject', 'error');
-                                          }
-                                        }}
-                                      >
-                                        Reject
-                                      </button>
-                                    </div>
-                                  )}
-                                  {primaryApp.type === 'Appointment' && (primaryApp.status === 'Scheduled' || primaryApp.status === 'Paid' || primaryApp.status === 'Confirmed') && (
-                                    <button
-                                      className="btn btn-primary"
-                                      style={{ padding: '6px 12px', fontSize: '12px', background: '#8B5CF6', borderColor: '#8B5CF6', display: 'flex', alignItems: 'center', gap: '4px' }}
                                       onClick={() => {
-                                        const patientData = typeof primaryApp.patientId === 'object' ? primaryApp.patientId : null;
+                                        const patientData = typeof primary.patientId === 'object' ? primary.patientId : null;
                                         if (patientData) {
                                           setSelectedPatient(patientData);
-                                          setAddOnOriginAppt(primaryApp.rawItem);
+                                          setAddOnOriginAppt(primary.rawItem);
                                           setFormData({
                                             name: patientData.name || '',
                                             age: patientData.age || '',
@@ -9980,13 +10283,14 @@ const ReceptionistDashboard = () => {
                                           });
                                           setIsExistingPatient(true);
                                           switchTab('registration-form', true);
-                                          showToast(`Adding-on appointment for ${patientData.name}. Choose a doctor and slot.`, 'success');
+                                          showToast(`Adding same-day consultation for ${patientData.name}.`, 'success');
                                         } else {
                                           showToast("Patient details not found.", "error");
                                         }
                                       }}
+                                      title="Add another consultation for this patient on this same date"
                                     >
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                                       Add-On
                                     </button>
                                   )}
@@ -9994,41 +10298,47 @@ const ReceptionistDashboard = () => {
                               </td>
                             </tr>
 
-                            {/* Render any Add-On Appointment Sub-Rows */}
-                            {addOnApps.map((addOn, subIdx) => (
+                            {/* Same-Day Add-On Sub-Rows (Strictly Column Aligned) */}
+                            {isMulti && addOns.map((addOn, subIdx) => (
                               <tr 
-                                key={addOn.id} 
+                                key={addOn.id || `sub-${subIdx}`} 
                                 style={{ 
                                   background: '#FCFAFF', 
                                   borderLeft: '4px solid #C4B5FD',
-                                  borderBottom: subIdx === addOnApps.length - 1 ? '2px solid #E9D5FF' : '1px dashed #EDE9FE' 
+                                  borderBottom: subIdx === addOns.length - 1 ? '1.5px solid #DDD6FE' : '1px dashed #EDE9FE' 
                                 }}
                               >
-                                <td style={{ paddingLeft: '56px' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {/* S.No. indicator for sub-row */}
+                                <td style={{ width: '56px', padding: '12px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                  <span style={{ color: '#8B5CF6', fontWeight: 900, fontSize: '13px' }}>↳</span>
+                                </td>
+
+                                {/* Patient Cell with Tree Indent */}
+                                <td style={{ width: '220px', padding: '12px 16px', verticalAlign: 'middle' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '6px' }}>
                                     <span style={{
                                       display: 'inline-flex',
                                       alignItems: 'center',
-                                      justifyContent: 'center',
-                                      width: '20px',
-                                      height: '20px',
-                                      borderRadius: '4px',
+                                      gap: '4px',
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
                                       background: '#EDE9FE',
                                       color: '#7C3AED',
-                                      fontSize: '12px',
-                                      fontWeight: 900
+                                      fontSize: '11px',
+                                      fontWeight: 800
                                     }}>
-                                      ↳
+                                      ↳ Add-On Visit
                                     </span>
-                                    <span style={{ color: '#6D28D9', fontSize: '12px', fontWeight: 800 }}>Add-On Visit</span>
                                   </div>
                                 </td>
 
-                                <td>
+                                {/* Type */}
+                                <td style={{ width: '120px', padding: '12px 14px', verticalAlign: 'middle' }}>
                                   <span style={{
-                                    padding: '2px 6px',
-                                    borderRadius: '4px',
-                                    fontSize: '10.5px',
+                                    display: 'inline-block',
+                                    padding: '2px 7px',
+                                    borderRadius: '5px',
+                                    fontSize: '11px',
                                     fontWeight: 700,
                                     background: '#F5F3FF',
                                     color: '#7C3AED',
@@ -10037,101 +10347,233 @@ const ReceptionistDashboard = () => {
                                     Add-On appt
                                   </span>
                                 </td>
-                                <td style={{ fontWeight: 700, color: '#4F46E5', fontSize: '13px' }}>
+
+                                {/* Doctor */}
+                                <td style={{ width: '180px', padding: '12px 14px', verticalAlign: 'middle', fontWeight: 700, color: '#4F46E5', fontSize: '12.5px' }}>
                                   {addOn.detailName}
                                 </td>
-                                <td style={{ fontWeight: 600, fontSize: '12.5px' }}>
-                                  {getFormattedDate(addOn.date)}
-                                  {addOn.time}
+
+                                {/* Date & Slot */}
+                                <td style={{ width: '180px', padding: '12px 14px', verticalAlign: 'middle', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                                  <div style={{ fontWeight: 700, color: '#0F172A' }}>
+                                    {addOn.date ? new Date(addOn.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px' }}>
+                                    {addOn.time || 'General Slot'}
+                                  </div>
                                 </td>
-                                <td>
-                                  {addOn.tokenNumber ? (
-                                    <span style={{
-                                      padding: '2px 6px',
-                                      borderRadius: '4px',
-                                      fontSize: '10.5px',
-                                      fontWeight: 800,
-                                      background: '#EFF6FF',
-                                      color: '#1D4ED8',
-                                      border: '1px solid #BFDBFE',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '3px'
-                                    }}>
-                                      Token #{addOn.tokenNumber}
-                                    </span>
-                                  ) : (
-                                    <span style={{ color: '#94A3B8', fontSize: '10.5px', fontWeight: 600 }}>
-                                      Not Checked In
-                                    </span>
-                                  )}
+
+                                {/* Token */}
+                                <td style={{ width: '120px', padding: '12px 14px', verticalAlign: 'middle', textAlign: 'center' }}>
+                                  {(() => {
+                                    const isExpired = isApptExpired24h(addOn.date, addOn.time);
+                                    if (isExpired) {
+                                      return (
+                                        <span style={{ color: '#94A3B8', fontSize: '11.5px', fontWeight: 600 }} title="Token removed after 24 hrs of appointment day">
+                                          —
+                                        </span>
+                                      );
+                                    }
+                                    if (addOn.tokenNumber) {
+                                      return (
+                                        <span style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '3px',
+                                          padding: '2px 7px',
+                                          borderRadius: '5px',
+                                          fontSize: '11px',
+                                          fontWeight: 800,
+                                          background: '#EFF6FF',
+                                          color: '#1D4ED8',
+                                          border: '1px solid #BFDBFE'
+                                        }}>
+                                          Token #{addOn.tokenNumber}
+                                        </span>
+                                      );
+                                    }
+                                    return (
+                                      <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>
+                                        Not Checked In
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
-                                <td>
+
+                                {/* Status */}
+                                <td style={{ width: '110px', padding: '12px 14px', verticalAlign: 'middle', textAlign: 'center' }}>
                                   <span className={`status-badge ${
                                     addOn.status === 'Completed' || addOn.status === 'Paid' ? 'available' : 
                                     addOn.status === 'Rescheduled' ? 'rescheduled' :
                                     (addOn.status === 'Cancelled' ? 'critical' : 'pending')
-                                  }`} style={{ fontSize: '11px', padding: '3px 8px' }}>
+                                  }`} style={{ fontSize: '11px', padding: '2px 7px' }}>
                                     {addOn.status}
                                   </span>
                                 </td>
-                                <td>
-                                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>
+
+                                {/* Action Buttons */}
+                                <td style={{ width: '230px', padding: '12px 16px', verticalAlign: 'middle', textAlign: 'right' }}>
+                                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                                     <button 
+                                      type="button"
                                       className="btn btn-secondary" 
-                                      style={{ padding: '0 10px', height: '28px', fontSize: '11px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', whiteSpace: 'nowrap' }} 
+                                      style={{ padding: '0 8px', height: '28px', fontSize: '11px', fontWeight: 700, borderRadius: '6px', border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#334155', cursor: 'pointer', whiteSpace: 'nowrap' }} 
                                       onClick={() => openDetailsModal(addOn.rawItem)}
                                     >
                                       View Details
                                     </button>
-                                    {addOn.status !== 'Cancelled' && addOn.status !== 'Completed' && (
-                                      <button 
-                                        className="btn" 
-                                        style={{ 
-                                          padding: '0 10px', 
-                                          height: '28px',
-                                          fontSize: '11px', 
-                                          background: addOn.tokenNumber ? '#ECFDF5' : '#2563EB', 
-                                          color: addOn.tokenNumber ? '#059669' : '#FFFFFF', 
-                                          border: addOn.tokenNumber ? '1px solid #A7F3D0' : 'none', 
-                                          borderRadius: '6px', 
-                                          fontWeight: 700, 
-                                          cursor: 'pointer', 
-                                          display: 'inline-flex', 
-                                          alignItems: 'center', 
-                                          justifyContent: 'center',
-                                          gap: '4px',
-                                          whiteSpace: 'nowrap'
-                                        }} 
-                                        disabled={isCheckingIn}
-                                        onClick={() => handleCheckInAppointment(addOn.rawItem)}
-                                      >
-                                        <i data-lucide={addOn.tokenNumber ? "check-check" : "check-circle-2"} style={{ width: '12px', height: '12px' }}></i>
-                                        {addOn.tokenNumber ? 'Checked In' : 'Check In'}
-                                      </button>
-                                    )}
+                                    {(() => {
+                                      if (addOn.status === 'Cancelled' || addOn.status === 'Completed') return null;
+                                      const isExpired = isApptExpired24h(addOn.date, addOn.time);
+                                      if (isExpired) {
+                                        return (
+                                          <span 
+                                            style={{ 
+                                              padding: '0 8px', 
+                                              height: '28px', 
+                                              fontSize: '11px', 
+                                              fontWeight: 700, 
+                                              background: '#F1F5F9', 
+                                              color: '#64748B', 
+                                              border: '1px solid #CBD5E1', 
+                                              borderRadius: '6px', 
+                                              display: 'inline-flex', 
+                                              alignItems: 'center', 
+                                              justifyContent: 'center', 
+                                              whiteSpace: 'nowrap' 
+                                            }}
+                                            title="Appointment day has passed (24+ hrs ago)"
+                                          >
+                                            Not Visited
+                                          </span>
+                                        );
+                                      }
+                                      return (
+                                        <button 
+                                          type="button"
+                                          style={{ 
+                                            padding: '0 10px', 
+                                            height: '28px',
+                                            fontSize: '11px', 
+                                            background: addOn.tokenNumber ? '#ECFDF5' : '#2563EB', 
+                                            color: addOn.tokenNumber ? '#059669' : '#FFFFFF', 
+                                            border: addOn.tokenNumber ? '1px solid #A7F3D0' : 'none', 
+                                            borderRadius: '6px', 
+                                            fontWeight: 800, 
+                                            cursor: 'pointer', 
+                                            display: 'inline-flex', 
+                                            alignItems: 'center', 
+                                            gap: '4px',
+                                            whiteSpace: 'nowrap'
+                                          }} 
+                                          disabled={isCheckingIn}
+                                          onClick={() => handleCheckInAppointment(addOn.rawItem)}
+                                        >
+                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                          {addOn.tokenNumber ? 'Checked In' : 'Check In'}
+                                        </button>
+                                      );
+                                    })()}
                                   </div>
                                 </td>
                               </tr>
                             ))}
                           </React.Fragment>
                         );
-                      });
-                    })()}
-                    {getFilteredAppointments().length === 0 && (
-                      <tr>
-                        <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#64748B', fontWeight: 600 }}>
-                          {appointmentSearch.trim() ? `No matches found matching "${appointmentSearch}"` : "No bookings found for the selected type / date range."}
-                        </td>
-                      </tr>
+                      })
                     )}
                   </tbody>
                 </table>
               </div>
+
+              {/* Table Footer with Record Count & 10-Row Pagination */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #F1F5F9', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '12.5px', color: '#475569', fontWeight: 600 }}>
+                    Showing <strong>{startItem} - {endItem}</strong> of <strong>{groupedBookings.length}</strong> booking{groupedBookings.length === 1 ? '' : 's'}
+                    {groupedBookings.length < counts.All && ` (filtered from ${counts.All})`}
+                  </span>
+                </div>
+
+                {/* Pagination Controls */}
+                {totalApptPages > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setAppointmentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentApptPage === 1}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        borderRadius: '8px',
+                        border: '1px solid #CBD5E1',
+                        background: currentApptPage === 1 ? '#F8FAFC' : '#FFFFFF',
+                        color: currentApptPage === 1 ? '#94A3B8' : '#334155',
+                        cursor: currentApptPage === 1 ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                      Prev
+                    </button>
+
+                    {Array.from({ length: totalApptPages }, (_, i) => i + 1).map(pageNum => (
+                      <button
+                        key={pageNum}
+                        type="button"
+                        onClick={() => setAppointmentPage(pageNum)}
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          fontSize: '12px',
+                          fontWeight: 800,
+                          borderRadius: '8px',
+                          border: pageNum === currentApptPage ? 'none' : '1px solid #E2E8F0',
+                          background: pageNum === currentApptPage ? '#2563EB' : '#FFFFFF',
+                          color: pageNum === currentApptPage ? '#FFFFFF' : '#475569',
+                          boxShadow: pageNum === currentApptPage ? '0 2px 6px rgba(37, 99, 235, 0.25)' : 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        {pageNum}
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={() => setAppointmentPage(prev => Math.min(totalApptPages, prev + 1))}
+                      disabled={currentApptPage === totalApptPages}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        borderRadius: '8px',
+                        border: '1px solid #CBD5E1',
+                        background: currentApptPage === totalApptPages ? '#F8FAFC' : '#FFFFFF',
+                        color: currentApptPage === totalApptPages ? '#94A3B8' : '#334155',
+                        cursor: currentApptPage === totalApptPages ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      Next
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
-        )}
-
+          );
+        })()}
         {/* WAITING QUEUE TAB */}
         {activeTab === 'waiting-queue' && (
           <WaitingQueuePanel
@@ -10240,280 +10682,751 @@ const ReceptionistDashboard = () => {
         )}
 
         {/* BILLING TAB */}
-        {activeTab === 'billing' && (
-            <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#1A1D23' }}>Finance & Billing</h2>
-                  <button className="btn btn-primary" onClick={handleExportBillingCSV}><i data-lucide="download"></i> Export Report</button>
+        {activeTab === 'billing' && (() => {
+          // Calculations for metrics
+          const totalInvoicesCount = bills.length;
+          const paidBills = bills.filter(b => b.status === 'Paid');
+          const unpaidBills = bills.filter(b => b.status === 'Unpaid' || !b.status);
+          const paidCount = paidBills.length;
+          const unpaidCount = unpaidBills.length;
+
+          const totalPaidRevenue = paidBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+          const totalPendingRevenue = unpaidBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+          const todayTxCount = bills.filter(b => new Date(b.createdAt || b.date).toDateString() === new Date().toDateString()).length;
+          const settlementRate = totalInvoicesCount > 0 ? Math.round((paidCount / totalInvoicesCount) * 100) : 0;
+
+          // Helper for avatar initials & theme
+          const getInitials = (name) => {
+            if (!name) return 'PT';
+            const parts = name.trim().split(/\s+/);
+            if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+            return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+          };
+
+          const getAvatarTheme = (name) => {
+            const themes = [
+              { bg: '#EFF6FF', text: '#2563EB', border: '#BFDBFE' },
+              { bg: '#ECFDF5', text: '#059669', border: '#A7F3D0' },
+              { bg: '#F5F3FF', text: '#7C3AED', border: '#DDD6FE' },
+              { bg: '#FFFBEB', text: '#D97706', border: '#FDE68A' },
+              { bg: '#FDF2F8', text: '#DB2777', border: '#FBCFE8' },
+              { bg: '#F0FDFA', text: '#0D9488', border: '#99F6E4' }
+            ];
+            let hash = 0;
+            for (let i = 0; i < (name || '').length; i++) {
+              hash = name.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            return themes[Math.abs(hash) % themes.length];
+          };
+
+          // Filter and sort invoices
+          const query = billingSearch.toLowerCase().trim();
+          const filtered = bills.filter(b => {
+            const statusMatch = billingStatusFilter === 'All' || 
+              (billingStatusFilter === 'Paid' && b.status === 'Paid') ||
+              (billingStatusFilter === 'Unpaid' && (b.status === 'Unpaid' || !b.status));
+            
+            if (!statusMatch) return false;
+
+            if (!query) return true;
+            const invId = `#INV-${(b._id || '').substring(Math.max(0, (b._id || '').length - 6)).toUpperCase() || 'N/A'}`;
+            return (b.patientId?.name || '').toLowerCase().includes(query) || 
+                   invId.toLowerCase().includes(query) || 
+                   (b.status || 'Unpaid').toLowerCase().includes(query);
+          });
+
+          const sorted = [...filtered].sort((a, b) => {
+            const aPaid = (a.status || 'Unpaid') === 'Paid';
+            const bPaid = (b.status || 'Unpaid') === 'Paid';
+            if (aPaid && !bPaid) return 1;
+            if (!aPaid && bPaid) return -1;
+            return new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date);
+          });
+
+          return (
+          <div className="tab-content active" style={{ animation: 'slideUp 0.3s ease-out' }}>
+            
+            {/* Header with Breadcrumb and Export Button */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B', fontWeight: 600, marginBottom: '6px' }}>
+                  <span>Operations & Billing</span>
+                  <span style={{ color: '#CBD5E1' }}>/</span>
+                  <span style={{ color: '#2563EB', fontWeight: 700 }}>Invoices & Collections</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
+                    Finance & Billing
+                  </h2>
+                  <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 9px', borderRadius: '20px', background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }}>
+                    {totalInvoicesCount} Invoices
+                  </span>
+                </div>
+                <p style={{ color: '#64748B', fontSize: '13px', margin: '4px 0 0', fontWeight: 500 }}>
+                  Track revenue collections, pending payments, and patient fee settlements.
+                </p>
               </div>
-              <div className="ph-kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '12px' }}>
-                  <div className="kpi-card semantic-card-info" style={{ padding: '12px' }}>
-                      <div className="kpi-icon-box" style={{ background: '#F0FDF4', color: '#10B981' }}><i data-lucide="trending-up"></i></div>
-                      <div>
-                        <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 800 }}>TOTAL REVENUE</div>
-                        <div style={{ fontSize: '24px', fontWeight: 900 }}>₹{bills.filter(b => b.status === 'Paid').reduce((sum, b) => sum + (b.totalAmount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-                      </div>
-                  </div>
-                  <div className="kpi-card semantic-card-warning" style={{ padding: '12px' }}>
-                      <div className="kpi-icon-box" style={{ background: '#FFFBEB', color: '#F59E0B' }}><i data-lucide="clock"></i></div>
-                      <div>
-                        <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 800 }}>PENDING PAYMENTS</div>
-                        <div style={{ fontSize: '24px', fontWeight: 900 }}>₹{bills.filter(b => b.status === 'Unpaid' || !b.status).reduce((sum, b) => sum + (b.totalAmount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-                      </div>
-                  </div>
-                  <div className="kpi-card semantic-card-info" style={{ padding: '12px' }}>
-                      <div className="kpi-icon-box" style={{ background: '#EEF2FF', color: '#6366F1' }}><i data-lucide="credit-card"></i></div>
-                      <div>
-                        <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 800 }}>TRANSACTIONS TODAY</div>
-                        <div style={{ fontSize: '24px', fontWeight: 900 }}>{bills.filter(b => new Date(b.createdAt).toDateString() === new Date().toDateString()).length}</div>
-                      </div>
-                  </div>
+
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button 
+                  type="button"
+                  className="btn btn-primary" 
+                  style={{ padding: '9px 18px', fontWeight: 700, borderRadius: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
+                  onClick={handleExportBillingCSV}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Export Report
+                </button>
               </div>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', alignItems: 'center' }}>
-                <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <i data-lucide="search" style={{ position: 'absolute', left: '16px', color: '#64748B', width: '16px' }}></i>
+            </div>
+
+            {/* Top KPI Demographic & Overview Cards (Exact Dashboard Style) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              
+              {/* Card 1: Total Revenue (Emerald Green Gradient) */}
+              <div 
+                className={`p-5 rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer ${billingStatusFilter === 'Paid' ? 'ring-2 ring-emerald-500' : ''}`}
+                style={{
+                  background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)'
+                }}
+                onClick={() => setBillingStatusFilter(billingStatusFilter === 'Paid' ? 'All' : 'Paid')}
+                title="Click to filter settled invoices"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
+                    <span className="text-base font-black font-sans leading-none">₹</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider">Total Revenue</span>
+                  </div>
+                </div>
+                
+                <div className="mt-4 flex items-end justify-between">
+                  <div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
+                      ₹{totalPaidRevenue.toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-xs text-emerald-700 font-bold mt-2 truncate">
+                      {paidCount} settled receipts · 100% cleared
+                    </div>
+                  </div>
+
+                  {/* Green Mini Sparkline */}
+                  <div className="w-16 h-8 shrink-0 relative">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="kpiGreenGradRecBill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10B981" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#10B981" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#kpiGreenGradRecBill)" />
+                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#10B981" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Half Gradient Accent Line Beneath Card */}
+                <div 
+                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                  style={{
+                    background: 'linear-gradient(90deg, transparent 0%, #10B981 100%)'
+                  }}
+                />
+              </div>
+
+              {/* Card 2: Pending Payments (Amber / Orange Gradient) */}
+              <div 
+                className={`p-5 rounded-2xl border border-amber-200/90 shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer ${billingStatusFilter === 'Unpaid' ? 'ring-2 ring-amber-500' : ''}`}
+                style={{
+                  background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)'
+                }}
+                onClick={() => setBillingStatusFilter(billingStatusFilter === 'Unpaid' ? 'All' : 'Unpaid')}
+                title="Click to filter pending unpaid invoices"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/25">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  </div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">Pending Payments</span>
+                  </div>
+                </div>
+                
+                <div className="mt-4 flex items-end justify-between">
+                  <div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
+                      ₹{totalPendingRevenue.toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-xs text-amber-700 font-bold mt-2 truncate">
+                      {unpaidCount} unpaid invoice{unpaidCount === 1 ? '' : 's'} · Awaiting settlement
+                    </div>
+                  </div>
+
+                  {/* Amber Mini Sparkline */}
+                  <div className="w-16 h-8 shrink-0 relative">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="kpiAmberGradRecBill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#kpiAmberGradRecBill)" />
+                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#F59E0B" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Half Gradient Accent Line Beneath Card */}
+                <div 
+                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                  style={{
+                    background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)'
+                  }}
+                />
+              </div>
+
+              {/* Card 3: Transactions Today (Blue Gradient) */}
+              <div 
+                className="p-5 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group"
+                style={{
+                  background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)'
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  </div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">Transactions Today</span>
+                  </div>
+                </div>
+                
+                <div className="mt-4 flex items-end justify-between">
+                  <div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{todayTxCount}</div>
+                    <div className="text-xs text-blue-700 font-bold mt-2 truncate">
+                      Generated today · Active transactions
+                    </div>
+                  </div>
+
+                  {/* Blue Mini Sparkline */}
+                  <div className="w-16 h-8 shrink-0 relative">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="kpiBlueGradRecBill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiBlueGradRecBill)" />
+                      <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Half Gradient Accent Line Beneath Card */}
+                <div 
+                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                  style={{
+                    background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)'
+                  }}
+                />
+              </div>
+
+              {/* Card 4: Total Invoices (Purple / Violet Gradient) */}
+              <div 
+                className={`p-5 rounded-2xl border border-purple-200/90 shadow-[0_12px_28px_rgba(139,92,246,0.08)] hover:shadow-[0_16px_36px_rgba(139,92,246,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer ${billingStatusFilter === 'All' ? 'ring-2 ring-purple-500' : ''}`}
+                style={{
+                  background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)'
+                }}
+                onClick={() => { setBillingStatusFilter('All'); setBillingPage(1); }}
+                title="Click to view all invoices"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/25">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                  </div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider">Total Invoices</span>
+                  </div>
+                </div>
+                
+                <div className="mt-4 flex items-end justify-between">
+                  <div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{totalInvoicesCount}</div>
+                    <div className="text-xs text-purple-700 font-bold mt-2 truncate">
+                      {settlementRate}% collection settlement rate
+                    </div>
+                  </div>
+
+                  {/* Purple Mini Sparkline */}
+                  <div className="w-16 h-8 shrink-0 relative">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="kpiPurpleGradRecBill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiPurpleGradRecBill)" />
+                      <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#8B5CF6" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Half Gradient Accent Line Beneath Card */}
+                <div 
+                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                  style={{
+                    background: 'linear-gradient(90deg, transparent 0%, #8B5CF6 100%)'
+                  }}
+                />
+              </div>
+
+            </div>
+
+            {/* Main Content Card with Search & Quick Filter Pills */}
+            <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', border: '1px solid #E2E8F0', background: '#FFFFFF', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+              
+              {/* Toolbar */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                
+                {/* Search Bar */}
+                <div style={{ flex: '1 1 300px', maxWidth: '440px', position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '14px', pointerEvents: 'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   <input 
                     type="text" 
                     placeholder="Search invoices by patient name, Invoice ID, or status..." 
-                    style={{ background: 'white', border: '1px solid #CBD5E1', paddingLeft: '44px', height: '42px', width: '100%', borderRadius: '2px', fontSize: '13px', fontWeight: 600, outline: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
                     value={billingSearch}
-                    onChange={(e) => setBillingSearch(e.target.value)}
+                    onChange={e => { setBillingSearch(e.target.value); setBillingPage(1); }}
+                    style={{ 
+                      background: '#F8FAFC', 
+                      border: '1.5px solid #E2E8F0', 
+                      paddingLeft: '40px', 
+                      paddingRight: billingSearch ? '36px' : '14px',
+                      height: '40px', 
+                      width: '100%', 
+                      borderRadius: '10px', 
+                      fontSize: '13px', 
+                      fontWeight: 600,
+                      color: '#0F172A',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      transition: 'all 0.15s'
+                    }} 
+                    onFocus={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#2563EB'; }}
+                    onBlur={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
                   />
+                  {billingSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setBillingSearch('')}
+                      style={{ position: 'absolute', right: '10px', background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
+
+                {/* Quick Status Filter Pills */}
+                <div style={{ display: 'flex', gap: '6px', background: '#F1F5F9', padding: '3px', borderRadius: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setBillingStatusFilter('All')}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: billingStatusFilter === 'All' ? '#FFFFFF' : 'transparent',
+                      color: billingStatusFilter === 'All' ? '#0F172A' : '#64748B',
+                      boxShadow: billingStatusFilter === 'All' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    All ({totalInvoicesCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setBillingStatusFilter('Unpaid'); setBillingPage(1); }}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: billingStatusFilter === 'Unpaid' ? '#FFFFFF' : 'transparent',
+                      color: billingStatusFilter === 'Unpaid' ? '#D97706' : '#64748B',
+                      boxShadow: billingStatusFilter === 'Unpaid' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <span>⚠️ Unpaid</span>
+                    <span>({unpaidCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setBillingStatusFilter('Paid'); setBillingPage(1); }}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: billingStatusFilter === 'Paid' ? '#FFFFFF' : 'transparent',
+                      color: billingStatusFilter === 'Paid' ? '#059669' : '#64748B',
+                      boxShadow: billingStatusFilter === 'Paid' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <span>✓ Paid</span>
+                    <span>({paidCount})</span>
+                  </button>
+                </div>
+
               </div>
 
-              <div className="glass-card" style={{ padding: '12px' }}>
-                  <div className="table-responsive">
-                    <table className="elite-table" style={{ margin: 0 }}>
-                        <thead style={{ background: '#F8FAFC' }}>
-                            <tr>
-                                <th>Invoice ID</th>
-                                <th>Patient Name</th>
-                                <th>Date</th>
-                                <th>Amount</th>
-                                <th>Status</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {(() => {
-                                const query = billingSearch.toLowerCase().trim();
-                                const filtered = bills.filter(b => {
-                                    if (!query) return true;
-                                    const invId = `#INV-${(b._id || '').substring(Math.max(0, (b._id || '').length - 6)).toUpperCase() || 'N/A'}`;
-                                    return (b.patientId?.name || '').toLowerCase().includes(query) || 
-                                           invId.toLowerCase().includes(query) || 
-                                           (b.status || 'Unpaid').toLowerCase().includes(query);
-                                });
+              {/* Invoices Table */}
+              <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
+                      <th style={{ width: '60px', padding: '12px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        S.No.
+                      </th>
+                      <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Invoice ID
+                      </th>
+                      <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Patient Name
+                      </th>
+                      <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Date
+                      </th>
+                      <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Amount
+                      </th>
+                      <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Status
+                      </th>
+                      <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sorted.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '32px' }}>🧾</span>
+                            <span style={{ fontWeight: 800, fontSize: '16px', color: '#0F172A' }}>No Invoices Found</span>
+                            <span style={{ fontSize: '13px', color: '#64748B', maxWidth: '320px' }}>
+                              {billingSearch.trim() ? `No billing records match "${billingSearch}"` : "No transactions found matching active filters."}
+                            </span>
+                            {(billingSearch || billingStatusFilter !== 'All') && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBillingSearch('');
+                                  setBillingStatusFilter('All');
+                                  setBillingPage(1);
+                                }}
+                                style={{ marginTop: '8px', padding: '6px 14px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', fontWeight: 700, fontSize: '12.5px', cursor: 'pointer' }}
+                              >
+                                Clear Filters
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      (() => {
+                        const pageSize = 10;
+                        const totalBillingPages = Math.ceil(sorted.length / pageSize) || 1;
+                        const currentBillingPage = Math.min(Math.max(1, billingPage), totalBillingPages);
+                        const startBillingIdx = (currentBillingPage - 1) * pageSize;
+                        const paginatedBills = sorted.slice(startBillingIdx, startBillingIdx + pageSize);
 
-                                const sorted = [...filtered].sort((a, b) => {
-                                    const aPaid = (a.status || 'Unpaid') === 'Paid';
-                                    const bPaid = (b.status || 'Unpaid') === 'Paid';
-                                    if (aPaid && !bPaid) return 1;
-                                    if (!aPaid && bPaid) return -1;
-                                    return new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date);
-                                });
-                                
-                                if (sorted.length === 0) {
-                                    return (
-                                        <tr>
-                                            <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#94A3B8', fontWeight: 600 }}>
-                                                {billingSearch.trim() ? `No billing records found matching "${billingSearch}"` : "No transactions found"}
-                                            </td>
-                                        </tr>
-                                    );
-                                }
-                                
-                                return sorted.map((bill, idx) => (
-                                    <tr key={bill._id || idx}>
-                                        <td style={{ fontWeight: 700, color: 'var(--primary)' }}>#INV-{(bill._id || '').substring(Math.max(0, (bill._id || '').length - 6)).toUpperCase() || 'N/A'}</td>
-                                        <td style={{ fontWeight: 600 }}>{bill.patientId?.name || 'Unknown Patient'}</td>
-                                        <td>{new Date(bill.createdAt || bill.date).toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-                                        <td style={{ fontWeight: 800 }}>
-                                            <div>₹{(bill.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                                            {bill.discountPercent > 0 && (
-                                                <div style={{ fontSize: '10px', color: '#EF4444', fontWeight: 700, marginTop: '2px' }}>
-                                                    ({bill.discountPercent}% off of ₹{(bill.originalAmount || (bill.totalAmount + bill.discountAmount)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td><span className={`status-badge ${bill.status === 'Paid' ? 'available' : 'pending'}`}>{bill.status || 'Unpaid'}</span></td>
-                                        <td>
-                                            {bill.status !== 'Paid' ? (
-                                                <button 
-                                                    className="btn btn-primary" 
-                                                    style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 800, background: 'var(--primary-gradient)', border: 'none', borderRadius: '6px' }}
-                                                    onClick={() => {
-                                                      setSelectedBillForPayment(bill);
-                                                      setDiscountPercent(0);
-                                                      setDiscountReason('');
-                                                      setPaymentMethod('Cash');
-                                                      setShowPaymentModal(true);
-                                                    }}
-                                                >
-                                                    Mark as Paid
-                                                </button>
-                                            ) : (
-                                                <span style={{ fontSize: '12px', color: '#16A34A', fontWeight: 800 }}>Settled</span>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ));
-                            })()}
-                        </tbody>
-                    </table>
+                        return paginatedBills.map((bill, localIdx) => {
+                          const globalIdx = startBillingIdx + localIdx;
+                          const isPaid = (bill.status || 'Unpaid') === 'Paid';
+                          const patientName = bill.patientId?.name || 'Unknown Patient';
+                          const avatarTheme = getAvatarTheme(patientName);
+                          const initials = getInitials(patientName);
+                          const invId = `#INV-${(bill._id || '').substring(Math.max(0, (bill._id || '').length - 6)).toUpperCase() || 'N/A'}`;
+
+                          return (
+                          <tr 
+                            key={bill._id || globalIdx}
+                            style={{ 
+                              borderBottom: localIdx === paginatedBills.length - 1 ? 'none' : '1px solid #F1F5F9', 
+                              background: '#FFFFFF',
+                              transition: 'background 0.15s ease'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
+                          >
+                            {/* Serial Number */}
+                            <td style={{ padding: '14px', textAlign: 'center' }}>
+                              <span style={{ 
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                minWidth: '28px',
+                                height: '26px',
+                                padding: '0 6px',
+                                borderRadius: '8px',
+                                background: '#F1F5F9',
+                                color: '#475569',
+                                fontWeight: 800,
+                                fontSize: '12px',
+                                fontFamily: "'Outfit', monospace"
+                              }}>
+                                {globalIdx + 1}
+                              </span>
+                            </td>
+
+                            {/* Invoice ID */}
+                            <td style={{ padding: '14px 16px' }}>
+                              <span style={{ 
+                                fontFamily: 'monospace', 
+                                fontWeight: 800, 
+                                fontSize: '12.5px', 
+                                background: '#EFF6FF', 
+                                color: '#2563EB', 
+                                padding: '4px 9px', 
+                                borderRadius: '6px',
+                                letterSpacing: '0.04em',
+                                border: '1px solid #BFDBFE'
+                              }}>
+                                {invId}
+                              </span>
+                            </td>
+
+                            {/* Patient Name */}
+                            <td style={{ padding: '14px 16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{ 
+                                  width: '32px', 
+                                  height: '32px', 
+                                  borderRadius: '50%', 
+                                  background: avatarTheme.bg, 
+                                  color: avatarTheme.text, 
+                                  border: `1.5px solid ${avatarTheme.border}`,
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center', 
+                                  fontWeight: 800, 
+                                  fontSize: '11.5px',
+                                  flexShrink: 0
+                                }}>
+                                  {initials}
+                                </div>
+                                <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>
+                                  {patientName}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Date */}
+                            <td style={{ padding: '14px 16px', color: '#64748B', fontWeight: 600, fontSize: '13px' }}>
+                              {new Date(bill.createdAt || bill.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </td>
+
+                            {/* Amount */}
+                            <td style={{ padding: '14px 16px' }}>
+                              <div style={{ fontWeight: 900, color: '#0F172A', fontSize: '14px', fontFamily: "'Outfit', sans-serif" }}>
+                                ₹{(bill.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                              {bill.discountPercent > 0 && (
+                                <div style={{ fontSize: '10.5px', color: '#EF4444', fontWeight: 700, marginTop: '2px' }}>
+                                  {bill.discountPercent}% off (₹{(bill.originalAmount || (bill.totalAmount + bill.discountAmount)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Status */}
+                            <td style={{ padding: '14px 16px' }}>
+                              {isPaid ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 800, background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }}>
+                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }}></span>
+                                  Paid
+                                </span>
+                              ) : (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 800, background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }}>
+                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#F59E0B' }}></span>
+                                  Unpaid
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Action */}
+                            <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                              {!isPaid ? (
+                                <button 
+                                  type="button"
+                                  className="btn btn-primary" 
+                                  style={{ 
+                                    padding: '6px 14px', 
+                                    fontSize: '12px', 
+                                    fontWeight: 800, 
+                                    background: '#2563EB', 
+                                    color: 'white', 
+                                    border: 'none', 
+                                    borderRadius: '8px', 
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)'
+                                  }}
+                                  onClick={() => {
+                                    setSelectedBillForPayment(bill);
+                                    setDiscountPercent(0);
+                                    setDiscountReason('');
+                                    setPaymentMethod('Cash');
+                                    setShowPaymentModal(true);
+                                  }}
+                                >
+                                  Mark as Paid
+                                </button>
+                              ) : (
+                                <span style={{ 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  gap: '4px', 
+                                  fontSize: '12px', 
+                                  color: '#059669', 
+                                  fontWeight: 800,
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  background: '#F0FDF4'
+                                }}>
+                                  Settled ✓
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()
+                  )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Table Footer with Record Count & 10-Row Pagination */}
+              {(() => {
+                const pageSize = 10;
+                const totalBillingPages = Math.ceil(sorted.length / pageSize) || 1;
+                const currentBillingPage = Math.min(Math.max(1, billingPage), totalBillingPages);
+                const startItem = sorted.length === 0 ? 0 : (currentBillingPage - 1) * pageSize + 1;
+                const endItem = Math.min(currentBillingPage * pageSize, sorted.length);
+
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #F1F5F9', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ fontSize: '12.5px', color: '#475569', fontWeight: 600 }}>
+                        Showing <strong>{startItem} - {endItem}</strong> of <strong>{sorted.length}</strong> invoice{sorted.length === 1 ? '' : 's'}
+                        {sorted.length < totalInvoicesCount && ` (filtered from ${totalInvoicesCount})`}
+                      </span>
+                      <span style={{ fontSize: '11.5px', color: '#94A3B8' }}>
+                        • {paidCount} Paid · {unpaidCount} Outstanding
+                      </span>
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {totalBillingPages > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setBillingPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentBillingPage === 1}
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            borderRadius: '8px',
+                            border: '1px solid #CBD5E1',
+                            background: currentBillingPage === 1 ? '#F8FAFC' : '#FFFFFF',
+                            color: currentBillingPage === 1 ? '#94A3B8' : '#334155',
+                            cursor: currentBillingPage === 1 ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                          Prev
+                        </button>
+
+                        {Array.from({ length: totalBillingPages }, (_, i) => i + 1).map(pageNum => (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => setBillingPage(pageNum)}
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              fontSize: '12px',
+                              fontWeight: 800,
+                              borderRadius: '8px',
+                              border: pageNum === currentBillingPage ? 'none' : '1px solid #E2E8F0',
+                              background: pageNum === currentBillingPage ? '#2563EB' : '#FFFFFF',
+                              color: pageNum === currentBillingPage ? '#FFFFFF' : '#475569',
+                              boxShadow: pageNum === currentBillingPage ? '0 2px 6px rgba(37, 99, 235, 0.25)' : 'none',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            {pageNum}
+                          </button>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => setBillingPage(prev => Math.min(totalBillingPages, prev + 1))}
+                          disabled={currentBillingPage === totalBillingPages}
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            borderRadius: '8px',
+                            border: '1px solid #CBD5E1',
+                            background: currentBillingPage === totalBillingPages ? '#F8FAFC' : '#FFFFFF',
+                            color: currentBillingPage === totalBillingPages ? '#94A3B8' : '#334155',
+                            cursor: currentBillingPage === totalBillingPages ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          Next
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                        </button>
+                      </div>
+                    )}
                   </div>
-              </div>
+                );
+              })()}
+
             </div>
-        )}
 
-        {/* PROFILE TAB */}
-        {activeTab === 'profile' && (
-          <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out' }}>
-            <div className="dashboard-header" style={{ marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#1A1D23' }}>My Profile</h2>
-              <p style={{ color: '#64748B', fontWeight: 600 }}>Manage your personal information and security</p>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: '32px' }} className="mobile-stack">
-              <div className="glass-card" style={{ padding: '32px', textAlign: 'center' }}>
-                <div style={{ position: 'relative', width: '120px', height: '120px', margin: '0 auto 24px' }}>
-                  <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '4px solid var(--primary-light)' }} alt="Profile" />
-                  <div style={{ position: 'absolute', bottom: '0', right: '0', width: '36px', height: '36px', background: 'var(--primary)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid white', cursor: 'pointer' }}>
-                    <i data-lucide="camera" style={{ width: '16px' }}></i>
-                  </div>
-                </div>
-                <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#1A1D23', marginBottom: '4px' }}>{user.name || 'Roshni Singh'}</h3>
-                <p style={{ fontSize: '12px', color: '#64748B', fontWeight: 700, marginBottom: '12px' }}>Senior Receptionist</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
-                  <div style={{ padding: '12px', background: '#F8FAFC', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <i data-lucide="mail" style={{ width: '18px', color: 'var(--primary)' }}></i>
-                    <span style={{ fontSize: '13px', fontWeight: 600 }}>{user.email || 'roshni@curoxa.com'}</span>
-                  </div>
-                  <div style={{ padding: '12px', background: '#F8FAFC', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <i data-lucide="phone" style={{ width: '18px', color: 'var(--primary)' }}></i>
-                    <span style={{ fontSize: '13px', fontWeight: 600 }}>+91 98765 43210</span>
-                  </div>
-                </div>
-                <button className="btn btn-secondary" style={{ width: '100%', marginTop: '32px', justifyContent: 'center', color: 'var(--danger)', border: '1px solid #FEE2E2' }} onClick={handleLogout}>
-                  <i data-lucide="log-out"></i> Logout
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div className="glass-card" style={{ padding: '32px' }}>
-                  <h3 style={{ fontSize: '14px', fontWeight: 800, marginBottom: '12px' }}>Edit Profile</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '12px' }}>
-                    <div className="form-group">
-                      <label>Full Name</label>
-                      <input type="text" className="form-control" defaultValue={user.name || 'Roshni Singh'} style={{ height: '48px' }} />
-                    </div>
-                    <div className="form-group">
-                      <label>Email Address</label>
-                      <input type="email" className="form-control" defaultValue={user.email || 'roshni@curoxa.com'} style={{ height: '48px' }} />
-                    </div>
-                    <div className="form-group">
-                      <label>Mobile Number</label>
-                      <input type="text" className="form-control" defaultValue="+91 98765 43210" style={{ height: '48px' }} />
-                    </div>
-                    <div className="form-group">
-                      <label>Employee ID</label>
-                      <input type="text" className="form-control" defaultValue="MED-RE-099" readOnly style={{ height: '48px', background: '#F8FAFC' }} />
-                    </div>
-                  </div>
-                  <button className="btn btn-primary" style={{ padding: '0 32px', height: '48px' }}>Save Changes</button>
-                </div>
-
-                <div className="glass-card" style={{ padding: '32px' }}>
-                  <h3 style={{ fontSize: '14px', fontWeight: 800, marginBottom: '12px' }}>Change Password</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '12px' }}>
-                    <div className="form-group">
-                      <label>Current Password</label>
-                      <input type="password" className="form-control" placeholder="********" style={{ height: '48px' }} />
-                    </div>
-                    <div className="form-group">
-                      <label>New Password</label>
-                      <input type="password" className="form-control" placeholder="New Password" style={{ height: '48px' }} pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,}" title="Must contain at least one number and one uppercase and lowercase letter, one special character, and at least 8 or more characters." required />
-                    </div>
-                    <div className="form-group">
-                      <label>Confirm Password</label>
-                      <input type="password" className="form-control" placeholder="Confirm Password" style={{ height: '48px' }} pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,}" title="Must contain at least one number and one uppercase and lowercase letter, one special character, and at least 8 or more characters." required />
-                    </div>
-                  </div>
-                  <button className="btn btn-primary" style={{ padding: '0 32px', height: '48px' }}>Update Password</button>
-                </div>
-              </div>
-            </div>
           </div>
-        )}
-
-        {/* SETTINGS TAB */}
-        {activeTab === 'settings' && (
-          <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out' }}>
-            <div className="dashboard-header" style={{ marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#1A1D23' }}>System Settings</h2>
-              <p style={{ color: '#64748B', fontWeight: 600 }}>Configure your workspace and preferences</p>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '12px' }}>
-              <div className="glass-card" style={{ padding: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <div style={{ width: '40px', height: '40px', background: '#EFF6FF', color: 'var(--primary)', borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><i data-lucide="bell" style={{ width: '20px' }}></i></div>
-                  <h3 style={{ fontSize: '14px', fontWeight: 800 }}>Notifications</h3>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div><div style={{ fontSize: '12px', fontWeight: 700 }}>Email Alerts</div><div style={{ fontSize: '12px', color: '#64748B' }}>Receive daily summaries</div></div>
-                    <input type="checkbox" defaultChecked />
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div><div style={{ fontSize: '12px', fontWeight: 700 }}>Push Notifications</div><div style={{ fontSize: '12px', color: '#64748B' }}>Instant app alerts</div></div>
-                    <input type="checkbox" defaultChecked />
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div><div style={{ fontSize: '12px', fontWeight: 700 }}>SMS Updates</div><div style={{ fontSize: '12px', color: '#64748B' }}>Patient appointment reminders</div></div>
-                    <input type="checkbox" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="glass-card" style={{ padding: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <div style={{ width: '40px', height: '40px', background: '#F0FDF4', color: '#10B981', borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><i data-lucide="shield" style={{ width: '20px' }}></i></div>
-                  <h3 style={{ fontSize: '14px', fontWeight: 800 }}>Privacy & Security</h3>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div><div style={{ fontSize: '12px', fontWeight: 700 }}>Two-Factor Auth</div><div style={{ fontSize: '12px', color: '#64748B' }}>Extra layer of security</div></div>
-                    <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '6px 12px' }}>Enable</button>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div><div style={{ fontSize: '12px', fontWeight: 700 }}>Active Sessions</div><div style={{ fontSize: '12px', color: '#64748B' }}>Manage logged-in devices</div></div>
-                    <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '6px 12px' }}>View</button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="glass-card" style={{ padding: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <div style={{ width: '40px', height: '40px', background: '#FFFBEB', color: '#F59E0B', borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><i data-lucide="palette" style={{ width: '20px' }}></i></div>
-                  <h3 style={{ fontSize: '14px', fontWeight: 800 }}>Appearance</h3>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div><div style={{ fontSize: '12px', fontWeight: 700 }}>Dark Mode</div><div style={{ fontSize: '12px', color: '#64748B' }}>Toggle system theme</div></div>
-                    <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '6px 12px' }}>Enable</button>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div><div style={{ fontSize: '12px', fontWeight: 700 }}>Compact View</div><div style={{ fontSize: '12px', color: '#64748B' }}>Higher density layout</div></div>
-                    <input type="checkbox" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
+          );
+        })()}
         {/* UTILITY REQUESTS TAB */}
         {activeTab === 'indent' && (() => {
           const filtered = indents
@@ -10623,19 +11536,8 @@ const ReceptionistDashboard = () => {
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ background: '#F8FAFC' }}>
-                        <th style={{ padding: '14px 16px', width: '40px' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={paginated.length > 0 && selectedIndentIds.length === paginated.length}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedIndentIds(paginated.map(ind => ind._id || ind.indentId));
-                              } else {
-                                setSelectedIndentIds([]);
-                              }
-                            }}
-                            title="Select All"
-                          />
+                        <th style={{ width: '60px', padding: '14px 16px', textAlign: 'center', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          S.No.
                         </th>
                         <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Request ID</th>
                         <th style={{ padding: '14px 16px', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Items</th>
@@ -10667,19 +11569,23 @@ const ReceptionistDashboard = () => {
                             onClick={() => { setSelectedIndent(ind); setShowIndentModal(true); }}
                             style={{ background: isSelected ? '#EFF6FF' : rowBg(ind.status), borderBottom: '1px solid rgba(241,245,249,0.8)', cursor: 'pointer' }}
                           >
-                            <td onClick={e => e.stopPropagation()} style={{ padding: '14px 16px' }}>
-                              <input 
-                                type="checkbox" 
-                                checked={isSelected}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  if (e.target.checked) {
-                                    setSelectedIndentIds(prev => [...prev, itemKey]);
-                                  } else {
-                                    setSelectedIndentIds(prev => prev.filter(id => id !== itemKey));
-                                  }
-                                }}
-                              />
+                            <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                              <span style={{ 
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                minWidth: '28px',
+                                height: '26px',
+                                padding: '0 6px',
+                                borderRadius: '8px',
+                                background: '#F1F5F9',
+                                color: '#475569',
+                                fontWeight: 800,
+                                fontSize: '12px',
+                                fontFamily: "'Outfit', monospace"
+                              }}>
+                                {(indentPage - 1) * INDENT_PAGE_SIZE + idx + 1}
+                              </span>
                             </td>
                             <td style={{ padding: '14px 16px', fontWeight: 800, color: '#0F172A', fontSize: '13px' }}>{ind.indentId}</td>
                             <td style={{ padding: '14px 16px' }}>

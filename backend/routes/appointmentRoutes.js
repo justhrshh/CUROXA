@@ -1,6 +1,8 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const Appointment = require('../models/Appointment');
 const Patient = require('../models/Patient');
+const User = require('../models/User');
 const { verifyToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 
@@ -16,17 +18,44 @@ router.get('/', async (req, res) => {
     const query = {};
     let patientIds = [];
     
-    // Cross-tenant patient scope: if requesting user is patient, find all their appointments by contact
+    // Cross-tenant patient scope: if requesting user is patient, find all their appointments across all registered patient and user records
     if (req.user && req.user.role === 'patient') {
-      const Patient = require('../models/Patient');
-      const patientDocs = await Patient.find({ contact: req.user.staff_id });
-      patientIds = patientDocs.map(p => p._id.toString());
-      if (req.user.id) patientIds.push(req.user.id.toString());
+      const phoneRaw = req.user.staff_id ? req.user.staff_id.split('_')[0] : null;
+      const userPhone = req.user.phone || phoneRaw;
+      const userEmail = req.user.email;
+
+      // 1. Find all related user IDs for this patient across tenants (matching email or phone)
+      const orConditionsUser = [];
+      if (userEmail) orConditionsUser.push({ email: userEmail });
+      if (userPhone) orConditionsUser.push({ phone: userPhone }, { staff_id: new RegExp('^' + userPhone) });
+      
+      let relatedUserIds = [req.user.id ? req.user.id.toString() : null].filter(Boolean);
+      if (orConditionsUser.length > 0) {
+        const relatedUsers = await User.find({ $or: orConditionsUser }).select('_id');
+        relatedUsers.forEach(u => relatedUserIds.push(u._id.toString()));
+      }
+
+      // 2. Find all Patient records matching any related userId, or user's phone, email, contact, or staff_id
+      const orConditionsPatient = [
+        { userId: { $in: relatedUserIds.map(id => mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id) } }
+      ];
+      if (req.user.staff_id) orConditionsPatient.push({ contact: req.user.staff_id });
+      if (phoneRaw) orConditionsPatient.push({ contact: phoneRaw });
+      if (userPhone) orConditionsPatient.push({ contact: userPhone });
+      if (userEmail) orConditionsPatient.push({ email: userEmail });
+
+      const patientDocs = await Patient.find({ $or: orConditionsPatient });
+      let allIds = patientDocs.map(p => p._id.toString());
+      relatedUserIds.forEach(uid => allIds.push(uid));
+      allIds = [...new Set(allIds)];
+
+      const patientObjectIds = allIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+      const allPatientMatchers = [...allIds, ...patientObjectIds];
 
       if (req.query.doctorId) {
         query.doctorId = req.query.doctorId;
       } else {
-        query.patientId = { $in: patientIds };
+        query.patientId = { $in: allPatientMatchers };
       }
     } else {
       query.tenantId = req.tenantId;

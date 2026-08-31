@@ -288,9 +288,7 @@ function App() {
         } />
 
         <Route path="/receptionist/waiting-queue" element={
-          <ProtectedRoute targetRole="receptionist">
-            <ReceptionistDashboard />
-          </ProtectedRoute>
+          <Navigate to="/receptionist" replace />
         } />
 
 

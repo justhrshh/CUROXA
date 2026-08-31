@@ -3054,3 +3054,114 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 /* Global Button Hover Effect */
 button:hover, .btn:hover { filter: brightness(0.9) !important; }
 
+/* ==========================================================
+   CUROXA PATIENT PORTAL — HOSPITAL LEVEL REDESIGN RESPONSIVENESS
+   ========================================================== */
+@media (max-width: 1024px) {
+  .top-nav {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    gap: 6px !important;
+  }
+  .main-content,
+  .patient-portal-container .main-content {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    padding-top: 12px !important;
+    padding-bottom: 120px !important;
+    box-sizing: border-box !important;
+  }
+  .tab-content.active,
+  .tab-content {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-bottom: 100px !important;
+  }
+  .hospital-row-2 {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+  .hospital-row-3 {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+  .hospital-hero-banner > div {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+  .hospital-hero-banner {
+    padding: 18px 16px !important;
+    border-radius: 18px !important;
+  }
+  .patient-hospital-home {
+    gap: 14px !important;
+    padding-bottom: 120px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .patient-nav-pill {
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .desktop-only-btn {
+    display: none !important;
+  }
+  .desktop-only-block {
+    display: none !important;
+  }
+  .desktop-only-flex {
+    display: none !important;
+  }
+  .mobile-only-flex {
+    display: inline-flex !important;
+  }
+  .mobile-only-block {
+    display: block !important;
+  }
+  .patient-hospital-top-nav {
+    padding: 10px 14px !important;
+    gap: 6px !important;
+  }
+}
+
+@media (min-width: 1025px) {
+  /* On desktop, the sidebar is visible, hide mobile bottom dock */
+  .hospital-bottom-dock {
+    display: none !important;
+  }
+  .desktop-only-btn {
+    display: inline-flex !important;
+  }
+  .desktop-only-block {
+    display: block !important;
+  }
+  .desktop-only-flex {
+    display: inline-flex !important;
+  }
+  .mobile-only-flex {
+    display: none !important;
+  }
+  .mobile-only-block {
+    display: none !important;
+  }
+  .patient-hospital-home {
+    padding-bottom: 32px !important;
+  }
+}
+
+.hospital-card {
+  padding: 20px 22px;
+}
+
+@media (max-width: 1024px) {
+  .hospital-card {
+    padding: 16px 14px !important;
+    border-radius: 18px !important;
+  }
+}
+
+
+
+
