@@ -22,6 +22,10 @@ async function sendEmail({ to, subject, text, html }) {
     // 1. Try Brevo HTTP API first (High deliverability transactional relay, bypasses SMTP spam filtering & port blocks)
     if (process.env.BREVO_API_KEY) {
       try {
+        const plainText = (text && text.trim())
+          ? text.trim()
+          : (html ? html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : (subject || "Curoxa Notification"));
+
         const payload = JSON.stringify({
           sender: { 
             name: "Curoxa Security", 
@@ -29,8 +33,8 @@ async function sendEmail({ to, subject, text, html }) {
           },
           to: [{ email: recipient }],
           subject,
-          textContent: text || "",
-          htmlContent: html || text || ""
+          textContent: plainText,
+          htmlContent: html || `<p>${plainText}</p>`
         });
         const options = {
           hostname: 'api.brevo.com',

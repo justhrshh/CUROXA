@@ -1687,6 +1687,7 @@ async function sendPortalOtpEmail(targetEmail, otp) {
   const result = await sendEmail({
     to: targetEmail,
     subject: "Curoxa Patient Portal Verification Code: " + otp,
+    text: `Your Curoxa Patient Portal verification code is: ${otp}. This code is valid for 10 minutes.`,
     html: emailHtmlBody
   });
 
