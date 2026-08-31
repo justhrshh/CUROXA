@@ -6154,103 +6154,412 @@ const ReceptionistDashboard = () => {
         )}
 
         {/* PATIENTS TAB */}
-        {activeTab === 'patients' && (
-          <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out' }}>
-            <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+        {activeTab === 'patients' && (() => {
+          const allFiltered = getFilteredPatientsList();
+          const totalPatients = patientsList.length;
+          const maleCount = patientsList.filter(p => p.gender?.toLowerCase() === 'male').length;
+          const femaleCount = patientsList.filter(p => p.gender?.toLowerCase() === 'female').length;
+          const appointmentsCount = appointments.length;
+
+          // Dynamic avatar initials and pastel themes
+          const getInitials = (name) => {
+            if (!name) return 'PT';
+            const parts = name.trim().split(/\s+/);
+            if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+            return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+          };
+
+          const getAvatarTheme = (name) => {
+            const themes = [
+              { bg: '#EFF6FF', text: '#2563EB', border: '#BFDBFE' }, // Blue
+              { bg: '#ECFDF5', text: '#059669', border: '#A7F3D0' }, // Emerald
+              { bg: '#F5F3FF', text: '#7C3AED', border: '#DDD6FE' }, // Purple
+              { bg: '#FFFBEB', text: '#D97706', border: '#FDE68A' }, // Amber
+              { bg: '#FDF2F8', text: '#DB2777', border: '#FBCFE8' }, // Pink
+              { bg: '#F0FDFA', text: '#0D9488', border: '#99F6E4' }  // Teal
+            ];
+            let hash = 0;
+            for (let i = 0; i < (name || '').length; i++) {
+              hash = name.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            return themes[Math.abs(hash) % themes.length];
+          };
+
+          const activeFiltersCount = (patientGenderFilter !== 'All' ? 1 : 0) + 
+            (patientStartRegDate ? 1 : 0) + 
+            (patientEndRegDate ? 1 : 0) + 
+            (patientBookingTypeFilter !== 'All' ? 1 : 0);
+
+          return (
+          <div className="tab-content active" style={{ animation: 'slideUp 0.3s ease-out' }}>
+            
+            {/* Header with Breadcrumb and Action Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
               <div>
-                <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#1A1D23', marginBottom: '4px' }}>Patients</h2>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 700 }}>Home <span style={{ margin: '0 8px' }}>»</span> <span style={{ color: '#1A1D23' }}>Patients</span></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B', fontWeight: 600, marginBottom: '6px' }}>
+                  <span>Front Desk</span>
+                  <span style={{ color: '#CBD5E1' }}>/</span>
+                  <span style={{ color: '#2563EB', fontWeight: 700 }}>Patient Directory</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
+                    Patient Management
+                  </h2>
+                  <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 9px', borderRadius: '20px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }}>
+                    {totalPatients} Registered
+                  </span>
+                </div>
+                <p style={{ color: '#64748B', fontSize: '13px', margin: '4px 0 0', fontWeight: 500 }}>
+                  Search patient records, view clinical profiles, and initiate registrations.
+                </p>
               </div>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <button 
-                  className="btn btn-primary" 
-                  style={{ height: '26px', padding: '0 16px', fontWeight: 700, borderRadius: '2px', background: '#059669', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }} 
+                  type="button"
+                  className="btn btn-secondary" 
+                  style={{ padding: '9px 15px', fontWeight: 700, borderRadius: '10px', background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '13px', transition: 'all 0.15s' }} 
                   onClick={() => {
                     resetRegistrationForm();
                     setBookingType('lab');
                     switchTab('registration-form');
                   }}
+                  title="Book laboratory test for patient"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                   Book Lab Test
                 </button>
+
                 <button 
+                  type="button"
                   className="btn btn-primary" 
-                  style={{ height: '26px', padding: '0 16px', fontWeight: 700, borderRadius: '2px', background: '#2563EB', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }} 
+                  style={{ padding: '9px 18px', fontWeight: 700, borderRadius: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13.5px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
                   onClick={() => {
                     resetRegistrationForm();
                     setBookingType('opd');
                     switchTab('registration-form');
                   }}
                 >
-                  <i data-lucide="plus" style={{ width: '16px', strokeWidth: 3 }}></i> Create Appointment
+                  <i data-lucide="plus" style={{ width: '16px', strokeWidth: 3 }}></i>
+                  + Register Patient
                 </button>
+
                 <button 
+                  type="button"
                   className="btn btn-secondary" 
-                  style={{ height: '26px', padding: '0 16px', fontWeight: 700, borderRadius: '2px', background: '#FEE2E2', color: '#EF4444', border: '1px solid #FCA5A5', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px' }} 
-                  onClick={handleDeleteAllPatients}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                  Delete All (Test)
-                </button>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ width: '38px', height: '26px', padding: 0, borderRadius: '2px', background: '#EFF6FF', color: '#2563EB', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                  style={{ padding: '9px 14px', borderRadius: '10px', background: '#F8FAFC', color: '#475569', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 700 }}
                   onClick={() => switchTab('appointments')}
-                  title="View Appointments"
+                  title="View Appointments Queue"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                     <line x1="16" y1="2" x2="16" y2="6" />
                     <line x1="8" y1="2" x2="8" y2="6" />
                     <line x1="3" y1="10" x2="21" y2="10" />
                   </svg>
+                  Appointments
+                </button>
+
+                <button 
+                  type="button"
+                  className="btn btn-secondary" 
+                  style={{ padding: '8px 12px', fontWeight: 700, borderRadius: '10px', background: '#FFF1F2', color: '#E11D48', border: '1px solid #FECDD3', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '12px' }} 
+                  onClick={handleDeleteAllPatients}
+                  title="Clear test patient records"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  Clear All (Test)
                 </button>
               </div>
             </div>
-            
-            <div className="glass-card" style={{ padding: '12px' }}>
-              <div className="filter-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <div style={{ flex: 1, maxWidth: '400px', position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <i data-lucide="search" style={{ position: 'absolute', left: '16px', color: '#64748B', width: '18px' }}></i>
-                    <input 
-                      type="text" 
-                      className="search-input" 
-                      placeholder="Search Patients..." 
-                      value={patientSearchText}
-                      onChange={e => setPatientSearchText(e.target.value)}
-                      style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', paddingLeft: '44px', height: '26px', width: '100%', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }} 
-                    />
+
+            {/* Top KPI Demographic & Overview Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+              {/* Card 1: Total Patients */}
+              <div 
+                onClick={() => setPatientGenderFilter('All')}
+                style={{ 
+                  padding: '16px 20px', 
+                  borderRadius: '16px', 
+                  background: patientGenderFilter === 'All' ? 'linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 100%)' : '#FFFFFF', 
+                  border: patientGenderFilter === 'All' ? '2px solid #2563EB' : '1px solid #E2E8F0',
+                  boxShadow: patientGenderFilter === 'All' ? '0 4px 14px rgba(37, 99, 235, 0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total Patients</span>
+                  <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <button 
-                      className="btn btn-secondary" 
-                      style={{ padding: '0 16px', height: '26px', display: 'flex', alignItems: 'center', gap: '8px', background: showPatientFilters ? 'rgba(59, 130, 246, 0.15)' : '#EFF6FF', border: showPatientFilters ? '1px solid #93C5FD' : 'none', color: '#2563EB' }}
-                      onClick={() => { setShowPatientFilters(!showPatientFilters); setTimeout(() => window.lucide && window.lucide.createIcons(), 100); }}
+                <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", marginTop: '6px', lineHeight: 1.1 }}>
+                  {totalPatients}
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#2563EB', fontWeight: 700, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563EB' }}></span> Active patient registry
+                </div>
+              </div>
+
+              {/* Card 2: Male Patients */}
+              <div 
+                onClick={() => setPatientGenderFilter('Male')}
+                style={{ 
+                  padding: '16px 20px', 
+                  borderRadius: '16px', 
+                  background: patientGenderFilter === 'Male' ? 'linear-gradient(135deg, #FFFFFF 0%, #EEF2FF 100%)' : '#FFFFFF', 
+                  border: patientGenderFilter === 'Male' ? '2px solid #4F46E5' : '1px solid #E2E8F0',
+                  boxShadow: patientGenderFilter === 'Male' ? '0 4px 14px rgba(79, 70, 229, 0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#4F46E5', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Male Patients</span>
+                  <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#EEF2FF', color: '#4F46E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontSize: '16px', fontWeight: 900 }}>♂</span>
+                  </div>
+                </div>
+                <div style={{ fontSize: '28px', fontWeight: 900, color: '#4F46E5', fontFamily: "'Outfit', sans-serif", marginTop: '6px', lineHeight: 1.1 }}>
+                  {maleCount}
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, marginTop: '6px' }}>
+                  {totalPatients > 0 ? Math.round((maleCount / totalPatients) * 100) : 0}% of directory
+                </div>
+              </div>
+
+              {/* Card 3: Female Patients */}
+              <div 
+                onClick={() => setPatientGenderFilter('Female')}
+                style={{ 
+                  padding: '16px 20px', 
+                  borderRadius: '16px', 
+                  background: patientGenderFilter === 'Female' ? 'linear-gradient(135deg, #FFFFFF 0%, #FDF2F8 100%)' : '#FFFFFF', 
+                  border: patientGenderFilter === 'Female' ? '2px solid #DB2777' : '1px solid #E2E8F0',
+                  boxShadow: patientGenderFilter === 'Female' ? '0 4px 14px rgba(219, 39, 119, 0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#DB2777', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Female Patients</span>
+                  <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#FDF2F8', color: '#DB2777', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontSize: '16px', fontWeight: 900 }}>♀</span>
+                  </div>
+                </div>
+                <div style={{ fontSize: '28px', fontWeight: 900, color: '#DB2777', fontFamily: "'Outfit', sans-serif", marginTop: '6px', lineHeight: 1.1 }}>
+                  {femaleCount}
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, marginTop: '6px' }}>
+                  {totalPatients > 0 ? Math.round((femaleCount / totalPatients) * 100) : 0}% of directory
+                </div>
+              </div>
+
+              {/* Card 4: Active Appointments */}
+              <div 
+                onClick={() => switchTab('appointments')}
+                style={{ 
+                  padding: '16px 20px', 
+                  borderRadius: '16px', 
+                  background: '#FFFFFF', 
+                  border: '1px solid #E2E8F0',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Appointments</span>
+                  <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  </div>
+                </div>
+                <div style={{ fontSize: '28px', fontWeight: 900, color: '#059669', fontFamily: "'Outfit', sans-serif", marginTop: '6px', lineHeight: 1.1 }}>
+                  {appointmentsCount}
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#059669', fontWeight: 700, marginTop: '6px' }}>
+                  Scheduled consultations →
+                </div>
+              </div>
+            </div>
+            
+            {/* Main Content Card with Search & Filters */}
+            <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', border: '1px solid #E2E8F0', background: '#FFFFFF', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+              
+              {/* Toolbar */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                
+                {/* Search Bar */}
+                <div style={{ flex: '1 1 300px', maxWidth: '420px', position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '14px', pointerEvents: 'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input 
+                    type="text" 
+                    placeholder="Search by name, ID, phone, email..." 
+                    value={patientSearchText}
+                    onChange={e => setPatientSearchText(e.target.value)}
+                    style={{ 
+                      background: '#F8FAFC', 
+                      border: '1.5px solid #E2E8F0', 
+                      paddingLeft: '40px', 
+                      paddingRight: patientSearchText ? '36px' : '14px',
+                      height: '40px', 
+                      width: '100%', 
+                      borderRadius: '10px', 
+                      fontSize: '13px', 
+                      fontWeight: 600,
+                      color: '#0F172A',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      transition: 'all 0.15s'
+                    }} 
+                    onFocus={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#2563EB'; }}
+                    onBlur={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                  />
+                  {patientSearchText && (
+                    <button
+                      type="button"
+                      onClick={() => setPatientSearchText('')}
+                      style={{ position: 'absolute', right: '10px', background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}
                     >
-                      <i data-lucide="filter" style={{ width: '18px' }}></i> Filter
+                      ✕
                     </button>
-                    <button 
-                      className="btn btn-secondary" 
-                      style={{ padding: '0 16px', height: '26px', display: 'flex', alignItems: 'center', gap: '8px', background: '#EFF6FF', border: 'none', color: '#2563EB' }}
-                      onClick={handleExportPatientsCSV}
+                  )}
+                </div>
+
+                {/* Quick Gender Filter Pills & Buttons */}
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  
+                  {/* Segmented Gender Pills */}
+                  <div style={{ display: 'flex', gap: '4px', background: '#F1F5F9', padding: '3px', borderRadius: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setPatientGenderFilter('All')}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: patientGenderFilter === 'All' ? '#FFFFFF' : 'transparent',
+                        color: patientGenderFilter === 'All' ? '#0F172A' : '#64748B',
+                        boxShadow: patientGenderFilter === 'All' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        cursor: 'pointer'
+                      }}
                     >
-                      <i data-lucide="download" style={{ width: '18px' }}></i> Export
+                      All ({totalPatients})
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setPatientGenderFilter('Male')}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: patientGenderFilter === 'Male' ? '#FFFFFF' : 'transparent',
+                        color: patientGenderFilter === 'Male' ? '#4F46E5' : '#64748B',
+                        boxShadow: patientGenderFilter === 'Male' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <span>♂ Male</span>
+                      <span>({maleCount})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPatientGenderFilter('Female')}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: patientGenderFilter === 'Female' ? '#FFFFFF' : 'transparent',
+                        color: patientGenderFilter === 'Female' ? '#DB2777' : '#64748B',
+                        boxShadow: patientGenderFilter === 'Female' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <span>♀ Female</span>
+                      <span>({femaleCount})</span>
+                    </button>
+                  </div>
+
+                  {/* Filter Toggle Button */}
+                  <button 
+                    type="button"
+                    className="btn btn-secondary" 
+                    style={{ 
+                      padding: '8px 14px', 
+                      height: '38px', 
+                      borderRadius: '10px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '7px', 
+                      background: showPatientFilters ? '#EFF6FF' : '#FFFFFF', 
+                      border: showPatientFilters ? '1.5px solid #3B82F6' : '1px solid #CBD5E1', 
+                      color: showPatientFilters ? '#2563EB' : '#334155',
+                      fontWeight: 700,
+                      fontSize: '12.5px',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => { setShowPatientFilters(!showPatientFilters); setTimeout(() => window.lucide && window.lucide.createIcons(), 100); }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    Filter
+                    {activeFiltersCount > 0 && (
+                      <span style={{ background: '#2563EB', color: 'white', fontSize: '10.5px', fontWeight: 800, padding: '1px 6px', borderRadius: '10px', marginLeft: '2px' }}>
+                        {activeFiltersCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Export Button */}
+                  <button 
+                    type="button"
+                    className="btn btn-secondary" 
+                    style={{ 
+                      padding: '8px 14px', 
+                      height: '38px', 
+                      borderRadius: '10px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '7px', 
+                      background: '#FFFFFF', 
+                      border: '1px solid #CBD5E1', 
+                      color: '#334155',
+                      fontWeight: 700,
+                      fontSize: '12.5px',
+                      cursor: 'pointer'
+                    }}
+                    onClick={handleExportPatientsCSV}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Export CSV
+                  </button>
                 </div>
               </div>
 
               {/* Sliding Patient Filter Panel */}
               {showPatientFilters && (
-                <div className="glass-card" style={{ padding: '12px', marginBottom: '12px', animation: 'slideDown 0.3s ease-out', border: '1.5px solid #BFDBFE', background: '#F8FAFC', borderRadius: '4px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <h4 style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <i data-lucide="filter" style={{ width: '18px', color: '#2563EB' }}></i> Select Patient Filters
-                    </h4>
+                <div style={{ padding: '16px 18px', marginBottom: '18px', animation: 'slideDown 0.25s ease-out', border: '1.5px solid #BFDBFE', background: '#F8FAFC', borderRadius: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                      Filter Patient Directory
+                    </div>
                     {(patientGenderFilter !== 'All' || patientStartRegDate || patientEndRegDate || patientBookingTypeFilter !== 'All') && (
                       <button 
-                        className="btn" 
-                        style={{ fontSize: '12px', padding: '4px 10px', background: 'transparent', color: '#EF4444', fontWeight: 700, border: 'none', cursor: 'pointer' }}
+                        type="button"
+                        style={{ fontSize: '12px', padding: '4px 10px', background: '#FEE2E2', color: '#DC2626', fontWeight: 700, border: '1px solid #FECACA', borderRadius: '6px', cursor: 'pointer' }}
                         onClick={() => { 
                           setPatientGenderFilter('All'); 
                           setPatientStartRegDate(''); 
@@ -6258,17 +6567,16 @@ const ReceptionistDashboard = () => {
                           setPatientBookingTypeFilter('All');
                         }}
                       >
-                        Clear Filters
+                        Reset All Filters
                       </button>
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                    <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '150px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '6px', display: 'block', textTransform: 'uppercase' }}>Gender</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', alignItems: 'flex-end' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gender</label>
                       <select 
-                        className="form-control" 
-                        style={{ height: '40px', borderRadius: '2px', border: '1px solid #CBD5E1', padding: '0 12px', background: 'white', fontWeight: 600, color: '#334155', width: '100%' }}
+                        style={{ height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', background: 'white', fontWeight: 600, color: '#0F172A', width: '100%', outline: 'none', fontSize: '13px' }}
                         value={patientGenderFilter}
                         onChange={e => setPatientGenderFilter(e.target.value)}
                       >
@@ -6279,11 +6587,10 @@ const ReceptionistDashboard = () => {
                       </select>
                     </div>
 
-                    <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '180px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '6px', display: 'block', textTransform: 'uppercase' }}>Booking Type</label>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Booking Type</label>
                       <select 
-                        className="form-control" 
-                        style={{ height: '40px', borderRadius: '2px', border: '1px solid #CBD5E1', padding: '0 12px', background: 'white', fontWeight: 600, color: '#334155', width: '100%' }}
+                        style={{ height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', background: 'white', fontWeight: 600, color: '#0F172A', width: '100%', outline: 'none', fontSize: '13px' }}
                         value={patientBookingTypeFilter}
                         onChange={e => setPatientBookingTypeFilter(e.target.value)}
                       >
@@ -6294,23 +6601,21 @@ const ReceptionistDashboard = () => {
                       </select>
                     </div>
 
-                    <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '180px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '6px', display: 'block', textTransform: 'uppercase' }}>Registered From (Calendar)</label>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Registered From</label>
                       <input 
                         type="date" 
-                        className="form-control" 
-                        style={{ height: '40px', borderRadius: '2px', border: '1px solid #CBD5E1', padding: '0 12px', background: 'white', fontWeight: 600, color: '#334155', width: '100%' }} 
+                        style={{ height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', background: 'white', fontWeight: 600, color: '#0F172A', width: '100%', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }} 
                         value={patientStartRegDate} 
                         onChange={e => setPatientStartRegDate(e.target.value)} 
                       />
                     </div>
 
-                    <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '180px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '6px', display: 'block', textTransform: 'uppercase' }}>Registered To (Calendar)</label>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Registered To</label>
                       <input 
                         type="date" 
-                        className="form-control" 
-                        style={{ height: '40px', borderRadius: '2px', border: '1px solid #CBD5E1', padding: '0 12px', background: 'white', fontWeight: 600, color: '#334155', width: '100%' }} 
+                        style={{ height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', background: 'white', fontWeight: 600, color: '#0F172A', width: '100%', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }} 
                         value={patientEndRegDate} 
                         onChange={e => setPatientEndRegDate(e.target.value)} 
                       />
@@ -6318,46 +6623,99 @@ const ReceptionistDashboard = () => {
                   </div>
                 </div>
               )}
-               <div className="table-responsive">
-                 <table className="elite-table" style={{ margin: 0, borderCollapse: 'collapse', borderSpacing: 0 }}>
-                  <thead style={{ background: '#F8FAFC' }}>
-                      <tr>
-                          <th style={{ width: '40px' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={getFilteredPatientsList().length > 0 && selectedPatientIds.length === getFilteredPatientsList().length}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedPatientIds(getFilteredPatientsList().map(p => p._id));
-                                } else {
-                                  setSelectedPatientIds([]);
-                                }
-                              }}
-                              title="Select All Patients"
-                            />
-                          </th>
-                          <th>Patient ID</th>
-                          <th>Name</th>
-                          <th>Gender</th>
-                          <th>Mobile Number</th>
-                          <th>Email</th>
-                          <th style={{ width: '40px' }}></th>
-                      </tr>
+
+              {/* Patient Directory Table */}
+              <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
+                      <th style={{ width: '44px', padding: '12px 14px', textAlign: 'center' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={allFiltered.length > 0 && selectedPatientIds.length === allFiltered.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPatientIds(allFiltered.map(p => p._id));
+                            } else {
+                              setSelectedPatientIds([]);
+                            }
+                          }}
+                          style={{ cursor: 'pointer', width: '15px', height: '15px' }}
+                          title="Select All Patients"
+                        />
+                      </th>
+                      <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Patient ID
+                      </th>
+                      <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Patient Details
+                      </th>
+                      <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Gender
+                      </th>
+                      <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Mobile Number
+                      </th>
+                      <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Email Address
+                      </th>
+                      <th style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>
+                        Actions
+                      </th>
+                    </tr>
                   </thead>
                   <tbody>
-                    {getFilteredPatientsList().length === 0 ? (
+                    {allFiltered.length === 0 ? (
                       <tr>
-                        <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: '#64748B', fontSize: '14.5px', fontWeight: 600 }}>
-                          No patients found matching the criteria.
+                        <td colSpan="7" style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '32px' }}>🔍</span>
+                            <span style={{ fontWeight: 800, fontSize: '16px', color: '#0F172A' }}>No Patients Found</span>
+                            <span style={{ fontSize: '13px', color: '#64748B', maxWidth: '320px' }}>
+                              No patient records match the active search query or filter criteria.
+                            </span>
+                            {(patientSearchText || patientGenderFilter !== 'All' || activeFiltersCount > 0) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPatientSearchText('');
+                                  setPatientGenderFilter('All');
+                                  setPatientStartRegDate('');
+                                  setPatientEndRegDate('');
+                                  setPatientBookingTypeFilter('All');
+                                }}
+                                style={{ marginTop: '8px', padding: '6px 14px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', fontWeight: 700, fontSize: '12.5px', cursor: 'pointer' }}
+                              >
+                                Clear All Filters
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ) : (
-                      getFilteredPatientsList().map(p => (
-                        <tr key={p._id} className="patients-table" style={{ borderBottom: '1px solid #F1F5F9', background: selectedPatientIds.includes(p._id) ? '#EFF6FF' : 'transparent' }}>
-                            <td onClick={e => e.stopPropagation()}>
+                      allFiltered.map((p, idx) => {
+                        const isSelected = selectedPatientIds.includes(p._id);
+                        const avatarTheme = getAvatarTheme(p.name);
+                        const initials = getInitials(p.name);
+                        const isMale = p.gender?.toLowerCase() === 'male';
+                        const isFemale = p.gender?.toLowerCase() === 'female';
+
+                        return (
+                          <tr 
+                            key={p._id} 
+                            style={{ 
+                              borderBottom: idx === allFiltered.length - 1 ? 'none' : '1px solid #F1F5F9', 
+                              background: isSelected ? '#EFF6FF' : '#FFFFFF',
+                              transition: 'background 0.15s ease'
+                            }}
+                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#F8FAFC'; }}
+                            onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = '#FFFFFF'; }}
+                          >
+                            {/* Checkbox */}
+                            <td style={{ padding: '14px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                               <input 
                                 type="checkbox" 
-                                checked={selectedPatientIds.includes(p._id)}
+                                checked={isSelected}
                                 onChange={(e) => {
                                   e.stopPropagation();
                                   if (e.target.checked) {
@@ -6366,49 +6724,204 @@ const ReceptionistDashboard = () => {
                                     setSelectedPatientIds(prev => prev.filter(id => id !== p._id));
                                   }
                                 }}
+                                style={{ cursor: 'pointer', width: '15px', height: '15px' }}
                               />
                             </td>
-                            <td style={{ color: '#64748B', fontWeight: 600 }}>{getFormattedPatientId(p._id)}</td>
-                            <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }} onClick={() => handleOpenPatientProfile(p)}>
-                                    <span style={{ fontWeight: 700, color: '#1A1D23' }}>{p.name} {p.age ? `(${p.age} Yrs)` : ''}</span>
-                                </div>
+
+                            {/* Patient ID */}
+                            <td style={{ padding: '14px 16px' }}>
+                              <span style={{ 
+                                fontFamily: 'monospace', 
+                                fontWeight: 800, 
+                                fontSize: '12px', 
+                                background: '#F1F5F9', 
+                                color: '#334155', 
+                                padding: '4px 8px', 
+                                borderRadius: '6px',
+                                letterSpacing: '0.04em',
+                                border: '1px solid #E2E8F0'
+                              }}>
+                                {getFormattedPatientId(p._id)}
+                              </span>
                             </td>
-                            <td style={{ color: '#64748B', fontWeight: 600 }}>{p.gender}</td>
-                            <td style={{ color: '#64748B', fontWeight: 600 }}>{p.contact}</td>
-                            <td style={{ color: '#64748B', fontWeight: 600 }}>{p.email || 'N/A'}</td>
-                            <td>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const pIdStr = String(p._id);
-                                  if (activePatientMenuId && String(activePatientMenuId) === pIdStr) {
-                                    setActivePatientMenuId(null);
-                                  } else {
-                                    const btnRect = e.currentTarget.getBoundingClientRect();
-                                    setPatientMenuPos({
-                                      top: btnRect.bottom + 4,
-                                      right: Math.max(10, window.innerWidth - btnRect.right)
-                                    });
-                                    setActivePatientMenuId(p._id);
-                                  }
-                                }}
-                                style={{ background: (activePatientMenuId && String(activePatientMenuId) === String(p._id)) ? '#EFF6FF' : 'transparent', border: 'none', cursor: 'pointer', padding: '6px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+
+                            {/* Patient Details: Avatar + Name + Age */}
+                            <td style={{ padding: '14px 16px' }}>
+                              <div 
+                                style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+                                onClick={() => handleOpenPatientProfile(p)}
+                                title="Click to view patient profile"
                               >
-                                <i data-lucide="more-vertical" style={{ width: '18px', color: (activePatientMenuId && String(activePatientMenuId) === String(p._id)) ? '#2563EB' : '#64748B' }}></i>
-                              </button>
+                                {/* Circle Avatar */}
+                                <div style={{ 
+                                  width: '36px', 
+                                  height: '36px', 
+                                  borderRadius: '50%', 
+                                  background: avatarTheme.bg, 
+                                  color: avatarTheme.text, 
+                                  border: `1.5px solid ${avatarTheme.border}`,
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center', 
+                                  fontWeight: 800, 
+                                  fontSize: '12.5px',
+                                  flexShrink: 0,
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                                }}>
+                                  {initials}
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13.5px', lineHeight: 1.2 }}>
+                                    {p.name}
+                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
+                                    {p.age && (
+                                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>
+                                        {p.age} Yrs
+                                      </span>
+                                    )}
+                                    {p.bloodGroup && (
+                                      <>
+                                        <span style={{ color: '#CBD5E1', fontSize: '10px' }}>•</span>
+                                        <span style={{ fontSize: '10px', fontWeight: 800, color: '#DC2626', background: '#FEF2F2', padding: '1px 5px', borderRadius: '4px' }}>
+                                          {p.bloodGroup}
+                                        </span>
+                                      </>
+                                    )}
+                                    {p.createdAt && (
+                                      <>
+                                        <span style={{ color: '#CBD5E1', fontSize: '10px' }}>•</span>
+                                        <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>
+                                          Reg. {new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
                             </td>
-                        </tr>
-                      ))
+
+                            {/* Gender */}
+                            <td style={{ padding: '14px 16px' }}>
+                              {isMale ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 9px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 800, background: '#EEF2FF', color: '#4F46E5', border: '1px solid #C7D2FE' }}>
+                                  <span>♂</span> Male
+                                </span>
+                              ) : isFemale ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 9px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 800, background: '#FDF2F8', color: '#DB2777', border: '1px solid #FBCFE8' }}>
+                                  <span>♀</span> Female
+                                </span>
+                              ) : (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 9px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, background: '#F1F5F9', color: '#475569', border: '1px solid #E2E8F0' }}>
+                                  {p.gender || 'Not specified'}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Mobile Number */}
+                            <td style={{ padding: '14px 16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#1E293B', fontSize: '13px' }}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.3"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                                {p.contact || '-'}
+                              </div>
+                            </td>
+
+                            {/* Email */}
+                            <td style={{ padding: '14px 16px' }}>
+                              {p.email ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '12.5px', fontWeight: 500 }}>
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.3"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                                  <span style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.email}>
+                                    {p.email}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span style={{ color: '#94A3B8', fontSize: '11.5px', fontStyle: 'italic' }}>Not provided</span>
+                              )}
+                            </td>
+
+                            {/* Action Buttons */}
+                            <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenPatientProfile(p)}
+                                  style={{
+                                    padding: '5px 10px',
+                                    fontSize: '11.5px',
+                                    fontWeight: 700,
+                                    borderRadius: '6px',
+                                    background: '#EFF6FF',
+                                    color: '#2563EB',
+                                    border: '1px solid #BFDBFE',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    transition: 'all 0.15s'
+                                  }}
+                                  title="View full medical profile"
+                                >
+                                  Profile
+                                </button>
+                                
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const pIdStr = String(p._id);
+                                    if (activePatientMenuId && String(activePatientMenuId) === pIdStr) {
+                                      setActivePatientMenuId(null);
+                                    } else {
+                                      const btnRect = e.currentTarget.getBoundingClientRect();
+                                      setPatientMenuPos({
+                                        top: btnRect.bottom + 4,
+                                        right: Math.max(10, window.innerWidth - btnRect.right)
+                                      });
+                                      setActivePatientMenuId(p._id);
+                                    }
+                                  }}
+                                  style={{ 
+                                    background: (activePatientMenuId && String(activePatientMenuId) === String(p._id)) ? '#EFF6FF' : '#F8FAFC', 
+                                    border: '1px solid #E2E8F0', 
+                                    cursor: 'pointer', 
+                                    padding: '5px 8px', 
+                                    borderRadius: '6px', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center',
+                                    color: (activePatientMenuId && String(activePatientMenuId) === String(p._id)) ? '#2563EB' : '#64748B'
+                                  }}
+                                  title="More actions"
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
-              </table>
+                </table>
+              </div>
+
+              {/* Table Footer with Record Count */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #F1F5F9', fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+                <span>
+                  Showing <strong>{allFiltered.length}</strong> of <strong>{totalPatients}</strong> patient record{totalPatients === 1 ? '' : 's'}
+                </span>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', color: '#94A3B8' }}>Click row or Profile button to view clinical records</span>
+                </div>
+              </div>
+
             </div>
 
             {/* Floating Bulk Action Bar */}
             {selectedPatientIds.length > 0 && (
-              <div style={{ background: '#0F172A', color: 'white', padding: '14px 22px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', boxShadow: '0 12px 28px rgba(15, 23, 42, 0.3)', border: '1px solid #334155', animation: 'slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+              <div style={{ background: '#0F172A', color: 'white', padding: '14px 22px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', boxShadow: '0 12px 28px rgba(15, 23, 42, 0.3)', border: '1px solid #334155', animation: 'slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <span style={{ background: '#2563EB', color: 'white', padding: '4px 12px', borderRadius: '6px', fontSize: '12.5px', fontWeight: 800 }}>{selectedPatientIds.length} Selected</span>
                   <span style={{ fontSize: '12px', fontWeight: 700, color: '#E2E8F0' }}>Bulk Batch Actions</span>
@@ -6417,7 +6930,7 @@ const ReceptionistDashboard = () => {
                   <button 
                     type="button" 
                     onClick={() => setShowBatchSmsModal(true)}
-                    style={{ padding: '8px 16px', background: '#334155', color: 'white', border: '1px solid #475569', borderRadius: '2px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s' }}
+                    style={{ padding: '8px 16px', background: '#334155', color: 'white', border: '1px solid #475569', borderRadius: '8px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#475569'}
                     onMouseLeave={e => e.currentTarget.style.background = '#334155'}
                   >
@@ -6440,7 +6953,7 @@ const ReceptionistDashboard = () => {
                       setBatchSmsSuccessToast(`Exported ${selectedPatientIds.length} patient record(s) to CSV!`);
                       setTimeout(() => setBatchSmsSuccessToast(''), 4000);
                     }}
-                    style={{ padding: '8px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: '2px', fontSize: '12.5px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 12px rgba(5,150,105,0.25)', transition: 'all 0.15s' }}
+                    style={{ padding: '8px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: '8px', fontSize: '12.5px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 12px rgba(5,150,105,0.25)', transition: 'all 0.15s' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#047857'}
                     onMouseLeave={e => e.currentTarget.style.background = '#059669'}
                   >
@@ -6450,17 +6963,17 @@ const ReceptionistDashboard = () => {
                   <button 
                     type="button" 
                     onClick={() => setSelectedPatientIds([])}
-                    style={{ padding: '8px 14px', background: 'transparent', color: '#94A3B8', border: '1px solid #475569', borderRadius: '2px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}
+                    style={{ padding: '8px 14px', background: 'transparent', color: '#94A3B8', border: '1px solid #475569', borderRadius: '8px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}
                   >
                     Clear Selection
                   </button>
                 </div>
               </div>
             )}
-          </div>
-        </div>
-        )}
 
+          </div>
+          );
+        })()}
         {/* PATIENT DETAILS TAB */}
         {activeTab === 'patient-details' && selectedPatient && (
           <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out' }}>
