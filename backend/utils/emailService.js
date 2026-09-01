@@ -19,8 +19,45 @@ async function sendEmail({ to, subject, text, html }) {
     let usedProvider = null;
     let lastError = null;
 
-    // 1. Try Brevo HTTP API first (High deliverability transactional relay, bypasses SMTP spam filtering & port blocks)
-    if (process.env.BREVO_API_KEY) {
+    // 1. Try direct authenticated SMTP first (Gmail / Custom SMTP) - ensures valid SPF/DKIM without 3rd-party spoofing blocks
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      try {
+        const plainText = (text && text.trim())
+          ? text.trim()
+          : (html ? html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : (subject || "Curoxa Notification"));
+
+        const smtpConfig = {
+          host: process.env.SMTP_HOST || "smtp.gmail.com",
+          port: parseInt(process.env.SMTP_PORT, 10) || 465,
+          secure: process.env.SMTP_SECURE === "true" || parseInt(process.env.SMTP_PORT, 10) === 465,
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS
+          },
+          connectionTimeout: 6000,
+          greetingTimeout: 6000,
+          socketTimeout: 8000
+        };
+        const transporter = nodemailer.createTransport(smtpConfig);
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || `"Curoxa Healthcare" <${process.env.SMTP_USER}>`,
+          to: recipient,
+          replyTo: `"Curoxa Healthcare" <${process.env.SMTP_USER}>`,
+          subject,
+          text: plainText,
+          html: html || text || ""
+        });
+        emailSent = true;
+        usedProvider = "SMTP";
+        console.log(`[EMAIL] Email successfully sent via SMTP to ${recipient}`);
+      } catch (smtpError) {
+        lastError = smtpError.message;
+        console.error(`[EMAIL] SMTP failed for ${recipient}:`, smtpError.message);
+      }
+    }
+
+    // 2. Fallback to Brevo HTTP API
+    if (!emailSent && process.env.BREVO_API_KEY) {
       try {
         const plainText = (text && text.trim())
           ? text.trim()
@@ -78,39 +115,6 @@ async function sendEmail({ to, subject, text, html }) {
       } catch (brevoError) {
         lastError = brevoError.message;
         console.error(`[EMAIL] Brevo failed for ${recipient}:`, brevoError.message);
-      }
-    }
-
-    // 2. Try SMTP fallback (Gmail / Custom SMTP)
-    if (!emailSent && process.env.SMTP_USER && process.env.SMTP_PASS) {
-      try {
-        const smtpConfig = {
-          host: process.env.SMTP_HOST || "smtp.gmail.com",
-          port: parseInt(process.env.SMTP_PORT, 10) || 465,
-          secure: process.env.SMTP_SECURE === "true" || parseInt(process.env.SMTP_PORT, 10) === 465,
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-          },
-          connectionTimeout: 6000,
-          greetingTimeout: 6000,
-          socketTimeout: 8000
-        };
-        const transporter = nodemailer.createTransport(smtpConfig);
-        await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Curoxa Healthcare" <${process.env.SMTP_USER}>`,
-          to: recipient,
-          replyTo: `"Curoxa Healthcare" <${process.env.SMTP_USER}>`,
-          subject,
-          text: plainText,
-          html: html || text || ""
-        });
-        emailSent = true;
-        usedProvider = "SMTP";
-        console.log(`[EMAIL] Email successfully sent via SMTP to ${recipient}`);
-      } catch (smtpError) {
-        lastError = smtpError.message;
-        console.error(`[EMAIL] SMTP failed for ${recipient}:`, smtpError.message);
       }
     }
 

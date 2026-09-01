@@ -1276,6 +1276,270 @@ const ReceptionistDashboard = () => {
   };
 
   const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [isFinishingConsultation, setIsFinishingConsultation] = useState(null);
+  const [doctorClinicalMode, setDoctorClinicalMode] = useState(() => {
+    try {
+      return localStorage.getItem('doctorClinicalMode') || 'ONLINE';
+    } catch (e) {
+      return 'ONLINE';
+    }
+  });
+
+  // Phase 5 Offline Prescription States
+  const [uploadPrescriptionModalAppt, setUploadPrescriptionModalAppt] = useState(null);
+  const [noPrescriptionConfirmAppt, setNoPrescriptionConfirmAppt] = useState(null);
+  const [prescriptionPages, setPrescriptionPages] = useState([]);
+  const [isPrescriptionConfirmed, setIsPrescriptionConfirmed] = useState(false);
+  const [isUploadingPrescription, setIsUploadingPrescription] = useState(false);
+  const [isResolvingNoPrescription, setIsResolvingNoPrescription] = useState(false);
+  const [viewHandwrittenPrescriptionAppt, setViewHandwrittenPrescriptionAppt] = useState(null);
+  const [viewHandwrittenPrescriptionData, setViewHandwrittenPrescriptionData] = useState(null);
+  const [previewEnlargedImage, setPreviewEnlargedImage] = useState(null);
+  const [isCorrectionMode, setIsCorrectionMode] = useState(false);
+
+  useEffect(() => {
+    const fetchTenantMode = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const res = await fetch('/api/auth/tenant-mode', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const mode = data.doctorClinicalMode || 'ONLINE';
+          setDoctorClinicalMode(mode);
+          localStorage.setItem('doctorClinicalMode', mode);
+        }
+      } catch (err) {
+        console.error('Error fetching tenant mode in ReceptionistDashboard:', err);
+      }
+    };
+    fetchTenantMode();
+  }, []);
+
+  const handleFinishConsultation = async (app) => {
+    if (!app || !app._id) return;
+    try {
+      setIsFinishingConsultation(app._id);
+      const res = await api.post(`/appointments/${app._id}/finish-consultation`);
+      const { appointment: updatedAppt } = res.data;
+
+      if (updatedAppt) {
+        setAppointments(prev => prev.map(a => a._id === updatedAppt._id ? { ...a, ...updatedAppt } : a));
+        if (selectedAppointment && selectedAppointment._id === updatedAppt._id) {
+          setSelectedAppointment(prev => ({ ...prev, ...updatedAppt }));
+        }
+      }
+
+      showToast(
+        `Consultation finished for Token #${app.tokenNumber || ''}! Status: Prescription Pending.`,
+        'success'
+      );
+
+      fetchData();
+      window.dispatchEvent(new CustomEvent('curoxa_sync', { detail: { type: 'appointments', subType: 'doctor_queue' } }));
+    } catch (err) {
+      console.error("Finish consultation error:", err);
+      showToast(err.response?.data?.error || "Failed to finish consultation.", "error");
+    } finally {
+      setIsFinishingConsultation(null);
+    }
+  };
+
+  const handleOpenUploadPrescription = (app) => {
+    if (!app) return;
+    setIsCorrectionMode(false);
+    setUploadPrescriptionModalAppt(app);
+    setPrescriptionPages([]);
+    setIsPrescriptionConfirmed(false);
+  };
+
+  const handleStartCorrection = (app, rxData) => {
+    if (!app || !rxData) return;
+    setIsCorrectionMode(true);
+    setUploadPrescriptionModalAppt(app);
+    setPrescriptionPages((rxData.images || []).map((img, i) => ({
+      id: `page-${i}-${Date.now()}`,
+      pageNumber: img.pageNumber || i + 1,
+      previewUrl: img.url,
+      originalName: img.originalName || `Page_${i + 1}.jpg`
+    })));
+    setIsPrescriptionConfirmed(true);
+    setViewHandwrittenPrescriptionAppt(null);
+  };
+
+  const handleOpenNoPrescriptionConfirm = (app) => {
+    if (!app) return;
+    setNoPrescriptionConfirmAppt(app);
+  };
+
+  const handleAddPrescriptionFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    let loadedCount = 0;
+    const newItems = [];
+    files.forEach((file, fIdx) => {
+      if (!file.type.startsWith('image/')) {
+        showToast(`Skipped ${file.name}: Only image files (JPG, PNG, WebP) are allowed.`, 'error');
+        loadedCount++;
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        newItems.push({
+          id: `${Date.now()}_${fIdx}_${Math.random().toString(36).substring(2, 6)}`,
+          file,
+          previewUrl: ev.target.result,
+          originalName: file.name
+        });
+        loadedCount++;
+        if (loadedCount === files.length) {
+          setPrescriptionPages(prev => [...prev, ...newItems]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const handleRemovePrescriptionPage = (idxToRemove) => {
+    setPrescriptionPages(prev => prev.filter((_, idx) => idx !== idxToRemove));
+  };
+
+  const handleMovePrescriptionPage = (fromIdx, toIdx) => {
+    setPrescriptionPages(prev => {
+      if (toIdx < 0 || toIdx >= prev.length) return prev;
+      const updated = [...prev];
+      const [movedItem] = updated.splice(fromIdx, 1);
+      updated.splice(toIdx, 0, movedItem);
+      return updated;
+    });
+  };
+
+  const handleReplacePrescriptionPage = (idxToReplace, file) => {
+    if (!file || !file.type.startsWith('image/')) {
+      showToast('Only image files (JPG, PNG, WebP) are allowed.', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setPrescriptionPages(prev => {
+        const updated = [...prev];
+        updated[idxToReplace] = {
+          ...updated[idxToReplace],
+          file,
+          previewUrl: ev.target.result,
+          originalName: file.name
+        };
+        return updated;
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmitHandwrittenPrescription = async () => {
+    if (!uploadPrescriptionModalAppt) return;
+    if (prescriptionPages.length === 0) {
+      showToast('A handwritten prescription must contain at least one page.', 'error');
+      return;
+    }
+    if (!isPrescriptionConfirmed) {
+      showToast('Please confirm that this prescription belongs to the patient.', 'error');
+      return;
+    }
+
+    try {
+      setIsUploadingPrescription(true);
+      const imagesPayload = prescriptionPages.map((page, idx) => ({
+        pageNumber: idx + 1,
+        url: page.previewUrl,
+        originalName: page.originalName || `Page_${idx + 1}.jpg`
+      }));
+
+      if (isCorrectionMode) {
+        // Phase 6: Correction request via PUT
+        await api.put(`/appointments/${uploadPrescriptionModalAppt._id}/offline-prescription`, {
+          images: imagesPayload
+        });
+
+        showToast(
+          `Prescription updated successfully for ${uploadPrescriptionModalAppt.patientId?.name || 'patient'}!`,
+          'success'
+        );
+      } else {
+        // Phase 5: Initial upload via POST
+        await api.post(`/appointments/${uploadPrescriptionModalAppt._id}/offline-prescription`, {
+          images: imagesPayload
+        });
+
+        showToast(
+          `Prescription saved for ${uploadPrescriptionModalAppt.patientId?.name || 'patient'}! Appointment Completed.`,
+          'success'
+        );
+      }
+
+      setUploadPrescriptionModalAppt(null);
+      setPrescriptionPages([]);
+      setIsPrescriptionConfirmed(false);
+      setIsCorrectionMode(false);
+      if (detailsModalOpen && selectedAppointment?._id === uploadPrescriptionModalAppt._id) {
+        setSelectedAppointment(prev => ({ ...prev, status: 'Completed' }));
+      }
+      fetchData();
+      window.dispatchEvent(new CustomEvent('curoxa_sync', { detail: { type: 'appointments', action: 'appointment_completed' } }));
+      window.dispatchEvent(new CustomEvent('curoxa_sync', { detail: { type: 'prescriptions', action: isCorrectionMode ? 'prescription_corrected' : 'prescription_created' } }));
+    } catch (err) {
+      console.error('Submit handwritten prescription error:', err);
+      if (err.response?.data?.error === 'PRESCRIPTION_EDIT_WINDOW_EXPIRED') {
+        showToast('The 24-hour correction window for this prescription has expired.', 'error');
+      } else {
+        showToast(err.response?.data?.message || err.response?.data?.error || 'Failed to save prescription', 'error');
+      }
+    } finally {
+      setIsUploadingPrescription(false);
+    }
+  };
+
+  const handleConfirmNoPrescription = async () => {
+    if (!noPrescriptionConfirmAppt) return;
+    try {
+      setIsResolvingNoPrescription(true);
+      await api.post(`/appointments/${noPrescriptionConfirmAppt._id}/no-prescription`);
+      showToast(
+        `Appointment for ${noPrescriptionConfirmAppt.patientId?.name || 'patient'} completed (No Prescription Provided).`,
+        'success'
+      );
+      setNoPrescriptionConfirmAppt(null);
+      if (detailsModalOpen && selectedAppointment?._id === noPrescriptionConfirmAppt._id) {
+        setSelectedAppointment(prev => ({ ...prev, status: 'Completed', noPrescriptionProvided: true }));
+      }
+      fetchData();
+      window.dispatchEvent(new CustomEvent('curoxa_sync', { detail: { type: 'appointments', action: 'appointment_completed' } }));
+    } catch (err) {
+      console.error('No prescription confirmation error:', err);
+      showToast(err.response?.data?.error || 'Failed to complete appointment', 'error');
+    } finally {
+      setIsResolvingNoPrescription(false);
+    }
+  };
+
+  const handleViewOfflinePrescription = async (app) => {
+    if (!app) return;
+    setViewHandwrittenPrescriptionAppt(app);
+    setViewHandwrittenPrescriptionData(null);
+    try {
+      const res = await api.get(`/prescriptions?patientId=${app.patientId?._id || app.patientId}`);
+      const matchingRx = (res.data || []).find(p => String(p.appointmentId?._id || p.appointmentId) === String(app._id));
+      if (matchingRx) {
+        setViewHandwrittenPrescriptionData(matchingRx);
+      }
+    } catch (err) {
+      console.error('View prescription error:', err);
+    }
+  };
+
 
   const handleCheckInAppointment = async (app) => {
     if (!app || !app._id) return;
@@ -1998,6 +2262,18 @@ const ReceptionistDashboard = () => {
         fetchCoverageData();
       } else if (type === 'indents' || type === 'indent') {
         fetchIndents();
+      } else if (type === 'subscription' || type === 'hospital_updated') {
+        const token = localStorage.getItem('token');
+        if (token) {
+          fetch('/api/auth/tenant-mode', { headers: { 'Authorization': `Bearer ${token}` } })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+              if (d?.doctorClinicalMode) {
+                setDoctorClinicalMode(d.doctorClinicalMode);
+                localStorage.setItem('doctorClinicalMode', d.doctorClinicalMode);
+              }
+            }).catch(() => {});
+        }
       } else if (type === 'appointments' || type === 'billing' || type === 'all' || !type) {
         fetchData();
       }
@@ -10035,6 +10311,158 @@ const ReceptionistDashboard = () => {
                                         </span>
                                       );
                                     }
+
+                                    if (doctorClinicalMode === 'OFFLINE' && (primary.status === 'Prescription Pending' || primary.rawItem?.status === 'Prescription Pending')) {
+                                      return (
+                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', flexWrap: 'nowrap' }}>
+                                          <span
+                                            style={{
+                                              padding: '0 7px',
+                                              height: '28px',
+                                              fontSize: '10.5px',
+                                              fontWeight: 800,
+                                              background: '#FEF3C7',
+                                              color: '#92400E',
+                                              border: '1px solid #FDE68A',
+                                              borderRadius: '6px',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              whiteSpace: 'nowrap'
+                                            }}
+                                            title="Doctor physical consultation finished. Prescription outcome pending."
+                                          >
+                                            Rx Pending
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenUploadPrescription(primary.rawItem || primary)}
+                                            style={{
+                                              padding: '0 8px',
+                                              height: '28px',
+                                              fontSize: '10.5px',
+                                              fontWeight: 800,
+                                              background: '#0D9488',
+                                              color: '#FFFFFF',
+                                              border: 'none',
+                                              borderRadius: '6px',
+                                              cursor: 'pointer',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '3px',
+                                              boxShadow: '0 1px 3px rgba(13, 148, 136, 0.25)',
+                                              whiteSpace: 'nowrap'
+                                            }}
+                                            title="Upload doctor's handwritten prescription"
+                                          >
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                            Upload Rx
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenNoPrescriptionConfirm(primary.rawItem || primary)}
+                                            style={{
+                                              padding: '0 7px',
+                                              height: '28px',
+                                              fontSize: '10.5px',
+                                              fontWeight: 700,
+                                              background: '#F8FAFC',
+                                              color: '#475569',
+                                              border: '1px solid #CBD5E1',
+                                              borderRadius: '6px',
+                                              cursor: 'pointer',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              whiteSpace: 'nowrap'
+                                            }}
+                                            title="Complete appointment without prescription"
+                                          >
+                                            No Rx
+                                          </button>
+                                        </div>
+                                      );
+                                    }
+                                    if (doctorClinicalMode === 'OFFLINE' && primary.tokenNumber && primary.status !== 'Completed' && primary.status !== 'Cancelled') {
+                                      const isServing = primary.status === 'In Progress' || primary.queueStatus === 'Serving' || primary.rawItem?.status === 'In Progress' || primary.rawItem?.queueStatus === 'Serving';
+                                      return (
+                                        <>
+                                          <button
+                                            type="button"
+                                            style={{
+                                              padding: '0 9px',
+                                              height: '30px',
+                                              fontSize: '11px',
+                                              background: '#ECFDF5',
+                                              color: '#059669',
+                                              border: '1px solid #A7F3D0',
+                                              borderRadius: '8px',
+                                              fontWeight: 800,
+                                              cursor: 'default',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              gap: '3px',
+                                              whiteSpace: 'nowrap'
+                                            }}
+                                            title="Patient checked in"
+                                          >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                            Token #{primary.tokenNumber}
+                                          </button>
+                                          {isServing ? (
+                                            <button
+                                              type="button"
+                                              style={{
+                                                padding: '0 10px',
+                                                height: '30px',
+                                                fontSize: '11px',
+                                                background: '#0D9488',
+                                                color: '#FFFFFF',
+                                                border: 'none',
+                                                borderRadius: '8px',
+                                                fontWeight: 800,
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '4px',
+                                                whiteSpace: 'nowrap',
+                                                boxShadow: '0 2px 5px rgba(13, 148, 136, 0.25)'
+                                              }}
+                                              disabled={isFinishingConsultation === primary.rawItem?._id}
+                                              onClick={() => handleFinishConsultation(primary.rawItem)}
+                                              title="Mark doctor physical consultation finished and advance queue"
+                                            >
+                                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                              {isFinishingConsultation === primary.rawItem?._id ? 'Finishing...' : 'Consultation Finished'}
+                                            </button>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              disabled
+                                              style={{
+                                                padding: '0 10px',
+                                                height: '30px',
+                                                fontSize: '11px',
+                                                background: '#F8FAFC',
+                                                color: '#94A3B8',
+                                                border: '1px solid #E2E8F0',
+                                                borderRadius: '8px',
+                                                fontWeight: 700,
+                                                cursor: 'not-allowed',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                whiteSpace: 'nowrap'
+                                              }}
+                                              title="Patient is waiting in queue. Action available when token becomes active."
+                                            >
+                                              In Queue
+                                            </button>
+                                          )}
+                                        </>
+                                      );
+                                    }
                                     return (
                                       <button
                                         type="button"
@@ -10433,6 +10861,8 @@ const ReceptionistDashboard = () => {
             handleCheckInAppointment={handleCheckInAppointment}
             showToast={showToast}
             fetchData={fetchData}
+            doctorClinicalMode={doctorClinicalMode}
+            handleFinishConsultation={handleFinishConsultation}
           />
         )}
 
@@ -13992,10 +14422,116 @@ const ReceptionistDashboard = () => {
                           Slot: {selectedAppointment.tokenSlotId || selectedAppointment.time} • Queue Status: {selectedAppointment.queueStatus || 'Waiting in Queue'}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <span style={{ background: '#DBEAFE', color: '#1E40AF', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 800 }}>
                           Checked In
                         </span>
+                        {doctorClinicalMode === 'OFFLINE' && selectedAppointment.status === 'Prescription Pending' && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 800 }}>
+                              Prescription Pending
+                            </span>
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{
+                                background: '#0D9488',
+                                color: '#FFFFFF',
+                                fontWeight: 800,
+                                padding: '5px 12px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                cursor: 'pointer',
+                                border: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                boxShadow: '0 1px 4px rgba(13, 148, 136, 0.25)'
+                              }}
+                              onClick={() => handleOpenUploadPrescription(selectedAppointment)}
+                              title="Upload doctor's handwritten prescription"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                              Upload Prescription
+                            </button>
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{
+                                background: '#F1F5F9',
+                                color: '#475569',
+                                fontWeight: 800,
+                                padding: '5px 10px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                cursor: 'pointer',
+                                border: '1px solid #CBD5E1',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              onClick={() => handleOpenNoPrescriptionConfirm(selectedAppointment)}
+                              title="Mark completed without prescription"
+                            >
+                              No Prescription Provided
+                            </button>
+                          </div>
+                        )}
+                        {doctorClinicalMode === 'OFFLINE' && selectedAppointment.noPrescriptionProvided && (
+                          <span style={{ background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 800 }}>
+                            No Prescription Provided
+                          </span>
+                        )}
+                        {doctorClinicalMode === 'OFFLINE' && selectedAppointment.status === 'Completed' && !selectedAppointment.noPrescriptionProvided && (
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{
+                              background: '#F0FDFA',
+                              color: '#0D9488',
+                              border: '1px solid #99F6E4',
+                              fontWeight: 800,
+                              padding: '5px 12px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            onClick={() => handleViewOfflinePrescription(selectedAppointment)}
+                            title="View doctor's handwritten prescription images"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            View Prescription
+                          </button>
+                        )}
+                        {doctorClinicalMode === 'OFFLINE' && !isCancelled && !isCompleted && (selectedAppointment.status === 'In Progress' || selectedAppointment.queueStatus === 'Serving') && (
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{
+                              background: '#0D9488',
+                              color: '#FFFFFF',
+                              fontWeight: 800,
+                              padding: '5px 12px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                              border: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              boxShadow: '0 1px 4px rgba(13, 148, 136, 0.25)'
+                            }}
+                            disabled={isFinishingConsultation === selectedAppointment._id}
+                            onClick={() => handleFinishConsultation(selectedAppointment)}
+                            title="Mark physical doctor consultation finished and advance queue"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                            {isFinishingConsultation === selectedAppointment._id ? 'Finishing...' : 'Consultation Finished'}
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="btn"
@@ -16118,6 +16654,560 @@ const ReceptionistDashboard = () => {
               {selectedLabRequest.results || 'Report is pending completion.'}
             </div>
           </div>
+        </div>
+      )}
+      {/* PHASE 5: UPLOAD HANDWRITTEN PRESCRIPTION MODAL */}
+      {uploadPrescriptionModalAppt && (
+        <div 
+          onClick={() => { if (!isUploadingPrescription) setUploadPrescriptionModalAppt(null); }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            style={{ background: 'white', borderRadius: '16px', width: '100%', maxWidth: '640px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden', animation: 'slideUp 0.25s ease-out' }}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#0D9488', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {isCorrectionMode ? 'Offline Doctor Mode — 24-Hour Edit Window' : 'Offline Doctor Clinical Mode'}
+                </div>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: '2px 0 0 0' }}>
+                  {isCorrectionMode ? 'Correct Handwritten Prescription' : 'Upload Handwritten Prescription'}
+                </h3>
+              </div>
+              <button 
+                type="button"
+                disabled={isUploadingPrescription}
+                onClick={() => setUploadPrescriptionModalAppt(null)} 
+                style={{ background: '#F1F5F9', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: '16px', fontWeight: 'bold' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }} data-lenis-prevent>
+              {/* Patient & Consultation Summary Card */}
+              <div style={{ background: '#F0FDFA', border: '1.5px solid #99F6E4', borderRadius: '12px', padding: '14px 16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                  <div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#0F766E', textTransform: 'uppercase' }}>Patient</div>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#134E4A', marginTop: '1px' }}>
+                      {uploadPrescriptionModalAppt.patientId?.name || 'Walk-in Patient'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#115E59' }}>
+                      {uploadPrescriptionModalAppt.patientId?.gender || ''} • Age: {uploadPrescriptionModalAppt.patientId?.age || '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#0F766E', textTransform: 'uppercase' }}>Doctor</div>
+                    <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#134E4A', marginTop: '1px' }}>
+                      {uploadPrescriptionModalAppt.doctorId?.name || 'Assigned Doctor'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#115E59' }}>
+                      {uploadPrescriptionModalAppt.doctorId?.specialty || 'General Consultation'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#0F766E', textTransform: 'uppercase' }}>Consultation</div>
+                    <div style={{ fontSize: '13.5px', fontWeight: 900, color: '#0D9488', marginTop: '1px' }}>
+                      Token #{uploadPrescriptionModalAppt.tokenNumber || '—'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#115E59' }}>
+                      {uploadPrescriptionModalAppt.time || 'OPD'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Multi-Page Prescription Image Gallery */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <label style={{ fontSize: '12.5px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    Prescription Pages ({prescriptionPages.length})
+                  </label>
+                  <label 
+                    style={{
+                      background: '#0D9488',
+                      color: '#FFFFFF',
+                      padding: '5px 12px',
+                      borderRadius: '6px',
+                      fontSize: '11.5px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      boxShadow: '0 1px 3px rgba(13, 148, 136, 0.2)'
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add Page(s)
+                    <input 
+                      type="file" 
+                      accept="image/png, image/jpeg, image/jpg, image/webp" 
+                      multiple 
+                      style={{ display: 'none' }} 
+                      onChange={handleAddPrescriptionFiles}
+                    />
+                  </label>
+                </div>
+
+                {prescriptionPages.length === 0 ? (
+                  <div 
+                    style={{
+                      border: '2px dashed #CBD5E1',
+                      borderRadius: '12px',
+                      padding: '36px 20px',
+                      textAlign: 'center',
+                      background: '#F8FAFC',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => {
+                      const input = document.getElementById('handwritten-rx-file-input');
+                      if (input) input.click();
+                    }}
+                  >
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.8" style={{ margin: '0 auto 10px auto' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#334155' }}>
+                      Click to select or drag prescription image pages
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#94A3B8', marginTop: '4px' }}>
+                      Supports multiple pages (JPG, PNG, WebP) • Original image data preserved
+                    </div>
+                    <input 
+                      id="handwritten-rx-file-input"
+                      type="file" 
+                      accept="image/png, image/jpeg, image/jpg, image/webp" 
+                      multiple 
+                      style={{ display: 'none' }} 
+                      onChange={handleAddPrescriptionFiles}
+                    />
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {prescriptionPages.map((page, idx) => (
+                      <div 
+                        key={page.id || idx}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          border: '1px solid #E2E8F0',
+                          borderRadius: '10px',
+                          background: '#FFFFFF',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                          <span style={{ fontWeight: 800, fontSize: '12px', color: '#0D9488', minWidth: '55px' }}>
+                            Page {idx + 1}
+                          </span>
+                          <img 
+                            src={page.previewUrl} 
+                            alt={`Page ${idx + 1}`} 
+                            style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #CBD5E1', cursor: 'pointer' }}
+                            onClick={() => setPreviewEnlargedImage({ url: page.previewUrl, title: `Page ${idx + 1} - ${page.originalName}` })}
+                            title="Click to zoom preview"
+                          />
+                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                            <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {page.originalName || `Page_${idx + 1}.jpg`}
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: '#94A3B8' }}>
+                              Order: Position {idx + 1} of {prescriptionPages.length}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Reorder and management controls */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => handleMovePrescriptionPage(idx, idx - 1)}
+                            style={{
+                              padding: '3px 7px',
+                              background: idx === 0 ? '#F1F5F9' : '#FFFFFF',
+                              border: '1px solid #CBD5E1',
+                              borderRadius: '4px',
+                              cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                              color: idx === 0 ? '#CBD5E1' : '#334155',
+                              fontSize: '11px',
+                              fontWeight: 800
+                            }}
+                            title="Move page up"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === prescriptionPages.length - 1}
+                            onClick={() => handleMovePrescriptionPage(idx, idx + 1)}
+                            style={{
+                              padding: '3px 7px',
+                              background: idx === prescriptionPages.length - 1 ? '#F1F5F9' : '#FFFFFF',
+                              border: '1px solid #CBD5E1',
+                              borderRadius: '4px',
+                              cursor: idx === prescriptionPages.length - 1 ? 'not-allowed' : 'pointer',
+                              color: idx === prescriptionPages.length - 1 ? '#CBD5E1' : '#334155',
+                              fontSize: '11px',
+                              fontWeight: 800
+                            }}
+                            title="Move page down"
+                          >
+                            ↓
+                          </button>
+                          <label
+                            style={{
+                              padding: '3px 7px',
+                              background: '#FFFFFF',
+                              border: '1px solid #CBD5E1',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              color: '#334155',
+                              fontSize: '11px',
+                              fontWeight: 700
+                            }}
+                            title="Replace page image"
+                          >
+                            Replace
+                            <input 
+                              type="file" 
+                              accept="image/png, image/jpeg, image/jpg, image/webp" 
+                              style={{ display: 'none' }} 
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  handleReplacePrescriptionPage(idx, e.target.files[0]);
+                                  e.target.value = '';
+                                }
+                              }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePrescriptionPage(idx)}
+                            style={{
+                              padding: '3px 7px',
+                              background: '#FEF2F2',
+                              border: '1px solid #FECACA',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              color: '#DC2626',
+                              fontSize: '11px',
+                              fontWeight: 800
+                            }}
+                            title="Remove page"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Mandatory Medical Record Confirmation Safeguard (Requirement 5) */}
+              <div 
+                style={{
+                  background: isPrescriptionConfirmed ? '#F0FDF4' : '#FFFBEB',
+                  border: isPrescriptionConfirmed ? '1.5px solid #86EFAC' : '1.5px solid #FCD34D',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <input 
+                  type="checkbox"
+                  id="confirm-rx-integrity"
+                  checked={isPrescriptionConfirmed}
+                  onChange={e => setIsPrescriptionConfirmed(e.target.checked)}
+                  style={{ width: '18px', height: '18px', marginTop: '2px', cursor: 'pointer', accentColor: '#0D9488' }}
+                />
+                <label 
+                  htmlFor="confirm-rx-integrity"
+                  style={{ fontSize: '12.5px', color: '#1E293B', cursor: 'pointer', lineHeight: '1.4' }}
+                >
+                  <strong>I confirm this prescription belongs to this patient ({uploadPrescriptionModalAppt.patientId?.name || 'Patient'}).</strong>
+                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                    Required clinical integrity safeguard before saving and completing this appointment.
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', gap: '10px', background: '#F8FAFC' }}>
+              <button
+                type="button"
+                disabled={isUploadingPrescription}
+                onClick={() => setUploadPrescriptionModalAppt(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  background: '#FFFFFF',
+                  color: '#475569',
+                  fontWeight: 700,
+                  fontSize: '12.5px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!isPrescriptionConfirmed || prescriptionPages.length === 0 || isUploadingPrescription}
+                onClick={handleSubmitHandwrittenPrescription}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: (!isPrescriptionConfirmed || prescriptionPages.length === 0 || isUploadingPrescription) ? '#94A3B8' : '#0D9488',
+                  color: '#FFFFFF',
+                  fontWeight: 800,
+                  fontSize: '12.5px',
+                  cursor: (!isPrescriptionConfirmed || prescriptionPages.length === 0 || isUploadingPrescription) ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 8px rgba(13, 148, 136, 0.25)'
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                {isUploadingPrescription ? (isCorrectionMode ? 'Updating...' : 'Saving & Completing...') : (isCorrectionMode ? 'Update Prescription' : 'Save & Complete Appointment')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PHASE 5: CONFIRM NO PRESCRIPTION MODAL */}
+      {noPrescriptionConfirmAppt && (
+        <div 
+          onClick={() => { if (!isResolvingNoPrescription) setNoPrescriptionConfirmAppt(null); }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            style={{ background: 'white', borderRadius: '16px', width: '100%', maxWidth: '480px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', animation: 'slideUp 0.2s ease-out' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900, flexShrink: 0 }}>
+                !
+              </div>
+              <div>
+                <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  Confirm: No Prescription Provided
+                </h3>
+                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                  Offline Doctor Consultation Resolution
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '14px', marginBottom: '16px', fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+              No prescription was provided by the doctor for <strong>{noPrescriptionConfirmAppt.patientId?.name || 'this patient'}</strong> (Token #{noPrescriptionConfirmAppt.tokenNumber || '—'}).
+              <div style={{ marginTop: '6px', fontSize: '12px', color: '#64748B' }}>
+                Are you sure you want to mark this appointment as Completed without a prescription? No prescription record will be created.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                disabled={isResolvingNoPrescription}
+                onClick={() => setNoPrescriptionConfirmAppt(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  background: '#FFFFFF',
+                  color: '#475569',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isResolvingNoPrescription}
+                onClick={handleConfirmNoPrescription}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: '#D97706',
+                  color: '#FFFFFF',
+                  fontWeight: 800,
+                  fontSize: '12px',
+                  cursor: isResolvingNoPrescription ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+              >
+                {isResolvingNoPrescription ? 'Completing...' : 'Confirm Completion (No Rx)'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PHASE 5: VIEW HANDWRITTEN PRESCRIPTION MODAL */}
+      {viewHandwrittenPrescriptionAppt && (
+        <div 
+          onClick={() => setViewHandwrittenPrescriptionAppt(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            style={{ background: 'white', borderRadius: '16px', width: '100%', maxWidth: '620px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden' }}
+          >
+            {(() => {
+              const deadline = viewHandwrittenPrescriptionData?.editableUntil
+                ? new Date(viewHandwrittenPrescriptionData.editableUntil).getTime()
+                : (viewHandwrittenPrescriptionData?.createdAt ? new Date(viewHandwrittenPrescriptionData.createdAt).getTime() + 24 * 60 * 60 * 1000 : 0);
+              const isWithinWindow = deadline > Date.now() && !viewHandwrittenPrescriptionData?.isLocked;
+              const diffMs = Math.max(0, deadline - Date.now());
+              const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+              const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+              return (
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#0D9488', textTransform: 'uppercase' }}>Handwritten Prescription</span>
+                      {viewHandwrittenPrescriptionData && (
+                        <span 
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            background: isWithinWindow ? '#ECFDF5' : '#F1F5F9',
+                            color: isWithinWindow ? '#059669' : '#64748B',
+                            border: isWithinWindow ? '1px solid #A7F3D0' : '1px solid #CBD5E1',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          {isWithinWindow ? (
+                            <>
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                              Editable for {diffHours}h {diffMins}m
+                            </>
+                          ) : (
+                            <>
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                              Correction window expired (Locked)
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: '2px 0 0 0' }}>
+                      {viewHandwrittenPrescriptionAppt.patientId?.name || 'Patient'} • Token #{viewHandwrittenPrescriptionAppt.tokenNumber || '—'}
+                    </h3>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {isWithinWindow && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartCorrection(viewHandwrittenPrescriptionAppt, viewHandwrittenPrescriptionData)}
+                        style={{
+                          background: '#0D9488',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                          fontSize: '11.5px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          boxShadow: '0 1px 3px rgba(13, 148, 136, 0.25)'
+                        }}
+                        title="Correct or reorder prescription pages within the 24-hour edit window"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        Correct Pages
+                      </button>
+                    )}
+                    <button 
+                      type="button"
+                      onClick={() => setViewHandwrittenPrescriptionAppt(null)} 
+                      style={{ background: '#F1F5F9', border: 'none', borderRadius: '8px', width: '30px', height: '30px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontWeight: 'bold' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }} data-lenis-prevent>
+              {viewHandwrittenPrescriptionData?.images && viewHandwrittenPrescriptionData.images.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                  {viewHandwrittenPrescriptionData.images.map((img, idx) => (
+                    <div key={idx} style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden', background: '#F8FAFC' }}>
+                      <div style={{ padding: '8px 10px', fontSize: '11px', fontWeight: 800, color: '#475569', background: '#FFFFFF', borderBottom: '1px solid #E2E8F0' }}>
+                        Page {img.pageNumber || idx + 1}
+                      </div>
+                      <img 
+                        src={img.url} 
+                        alt={`Page ${img.pageNumber || idx + 1}`}
+                        style={{ width: '100%', height: '220px', objectFit: 'contain', cursor: 'pointer', background: '#0F172A' }}
+                        onClick={() => setPreviewEnlargedImage({ url: img.url, title: `Page ${img.pageNumber || idx + 1} - ${img.originalName || ''}` })}
+                        title="Click to view full size"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '30px', color: '#94A3B8', fontSize: '13px' }}>
+                  Loading prescription images...
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PHASE 5: FULL-SIZE LIGHTBOX MODAL */}
+      {previewEnlargedImage && (
+        <div 
+          onClick={() => setPreviewEnlargedImage(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(5px)', zIndex: 99999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '900px', marginBottom: '10px' }}>
+            <span style={{ color: '#FFFFFF', fontSize: '13px', fontWeight: 700 }}>
+              {previewEnlargedImage.title || 'Prescription Page Preview'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPreviewEnlargedImage(null)}
+              style={{ background: '#334155', border: 'none', borderRadius: '6px', color: '#FFFFFF', padding: '6px 12px', fontSize: '13px', fontWeight: 800, cursor: 'pointer' }}
+            >
+              Close (✕)
+            </button>
+          </div>
+          <img 
+            src={previewEnlargedImage.url} 
+            alt="Prescription Full Preview"
+            style={{ maxWidth: '90vw', maxHeight: '82vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}
+            onClick={e => e.stopPropagation()}
+          />
         </div>
       )}
     </>

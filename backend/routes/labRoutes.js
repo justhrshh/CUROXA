@@ -1,9 +1,11 @@
 const express = require('express');
 const LabRequest = require('../models/LabRequest');
 const { verifyToken } = require('../middleware/authMiddleware');
+const { checkDoctorClinicalMode } = require('../middleware/subscriptionMiddleware');
 const router = express.Router();
 
 router.use(verifyToken);
+router.use(checkDoctorClinicalMode);
 
 // Get lab requests (scoped to tenant)
 router.get('/', async (req, res) => {

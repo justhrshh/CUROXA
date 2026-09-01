@@ -200,7 +200,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/patients", checkModule(["reception", "doctor"]), patientRoutes);
 app.use("/api/appointments", checkModule(["reception", "doctor"]), appointmentRoutes);
-app.use("/api/prescriptions", checkModule("doctor"), prescriptionRoutes);
+app.use("/api/prescriptions", checkModule(["doctor", "pharmacy", "reception"]), prescriptionRoutes);
 app.use("/api/labs", checkModule("laboratory"), labRoutes);
 app.use("/api/lab-tests", checkModule("laboratory"), labTestRoutes);
 app.use("/api/lab-inventory", checkModule("laboratory"), labInventoryRoutes);

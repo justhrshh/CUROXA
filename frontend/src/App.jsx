@@ -203,6 +203,7 @@ function App() {
           localStorage.removeItem('user');
           localStorage.removeItem('tenantId');
           localStorage.removeItem('tenantModules');
+          localStorage.removeItem('doctorClinicalMode');
           localStorage.removeItem('curoxa_superadmin_session');
           window.dispatchEvent(new CustomEvent('curoxa_logout'));
           window.location.href = '/login';

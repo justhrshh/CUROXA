@@ -467,7 +467,22 @@ const DoctorDashboard = () => {
     }
   })();
 
-  const [activeTab, setActiveTab] = useState('dash'); // Default to Overview (Daily Command Center) page on login
+  const [doctorClinicalMode, setDoctorClinicalMode] = useState(() => {
+    try {
+      return localStorage.getItem('doctorClinicalMode') || 'ONLINE';
+    } catch (e) {
+      return 'ONLINE';
+    }
+  });
+
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const mode = localStorage.getItem('doctorClinicalMode');
+      return mode === 'OFFLINE' ? 'hr-payroll' : 'dash';
+    } catch (e) {
+      return 'dash';
+    }
+  });
   const [showHomeCalendar, setShowHomeCalendar] = useState(false);
   const [emrSearchQuery, setEmrSearchQuery] = useState('');
   const [emrFilterType, setEmrFilterType] = useState('all');
@@ -550,6 +565,57 @@ const DoctorDashboard = () => {
       clearInterval(pollInterval);
     };
   }, [user.name]);
+
+  // Doctor Clinical Mode synchronization & active session handling
+  useEffect(() => {
+    const fetchTenantMode = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const res = await fetch('/api/auth/tenant-mode', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const mode = data.doctorClinicalMode || 'ONLINE';
+          setDoctorClinicalMode(mode);
+          localStorage.setItem('doctorClinicalMode', mode);
+          if (mode === 'OFFLINE') {
+            setActiveTab(prev => {
+              const clinicalTabs = ['dash', 'appointments', 'consultations', 'patients', 'prescriptions', 'labs', 'patient-profile', 'receptionist_cover', 'lab_cover', 'pharmacy_cover'];
+              return clinicalTabs.includes(prev) ? 'hr-payroll' : prev;
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching tenant mode:', err);
+      }
+    };
+
+    fetchTenantMode();
+
+    const handleSync = (e) => {
+      const detail = e.detail;
+      if (detail && (detail.type === 'subscription' || detail.type === 'hospital_updated')) {
+        fetchTenantMode();
+      }
+    };
+
+    window.addEventListener('curoxa_sync', handleSync);
+    return () => {
+      window.removeEventListener('curoxa_sync', handleSync);
+    };
+  }, []);
+
+  // Direct tab manipulation protection (e.g. via DevTools / console / direct calls)
+  useEffect(() => {
+    if (doctorClinicalMode === 'OFFLINE') {
+      const clinicalTabs = ['appointments', 'consultations', 'patients', 'prescriptions', 'labs', 'patient-profile', 'receptionist_cover', 'lab_cover', 'pharmacy_cover'];
+      if (clinicalTabs.includes(activeTab)) {
+        setActiveTab('offline-hub');
+      }
+    }
+  }, [activeTab, doctorClinicalMode]);
 
   // Notifications states
   const [notifications, setNotifications] = useState([]);
@@ -5211,7 +5277,28 @@ I have scanned the medical reference databases, but couldn't find a direct match
               flexDirection: 'column'
             }}
           >
+            {/* OFFLINE MODE SIDEBAR NOTICE */}
+            {doctorClinicalMode === 'OFFLINE' && (
+              <div style={{
+                margin: '12px 14px',
+                padding: '12px',
+                background: '#FFF7ED',
+                border: '1px solid #FED7AA',
+                borderRadius: '10px',
+                fontSize: '11px',
+                color: '#9A3412',
+                lineHeight: 1.4
+              }}>
+                <div style={{ fontWeight: 800, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#EA580C', display: 'inline-block' }}></span>
+                  CLINICAL MODE OFFLINE
+                </div>
+                Clinical consultation & prescription access is disabled for this hospital. HR & self-service features remain active.
+              </div>
+            )}
+
             {/* SECTION 1: OVERVIEW GROUP */}
+            {doctorClinicalMode !== 'OFFLINE' && (
             <div className="sidebar-group">
               <div className="sidebar-group-title" style={{ color: '#2563EB' }}>
                 <span style={{ fontSize: '13px', lineHeight: 1 }}>•</span> OVERVIEW
@@ -5253,8 +5340,10 @@ I have scanned the medical reference databases, but couldn't find a direct match
                 </div>
               )}
             </div>
+            )}
 
             {/* SECTION 2: CLINICAL MANAGEMENT ZONE (Tinted Teal Card) */}
+            {doctorClinicalMode !== 'OFFLINE' && (
             <div className={`sidebar-zone sidebar-zone-clinic ${!sectionOpen.management ? 'collapsed' : ''}`}>
               <div 
                 className={`sidebar-group-title ${!sectionOpen.management ? 'collapsed' : ''}`}
@@ -5328,6 +5417,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
                 </>
               )}
             </div>
+            )}
 
             {/* SECTION 3: TOOLS ZONE (Tinted Peach/Orange Card) */}
             <div className={`sidebar-zone sidebar-zone-finance ${!sectionOpen.tools ? 'collapsed' : ''}`}>
@@ -5370,7 +5460,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
             </div>
 
             {/* SECTION 4: DYNAMIC COVERAGE INTEGRATION LINKS */}
-            {((Object.keys(coverageState || {}).some(k => k.startsWith('rc-') && coverageState[k]?.on)) && tenantModules.reception?.enabled !== false ||
+            {doctorClinicalMode !== 'OFFLINE' && ((Object.keys(coverageState || {}).some(k => k.startsWith('rc-') && coverageState[k]?.on)) && tenantModules.reception?.enabled !== false ||
               (Object.keys(coverageState || {}).some(k => k.startsWith('lt-') && coverageState[k]?.on)) && tenantModules.laboratory?.enabled !== false ||
               (Object.keys(coverageState || {}).some(k => (k.startsWith('ph-') || k === 'dr-stockview') && coverageState[k]?.on)) && tenantModules.pharmacy?.enabled !== false) && (
               <div className="sidebar-group" style={{ marginTop: '10px' }}>
@@ -5741,15 +5831,87 @@ I have scanned the medical reference databases, but couldn't find a direct match
 
       <div className={"main-content " + (activeTab === 'hr-payroll' ? "fullscreen-portal" : (isSidebarCollapsed ? "collapsed" : ""))} data-lenis-prevent>
         
+        {/* DOCTOR CLINICAL MODE OFFLINE NOTICE GUARD */}
+        {doctorClinicalMode === 'OFFLINE' && activeTab !== 'hr-payroll' && activeTab !== 'settings' && (
+          <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', padding: '40px 24px' }}>
+            <div style={{
+              maxWidth: '620px',
+              margin: '40px auto',
+              background: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #FED7AA',
+              boxShadow: '0 10px 25px rgba(234, 88, 12, 0.08)',
+              padding: '36px 32px',
+              textAlign: 'center'
+            }}>
+              <div style={{
+                width: '60px',
+                height: '60px',
+                borderRadius: '16px',
+                background: '#FFF7ED',
+                color: '#EA580C',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '20px',
+                border: '1px solid #FED7AA'
+              }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              </div>
+              <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', marginBottom: '10px' }}>
+                Doctor Clinical Mode is currently OFFLINE for this hospital.
+              </h2>
+              <p style={{ fontSize: '13.5px', color: '#64748B', lineHeight: 1.6, marginBottom: '24px' }}>
+                Clinical consultations and prescriptions are being handled through the hospital's offline workflow.
+              </p>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('hr-payroll')}
+                  style={{
+                    padding: '10px 20px',
+                    background: '#2563EB',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)'
+                  }}
+                >
+                  Open HR & Self-Service
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('settings')}
+                  style={{
+                    padding: '10px 20px',
+                    background: '#F8FAFC',
+                    color: '#475569',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Doctor Profile & Settings
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TAB: HR PAYROLL PORTAL */}
         {activeTab === 'hr-payroll' && (
           <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', padding: 0 }}>
-            <HRPayroll onExit={() => setActiveTab('consultations')} />
+            <HRPayroll onExit={() => setActiveTab(doctorClinicalMode === 'OFFLINE' ? 'offline-hub' : 'consultations')} />
           </div>
         )}
 
         {/* TAB: RECEPTIONIST DYNAMIC COVERAGE */}
-        {activeTab === 'receptionist_cover' && (
+        {activeTab === 'receptionist_cover' && doctorClinicalMode !== 'OFFLINE' && (
           <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
               <div>
@@ -6171,7 +6333,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
         )}
 
         {/* TAB: LAB DYNAMIC COVERAGE */}
-        {activeTab === 'lab_cover' && (
+        {activeTab === 'lab_cover' && doctorClinicalMode !== 'OFFLINE' && (
           <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
               <div>
@@ -6348,7 +6510,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
         )}
 
         {/* TAB: PHARMACY DYNAMIC COVERAGE */}
-        {activeTab === 'pharmacy_cover' && (
+        {activeTab === 'pharmacy_cover' && doctorClinicalMode !== 'OFFLINE' && (
           <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
               <div>
@@ -6494,7 +6656,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
             )}
           </div>
         )}
-        {activeTab === 'dash' && (() => {
+        {activeTab === 'dash' && doctorClinicalMode !== 'OFFLINE' && (() => {
           const selectedDateStr = formatDateString(selectedDate);
           
           // Calculate KPI metrics relative to selected date
@@ -7478,7 +7640,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
         })()}
 
         {/* TAB 2: APPOINTMENTS */}
-        {activeTab === 'appointments' && (() => {
+        {activeTab === 'appointments' && doctorClinicalMode !== 'OFFLINE' && (() => {
           // 1. Get combined array of MongoDB + mock seed records
           const rawList = getAllAppointmentsForList();
           
@@ -8045,7 +8207,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
         })()}
 
         {/* TAB 3: CONSULTATIONS & PATIENTS */}
-        {(activeTab === 'consultations' || activeTab === 'patients') && (() => {
+        {(activeTab === 'consultations' || activeTab === 'patients') && doctorClinicalMode !== 'OFFLINE' && (() => {
           // 1. Get filtered list of patients based on search & drop downs
           let filtered = patients.filter(pt => {
             // Search text
@@ -8638,7 +8800,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
         })()}
 
         {/* TAB 4: SMART PRESCRIPTION MAKER */}
-        {activeTab === 'prescriptions' && (
+        {activeTab === 'prescriptions' && doctorClinicalMode !== 'OFFLINE' && (
           selectedPatient ? (
             <PrescriptionMakerTab
               selectedPatient={selectedPatient}
@@ -8785,7 +8947,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
         )}
 
         {/* TAB 5: LAB REPORTS */}
-        {activeTab === 'labs' && (() => {
+        {activeTab === 'labs' && doctorClinicalMode !== 'OFFLINE' && (() => {
           const mappedReports = allLabs.map(l => {
             const patientName = l.patientId?.name || 'N/A';
             const initials = patientName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || '--';
@@ -9606,7 +9768,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
         )}
 
         {/* TAB: PATIENT PROFILE VIEW */}
-        {activeTab === 'patient-profile' && selectedPatient && (
+        {activeTab === 'patient-profile' && selectedPatient && doctorClinicalMode !== 'OFFLINE' && (
           <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', padding: '24px' }}>
             <div className="patient-profile-title-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
               <div>
@@ -12824,10 +12986,19 @@ I have scanned the medical reference databases, but couldn't find a direct match
 
       {/* Collapsible Mobile Navigation drawer support */}
       <div className="mobile-bottom-nav">
-        <div className={`mob-nav-item ${activeTab === 'dash' ? 'active' : ''}`} onClick={() => setActiveTab('dash')}><i data-lucide="layout-grid"></i><span>Home</span></div>
-        <div className={`mob-nav-item ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => setActiveTab('appointments')}><i data-lucide="calendar"></i><span>Apps</span></div>
-        <div className={`mob-nav-item ${activeTab === 'patients' ? 'active' : ''}`} onClick={() => setActiveTab('patients')}><i data-lucide="users"></i><span>Patients</span></div>
-        <div className={`mob-nav-item ${activeTab === 'prescriptions' ? 'active' : ''}`} onClick={() => setActiveTab('prescriptions')}><i data-lucide="pill"></i><span>Rx Maker</span></div>
+        {doctorClinicalMode !== 'OFFLINE' ? (
+          <>
+            <div className={`mob-nav-item ${activeTab === 'dash' ? 'active' : ''}`} onClick={() => setActiveTab('dash')}><i data-lucide="layout-grid"></i><span>Home</span></div>
+            <div className={`mob-nav-item ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => setActiveTab('appointments')}><i data-lucide="calendar"></i><span>Apps</span></div>
+            <div className={`mob-nav-item ${activeTab === 'patients' ? 'active' : ''}`} onClick={() => setActiveTab('patients')}><i data-lucide="users"></i><span>Patients</span></div>
+            <div className={`mob-nav-item ${activeTab === 'prescriptions' ? 'active' : ''}`} onClick={() => setActiveTab('prescriptions')}><i data-lucide="pill"></i><span>Rx Maker</span></div>
+          </>
+        ) : (
+          <>
+            <div className={`mob-nav-item ${activeTab === 'hr-payroll' ? 'active' : ''}`} onClick={() => setActiveTab('hr-payroll')}><i data-lucide="file-text"></i><span>HR & Leaves</span></div>
+            <div className={`mob-nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}><i data-lucide="settings"></i><span>Profile</span></div>
+          </>
+        )}
       </div>
 
       {showCoveragePharmacyPaymentModal && selectedCoveragePharmacyRx && (

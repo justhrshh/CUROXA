@@ -25,6 +25,22 @@ router.get("/ping", (req, res) => {
   res.json({ status: "ok", message: "Curoxa Backend is awake" });
 });
 
+// Authoritative tenant mode check for active session synchronization
+router.get("/tenant-mode", verifyToken, async (req, res) => {
+  try {
+    const SuperAdminHospital = require("../models/SuperAdminHospital");
+    const tenantId = req.tenantId || (req.user && req.user.tenantId) || 'city_hospital';
+    const hospital = await SuperAdminHospital.findOne({ code: tenantId });
+    res.json({
+      tenantId,
+      doctorClinicalMode: hospital?.doctorClinicalMode || 'ONLINE',
+      modules: hospital?.modules || {}
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Secure diagnostic endpoint for database connection and basic user stats
 router.get("/diagnostic", async (req, res) => {
   try {
@@ -236,6 +252,7 @@ router.post("/login", tenantMiddleware, async (req, res) => {
         createdAt: user.createdAt,
       },
       tenantModules,
+      doctorClinicalMode: hospital?.doctorClinicalMode || 'ONLINE',
       plan: hospital ? hospital.plan : null
     });
   } catch (err) {
@@ -433,6 +450,7 @@ router.post("/google-login", tenantMiddleware, async (req, res) => {
           createdAt: user.createdAt,
         },
         tenantModules,
+        doctorClinicalMode: hospital?.doctorClinicalMode || 'ONLINE',
         plan: hospital ? hospital.plan : null
       });
     }
@@ -1885,6 +1903,8 @@ router.post('/patient-portal/verify-otp', async (req, res) => {
         id: targetId,
         userId: user._id,
         staff_id: user.staff_id || (patientDoc ? patientDoc.contact : input),
+        email: user.email || (patientDoc ? patientDoc.email : (isEmail ? input : '')),
+        phone: user.phone || (patientDoc ? patientDoc.contact : (!isEmail ? input : '')),
         role: 'patient',
         actualStaffRole: user.role,
         tenantId: user.tenantId || (patientDoc ? patientDoc.tenantId : 'city_hospital')

@@ -2,10 +2,12 @@ const express = require('express');
 const Patient = require('../models/Patient');
 const User = require('../models/User');
 const { verifyToken } = require('../middleware/authMiddleware');
+const { checkDoctorClinicalMode } = require('../middleware/subscriptionMiddleware');
 const { isPatientProfileComplete } = require('../utils/patientProfileHelper');
 const router = express.Router();
 
 router.use(verifyToken);
+router.use(checkDoctorClinicalMode);
 
 // Get all patients (scoped to tenant)
 router.get('/', async (req, res) => {

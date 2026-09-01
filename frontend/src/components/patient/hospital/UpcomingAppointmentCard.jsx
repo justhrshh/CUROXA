@@ -64,7 +64,7 @@ const UpcomingAppointmentCard = ({
       ? 'Today'
       : new Date(upcomingAppt.date).toLocaleDateString([], { month: 'short', day: 'numeric' })
     : 'Today';
-  const tokenNum = upcomingAppt.tokenNumber ?? (upcomingAppt.queueNumber ?? 31);
+  const tokenNum = upcomingAppt.tokenNumber || null;
 
   return (
     <div
@@ -126,20 +126,55 @@ const UpcomingAppointmentCard = ({
               {specialty}
             </div>
             <div>
-              <span
-                style={{
-                  display: 'inline-block',
-                  background: '#DCFCE7',
-                  color: '#15803D',
-                  border: '1px solid #BBF7D0',
-                  padding: '2px 10px',
-                  borderRadius: '99px',
-                  fontSize: '11px',
-                  fontWeight: 800
-                }}
-              >
-                Token #{tokenNum}
-              </span>
+              {tokenNum ? (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      background: '#DCFCE7',
+                      color: '#15803D',
+                      border: '1px solid #BBF7D0',
+                      padding: '2px 10px',
+                      borderRadius: '99px',
+                      fontSize: '11px',
+                      fontWeight: 800
+                    }}
+                  >
+                    Token #{tokenNum}
+                  </span>
+                  {upcomingAppt.status === 'Prescription Pending' && (
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        background: '#FEF3C7',
+                        color: '#B45309',
+                        border: '1px solid #FDE68A',
+                        padding: '2px 8px',
+                        borderRadius: '99px',
+                        fontSize: '10.5px',
+                        fontWeight: 800
+                      }}
+                    >
+                      Rx Pending
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span
+                  style={{
+                    display: 'inline-block',
+                    background: '#F1F5F9',
+                    color: '#64748B',
+                    border: '1px solid #E2E8F0',
+                    padding: '2px 10px',
+                    borderRadius: '99px',
+                    fontSize: '11px',
+                    fontWeight: 700
+                  }}
+                >
+                  Not Checked In
+                </span>
+              )}
             </div>
           </div>
 

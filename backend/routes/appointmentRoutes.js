@@ -4,11 +4,11 @@ const Appointment = require('../models/Appointment');
 const Patient = require('../models/Patient');
 const User = require('../models/User');
 const { verifyToken } = require('../middleware/authMiddleware');
+const { checkDoctorClinicalMode } = require('../middleware/subscriptionMiddleware');
 const router = express.Router();
 
-
-
 router.use(verifyToken);
+router.use(checkDoctorClinicalMode);
 
 // Get all appointments (optionally filter by doctorId or patientId, scoped to tenant)
 router.get('/', async (req, res) => {
@@ -20,7 +20,8 @@ router.get('/', async (req, res) => {
       await Appointment.updateMany(
         {
           date: { $lt: startOfToday },
-          status: { $nin: ['Completed', 'Cancelled'] }
+          tokenNumber: null,
+          status: { $nin: ['Completed', 'Cancelled', 'Prescription Pending'] }
         },
         {
           $set: {
@@ -38,9 +39,24 @@ router.get('/', async (req, res) => {
     
     // Cross-tenant patient scope: if requesting user is patient, find all their appointments across all registered patient and user records
     if (req.user && req.user.role === 'patient') {
+      let userPhone = req.user.phone;
+      let userEmail = req.user.email;
+
+      // Safe database fallback for already-issued JWTs that omitted email or phone
+      if ((!userEmail || !userPhone) && (req.user.userId || req.user.id)) {
+        try {
+          const fallbackUser = await User.findById(req.user.userId || req.user.id).select('email phone').lean();
+          if (fallbackUser) {
+            userEmail = userEmail || fallbackUser.email;
+            userPhone = userPhone || fallbackUser.phone;
+          }
+        } catch (dbErr) {
+          console.warn('[APPOINTMENTS] User fallback lookup warning:', dbErr.message);
+        }
+      }
+
       const phoneRaw = req.user.staff_id ? req.user.staff_id.split('_')[0] : null;
-      const userPhone = req.user.phone || phoneRaw;
-      const userEmail = req.user.email;
+      userPhone = userPhone || phoneRaw;
 
       // 1. Find all related user IDs for this patient across tenants (matching email or phone)
       const orConditionsUser = [];
@@ -626,13 +642,29 @@ router.post('/:id/check-in', async (req, res) => {
     appointment.tokenDoctorId = tokenResult.tokenDoctorId;
     appointment.tokenSlotId = tokenResult.tokenSlotId;
     appointment.tokenAssignedAt = tokenResult.tokenAssignedAt;
-    appointment.queueStatus = 'Waiting';
 
-    if (appointment.status !== 'Completed' && appointment.status !== 'Cancelled') {
+    // Determine if this newly checked-in token is the active currentToken for this doctor
+    const DoctorQueue = require('../models/DoctorQueue');
+    const queueDoc = await DoctorQueue.findOne({
+      tenantId: String(resolvedTenant).trim().toLowerCase(),
+      doctorId: appointment.doctorId,
+      date: tokenResult.tokenDate
+    });
+
+    const isCurrentActive = queueDoc && queueDoc.currentToken === tokenResult.tokenNumber;
+
+    if (isCurrentActive) {
       appointment.status = 'In Progress';
+      appointment.queueStatus = 'Serving';
+    } else {
+      appointment.status = 'Waiting';
+      appointment.queueStatus = 'Waiting';
     }
 
     await appointment.save();
+
+    const { syncDoctorQueueState } = require('../utils/queueEngine');
+    await syncDoctorQueueState(resolvedTenant, appointment.doctorId, tokenResult.tokenDate);
 
     const io = req.app.get("io");
     if (io) {
@@ -673,7 +705,21 @@ router.post('/:id/complete-consultation', async (req, res) => {
       return res.status(400).json({ error: 'Appointment does not have an assigned doctor' });
     }
 
-    const { advanceDoctorQueue } = require('../utils/queueEngine');
+    const { normalizeDateString, advanceDoctorQueue } = require('../utils/queueEngine');
+    const dateStr = appointment.tokenDate || normalizeDateString(appointment.date);
+    const DoctorQueue = require('../models/DoctorQueue');
+    const queueDoc = await DoctorQueue.findOne({
+      tenantId: resolvedTenant,
+      doctorId,
+      date: dateStr
+    });
+
+    const activeCurrentToken = queueDoc ? queueDoc.currentToken : null;
+    if (activeCurrentToken === null || appointment.tokenNumber !== activeCurrentToken) {
+      return res.status(400).json({
+        error: `Cannot complete consultation for Token #${appointment.tokenNumber}. Doctor's currently active consultation is Token #${activeCurrentToken || 'None'}.`
+      });
+    }
 
     const result = await advanceDoctorQueue({
       tenantId: resolvedTenant,
@@ -705,6 +751,609 @@ router.post('/:id/complete-consultation', async (req, res) => {
   } catch (error) {
     console.error("Complete consultation error:", error);
     res.status(400).json({ error: error.message || 'Failed to complete consultation' });
+  }
+});
+
+// Receptionist records that the physical doctor consultation has finished in offline mode
+router.post('/:id/finish-consultation', async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const resolvedTenant = String(req.tenantId || appointment.tenantId || 'city_hospital').trim().toLowerCase();
+    
+    // Server-side authorization check: Only reception or admin role
+    const userRole = req.user?.role;
+    if (userRole !== 'reception' && userRole !== 'receptionist' && userRole !== 'admin') {
+      return res.status(403).json({ error: 'Only Receptionist or Admin can record consultation completion in offline mode' });
+    }
+
+    // Verify hospital Doctor Clinical Mode is OFFLINE
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+    const hospital = await SuperAdminHospital.findOne({ code: resolvedTenant });
+    if (!hospital || hospital.doctorClinicalMode !== 'OFFLINE') {
+      return res.status(400).json({ error: 'Consultation Finished action is only available when Doctor Clinical Mode is OFFLINE' });
+    }
+
+    const doctorId = appointment.doctorId;
+    if (!doctorId) {
+      return res.status(400).json({ error: 'Appointment does not have an assigned doctor' });
+    }
+
+    // Idempotency check: If already marked Prescription Pending
+    if (appointment.status === 'Prescription Pending') {
+      return res.json({
+        success: true,
+        alreadyFinished: true,
+        message: 'Consultation already marked as finished (Prescription Pending).',
+        appointment
+      });
+    }
+
+    if (appointment.status === 'Completed' || appointment.status === 'Cancelled') {
+      return res.status(400).json({ error: `Cannot finish consultation for appointment in ${appointment.status} status` });
+    }
+
+    // Must have checked in and been part of the live queue
+    if (appointment.tokenNumber === null || appointment.tokenNumber === undefined) {
+      return res.status(400).json({ error: 'Cannot finish consultation for an appointment that has not checked in' });
+    }
+
+    // Verify that this appointment is the doctor's currently active consultation (appointment.tokenNumber === currentToken)
+    const { normalizeDateString, advanceDoctorQueue } = require('../utils/queueEngine');
+    const dateStr = appointment.tokenDate || normalizeDateString(appointment.date);
+    const DoctorQueue = require('../models/DoctorQueue');
+    const queueDoc = await DoctorQueue.findOne({
+      tenantId: resolvedTenant,
+      doctorId,
+      date: dateStr
+    });
+
+    const activeCurrentToken = queueDoc ? queueDoc.currentToken : null;
+    if (activeCurrentToken === null || appointment.tokenNumber !== activeCurrentToken) {
+      return res.status(400).json({
+        error: `Cannot finish consultation for Token #${appointment.tokenNumber}. Doctor's currently active consultation is Token #${activeCurrentToken || 'None'}.`
+      });
+    }
+
+    const result = await advanceDoctorQueue({
+      tenantId: resolvedTenant,
+      doctorId,
+      appointmentId: appointment._id,
+      targetStatus: 'Prescription Pending'
+    });
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(resolvedTenant).emit("data_changed", {
+        type: "appointments",
+        subType: "doctor_queue",
+        action: "queue_advanced",
+        doctorId,
+        date: result.queueState.date,
+        currentToken: result.queueState.currentToken,
+        currentAppointmentId: result.queueState.currentAppointmentId,
+        nextToken: result.queueState.nextToken,
+        waitingCount: result.queueState.waitingCount
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Physical consultation finished. Appointment is now Prescription Pending.',
+      appointment: result.completedAppointment,
+      queue: result.queueState
+    });
+  } catch (error) {
+    console.error("Finish consultation error:", error);
+    res.status(400).json({ error: error.message || 'Failed to finish consultation' });
+  }
+});
+
+// Multer storage for offline handwritten prescription pages
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const prescriptionImageStorage = multer.memoryStorage();
+const uploadPrescriptionImage = multer({
+  storage: prescriptionImageStorage,
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit per image
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype && file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files (JPG, PNG, WebP) are allowed. PDF or documents are not supported.'));
+    }
+  }
+});
+
+// Upload handwritten prescription page image (offline doctor clinical mode)
+router.post('/upload-prescription-image', (req, res, next) => {
+  uploadPrescriptionImage.single('prescriptionPage')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Prescription image upload failed' });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const userRole = req.user?.role;
+    if (userRole !== 'reception' && userRole !== 'receptionist' && userRole !== 'admin') {
+      return res.status(403).json({ error: 'Only Receptionist or Admin can upload handwritten prescription images' });
+    }
+
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+    const resolvedTenant = String(req.tenantId || 'city_hospital').trim().toLowerCase();
+    const hospital = await SuperAdminHospital.findOne({ code: resolvedTenant });
+    if (!hospital || hospital.doctorClinicalMode !== 'OFFLINE') {
+      return res.status(400).json({ error: 'Handwritten prescription upload is only available in OFFLINE mode' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No prescription image file uploaded' });
+    }
+
+    const uploadsDir = path.join(__dirname, '../uploads/prescriptions');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+    const safeFileName = `${resolvedTenant}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
+    const targetPath = path.join(uploadsDir, safeFileName);
+    fs.writeFileSync(targetPath, req.file.buffer);
+
+    const fileUrl = `/uploads/prescriptions/${safeFileName}`;
+    res.json({
+      success: true,
+      url: fileUrl,
+      originalName: req.file.originalname
+    });
+  } catch (err) {
+    console.error('Upload prescription image error:', err);
+    res.status(500).json({ error: err.message || 'Failed to upload prescription image' });
+  }
+});
+
+// Record offline handwritten prescription and transition appointment from Prescription Pending to Completed
+router.post('/:id/offline-prescription', async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const resolvedTenant = String(req.tenantId || appointment.tenantId || 'city_hospital').trim().toLowerCase();
+    if (String(appointment.tenantId).trim().toLowerCase() !== resolvedTenant) {
+      return res.status(403).json({ error: 'Tenant mismatch: access denied' });
+    }
+
+    // Server-side authorization check: Only reception or admin role
+    const userRole = req.user?.role;
+    if (userRole !== 'reception' && userRole !== 'receptionist' && userRole !== 'admin') {
+      return res.status(403).json({ error: 'Only Receptionist or Admin can record offline prescriptions' });
+    }
+
+    // Verify hospital Doctor Clinical Mode is OFFLINE
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+    const hospital = await SuperAdminHospital.findOne({ code: resolvedTenant });
+    if (!hospital || hospital.doctorClinicalMode !== 'OFFLINE') {
+      return res.status(400).json({ error: 'Offline prescription upload is only available when Doctor Clinical Mode is OFFLINE' });
+    }
+
+    // Mutual exclusivity check: Cannot upload if already marked as No Prescription Provided
+    if (appointment.noPrescriptionProvided) {
+      return res.status(400).json({ error: 'This appointment was already marked as No Prescription Provided' });
+    }
+
+    // Idempotency: Check if prescription already exists for this appointment
+    const Prescription = require('../models/Prescription');
+    const existingRx = await Prescription.findOne({
+      tenantId: resolvedTenant,
+      appointmentId: appointment._id
+    });
+
+    if (existingRx) {
+      if (appointment.status !== 'Completed') {
+        appointment.status = 'Completed';
+        await appointment.save();
+      }
+      return res.json({
+        success: true,
+        alreadyCreated: true,
+        message: 'Prescription already created for this appointment.',
+        prescription: existingRx,
+        appointment
+      });
+    }
+
+    // Appointment must be in Prescription Pending state
+    if (appointment.status !== 'Prescription Pending') {
+      return res.status(400).json({ error: `Cannot upload prescription for appointment in ${appointment.status} status. Must be Prescription Pending.` });
+    }
+
+    const rawImages = Array.isArray(req.body.images) ? req.body.images : [];
+    if (rawImages.length === 0) {
+      return res.status(400).json({ error: 'At least one prescription image page is required' });
+    }
+
+    // Process and normalize image pages in requested order
+    const uploadsDir = path.join(__dirname, '../uploads/prescriptions');
+    const normalizedImages = rawImages.map((img, idx) => {
+      let fileUrl = img.url;
+      // Convert base64 data URL to static file if provided
+      if (fileUrl && fileUrl.startsWith('data:image/')) {
+        try {
+          const matches = fileUrl.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+          if (matches) {
+            const ext = matches[1] === 'jpeg' ? '.jpg' : `.${matches[1]}`;
+            if (!fs.existsSync(uploadsDir)) {
+              fs.mkdirSync(uploadsDir, { recursive: true });
+            }
+            const safeName = `${resolvedTenant}_${Date.now()}_page${idx + 1}_${Math.random().toString(36).substring(2, 6)}${ext}`;
+            fs.writeFileSync(path.join(uploadsDir, safeName), Buffer.from(matches[2], 'base64'));
+            fileUrl = `/uploads/prescriptions/${safeName}`;
+          }
+        } catch (e) {
+          console.warn('Could not save base64 data URL to file:', e);
+        }
+      }
+      return {
+        pageNumber: idx + 1,
+        url: fileUrl,
+        originalName: img.originalName || `Page_${idx + 1}.jpg`,
+        uploadedAt: img.uploadedAt || new Date()
+      };
+    });
+
+    // Create the ONE Prescription document
+    const prescription = await Prescription.create({
+      tenantId: resolvedTenant,
+      appointmentId: appointment._id,
+      patientId: appointment.patientId,
+      doctorId: appointment.doctorId,
+      items: [], // Zero digital/fabricated items for handwritten prescription
+      status: 'Pending Pharmacy Dispatch',
+      prescriptionType: 'offline_handwritten',
+      images: normalizedImages,
+      editableUntil: new Date(Date.now() + 24 * 60 * 60 * 1000), // Phase 6: 24-hour edit window
+      isLocked: false,
+      offlineMetadata: {
+        uploadedBy: req.user._id || req.user.id,
+        uploadedByRole: req.user.role,
+        notes: req.body.notes || 'Offline handwritten prescription uploaded by Reception'
+      }
+    });
+
+    // Mark appointment as Completed ONLY after prescription is successfully persisted
+    appointment.status = 'Completed';
+    await appointment.save();
+
+    // Central AuditLog entry for initial creation (Phase 6 Requirement 1, 12)
+    const AuditLog = require('../models/AuditLog');
+    AuditLog.create({
+      tenantId: resolvedTenant,
+      actor: req.user.staff_id || req.user.id || req.user._id?.toString() || 'reception',
+      actorName: req.user.name || 'Reception Staff',
+      actorRole: req.user.role || 'reception',
+      action: 'PRESCRIPTION_CREATED',
+      target: prescription._id.toString(),
+      metadata: {
+        prescriptionId: prescription._id.toString(),
+        appointmentId: appointment._id.toString(),
+        patientId: appointment.patientId.toString(),
+        doctorId: appointment.doctorId?.toString(),
+        pageCount: normalizedImages.length,
+        editableUntil: prescription.editableUntil
+      }
+    }).catch(err => console.warn('AuditLog creation non-fatal error:', err));
+
+    // Emit Socket.IO real-time event
+    const io = req.app.get("io");
+    if (io) {
+      io.to(resolvedTenant).emit("data_changed", {
+        type: "prescriptions",
+        subType: "offline_handwritten",
+        action: "prescription_created",
+        appointmentId: appointment._id,
+        prescriptionId: prescription._id
+      });
+      io.to(resolvedTenant).emit("data_changed", {
+        type: "appointments",
+        action: "appointment_completed",
+        appointmentId: appointment._id
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Handwritten prescription uploaded and appointment completed successfully.',
+      prescription,
+      appointment
+    });
+  } catch (error) {
+    console.error("Offline prescription upload error:", error);
+    res.status(400).json({ error: error.message || 'Failed to record offline prescription' });
+  }
+});
+
+// PUT /api/appointments/:id/offline-prescription
+// PHASE 6: 24-Hour Edit Window & Audited Corrections for Handwritten Prescriptions
+router.put('/:id/offline-prescription', verifyToken, async (req, res) => {
+  try {
+    const resolvedTenant = req.tenantId || req.user?.tenantId;
+    if (!resolvedTenant) {
+      return res.status(400).json({ error: 'Tenant context is required' });
+    }
+
+    // Role check: ONLY reception / receptionist can perform corrections (Requirement 6)
+    const userRole = req.user?.role;
+    if (userRole !== 'reception' && userRole !== 'receptionist') {
+      return res.status(403).json({ 
+        error: 'FORBIDDEN_ROLE', 
+        message: 'Only Reception can submit handwritten prescription corrections.' 
+      });
+    }
+
+    // Load authoritative appointment
+    const appointment = await Appointment.findOne({
+      _id: req.params.id,
+      tenantId: resolvedTenant
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Find authoritative prescription
+    const Prescription = require('../models/Prescription');
+    const prescription = await Prescription.findOne({
+      appointmentId: appointment._id,
+      tenantId: resolvedTenant
+    });
+
+    if (!prescription) {
+      return res.status(404).json({ error: 'No prescription found for this appointment' });
+    }
+
+    // Invariant: applies ONLY to offline_handwritten prescriptions (Requirement 20)
+    if (prescription.prescriptionType !== 'offline_handwritten') {
+      return res.status(400).json({ 
+        error: 'INVALID_PRESCRIPTION_TYPE', 
+        message: 'Only offline handwritten prescriptions can be corrected via this endpoint.' 
+      });
+    }
+
+    // 24-Hour Edit Window Check (Server-authoritative, Requirement 2, 3, 4)
+    const now = Date.now();
+    const deadline = prescription.editableUntil 
+      ? new Date(prescription.editableUntil).getTime() 
+      : new Date(prescription.createdAt).getTime() + 24 * 60 * 60 * 1000;
+
+    if (now >= deadline || prescription.isLocked) {
+      return res.status(403).json({
+        error: 'PRESCRIPTION_EDIT_WINDOW_EXPIRED',
+        message: 'The 24-hour correction window for this prescription has expired.'
+      });
+    }
+
+    // Minimum 1 page invariant (Requirement 18)
+    const rawImages = Array.isArray(req.body.images) ? req.body.images : [];
+    if (rawImages.length === 0) {
+      return res.status(400).json({
+        error: 'EMPTY_PRESCRIPTION',
+        message: 'A handwritten prescription must contain at least one page.'
+      });
+    }
+
+    // Normalize image set with sequential 1-based page numbers
+    const uploadsDir = path.join(__dirname, '../uploads/prescriptions');
+    const normalizedImages = rawImages.map((img, idx) => {
+      let fileUrl = img.url;
+      if (fileUrl && fileUrl.startsWith('data:image/')) {
+        try {
+          const matches = fileUrl.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+          if (matches) {
+            const ext = matches[1] === 'jpeg' ? '.jpg' : `.${matches[1]}`;
+            if (!fs.existsSync(uploadsDir)) {
+              fs.mkdirSync(uploadsDir, { recursive: true });
+            }
+            const safeName = `${resolvedTenant}_${Date.now()}_page${idx + 1}_${Math.random().toString(36).substring(2, 6)}${ext}`;
+            const targetPath = path.join(uploadsDir, safeName);
+            fs.writeFileSync(targetPath, Buffer.from(matches[2], 'base64'));
+            fileUrl = `/uploads/prescriptions/${safeName}`;
+          }
+        } catch (e) {
+          console.warn('Could not save base64 data URL to file:', e);
+        }
+      }
+      return {
+        pageNumber: idx + 1,
+        url: fileUrl,
+        originalName: img.originalName || `Page_${idx + 1}.jpg`,
+        uploadedAt: img.uploadedAt || new Date()
+      };
+    });
+
+    // Capture previous state for audit (Requirement 9, 11)
+    const previousImages = (prescription.images || []).map(img => ({
+      pageNumber: img.pageNumber,
+      url: img.url,
+      originalName: img.originalName
+    }));
+
+    // Detect semantic action (Requirement 11, 14, 15, 16, 17)
+    let detectedAction = req.body.actionType;
+    if (!detectedAction || !['PAGE_ADDED', 'PAGE_REMOVED', 'PAGE_REPLACED', 'PAGES_REORDERED'].includes(detectedAction)) {
+      const prevUrls = previousImages.map(img => img.url);
+      const newUrls = normalizedImages.map(img => img.url);
+      if (newUrls.length < prevUrls.length) {
+        detectedAction = 'PAGE_REMOVED';
+      } else if (newUrls.length > prevUrls.length) {
+        detectedAction = 'PAGE_ADDED';
+      } else {
+        const prevSet = new Set(prevUrls);
+        const allPresent = newUrls.every(u => prevSet.has(u));
+        if (allPresent) {
+          detectedAction = 'PAGES_REORDERED';
+        } else {
+          detectedAction = 'PAGE_REPLACED';
+        }
+      }
+    }
+
+    const actorId = req.user.staff_id || req.user.id || req.user._id?.toString() || 'reception';
+    const actorName = req.user.name || 'Reception Staff';
+    const actorRole = req.user.role || 'reception';
+
+    // Record in central AuditLog (Requirement 1, 11)
+    const AuditLog = require('../models/AuditLog');
+    await AuditLog.create({
+      tenantId: resolvedTenant,
+      actor: actorId,
+      actorName: actorName,
+      actorRole: actorRole,
+      action: detectedAction,
+      target: prescription._id.toString(),
+      metadata: {
+        prescriptionId: prescription._id.toString(),
+        appointmentId: appointment._id.toString(),
+        patientId: appointment.patientId.toString(),
+        doctorId: appointment.doctorId?.toString(),
+        action: detectedAction,
+        affectedPage: req.body.affectedPage || null,
+        previousState: { images: previousImages },
+        resultingState: { images: normalizedImages },
+        notes: req.body.notes || `Prescription pages updated via ${detectedAction}`
+      }
+    });
+
+    // Record in prescription's embedded correctionHistory (Requirement 9, 11)
+    if (!prescription.correctionHistory) prescription.correctionHistory = [];
+    prescription.correctionHistory.push({
+      action: detectedAction,
+      actorId,
+      actorRole,
+      actorName,
+      timestamp: new Date(),
+      affectedPage: req.body.affectedPage || null,
+      previousState: { images: previousImages },
+      resultingState: { images: normalizedImages },
+      notes: req.body.notes || ''
+    });
+
+    // Update images (Historical image files are NOT physically deleted from disk)
+    prescription.images = normalizedImages;
+    await prescription.save();
+
+    // Emit Socket.IO event for real-time synchronization
+    const io = req.app.get("io");
+    if (io) {
+      io.to(resolvedTenant).emit("data_changed", {
+        type: "prescriptions",
+        subType: "offline_handwritten",
+        action: "prescription_corrected",
+        correctionAction: detectedAction,
+        appointmentId: appointment._id,
+        prescriptionId: prescription._id
+      });
+    }
+
+    res.json({
+      success: true,
+      action: detectedAction,
+      message: `Prescription updated successfully (${detectedAction}).`,
+      prescription
+    });
+  } catch (error) {
+    console.error("Prescription correction error:", error);
+    res.status(500).json({ error: error.message || 'Failed to update prescription' });
+  }
+});
+
+// Record that no prescription was provided by doctor and transition appointment from Prescription Pending to Completed
+router.post('/:id/no-prescription', async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const resolvedTenant = String(req.tenantId || appointment.tenantId || 'city_hospital').trim().toLowerCase();
+    if (String(appointment.tenantId).trim().toLowerCase() !== resolvedTenant) {
+      return res.status(403).json({ error: 'Tenant mismatch: access denied' });
+    }
+
+    // Server-side authorization check: Only reception or admin role
+    const userRole = req.user?.role;
+    if (userRole !== 'reception' && userRole !== 'receptionist' && userRole !== 'admin') {
+      return res.status(403).json({ error: 'Only Receptionist or Admin can record consultation completion' });
+    }
+
+    // Verify hospital Doctor Clinical Mode is OFFLINE
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+    const hospital = await SuperAdminHospital.findOne({ code: resolvedTenant });
+    if (!hospital || hospital.doctorClinicalMode !== 'OFFLINE') {
+      return res.status(400).json({ error: 'No Prescription resolution is only available when Doctor Clinical Mode is OFFLINE' });
+    }
+
+    // Mutual exclusivity: Check if a prescription already exists
+    const Prescription = require('../models/Prescription');
+    const existingRx = await Prescription.findOne({
+      tenantId: resolvedTenant,
+      appointmentId: appointment._id
+    });
+    if (existingRx) {
+      return res.status(400).json({ error: 'A prescription was already recorded for this appointment. Cannot mark as No Prescription.' });
+    }
+
+    // Idempotency: If already completed with no prescription
+    if (appointment.noPrescriptionProvided && appointment.status === 'Completed') {
+      return res.json({
+        success: true,
+        alreadyCompleted: true,
+        message: 'Appointment was already completed with No Prescription Provided.',
+        appointment
+      });
+    }
+
+    // Appointment must be in Prescription Pending state
+    if (appointment.status !== 'Prescription Pending') {
+      return res.status(400).json({ error: `Cannot resolve appointment in ${appointment.status} status. Must be Prescription Pending.` });
+    }
+
+    // Mark appointment Completed with noPrescriptionProvided = true
+    appointment.status = 'Completed';
+    appointment.noPrescriptionProvided = true;
+    if (!appointment.notes) {
+      appointment.notes = 'No prescription provided by doctor (Consultation completed).';
+    } else if (!appointment.notes.includes('No prescription provided')) {
+      appointment.notes += ' [No prescription provided by doctor]';
+    }
+    await appointment.save();
+
+    // Emit Socket.IO real-time event
+    const io = req.app.get("io");
+    if (io) {
+      io.to(resolvedTenant).emit("data_changed", {
+        type: "appointments",
+        action: "appointment_completed",
+        appointmentId: appointment._id,
+        noPrescriptionProvided: true
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Appointment completed successfully with No Prescription Provided.',
+      appointment
+    });
+  } catch (error) {
+    console.error("No-prescription completion error:", error);
+    res.status(400).json({ error: error.message || 'Failed to complete appointment' });
   }
 });
 

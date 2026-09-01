@@ -54,6 +54,11 @@ const superAdminHospitalSchema = new mongoose.Schema({
     inventory: { enabled: { type: Boolean, default: true }, lastMod: { type: String } },
     dpdp: { enabled: { type: Boolean, default: true }, lastMod: { type: String } }
   },
+  doctorClinicalMode: {
+    type: String,
+    enum: ['ONLINE', 'OFFLINE'],
+    default: 'ONLINE'
+  },
   limits: {
     doctorsUsed: { type: Number, default: 0 },
     doctorsLimit: { type: Number, default: 10 },

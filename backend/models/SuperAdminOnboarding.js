@@ -60,6 +60,8 @@ const superAdminOnboardingSchema = new mongoose.Schema({
   contractStartDate: { type: String, default: '' },
   contractDurationYears: { type: Number, default: 1 },
   modules: [{ type: String }], // Active modules e.g. ['reception', 'doctor']
+  doctorClinicalMode: { type: String, enum: ['ONLINE', 'OFFLINE'], default: 'ONLINE' },
+  configuredModules: { type: mongoose.Schema.Types.Mixed, default: {} },
 
   // Step 5: User & Role Provisioning / Sandbox
   provisionedUsers: [{

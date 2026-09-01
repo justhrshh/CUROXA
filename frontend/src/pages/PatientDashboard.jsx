@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import { joinTenantRoom } from '../utils/socket';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import curoxaHero3D from '../assets/curoxa_hero_3d.png';
 import curoxaMobileHero3D from '../assets/curoxa_mobile_hero_3d.png';
@@ -164,11 +165,17 @@ const PatientDashboard = () => {
     if (!h) return;
     setTransitionHospitalTarget(h);
     setIsTransitioningHospital(true);
+    const tenantCode = h.code || h.id;
     try {
-      localStorage.setItem('tenantId', h.code || h.id);
+      localStorage.setItem('tenantId', tenantCode);
       localStorage.setItem('tenantName', h.name);
       localStorage.setItem('curoxa_selected_hospital', JSON.stringify(h));
     } catch (e) {}
+
+    // Ensure Socket.IO client joins the selected hospital's tenant room
+    if (tenantCode) {
+      joinTenantRoom(tenantCode);
+    }
     
     // Fetch hospital-scoped data
     fetchData(false);
@@ -531,7 +538,7 @@ const PatientDashboard = () => {
     const today = hospitalAppointments.filter(app => (app.tokenDate === todayStr) || (app.date && getLocalDateString(app.date) === todayStr)).length;
     const upcoming = hospitalAppointments.filter(app => {
       const appDate = app.date ? getLocalDateString(app.date) : '';
-      return appDate > todayStr && !['Completed', 'Cancelled', 'Checked Out'].includes(app.status);
+      return appDate >= todayStr && !['Completed', 'Cancelled', 'Checked Out'].includes(app.status);
     }).length;
     const completed = hospitalAppointments.filter(app => ['Completed', 'Checked Out'].includes(app.status)).length;
     const cancelled = hospitalAppointments.filter(app => app.status === 'Cancelled').length;
@@ -853,8 +860,17 @@ const PatientDashboard = () => {
   }, [currentUser.id]);
 
   useEffect(() => {
+    if (selectedHospital) {
+      const tenantCode = selectedHospital.code || selectedHospital.id;
+      if (tenantCode) {
+        joinTenantRoom(tenantCode);
+      }
+    }
+  }, [selectedHospital]);
+
+  useEffect(() => {
     const handleSync = (e) => {
-      const { type } = e.detail;
+      const { type } = e.detail || {};
       console.log('[SOCKET] PatientDashboard received sync event for:', type);
       if (currentUser.id) {
         fetchData(true);
@@ -5373,7 +5389,7 @@ const PatientDashboard = () => {
                 return isToday && !['Completed', 'Cancelled', 'Checked Out'].includes(a.status);
               });
               const upcomingList = currentList.filter(a => {
-                const isFuture = a.date && getLocalDateString(a.date) > todayStr;
+                const isFuture = a.date && getLocalDateString(a.date) >= todayStr;
                 return isFuture && !['Completed', 'Cancelled', 'Checked Out'].includes(a.status);
               });
               const completedList = currentList.filter(a => ['Completed', 'Checked Out'].includes(a.status));
@@ -5921,13 +5937,25 @@ const PatientDashboard = () => {
                             <span>{p.createdAt ? new Date(p.createdAt).toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</span>
                           </div>
 
-                          <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', fontSize: '12.5px', color: '#334155' }}>
-                            <strong>{(p.items || []).length} Prescribed Item{(p.items || []).length === 1 ? '' : 's'}:</strong>
-                            <div style={{ marginTop: '4px', color: '#64748B', fontSize: '12px' }}>
-                              {(p.items || []).map(i => i.medicine || i.name).slice(0, 2).join(', ')}
-                              {(p.items || []).length > 2 ? '...' : ''}
+                          {p.prescriptionType === 'offline_handwritten' ? (
+                            <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', padding: '10px 12px', borderRadius: '10px', fontSize: '12.5px', color: '#0F766E' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ background: '#0D9488', color: '#FFFFFF', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 800 }}>HANDWRITTEN RX</span>
+                                <strong>Original Prescription Images</strong>
+                              </div>
+                              <div style={{ marginTop: '4px', color: '#115E59', fontSize: '12px' }}>
+                                {(p.images || []).length} Original Page{(p.images || []).length === 1 ? '' : 's'} Uploaded
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', fontSize: '12.5px', color: '#334155' }}>
+                              <strong>{(p.items || []).length} Prescribed Item{(p.items || []).length === 1 ? '' : 's'}:</strong>
+                              <div style={{ marginTop: '4px', color: '#64748B', fontSize: '12px' }}>
+                                {(p.items || []).map(i => i.medicine || i.name).slice(0, 2).join(', ')}
+                                {(p.items || []).length > 2 ? '...' : ''}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid #F1F5F9' }}>
@@ -7492,51 +7520,89 @@ const PatientDashboard = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Prescribed Medicines ({(selectedPrescription.items || selectedPrescription.medicines || []).length})
-                </div>
-                {(selectedPrescription.items || selectedPrescription.medicines || []).length > 0 ? (
-                  (selectedPrescription.items || selectedPrescription.medicines || []).map((item, idx) => (
-                    <div 
-                      key={idx} 
-                      style={{ 
-                        padding: '16px', 
-                        border: '1px solid #BFDBFE', 
-                        borderRadius: '12px', 
-                        background: '#FFFFFF',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                        <div style={{ fontWeight: 800, fontSize: '15px', color: '#0F172A', fontFamily: "'Outfit', sans-serif" }}>
-                          {item.medicine || item.name}
-                        </div>
-                        <span style={{ fontSize: '11px', fontWeight: 700, padding: '4px 8px', background: '#EFF6FF', color: '#2563EB', borderRadius: '6px' }}>
-                          {item.duration || 'As directed'}
-                        </span>
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12.5px', color: '#475569' }}>
-                        <div>
-                          <strong>Dosage:</strong> {item.dosage || 'Standard'}
-                        </div>
-                        <div>
-                          <strong>Frequency:</strong> {item.frequency || item.instructions || 'As advised'}
-                        </div>
-                      </div>
-                      {item.instructions && (
-                        <div style={{ marginTop: '8px', fontSize: '12px', color: '#64748B', background: '#F8FAFC', padding: '6px 10px', borderRadius: '6px' }}>
-                          <strong>Instructions:</strong> {item.instructions}
-                        </div>
-                      )}
+              {selectedPrescription.prescriptionType === 'offline_handwritten' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ background: '#F0FDFA', border: '1.5px solid #99F6E4', borderRadius: '12px', padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ background: '#0D9488', color: '#FFFFFF', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>
+                        HANDWRITTEN PRESCRIPTION
+                      </span>
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F766E' }}>
+                        Issued physically by {selectedPrescription.doctorId?.name || 'Doctor'}
+                      </span>
                     </div>
-                  ))
-                ) : (
-                  <div style={{ textAlign: 'center', padding: '20px', color: '#94A3B8' }}>
-                    No medicines listed in this prescription.
+                    <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#134E4A', lineHeight: '1.5' }}>
+                      This prescription was written physically on paper during your consultation. You can view, download, or present these original pages to any pharmacy.
+                    </p>
                   </div>
-                )}
-              </div>
+
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Prescription Pages ({(selectedPrescription.images || []).length})
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                    {(selectedPrescription.images || []).map((img, i) => (
+                      <div key={i} style={{ border: '1px solid #CBD5E1', borderRadius: '12px', overflow: 'hidden', background: '#FFFFFF', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+                        <div style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 800, color: '#334155', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span>Page {img.pageNumber || i + 1}</span>
+                          <a href={img.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0D9488', fontSize: '11.5px', textDecoration: 'none', fontWeight: 700 }}>
+                            Full Size ↗
+                          </a>
+                        </div>
+                        <a href={img.url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', background: '#0F172A' }}>
+                          <img src={img.url} alt={`Page ${img.pageNumber || i + 1}`} style={{ width: '100%', height: '220px', objectFit: 'contain', display: 'block' }} />
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Prescribed Medicines ({(selectedPrescription.items || selectedPrescription.medicines || []).length})
+                  </div>
+                  {(selectedPrescription.items || selectedPrescription.medicines || []).length > 0 ? (
+                    (selectedPrescription.items || selectedPrescription.medicines || []).map((item, idx) => (
+                      <div 
+                        key={idx} 
+                        style={{ 
+                          padding: '16px', 
+                          border: '1px solid #BFDBFE', 
+                          borderRadius: '12px', 
+                          background: '#FFFFFF', 
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.02)' 
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                          <div style={{ fontWeight: 800, fontSize: '15px', color: '#0F172A', fontFamily: "'Outfit', sans-serif" }}>
+                            {item.medicine || item.name}
+                          </div>
+                          <span style={{ fontSize: '11px', fontWeight: 700, padding: '4px 8px', background: '#EFF6FF', color: '#2563EB', borderRadius: '6px' }}>
+                            {item.duration || 'As directed'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12.5px', color: '#475569' }}>
+                          <div>
+                            <strong>Dosage:</strong> {item.dosage || 'Standard'}
+                          </div>
+                          <div>
+                            <strong>Frequency:</strong> {item.frequency || item.instructions || 'As advised'}
+                          </div>
+                        </div>
+                        {item.instructions && (
+                          <div style={{ marginTop: '8px', fontSize: '12px', color: '#64748B', background: '#F8FAFC', padding: '6px 10px', borderRadius: '6px' }}>
+                            <strong>Instructions:</strong> {item.instructions}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '20px', color: '#94A3B8' }}>
+                      No medicines listed in this prescription.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}

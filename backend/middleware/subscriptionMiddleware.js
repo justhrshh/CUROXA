@@ -58,6 +58,31 @@ const checkModule = (moduleName) => {
   };
 };
 
+const checkDoctorClinicalMode = async (req, res, next) => {
+  try {
+    // Only restrict clinical access if the authenticated actor is a doctor
+    if (!req.user || req.user.role !== 'doctor') {
+      return next();
+    }
+
+    const tenantId = req.tenantId || (req.user && req.user.tenantId) || 'city_hospital';
+    const hospital = await SuperAdminHospital.findOne({ code: tenantId });
+
+    if (hospital && hospital.doctorClinicalMode === 'OFFLINE') {
+      return res.status(403).json({
+        error: 'DOCTOR_CLINICAL_MODE_OFFLINE',
+        message: 'Doctor clinical access is disabled for this hospital.'
+      });
+    }
+
+    next();
+  } catch (err) {
+    console.error('checkDoctorClinicalMode error:', err);
+    res.status(500).json({ error: 'Internal server error checking doctor clinical mode' });
+  }
+};
+
 module.exports = {
-  checkModule
+  checkModule,
+  checkDoctorClinicalMode
 };

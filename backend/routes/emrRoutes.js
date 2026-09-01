@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/authMiddleware');
+const { checkDoctorClinicalMode } = require('../middleware/subscriptionMiddleware');
 const { restrictEMRRole, checkPatientConsent, writeAudit } = require('../middleware/complianceMiddleware');
 
 // Models
@@ -18,6 +19,7 @@ const Appointment = require('../models/Appointment');
 const Billing = require('../models/Billing');
 
 router.use(verifyToken);
+router.use(checkDoctorClinicalMode);
 
 // ==========================================
 // 1. VISIT MANAGEMENT

@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const ClinicalService = require('../models/ClinicalService');
 const { verifyToken } = require('../middleware/authMiddleware');
+const { checkDoctorClinicalMode } = require('../middleware/subscriptionMiddleware');
+
+router.use(verifyToken);
+router.use(checkDoctorClinicalMode);
 
 const DEFAULT_CLINICAL_SERVICES = [
   { serviceName: 'Dental — Root Canal Treatment (RCT)', serviceCode: 'DEN-201', department: 'Dental', description: 'Endodontic therapy for infected tooth pulp', price: 3500 },

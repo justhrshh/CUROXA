@@ -259,7 +259,7 @@ const getEligibleQueueAppointments = async (tenantId, doctorId, date) => {
       { tokenDate: dateStr },
       { date: { $gte: startOfDay, $lte: endOfDay } }
     ],
-    status: { $nin: ['Completed', 'Cancelled', 'Checked Out', 'No-Show', 'no-show'] },
+    status: { $nin: ['Completed', 'Prescription Pending', 'Cancelled', 'Checked Out', 'No-Show', 'no-show'] },
     queueStatus: { $nin: ['Completed', 'Cancelled', 'No-Show', 'no-show'] }
   })
     .populate('patientId')
@@ -282,24 +282,40 @@ const syncDoctorQueueState = async (tenantId, doctorId, date) => {
   let waitingCount = 0;
 
   if (eligibleList.length > 0) {
-    // Check if there is an appointment explicitly marked as 'Serving'
-    const servingApp = eligibleList.find(a => a.queueStatus === 'Serving');
+    // Current serving appointment is strictly the first eligible appointment in sequential queue order
+    currentAppointment = eligibleList[0];
+    currentToken = currentAppointment.tokenNumber;
 
-    if (servingApp) {
-      currentAppointment = servingApp;
-      currentToken = servingApp.tokenNumber;
-    } else {
-      // First eligible appointment becomes currently serving
-      currentAppointment = eligibleList[0];
-      currentToken = eligibleList[0].tokenNumber;
-      if (currentAppointment.queueStatus !== 'Serving') {
-        currentAppointment.queueStatus = 'Serving';
-        await currentAppointment.save();
+    let currChanged = false;
+    if (currentAppointment.queueStatus !== 'Serving') {
+      currentAppointment.queueStatus = 'Serving';
+      currChanged = true;
+    }
+    if (currentAppointment.status !== 'In Progress') {
+      currentAppointment.status = 'In Progress';
+      currChanged = true;
+    }
+    if (currChanged) {
+      await currentAppointment.save();
+    }
+
+    // All remaining appointments after current one MUST be strictly in Waiting state
+    const remainingAfterCurrent = eligibleList.filter(a => a._id.toString() !== currentAppointment._id.toString());
+    for (const remApp of remainingAfterCurrent) {
+      let remChanged = false;
+      if (remApp.queueStatus !== 'Waiting') {
+        remApp.queueStatus = 'Waiting';
+        remChanged = true;
+      }
+      if (remApp.status === 'In Progress') {
+        remApp.status = 'Waiting';
+        remChanged = true;
+      }
+      if (remChanged) {
+        await remApp.save();
       }
     }
 
-    // Remaining appointments after current one
-    const remainingAfterCurrent = eligibleList.filter(a => a._id.toString() !== currentAppointment._id.toString());
     nextToken = remainingAfterCurrent.length > 0 ? remainingAfterCurrent[0].tokenNumber : null;
     waitingCount = remainingAfterCurrent.length;
   }
@@ -332,7 +348,7 @@ const syncDoctorQueueState = async (tenantId, doctorId, date) => {
  * Atomically advances the doctor's queue when a consultation is completed.
  * Concurrency-safe: duplicate completion calls will not advance the queue multiple times.
  */
-const advanceDoctorQueue = async ({ tenantId, doctorId, appointmentId }) => {
+const advanceDoctorQueue = async ({ tenantId, doctorId, appointmentId, targetStatus = 'Completed' }) => {
   if (!tenantId) throw new Error('Tenant ID is required for queue advancement');
   if (!doctorId) throw new Error('Doctor ID is required for queue advancement');
   if (!appointmentId) throw new Error('Appointment ID is required for queue advancement');
@@ -355,8 +371,8 @@ const advanceDoctorQueue = async ({ tenantId, doctorId, appointmentId }) => {
 
   const dateStr = appointment.tokenDate || normalizeDateString(appointment.date);
 
-  // Mark appointment as Completed atomically
-  appointment.status = 'Completed';
+  // Mark appointment with target status and complete queue status atomically
+  appointment.status = targetStatus;
   appointment.queueStatus = 'Completed';
   await appointment.save();
 

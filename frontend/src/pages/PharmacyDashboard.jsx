@@ -5395,7 +5395,13 @@ const PharmacyDashboard = () => {
                                     setShowPrescriptionModal(true);
                                   }}
                                 >
-                                  {p.items} Items
+                                  {p.rawObj?.prescriptionType === 'offline_handwritten' ? (
+                                    <span style={{ background: '#F0FDFA', color: '#0D9488', border: '1px solid #99F6E4', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 }}>
+                                      Handwritten Rx
+                                    </span>
+                                  ) : (
+                                    `${p.items} Items`
+                                  )}
                                 </span>
                               </td>
                               <td style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>{p.amount}</td>
@@ -5408,14 +5414,14 @@ const PharmacyDashboard = () => {
                                 {p.status === 'Pending' && p.rawObj && (
                                   <button 
                                     className="btn btn-primary" 
-                                    style={{ padding: '6px 14px', fontSize: '12px', borderRadius: '8px', background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)' }}
+                                    style={{ padding: '6px 14px', fontSize: '12px', borderRadius: '8px', background: p.rawObj?.prescriptionType === 'offline_handwritten' ? 'linear-gradient(135deg, #0D9488 0%, #0F766E 100%)' : 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px rgba(13, 148, 136, 0.25)' }}
                                     onClick={() => {
                                       setSelectedPrescriptionGroup(p);
-                                      setPrescriptionModalStep('payment');
+                                      setPrescriptionModalStep(p.rawObj?.prescriptionType === 'offline_handwritten' ? 'details' : 'payment');
                                       setShowPrescriptionModal(true);
                                     }}
                                   >
-                                    Dispense
+                                    {p.rawObj?.prescriptionType === 'offline_handwritten' ? 'View & Dispense' : 'Dispense'}
                                   </button>
                                 )}
                               </td>
@@ -10456,56 +10462,92 @@ const PharmacyDashboard = () => {
                     </div>
                   </div>
 
-                  {/* Items List with Price Breakdown */}
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px' }}>
-                      Items ({selectedPrescriptionGroup.itemsList?.length || 0})
-                    </div>
-                    {/* Table Header */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '8px', padding: '8px 0', borderBottom: '2px solid #E2E8F0', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase' }}>Medicine</span>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', textAlign: 'center', minWidth: '40px' }}>Qty</span>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', textAlign: 'right', minWidth: '60px' }}>Rate</span>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', textAlign: 'right', minWidth: '70px' }}>Amount</span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      {selectedPrescriptionGroup.itemsList && selectedPrescriptionGroup.itemsList.length > 0 ? (
-                        selectedPrescriptionGroup.itemsList.map((item, idx) => (
-                          <div 
-                            key={idx} 
-                            style={{ 
-                              display: 'grid', 
-                              gridTemplateColumns: '1fr auto auto auto', 
-                              gap: '8px',
-                              alignItems: 'center',
-                              padding: '10px 0',
-                              borderBottom: idx === selectedPrescriptionGroup.itemsList.length - 1 ? 'none' : '1px solid #F1F5F9'
-                            }}
-                          >
-                            <div>
-                              <div style={{ fontWeight: 800, fontSize: '14px', color: '#0F172A' }}>{item.medicine}</div>
-                              <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', fontWeight: 600 }}>
-                                {item.dosage} • {item.duration} {item.instructions ? `• ${item.instructions}` : ''}
-                              </div>
-                            </div>
-                            <span style={{ fontSize: '13px', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '40px' }}>
-                              {item.quantity || 1}
-                            </span>
-                            <span style={{ fontSize: '13px', fontWeight: 700, color: '#475569', textAlign: 'right', minWidth: '60px' }}>
-                              ₹{(item.unitPrice || 0).toFixed(2)}
-                            </span>
-                            <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', textAlign: 'right', minWidth: '70px' }}>
-                              ₹{(item.lineTotal || 0).toFixed(2)}
-                            </span>
-                          </div>
-                        ))
-                      ) : (
-                        <div style={{ textAlign: 'center', padding: '20px', color: '#94A3B8', fontSize: '13px', fontWeight: 600 }}>
-                          No medicines listed.
+                  {/* Items List with Price Breakdown or Handwritten Rx Images */}
+                  {selectedPrescriptionGroup.rawObj?.prescriptionType === 'offline_handwritten' ? (
+                    <div>
+                      <div style={{ background: '#F0FDFA', border: '1.5px solid #99F6E4', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ background: '#0D9488', color: '#FFFFFF', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>
+                            OFFLINE HANDWRITTEN RX
+                          </span>
+                          <span style={{ fontSize: '12.5px', fontWeight: 750, color: '#0F766E' }}>
+                            Physical Doctor Prescription
+                          </span>
                         </div>
-                      )}
+                        <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#134E4A', lineHeight: '1.5' }}>
+                          Doctor physically consulted this patient and wrote the prescription on paper. Original uploaded image pages are shown below. No digital inventory items exist.
+                        </p>
+                      </div>
+
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
+                        Prescription Pages ({(selectedPrescriptionGroup.rawObj?.images || []).length})
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+                        {(selectedPrescriptionGroup.rawObj?.images || []).map((img, i) => (
+                          <div key={i} style={{ border: '1px solid #CBD5E1', borderRadius: '10px', overflow: 'hidden', background: '#F8FAFC' }}>
+                            <div style={{ padding: '6px 10px', fontSize: '11.5px', fontWeight: 800, color: '#334155', background: '#FFFFFF', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between' }}>
+                              <span>Page {img.pageNumber || i + 1}</span>
+                              <a href={img.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0D9488', fontSize: '11px', textDecoration: 'none', fontWeight: 700 }}>Open ↗</a>
+                            </div>
+                            <a href={img.url} target="_blank" rel="noopener noreferrer">
+                              <img src={img.url} alt={`Page ${img.pageNumber || i + 1}`} style={{ width: '100%', height: '190px', objectFit: 'contain', background: '#0F172A', display: 'block' }} />
+                            </a>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px' }}>
+                        Items ({selectedPrescriptionGroup.itemsList?.length || 0})
+                      </div>
+                      {/* Table Header */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '8px', padding: '8px 0', borderBottom: '2px solid #E2E8F0', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase' }}>Medicine</span>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', textAlign: 'center', minWidth: '40px' }}>Qty</span>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', textAlign: 'right', minWidth: '60px' }}>Rate</span>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', textAlign: 'right', minWidth: '70px' }}>Amount</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        {selectedPrescriptionGroup.itemsList && selectedPrescriptionGroup.itemsList.length > 0 ? (
+                          selectedPrescriptionGroup.itemsList.map((item, idx) => (
+                            <div 
+                              key={idx} 
+                              style={{ 
+                                display: 'grid', 
+                                gridTemplateColumns: '1fr auto auto auto', 
+                                gap: '8px',
+                                alignItems: 'center',
+                                padding: '10px 0',
+                                borderBottom: idx === selectedPrescriptionGroup.itemsList.length - 1 ? 'none' : '1px solid #F1F5F9'
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 800, fontSize: '14px', color: '#0F172A' }}>{item.medicine}</div>
+                                <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', fontWeight: 600 }}>
+                                  {item.dosage} • {item.duration} {item.instructions ? `• ${item.instructions}` : ''}
+                                </div>
+                              </div>
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '40px' }}>
+                                {item.quantity || 1}
+                              </span>
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: '#475569', textAlign: 'right', minWidth: '60px' }}>
+                                ₹{(item.unitPrice || 0).toFixed(2)}
+                              </span>
+                              <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', textAlign: 'right', minWidth: '70px' }}>
+                                ₹{(item.lineTotal || 0).toFixed(2)}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div style={{ textAlign: 'center', padding: '20px', color: '#94A3B8', fontSize: '13px', fontWeight: 600 }}>
+                            No medicines listed.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Modal Footer: DETAILS STEP */}
@@ -10579,32 +10621,61 @@ const PharmacyDashboard = () => {
                       View Invoice
                     </button>
                     {selectedPrescriptionGroup.status === 'Pending' && (
-                      <button 
-                        type="button" 
-                        style={{ 
-                          flex: 1, 
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '8px',
-                          height: '48px', 
-                          borderRadius: '12px', 
-                          background: '#2563EB', 
-                          border: 'none', 
-                          color: 'white', 
-                          fontWeight: 700, 
-                          fontSize: '14px',
-                          cursor: 'pointer',
-                          transition: 'background-color 0.2s',
-                          boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
-                        }}
-                        onClick={() => {
-                          setPrescriptionModalStep('payment');
-                        }}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                        Dispense Now
-                      </button>
+                      selectedPrescriptionGroup.rawObj?.prescriptionType === 'offline_handwritten' ? (
+                        <button 
+                          type="button" 
+                          style={{ 
+                            flex: 1, 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            gap: '8px', 
+                            height: '48px', 
+                            borderRadius: '12px', 
+                            background: 'linear-gradient(135deg, #0D9488 0%, #0F766E 100%)', 
+                            border: 'none', 
+                            color: 'white', 
+                            fontWeight: 700, 
+                            fontSize: '14px', 
+                            cursor: 'pointer', 
+                            boxShadow: '0 4px 12px rgba(13, 148, 136, 0.25)' 
+                          }}
+                          onClick={async () => {
+                            await dispensePrescription(selectedPrescriptionGroup.rawObj._id);
+                            setShowPrescriptionModal(false);
+                          }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                          Acknowledge / Dispense Handwritten Rx
+                        </button>
+                      ) : (
+                        <button 
+                          type="button" 
+                          style={{ 
+                            flex: 1, 
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            height: '48px', 
+                            borderRadius: '12px', 
+                            background: '#2563EB', 
+                            border: 'none', 
+                            color: 'white', 
+                            fontWeight: 700, 
+                            fontSize: '14px',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s',
+                            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
+                          }}
+                          onClick={() => {
+                            setPrescriptionModalStep('payment');
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                          Dispense Now
+                        </button>
+                      )
                     )}
                   </div>
                 </div>

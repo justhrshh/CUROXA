@@ -823,6 +823,14 @@ router.post('/hospitals', async (req, res) => {
       return res.status(400).json({ error: `Admin phone/login ID '${adminPhone}' is already in use by another staff/admin member in the system. Please use a unique ID.` });
     }
 
+    if (hospitalData.doctorClinicalMode !== undefined) {
+      if (!['ONLINE', 'OFFLINE'].includes(hospitalData.doctorClinicalMode)) {
+        return res.status(400).json({ error: "Invalid doctorClinicalMode. Allowed values are 'ONLINE' or 'OFFLINE'." });
+      }
+    } else {
+      hospitalData.doctorClinicalMode = 'ONLINE';
+    }
+
     const hospital = await SuperAdminHospital.create(hospitalData);
     
     const bcrypt = require('bcrypt');
@@ -902,15 +910,21 @@ router.put('/hospitals/:id', async (req, res) => {
     const { id } = req.params;
     const mongoose = require('mongoose');
 
+    if (req.body.doctorClinicalMode !== undefined) {
+      if (!['ONLINE', 'OFFLINE'].includes(req.body.doctorClinicalMode)) {
+        return res.status(400).json({ error: "Invalid doctorClinicalMode. Allowed values are 'ONLINE' or 'OFFLINE'." });
+      }
+    }
+
     let hospital = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
-      hospital = await SuperAdminHospital.findByIdAndUpdate(id, req.body, { returnDocument: 'after' });
+      hospital = await SuperAdminHospital.findByIdAndUpdate(id, req.body, { returnDocument: 'after', runValidators: true });
     }
     if (!hospital) {
       hospital = await SuperAdminHospital.findOneAndUpdate(
         { $or: [{ code: id }, { code: String(id).toLowerCase().trim() }, { id: id }] },
         req.body,
-        { returnDocument: 'after' }
+        { returnDocument: 'after', runValidators: true }
       );
     }
 

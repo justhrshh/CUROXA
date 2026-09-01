@@ -13,6 +13,9 @@ export const socket = io(socketUrl, {
 
 export const joinTenantRoom = (tenantId) => {
   if (tenantId) {
+    if (!socket.connected) {
+      socket.connect();
+    }
     if (socket.connected) {
       socket.emit('join_tenant', tenantId);
       console.log(`[SOCKET] Emitted join_tenant for: ${tenantId}`);

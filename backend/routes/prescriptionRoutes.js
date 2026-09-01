@@ -6,9 +6,11 @@ const Appointment = require("../models/Appointment");
 const LabRequest = require("../models/LabRequest");
 const { validateAndPlanFEFO, commitFEFOConsumption } = require("../utils/inventoryEngine");
 const { verifyToken } = require("../middleware/authMiddleware");
+const { checkDoctorClinicalMode } = require("../middleware/subscriptionMiddleware");
 const router = express.Router();
 
 router.use(verifyToken);
+router.use(checkDoctorClinicalMode);
 
 // Get all prescriptions (filter by status or patientId, scoped to tenant)
 router.get("/", async (req, res) => {
@@ -20,7 +22,7 @@ router.get("/", async (req, res) => {
     // Projection: only fields the pharmacy queue / doctor history actually need
     const prescriptions = await Prescription.find(query)
       .select(
-        "patientId doctorId items status createdAt updatedAt appointmentId",
+        "patientId doctorId items status createdAt updatedAt appointmentId prescriptionType images offlineMetadata editableUntil isLocked correctionHistory",
       )
       .populate("patientId", "name age contact")
       .populate("doctorId", "name specialty department designation staff_id")
@@ -260,6 +262,157 @@ router.put("/:id", async (req, res) => {
     res.json(prescription);
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+// PUT /api/prescriptions/:id/offline-correction
+// PHASE 6: Direct Prescription Correction Endpoint for Reception
+router.put("/:id/offline-correction", async (req, res) => {
+  try {
+    const resolvedTenant = req.tenantId || req.user?.tenantId;
+    if (!resolvedTenant) {
+      return res.status(400).json({ error: 'Tenant context is required' });
+    }
+
+    // Role check: ONLY reception / receptionist (Requirement 6)
+    const userRole = req.user?.role;
+    if (userRole !== 'reception' && userRole !== 'receptionist') {
+      return res.status(403).json({ 
+        error: 'FORBIDDEN_ROLE', 
+        message: 'Only Reception can submit handwritten prescription corrections.' 
+      });
+    }
+
+    const prescription = await Prescription.findOne({
+      _id: req.params.id,
+      tenantId: resolvedTenant
+    });
+
+    if (!prescription) {
+      return res.status(404).json({ error: 'Prescription not found' });
+    }
+
+    if (prescription.prescriptionType !== 'offline_handwritten') {
+      return res.status(400).json({ 
+        error: 'INVALID_PRESCRIPTION_TYPE', 
+        message: 'Only offline handwritten prescriptions can be corrected via this endpoint.' 
+      });
+    }
+
+    // 24-Hour Edit Window Check (Server-authoritative, Requirement 2, 3, 4)
+    const now = Date.now();
+    const deadline = prescription.editableUntil 
+      ? new Date(prescription.editableUntil).getTime() 
+      : new Date(prescription.createdAt).getTime() + 24 * 60 * 60 * 1000;
+
+    if (now >= deadline || prescription.isLocked) {
+      return res.status(403).json({
+        error: 'PRESCRIPTION_EDIT_WINDOW_EXPIRED',
+        message: 'The 24-hour correction window for this prescription has expired.'
+      });
+    }
+
+    const rawImages = Array.isArray(req.body.images) ? req.body.images : [];
+    if (rawImages.length === 0) {
+      return res.status(400).json({
+        error: 'EMPTY_PRESCRIPTION',
+        message: 'A handwritten prescription must contain at least one page.'
+      });
+    }
+
+    const normalizedImages = rawImages.map((img, idx) => ({
+      pageNumber: idx + 1,
+      url: img.url,
+      originalName: img.originalName || `Page_${idx + 1}.jpg`,
+      uploadedAt: img.uploadedAt || new Date()
+    }));
+
+    const previousImages = (prescription.images || []).map(img => ({
+      pageNumber: img.pageNumber,
+      url: img.url,
+      originalName: img.originalName
+    }));
+
+    let detectedAction = req.body.actionType;
+    if (!detectedAction || !['PAGE_ADDED', 'PAGE_REMOVED', 'PAGE_REPLACED', 'PAGES_REORDERED'].includes(detectedAction)) {
+      const prevUrls = previousImages.map(img => img.url);
+      const newUrls = normalizedImages.map(img => img.url);
+      if (newUrls.length < prevUrls.length) {
+        detectedAction = 'PAGE_REMOVED';
+      } else if (newUrls.length > prevUrls.length) {
+        detectedAction = 'PAGE_ADDED';
+      } else {
+        const prevSet = new Set(prevUrls);
+        const allPresent = newUrls.every(u => prevSet.has(u));
+        if (allPresent) {
+          detectedAction = 'PAGES_REORDERED';
+        } else {
+          detectedAction = 'PAGE_REPLACED';
+        }
+      }
+    }
+
+    const actorId = req.user.staff_id || req.user.id || req.user._id?.toString() || 'reception';
+    const actorName = req.user.name || 'Reception Staff';
+    const actorRole = req.user.role || 'reception';
+
+    // Log to AuditLog (Requirement 1, 11)
+    await AuditLog.create({
+      tenantId: resolvedTenant,
+      actor: actorId,
+      actorName: actorName,
+      actorRole: actorRole,
+      action: detectedAction,
+      target: prescription._id.toString(),
+      metadata: {
+        prescriptionId: prescription._id.toString(),
+        appointmentId: prescription.appointmentId?.toString(),
+        patientId: prescription.patientId?.toString(),
+        doctorId: prescription.doctorId?.toString(),
+        action: detectedAction,
+        affectedPage: req.body.affectedPage || null,
+        previousState: { images: previousImages },
+        resultingState: { images: normalizedImages },
+        notes: req.body.notes || `Prescription pages updated via ${detectedAction}`
+      }
+    });
+
+    if (!prescription.correctionHistory) prescription.correctionHistory = [];
+    prescription.correctionHistory.push({
+      action: detectedAction,
+      actorId,
+      actorRole,
+      actorName,
+      timestamp: new Date(),
+      affectedPage: req.body.affectedPage || null,
+      previousState: { images: previousImages },
+      resultingState: { images: normalizedImages },
+      notes: req.body.notes || ''
+    });
+
+    prescription.images = normalizedImages;
+    await prescription.save();
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(resolvedTenant).emit("data_changed", {
+        type: "prescriptions",
+        subType: "offline_handwritten",
+        action: "prescription_corrected",
+        correctionAction: detectedAction,
+        prescriptionId: prescription._id
+      });
+    }
+
+    res.json({
+      success: true,
+      action: detectedAction,
+      message: `Prescription updated successfully (${detectedAction}).`,
+      prescription
+    });
+  } catch (error) {
+    console.error("Prescription correction error:", error);
+    res.status(500).json({ error: error.message || 'Failed to update prescription' });
   }
 });
 

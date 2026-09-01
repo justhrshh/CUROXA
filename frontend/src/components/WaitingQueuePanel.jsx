@@ -75,7 +75,9 @@ const WaitingQueuePanel = ({
   openDetailsModal,
   handleCheckInAppointment,
   showToast,
-  fetchData: refreshParentData
+  fetchData: refreshParentData,
+  doctorClinicalMode: propClinicalMode,
+  handleFinishConsultation: propFinishConsultation
 }) => {
   const getLocalDateString = (d) => {
     const dateObj = d ? new Date(d) : new Date();
@@ -95,6 +97,57 @@ const WaitingQueuePanel = ({
   const [queueDataMap, setQueueDataMap] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [internalClinicalMode, setInternalClinicalMode] = useState(() => {
+    try {
+      return localStorage.getItem('doctorClinicalMode') || 'ONLINE';
+    } catch (e) {
+      return 'ONLINE';
+    }
+  });
+  const doctorClinicalMode = propClinicalMode || internalClinicalMode;
+  const [isFinishingId, setIsFinishingId] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetch('/api/auth/tenant-mode', { credentials: 'omit', headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d?.doctorClinicalMode) {
+            setInternalClinicalMode(d.doctorClinicalMode);
+            localStorage.setItem('doctorClinicalMode', d.doctorClinicalMode);
+          }
+        }).catch(() => {});
+    }
+  }, []);
+
+  const onFinishConsultation = async (item) => {
+    if (!item) return;
+    const appId = item._id || item.id || item.currentAppointmentId;
+    if (!appId) return;
+
+    if (propFinishConsultation) {
+      return propFinishConsultation(item);
+    }
+
+    try {
+      setIsFinishingId(appId);
+      await api.post(`/appointments/${appId}/finish-consultation`);
+      if (showToast) {
+        showToast(`Consultation finished for Token #${item.tokenNumber || item.currentToken || ''}! Status: Prescription Pending.`, 'success');
+      }
+      if (refreshParentData) refreshParentData();
+      await fetchAllQueues();
+      window.dispatchEvent(new CustomEvent('curoxa_sync', { detail: { type: 'appointments', subType: 'doctor_queue' } }));
+    } catch (err) {
+      console.error('Error finishing consultation:', err);
+      if (showToast) {
+        showToast(err.response?.data?.error || 'Failed to finish consultation', 'error');
+      }
+    } finally {
+      setIsFinishingId(null);
+    }
+  };
 
   // Filter out non-doctor accounts (e.g. laboratory1)
   const actualDoctors = useMemo(() => {
@@ -987,7 +1040,7 @@ const WaitingQueuePanel = ({
                         {/* Currently Serving */}
                         <td>
                           {isServing ? (
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                               <span style={{
                                 padding: '2px 7px',
                                 borderRadius: '5px',
@@ -1006,6 +1059,37 @@ const WaitingQueuePanel = ({
                               <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '11.5px' }}>
                                 {q.currentPatient?.name || 'In Consultation'}
                               </span>
+                              {doctorClinicalMode === 'OFFLINE' && q.currentAppointmentId && (
+                                <button
+                                  type="button"
+                                  disabled={isFinishingId === q.currentAppointmentId}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onFinishConsultation({ _id: q.currentAppointmentId, tokenNumber: q.currentToken });
+                                  }}
+                                  style={{
+                                    marginLeft: '4px',
+                                    padding: '2px 8px',
+                                    height: '24px',
+                                    fontSize: '10.5px',
+                                    fontWeight: 800,
+                                    borderRadius: '5px',
+                                    background: '#0D9488',
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    boxShadow: '0 1px 3px rgba(13, 148, 136, 0.25)',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title="Mark physical doctor consultation finished and advance live queue"
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                  {isFinishingId === q.currentAppointmentId ? 'Finishing...' : 'Consultation Finished'}
+                                </button>
+                              )}
                             </div>
                           ) : (
                             <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>
@@ -1248,6 +1332,34 @@ const WaitingQueuePanel = ({
 
                                           {/* Actions */}
                                           <td style={{ padding: '8px 14px', textAlign: 'right' }}>
+                                            {isServingToken && doctorClinicalMode === 'OFFLINE' && (
+                                              <button
+                                                type="button"
+                                                disabled={isFinishingId === item._id}
+                                                onClick={() => onFinishConsultation(item)}
+                                                style={{
+                                                  padding: '0 9px',
+                                                  height: '24px',
+                                                  fontSize: '10.5px',
+                                                  fontWeight: 800,
+                                                  borderRadius: '4px',
+                                                  background: '#0D9488',
+                                                  color: '#FFFFFF',
+                                                  border: 'none',
+                                                  cursor: 'pointer',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: '3px',
+                                                  marginRight: '6px',
+                                                  boxShadow: '0 1px 3px rgba(13, 148, 136, 0.25)',
+                                                  whiteSpace: 'nowrap'
+                                                }}
+                                                title="Mark physical doctor consultation finished and advance live queue"
+                                              >
+                                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                                {isFinishingId === item._id ? 'Finishing...' : 'Consultation Finished'}
+                                              </button>
+                                            )}
                                             {openDetailsModal && (
                                               <button
                                                 type="button"

@@ -8,7 +8,7 @@ const appointmentSchema = new mongoose.Schema({
   time: { type: String, required: true },
   status: { 
     type: String, 
-    enum: ['Pending', 'Pending Approval', 'Approved', 'In Progress', 'Completed', 'Cancelled', 'Paid', 'Confirmed', 'No-Show', 'Skipped'], 
+    enum: ['Pending', 'Pending Approval', 'Approved', 'Waiting', 'In Progress', 'Prescription Pending', 'Completed', 'Cancelled', 'Paid', 'Confirmed', 'No-Show', 'Skipped'], 
     default: 'Pending' 
   },
 
@@ -38,6 +38,7 @@ const appointmentSchema = new mongoose.Schema({
     enum: ['Waiting', 'Serving', 'In Consultation', 'Completed', 'Skipped', 'No-Show', 'Cancelled', null],
     default: null
   },
+  noPrescriptionProvided: { type: Boolean, default: false },
 
   createdAt: { type: Date, default: Date.now },
 }, { timestamps: true });

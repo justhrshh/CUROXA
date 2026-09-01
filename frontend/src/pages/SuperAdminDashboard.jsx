@@ -2624,10 +2624,40 @@ const SuperAdminDashboard = () => {
 
 
     const isModuleEnabled = (moduleKey) => {
-      if (wizardHospital.subscriptionPlan === 'custom') {
-        return wizardHospital.modules?.includes(moduleKey) ?? false;
+      if (wizardHospital?.configuredModules && typeof wizardHospital.configuredModules[moduleKey] === 'boolean') {
+        return wizardHospital.configuredModules[moduleKey];
       }
-      return activePlan?.modules?.includes(moduleKey) ?? false;
+      if (wizardHospital?.configuredModules && wizardHospital.configuredModules[moduleKey]?.enabled !== undefined) {
+        return Boolean(wizardHospital.configuredModules[moduleKey].enabled);
+      }
+      if (Array.isArray(wizardHospital?.modules)) {
+        return wizardHospital.modules.includes(moduleKey);
+      }
+      if (wizardHospital?.modules && typeof wizardHospital.modules === 'object' && wizardHospital.modules[moduleKey]) {
+        return Boolean(wizardHospital.modules[moduleKey].enabled !== false);
+      }
+      if (activePlan?.modules) {
+        return activePlan.modules.includes(moduleKey);
+      }
+      return true;
+    };
+
+    const toggleWizardModule = (moduleKey, nextVal) => {
+      setWizardHospital(prev => {
+        const currentConfigured = prev?.configuredModules || {};
+        const newConfigured = { ...currentConfigured, [moduleKey]: nextVal };
+        const currentList = Array.isArray(prev?.modules)
+          ? [...prev.modules]
+          : ['reception', 'doctor', 'pharmacy', 'laboratory', 'inventory'];
+        const newList = nextVal
+          ? (currentList.includes(moduleKey) ? currentList : [...currentList, moduleKey])
+          : currentList.filter(m => m !== moduleKey);
+        return {
+          ...prev,
+          configuredModules: newConfigured,
+          modules: newList
+        };
+      });
     };
 
     const toggleCustomModule = (moduleKey) => {
@@ -2641,7 +2671,6 @@ const SuperAdminDashboard = () => {
 
     const handleGoLive = async () => {
       const token = localStorage.getItem('token');
-      
       
       // Pre-check validation for required fields
       if (!wizardHospital.name?.trim()) {
@@ -2665,13 +2694,15 @@ const SuperAdminDashboard = () => {
         let amount = wizardHospital.billingCycle === 'annual' ? (activePlan?.annualPrice ?? 240000) : (activePlan?.monthlyPrice ?? 24000);
 
         const modulesObj = {
-          reception: { enabled: isModuleEnabled('reception') },
-          doctor: { enabled: isModuleEnabled('doctor') },
-          dpdp: { enabled: true },
-          pharmacy: { enabled: isModuleEnabled('pharmacy') },
-          laboratory: { enabled: isModuleEnabled('laboratory') },
-          inventory: { enabled: isModuleEnabled('inventory') }
+          reception: { enabled: isModuleEnabled('reception'), lastMod: new Date().toLocaleDateString() },
+          doctor: { enabled: isModuleEnabled('doctor'), lastMod: new Date().toLocaleDateString() },
+          dpdp: { enabled: true, lastMod: new Date().toLocaleDateString() },
+          pharmacy: { enabled: isModuleEnabled('pharmacy'), lastMod: new Date().toLocaleDateString() },
+          laboratory: { enabled: isModuleEnabled('laboratory'), lastMod: new Date().toLocaleDateString() },
+          inventory: { enabled: isModuleEnabled('inventory'), lastMod: new Date().toLocaleDateString() }
         };
+
+        const selectedDoctorMode = (wizardHospital.doctorClinicalMode === 'OFFLINE') ? 'OFFLINE' : 'ONLINE';
 
         const hospRes = await fetch('/api/superadmin/hospitals', {
           method: 'POST',
@@ -2712,6 +2743,7 @@ const SuperAdminDashboard = () => {
               patients: 0
             },
             modules: modulesObj,
+            doctorClinicalMode: selectedDoctorMode,
             adminName: wizardHospital.adminName || '',
             adminEmail: wizardHospital.adminEmail || '',
             adminPhone: wizardHospital.adminPhone || '',
@@ -2920,229 +2952,292 @@ const SuperAdminDashboard = () => {
             })}
           </aside>
 
-          <main style={{ flex: 1, padding: '28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', background: '#F8FAFC' }}>
+          <main 
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+                e.preventDefault();
+                if (wizardStep === totalSteps) {
+                  handleGoLive();
+                } else {
+                  handleNextStep();
+                }
+              }
+            }}
+            style={{ flex: 1, padding: '28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', background: '#F8FAFC' }}
+          >
             <div style={wizardStep === 6 ? { width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' } : { background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '24px', width: '100%', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
               
               {wizardStep === 1 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
                   <div>
                     <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Hospital Identity & Contact Details</h3>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>Configure general hospital information and focal contacts.</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>Configure general hospital information, focal contacts, and facility location.</p>
                   </div>
-                  <div style={styles.formRow}>
-                    <div style={styles.formCol}>
-                      <label style={styles.formLabel}>HOSPITAL NAME</label>
-                      <input 
-                        type="text" 
-                        style={styles.formInput} 
-                        value={wizardHospital.name || ''} 
-                        onChange={e => updateWizardField('name', e.target.value)} 
-                      />
-                    </div>
-                    <div style={styles.formCol}>
-                      <label style={styles.formLabel}>HOSPITAL TYPE</label>
-                      <div style={{ position: 'relative', width: '100%' }}>
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
-                          <input 
-                            type="text" 
-                            style={{ ...styles.formInput, width: '100%', paddingRight: '35px', boxSizing: 'border-box' }}
-                            placeholder="Type to search or enter custom hospital type..."
-                            value={wizardHospital.hospitalType || ''} 
-                            onFocus={() => setHospitalTypeSearchOpen(true)}
-                            onChange={e => {
-                              updateWizardField('hospitalType', e.target.value);
-                              setHospitalTypeSearchOpen(true);
-                            }} 
-                          />
-                          <LucideIcon 
-                            name="chevron-down" 
-                            style={{ position: 'absolute', right: '12px', width: '15px', height: '15px', color: '#64748B', pointerEvents: 'none' }} 
-                          />
-                        </div>
 
-                        {hospitalTypeSearchOpen && (
-                          <>
-                            <div 
-                              style={{ position: 'fixed', inset: 0, zIndex: 99 }} 
-                              onClick={() => setHospitalTypeSearchOpen(false)} 
+                  {/* Section 1: Hospital Core Info */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      1. Hospital Core Information
+                    </span>
+                    <div style={styles.formRow}>
+                      <div style={styles.formCol}>
+                        <label style={styles.formLabel}>
+                          HOSPITAL NAME <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                        </label>
+                        <input 
+                          type="text" 
+                          style={{ ...styles.formInput, borderColor: !wizardHospital.name?.trim() ? '#CBD5E1' : '#10B981' }} 
+                          placeholder="e.g. MetroCare Super Speciality Hospital"
+                          value={wizardHospital.name || ''} 
+                          onChange={e => updateWizardField('name', e.target.value)} 
+                        />
+                      </div>
+                      <div style={styles.formCol}>
+                        <label style={styles.formLabel}>
+                          HOSPITAL TYPE <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'none' }}>(Optional)</span>
+                        </label>
+                        <div style={{ position: 'relative', width: '100%' }}>
+                          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
+                            <input 
+                              type="text" 
+                              style={{ ...styles.formInput, width: '100%', paddingRight: '35px', boxSizing: 'border-box' }}
+                              placeholder="Search or type e.g. General Clinics, Multi-speciality..."
+                              value={wizardHospital.hospitalType || ''} 
+                              onFocus={() => setHospitalTypeSearchOpen(true)}
+                              onChange={e => {
+                                updateWizardField('hospitalType', e.target.value);
+                                setHospitalTypeSearchOpen(true);
+                              }} 
                             />
-                            <div style={{
-                              position: 'absolute',
-                              top: '100%',
-                              left: 0,
-                              right: 0,
-                              marginTop: '4px',
-                              background: '#FFFFFF',
-                              border: '1px solid #CBD5E1',
-                              borderRadius: '8px',
-                              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
-                              maxHeight: '220px',
-                              overflowY: 'auto',
-                              zIndex: 100,
-                              padding: '4px'
-                            }}>
-                              {(() => {
-                                const allTypes = [
-                                  'General Clinics',
-                                  'Child & Women Care',
-                                  'Medicine Specialties',
-                                  'Surgical Specialties',
-                                  'Cancer & Chronic Care',
-                                  'Mental Health',
-                                  'Skin & Cosmetic',
-                                  'Dental',
-                                  'Rehabilitation',
-                                  'Diagnostics',
-                                  'Eye & Hearing',
-                                  'Lifestyle & Wellness',
-                                  'AYUSH (India)',
-                                  'Specialized Clinics',
-                                  'Digital Healthcare'
-                                ];
+                            <LucideIcon 
+                              name="chevron-down" 
+                              style={{ position: 'absolute', right: '12px', width: '15px', height: '15px', color: '#64748B', pointerEvents: 'none' }} 
+                            />
+                          </div>
 
-                                const query = (wizardHospital.hospitalType || '').toLowerCase().trim();
-                                const matches = allTypes.filter(t => t.toLowerCase().includes(query));
-                                
-                                return (
-                                  <>
-                                    {matches.map(type => (
-                                      <div 
-                                        key={type}
-                                        onClick={() => {
-                                          updateWizardField('hospitalType', type);
-                                          setHospitalTypeSearchOpen(false);
-                                        }}
-                                        style={{
-                                          padding: '8px 12px',
-                                          fontSize: '12px',
-                                          fontWeight: 600,
-                                          color: wizardHospital.hospitalType === type ? '#2563EB' : '#334155',
-                                          background: wizardHospital.hospitalType === type ? '#EFF6FF' : 'transparent',
-                                          borderRadius: '6px',
-                                          cursor: 'pointer',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'space-between',
-                                          transition: 'background 0.1s'
-                                        }}
-                                        onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
-                                        onMouseLeave={e => e.currentTarget.style.background = wizardHospital.hospitalType === type ? '#EFF6FF' : 'transparent'}
-                                      >
-                                        <span>{type}</span>
-                                        {wizardHospital.hospitalType === type && (
-                                          <LucideIcon name="check" style={{ width: '14px', height: '14px', color: '#2563EB' }} />
-                                        )}
-                                      </div>
-                                    ))}
-                                    {query && !allTypes.some(t => t.toLowerCase() === query) && (
-                                      <div 
-                                        onClick={() => {
-                                          setHospitalTypeSearchOpen(false);
-                                        }}
-                                        style={{
-                                          padding: '8px 12px',
-                                          fontSize: '12px',
-                                          fontWeight: 700,
-                                          color: '#059669',
-                                          background: '#ECFDF5',
-                                          borderRadius: '6px',
-                                          cursor: 'pointer',
-                                          marginTop: '4px',
-                                          border: '1px solid #A7F3D0'
-                                        }}
-                                      >
-                                        ✨ Use Custom Type: "{wizardHospital.hospitalType}"
-                                      </div>
-                                    )}
-                                  </>
-                                );
-                              })()}
-                            </div>
-                          </>
-                        )}
+                          {hospitalTypeSearchOpen && (
+                            <>
+                              <div 
+                                style={{ position: 'fixed', inset: 0, zIndex: 99 }} 
+                                onClick={() => setHospitalTypeSearchOpen(false)} 
+                              />
+                              <div style={{
+                                position: 'absolute',
+                                top: '100%',
+                                left: 0,
+                                right: 0,
+                                marginTop: '4px',
+                                background: '#FFFFFF',
+                                border: '1px solid #CBD5E1',
+                                borderRadius: '8px',
+                                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
+                                maxHeight: '220px',
+                                overflowY: 'auto',
+                                zIndex: 100,
+                                padding: '4px'
+                              }}>
+                                {(() => {
+                                  const allTypes = [
+                                    'General Clinics',
+                                    'Child & Women Care',
+                                    'Medicine Specialties',
+                                    'Surgical Specialties',
+                                    'Cancer & Chronic Care',
+                                    'Mental Health',
+                                    'Skin & Cosmetic',
+                                    'Dental',
+                                    'Rehabilitation',
+                                    'Diagnostics',
+                                    'Eye & Hearing',
+                                    'Lifestyle & Wellness',
+                                    'AYUSH (India)',
+                                    'Specialized Clinics',
+                                    'Digital Healthcare'
+                                  ];
+
+                                  const query = (wizardHospital.hospitalType || '').toLowerCase().trim();
+                                  const matches = allTypes.filter(t => t.toLowerCase().includes(query));
+                                  
+                                  return (
+                                    <>
+                                      {matches.map(type => (
+                                        <div 
+                                          key={type}
+                                          onClick={() => {
+                                            updateWizardField('hospitalType', type);
+                                            setHospitalTypeSearchOpen(false);
+                                          }}
+                                          style={{
+                                            padding: '8px 12px',
+                                            fontSize: '12px',
+                                            fontWeight: 600,
+                                            color: wizardHospital.hospitalType === type ? '#2563EB' : '#334155',
+                                            background: wizardHospital.hospitalType === type ? '#EFF6FF' : 'transparent',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            transition: 'background 0.1s'
+                                          }}
+                                          onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
+                                          onMouseLeave={e => e.currentTarget.style.background = wizardHospital.hospitalType === type ? '#EFF6FF' : 'transparent'}
+                                        >
+                                          <span>{type}</span>
+                                          {wizardHospital.hospitalType === type && (
+                                            <LucideIcon name="check" style={{ width: '14px', height: '14px', color: '#2563EB' }} />
+                                          )}
+                                        </div>
+                                      ))}
+                                      {query && !allTypes.some(t => t.toLowerCase() === query) && (
+                                        <div 
+                                          onClick={() => {
+                                            setHospitalTypeSearchOpen(false);
+                                          }}
+                                          style={{
+                                            padding: '8px 12px',
+                                            fontSize: '12px',
+                                            fontWeight: 700,
+                                            color: '#059669',
+                                            background: '#ECFDF5',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            marginTop: '4px',
+                                            border: '1px solid #A7F3D0'
+                                          }}
+                                        >
+                                          ✨ Use Custom Type: "{wizardHospital.hospitalType}"
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                  <div style={{ height: '1px', background: '#E2E8F0', margin: '8px 0' }} />
-                  <div style={styles.formRow}>
+
+                  <div style={{ height: '1px', background: '#E2E8F0' }} />
+
+                  {/* Section 2: Primary Contact */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      2. Primary Contact Details
+                    </span>
+                    <div style={styles.formRow}>
+                      <div style={styles.formCol}>
+                        <label style={styles.formLabel}>
+                          PRIMARY CONTACT PERSON <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                        </label>
+                        <input 
+                          type="text" 
+                          style={{ ...styles.formInput, borderColor: !wizardHospital.contactName?.trim() ? '#CBD5E1' : '#10B981' }} 
+                          placeholder="e.g. Dr. Rajesh Sharma"
+                          value={wizardHospital.contactName || ''} 
+                          onChange={e => updateWizardField('contactName', e.target.value)} 
+                        />
+                      </div>
+                      <div style={styles.formCol}>
+                        <label style={styles.formLabel}>
+                          DESIGNATION <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'none' }}>(Optional)</span>
+                        </label>
+                        <input 
+                          type="text" 
+                          style={styles.formInput} 
+                          placeholder="e.g. Medical Director / Operations Head"
+                          value={wizardHospital.contactDesignation || ''} 
+                          onChange={e => updateWizardField('contactDesignation', e.target.value)} 
+                        />
+                      </div>
+                    </div>
+                    <div style={styles.formRow}>
+                      <div style={styles.formCol}>
+                        <label style={styles.formLabel}>
+                          CONTACT EMAIL <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                        </label>
+                        <input 
+                          type="email" 
+                          style={{ ...styles.formInput, borderColor: !wizardHospital.contactEmail?.trim() ? '#CBD5E1' : '#10B981' }} 
+                          placeholder="e.g. admin@metrocare.com"
+                          value={wizardHospital.contactEmail || ''} 
+                          onChange={e => updateWizardField('contactEmail', e.target.value)} 
+                        />
+                      </div>
+                      <div style={styles.formCol}>
+                        <label style={styles.formLabel}>
+                          MOBILE NUMBER <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'none' }}>(Optional)</span>
+                        </label>
+                        <input 
+                          type="text" 
+                          style={styles.formInput}
+                          maxLength={10}
+                          placeholder="e.g. 9876543210 (10 digits)"
+                          value={wizardHospital.contactMobile || ''} 
+                          onChange={e => updateWizardField('contactMobile', e.target.value.replace(/[^0-9]/g, ''))} 
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ height: '1px', background: '#E2E8F0' }} />
+
+                  {/* Section 3: Facility Location */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      3. Facility Location & Address
+                    </span>
+                    <div style={styles.formRow}>
+                      <div style={styles.formCol}>
+                        <label style={styles.formLabel}>
+                          CITY <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                        </label>
+                        <input 
+                          type="text" 
+                          style={{ ...styles.formInput, borderColor: !wizardHospital.city?.trim() ? '#CBD5E1' : '#10B981' }} 
+                          placeholder="e.g. Mumbai"
+                          value={wizardHospital.city || ''} 
+                          onChange={e => updateWizardField('city', e.target.value)} 
+                        />
+                      </div>
+                      <div style={styles.formCol}>
+                        <label style={styles.formLabel}>
+                          COUNTRY <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'none' }}>(Optional)</span>
+                        </label>
+                        <input 
+                          type="text" 
+                          style={styles.formInput}
+                          placeholder="e.g. India"
+                          value={wizardHospital.country || ''} 
+                          onChange={e => updateWizardField('country', e.target.value)} 
+                        />
+                      </div>
+                    </div>
                     <div style={styles.formCol}>
-                      <label style={styles.formLabel}>PRIMARY CONTACT PERSON</label>
+                      <label style={styles.formLabel}>
+                        STREET ADDRESS <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                      </label>
+                      <textarea 
+                        style={{ ...styles.formInput, height: '60px', padding: '10px', resize: 'none', borderColor: !wizardHospital.address?.trim() ? '#CBD5E1' : '#10B981' }} 
+                        placeholder="e.g. Plot 42, Healthcare City, Sector 18, Opp Central Park"
+                        value={wizardHospital.address || ''} 
+                        onChange={e => updateWizardField('address', e.target.value)} 
+                      />
+                    </div>
+                    <div style={styles.formCol}>
+                      <label style={styles.formLabel}>
+                        GOOGLE MAPS EMBED OR LOCATION URL <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'none' }}>(Optional)</span>
+                      </label>
                       <input 
                         type="text" 
                         style={styles.formInput} 
-                        value={wizardHospital.contactName || ''} 
-                        onChange={e => updateWizardField('contactName', e.target.value)} 
+                        placeholder="e.g. https://maps.google.com/?q=..."
+                        value={wizardHospital.googleMapUrl || ''} 
+                        onChange={e => updateWizardField('googleMapUrl', e.target.value)} 
                       />
                     </div>
-                    <div style={styles.formCol}>
-                      <label style={styles.formLabel}>DESIGNATION</label>
-                      <input 
-                        type="text" 
-                        style={styles.formInput} 
-                        value={wizardHospital.contactDesignation || ''} 
-                        onChange={e => updateWizardField('contactDesignation', e.target.value)} 
-                      />
-                    </div>
-                  </div>
-                  <div style={styles.formRow}>
-                    <div style={styles.formCol}>
-                      <label style={styles.formLabel}>CONTACT EMAIL</label>
-                      <input 
-                        type="email" 
-                        style={styles.formInput} 
-                        value={wizardHospital.contactEmail || ''} 
-                        onChange={e => updateWizardField('contactEmail', e.target.value)} 
-                      />
-                    </div>
-                    <div style={styles.formCol}>
-                      <label style={styles.formLabel}>MOBILE NUMBER</label>
-                      <input 
-                        type="text" 
-                        style={styles.formInput}
-                        maxLength={10}
-                        value={wizardHospital.contactMobile || ''} 
-                        onChange={e => updateWizardField('contactMobile', e.target.value.replace(/[^0-9]/g, ''))} 
-                      />
-                    </div>
-                  </div>
-                  <div style={{ height: '1px', background: '#E2E8F0', margin: '8px 0' }} />
-                  <div style={styles.formRow}>
-                    <div style={styles.formCol}>
-                      <label style={styles.formLabel}>CITY</label>
-                      <input 
-                        type="text" 
-                        style={styles.formInput} 
-                        value={wizardHospital.city || ''} 
-                        onChange={e => updateWizardField('city', e.target.value)} 
-                      />
-                    </div>
-                    <div style={styles.formCol}>
-                      <label style={styles.formLabel}>COUNTRY</label>
-                      <input 
-                        type="text" 
-                        style={styles.formInput}
-                        placeholder="e.g. India"
-                        value={wizardHospital.country || ''} 
-                        onChange={e => updateWizardField('country', e.target.value)} 
-                      />
-                    </div>
-                  </div>
-                  <div style={styles.formCol}>
-                    <label style={styles.formLabel}>STREET ADDRESS</label>
-                    <textarea 
-                      style={{ ...styles.formInput, height: '60px', padding: '10px', resize: 'none' }} 
-                      value={wizardHospital.address || ''} 
-                      onChange={e => updateWizardField('address', e.target.value)} 
-                    />
-                  </div>
-                  <div style={styles.formCol}>
-                    <label style={styles.formLabel}>GOOGLE MAPS EMBED OR LOCATION URL</label>
-                    <input 
-                      type="text" 
-                      style={styles.formInput} 
-                      value={wizardHospital.googleMapUrl || ''} 
-                      onChange={e => updateWizardField('googleMapUrl', e.target.value)} 
-                    />
                   </div>
                 </div>
               )}
@@ -3235,11 +3330,13 @@ const SuperAdminDashboard = () => {
                   </div>
                   <div style={styles.formRow}>
                     <div style={styles.formCol}>
-                      <label style={styles.formLabel}>PAN NUMBER</label>
+                      <label style={styles.formLabel}>
+                        PAN NUMBER <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                      </label>
                       <input 
                         type="text" 
-                        style={{ ...styles.formInput, borderColor: (wizardHospital.panNumber && !validatePANFormat(wizardHospital.panNumber)) ? '#EF4444' : undefined }}
-                        placeholder="e.g. ABCDE1234F"
+                        style={{ ...styles.formInput, borderColor: (wizardHospital.panNumber && !validatePANFormat(wizardHospital.panNumber)) ? '#EF4444' : wizardHospital.panNumber ? '#10B981' : undefined }}
+                        placeholder="e.g. ABCDE1234F (5 letters, 4 digits, 1 letter)"
                         value={wizardHospital.panNumber || ''} 
                         onChange={e => updateWizardField('panNumber', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))} 
                       />
@@ -3248,11 +3345,13 @@ const SuperAdminDashboard = () => {
                       )}
                     </div>
                     <div style={styles.formCol}>
-                      <label style={styles.formLabel}>GSTIN NUMBER</label>
+                      <label style={styles.formLabel}>
+                        GSTIN NUMBER <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                      </label>
                       <input 
                         type="text" 
-                        style={{ ...styles.formInput, borderColor: (wizardHospital.gstin && !validateGSTINFormat(wizardHospital.gstin)) ? '#EF4444' : undefined }}
-                        placeholder="e.g. 07ABCDE1234F1Z1"
+                        style={{ ...styles.formInput, borderColor: (wizardHospital.gstin && !validateGSTINFormat(wizardHospital.gstin)) ? '#EF4444' : wizardHospital.gstin ? '#10B981' : undefined }}
+                        placeholder="e.g. 07METRO8827P1ZX (15 characters)"
                         value={wizardHospital.gstin || ''} 
                         onChange={e => updateWizardField('gstin', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15))} 
                       />
@@ -3263,11 +3362,13 @@ const SuperAdminDashboard = () => {
                   </div>
                   <div style={styles.formRow}>
                     <div style={styles.formCol}>
-                      <label style={styles.formLabel}>CIN (CORPORATE IDENTIFICATION NUMBER)</label>
+                      <label style={styles.formLabel}>
+                        CIN (CORPORATE ID) <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                      </label>
                       <input 
                         type="text" 
-                        style={{ ...styles.formInput, borderColor: (wizardHospital.corpId && !validateCINFormat(wizardHospital.corpId)) ? '#EF4444' : undefined }}
-                        placeholder="e.g. U85110DL2026PTC123456"
+                        style={{ ...styles.formInput, borderColor: (wizardHospital.corpId && !validateCINFormat(wizardHospital.corpId)) ? '#EF4444' : wizardHospital.corpId ? '#10B981' : undefined }}
+                        placeholder="e.g. U85110DL2026PTC123456 (21 characters)"
                         value={wizardHospital.corpId || ''} 
                         onChange={e => updateWizardField('corpId', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 21))} 
                       />
@@ -3276,11 +3377,13 @@ const SuperAdminDashboard = () => {
                       )}
                     </div>
                     <div style={styles.formCol}>
-                      <label style={styles.formLabel}>AUTHORIZED SIGNATORY NAME</label>
+                      <label style={styles.formLabel}>
+                        AUTHORIZED SIGNATORY NAME <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                      </label>
                       <input 
                         type="text" 
-                        style={styles.formInput} 
-                        placeholder="e.g. Dr. Rajesh Sharma"
+                        style={{ ...styles.formInput, borderColor: wizardHospital.signatoryName?.trim() ? '#10B981' : undefined }} 
+                        placeholder="e.g. Dr. Sarah Connor (Managing Director)"
                         value={wizardHospital.signatoryName || ''} 
                         onChange={e => updateWizardField('signatoryName', e.target.value)} 
                       />
@@ -3289,10 +3392,12 @@ const SuperAdminDashboard = () => {
                   <div style={{ height: '1px', background: '#E2E8F0', margin: '8px 0' }} />
                   <div style={styles.formRow}>
                     <div style={styles.formCol}>
-                      <label style={styles.formLabel}>DRUG LICENSE NUMBER</label>
+                      <label style={styles.formLabel}>
+                        DRUG LICENSE NUMBER <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                      </label>
                       <input 
                         type="text" 
-                        style={{ ...styles.formInput, borderColor: (wizardHospital.drugLicense && !validateDrugLicenseFormat(wizardHospital.drugLicense)) ? '#EF4444' : undefined }}
+                        style={{ ...styles.formInput, borderColor: (wizardHospital.drugLicense && !validateDrugLicenseFormat(wizardHospital.drugLicense)) ? '#EF4444' : wizardHospital.drugLicense ? '#10B981' : undefined }}
                         placeholder="e.g. DL-293849/2026"
                         value={wizardHospital.drugLicense || ''} 
                         onChange={e => updateWizardField('drugLicense', e.target.value.replace(/[^a-zA-Z0-9\-\/\s]/g, '').slice(0, 30))} 
@@ -3302,7 +3407,9 @@ const SuperAdminDashboard = () => {
                       )}
                     </div>
                     <div style={styles.formCol}>
-                      <label style={styles.formLabel}>FIRE SAFETY CERTIFICATE</label>
+                      <label style={styles.formLabel}>
+                        FIRE SAFETY CERTIFICATE <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'none' }}>(Optional)</span>
+                      </label>
                       <input 
                         type="text" 
                         style={{ ...styles.formInput, borderColor: (wizardHospital.fireSafetyCertificate && !validateCertificateFormat(wizardHospital.fireSafetyCertificate)) ? '#EF4444' : undefined }}
@@ -3316,7 +3423,9 @@ const SuperAdminDashboard = () => {
                     </div>
                   </div>
                   <div style={styles.formCol}>
-                    <label style={styles.formLabel}>POLLUTION CONTROL BOARD REGISTER NUMBER</label>
+                    <label style={styles.formLabel}>
+                      POLLUTION CONTROL BOARD REGISTER NUMBER <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'none' }}>(Optional)</span>
+                    </label>
                     <input 
                       type="text" 
                       style={{ ...styles.formInput, borderColor: (wizardHospital.pollutionCertificate && !validateCertificateFormat(wizardHospital.pollutionCertificate)) ? '#EF4444' : undefined }}
@@ -3330,7 +3439,9 @@ const SuperAdminDashboard = () => {
                   </div>
                   
                   <div style={styles.formCol}>
-                    <label style={styles.formLabel}>COMPLIANCE DOCUMENTS (PDF, XML, DOCX, IMAGES)</label>
+                    <label style={styles.formLabel}>
+                      COMPLIANCE DOCUMENTS (PDF, XML, DOCX, IMAGES) <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'none' }}>(Optional)</span>
+                    </label>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       <input 
                         type="file"
@@ -3481,7 +3592,9 @@ const SuperAdminDashboard = () => {
 
                   <div style={styles.formRow}>
                     <div style={styles.formCol}>
-                      <label style={styles.formLabel}>BILLING CYCLE</label>
+                      <label style={styles.formLabel}>
+                        BILLING CYCLE <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                      </label>
                       <select 
                         style={styles.filterSelect} 
                         value={wizardHospital.billingCycle || ''} 
@@ -3493,7 +3606,9 @@ const SuperAdminDashboard = () => {
                       </select>
                     </div>
                     <div style={styles.formCol}>
-                      <label style={styles.formLabel}>CONTRACT START DATE</label>
+                      <label style={styles.formLabel}>
+                        CONTRACT START DATE <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'none' }}>(Optional - defaults to today)</span>
+                      </label>
                       <input 
                         type="date" 
                         style={styles.formInput} 
@@ -3504,7 +3619,9 @@ const SuperAdminDashboard = () => {
                   </div>
 
                   <div style={styles.formCol}>
-                    <label style={styles.formLabel}>CONTRACT VALIDITY PERIOD (YEARS)</label>
+                    <label style={styles.formLabel}>
+                      CONTRACT VALIDITY PERIOD (YEARS) <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                    </label>
                     <select 
                       style={styles.filterSelect} 
                       value={wizardHospital.contractDurationYears || ''} 
@@ -3516,6 +3633,161 @@ const SuperAdminDashboard = () => {
                       <option>3</option>
                       <option>5</option>
                     </select>
+                  </div>
+
+                  <div style={{ height: '1px', background: '#E2E8F0', margin: '8px 0' }} />
+
+                  {/* CLINICAL OPERATIONS & DOCTOR MODE CONFIGURATION */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '13.5px', fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        CLINICAL OPERATIONS <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                      </h4>
+                      <p style={{ margin: '3px 0 0', fontSize: '11.5px', color: '#64748B' }}>
+                        Configure the clinical operating mode and active functional modules for this hospital node.
+                      </p>
+                    </div>
+
+                    {/* Doctor Clinical Mode Selector */}
+                    <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          DOCTOR CLINICAL MODE <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                        </label>
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          background: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#EFF6FF' : '#FFF7ED',
+                          color: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#2563EB' : '#EA580C',
+                          border: `1px solid ${(wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#BFDBFE' : '#FED7AA'}`
+                        }}>
+                          ● Active Mode: {wizardHospital.doctorClinicalMode || 'ONLINE'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        {/* ONLINE Option */}
+                        <div
+                          onClick={() => updateWizardField('doctorClinicalMode', 'ONLINE')}
+                          style={{
+                            border: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '2px solid #2563EB' : '1px solid #CBD5E1',
+                            background: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#EFF6FF' : '#FFFFFF',
+                            borderRadius: '10px',
+                            padding: '14px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                            <input
+                              type="radio"
+                              name="onboardingDoctorClinicalMode"
+                              checked={(wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE'}
+                              onChange={() => updateWizardField('doctorClinicalMode', 'ONLINE')}
+                              style={{ accentColor: '#2563EB', cursor: 'pointer' }}
+                            />
+                            <strong style={{ fontSize: '13px', color: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#1E40AF' : '#1E293B' }}>
+                              ONLINE
+                            </strong>
+                          </div>
+                          <p style={{ margin: 0, fontSize: '11px', color: '#64748B', lineHeight: 1.45, paddingLeft: '22px' }}>
+                            Doctors use Curoxa for digital clinical consultations, prescriptions and clinical workflows.
+                          </p>
+                        </div>
+
+                        {/* OFFLINE Option */}
+                        <div
+                          onClick={() => updateWizardField('doctorClinicalMode', 'OFFLINE')}
+                          style={{
+                            border: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'OFFLINE' ? '2px solid #EA580C' : '1px solid #CBD5E1',
+                            background: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'OFFLINE' ? '#FFF7ED' : '#FFFFFF',
+                            borderRadius: '10px',
+                            padding: '14px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                            <input
+                              type="radio"
+                              name="onboardingDoctorClinicalMode"
+                              checked={(wizardHospital.doctorClinicalMode || 'ONLINE') === 'OFFLINE'}
+                              onChange={() => updateWizardField('doctorClinicalMode', 'OFFLINE')}
+                              style={{ accentColor: '#EA580C', cursor: 'pointer' }}
+                            />
+                            <strong style={{ fontSize: '13px', color: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'OFFLINE' ? '#C2410C' : '#1E293B' }}>
+                              OFFLINE
+                            </strong>
+                          </div>
+                          <p style={{ margin: 0, fontSize: '11px', color: '#64748B', lineHeight: 1.45, paddingLeft: '22px' }}>
+                            Doctors use Curoxa for HR/self-service only. Clinical consultation and handwritten prescriptions are handled through the hospital's offline workflow.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Hospital Services & Module Configuration */}
+                    <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div>
+                        <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '2px' }}>
+                          HOSPITAL SERVICES & MODULE CONFIGURATION
+                        </label>
+                        <p style={{ margin: 0, fontSize: '11px', color: '#64748B' }}>
+                          Enable or disable specific modules based on hospital facilities.
+                        </p>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        {[
+                          { key: 'reception', label: 'Reception Module', desc: 'Front desk, check-in, appointments & token queue' },
+                          { key: 'doctor', label: 'Doctor Module', desc: 'Physician portal (clinical or HR according to mode)' },
+                          { key: 'pharmacy', label: 'Pharmacy Module', desc: 'Prescription dispensation and medication inventory' },
+                          { key: 'laboratory', label: 'Laboratory Module', desc: 'Diagnostic test requests, sample tracking & reports' }
+                        ].map(mod => {
+                          const isEnabled = isModuleEnabled(mod.key);
+                          return (
+                            <div
+                              key={mod.key}
+                              style={{
+                                background: '#FFFFFF',
+                                border: '1px solid #E2E8F0',
+                                borderRadius: '10px',
+                                padding: '12px 14px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: '10px'
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <strong style={{ fontSize: '12.5px', color: '#1E293B' }}>{mod.label}</strong>
+                                  <span style={{
+                                    fontSize: '9.5px',
+                                    fontWeight: 800,
+                                    padding: '1px 6px',
+                                    borderRadius: '8px',
+                                    background: isEnabled ? '#DCFCE7' : '#F1F5F9',
+                                    color: isEnabled ? '#15803D' : '#64748B'
+                                  }}>
+                                    {isEnabled ? 'ON' : 'OFF'}
+                                  </span>
+                                </div>
+                                <p style={{ margin: '2px 0 0', fontSize: '10.5px', color: '#64748B', lineHeight: 1.3 }}>
+                                  {mod.desc}
+                                </p>
+                              </div>
+                              <ToggleSwitch
+                                checked={isEnabled}
+                                onChange={(nextVal) => toggleWizardModule(mod.key, nextVal)}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -3558,7 +3830,7 @@ const SuperAdminDashboard = () => {
                   {/* Provisioned Onboarding Staff */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                      <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>Provisioned Staff Registry</h4>
+                      <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>Provisioned Staff Registry <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'none' }}>(Optional)</span></h4>
                       <button 
                         type="button" 
                         style={{ ...styles.btnPrimary, height: '30px', padding: '0 10px', fontSize: '11px' }}
@@ -3657,7 +3929,9 @@ const SuperAdminDashboard = () => {
                       <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>Administrator Credentials & SMTP Dispatcher</h4>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
                         <div style={styles.formCol}>
-                          <label style={styles.formLabel}>ADMIN FULL NAME</label>
+                          <label style={styles.formLabel}>
+                            ADMIN FULL NAME <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                          </label>
                           <input 
                             type="text" 
                             style={styles.formInput} 
@@ -3666,7 +3940,9 @@ const SuperAdminDashboard = () => {
                           />
                         </div>
                         <div style={styles.formCol}>
-                          <label style={styles.formLabel}>ADMIN WORK EMAIL</label>
+                          <label style={styles.formLabel}>
+                            ADMIN WORK EMAIL <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                          </label>
                           <input 
                             type="email" 
                             style={styles.formInput} 
@@ -3675,7 +3951,9 @@ const SuperAdminDashboard = () => {
                           />
                         </div>
                         <div style={styles.formCol}>
-                          <label style={styles.formLabel}>ADMIN TELEPHONE</label>
+                          <label style={styles.formLabel}>
+                            ADMIN TELEPHONE <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                          </label>
                           <input 
                             type="text" 
                             style={styles.formInput} 
@@ -3685,7 +3963,9 @@ const SuperAdminDashboard = () => {
                           />
                         </div>
                         <div style={styles.formCol}>
-                          <label style={styles.formLabel}>SECURITY PASSWORD</label>
+                          <label style={styles.formLabel}>
+                            SECURITY PASSWORD <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                          </label>
                           <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
                             <input 
                               type={showPasswords['wizardAdmin'] ? 'text' : 'password'} 
@@ -3714,7 +3994,9 @@ const SuperAdminDashboard = () => {
                           </div>
                         </div>
                         <div style={styles.formCol}>
-                          <label style={styles.formLabel}>CONFIRM PASSWORD</label>
+                          <label style={styles.formLabel}>
+                            CONFIRM PASSWORD <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
+                          </label>
                           <input 
                             type={showPasswords['wizardAdmin'] ? 'text' : 'password'} 
                             style={{ ...styles.formInput, borderColor: wizardHospital.confirmAdminPassword && wizardHospital.adminPassword !== wizardHospital.confirmAdminPassword ? '#EF4444' : undefined }} 
@@ -3848,7 +4130,7 @@ const SuperAdminDashboard = () => {
                         { id: 1, title: 'Step 1: Basic Info', desc: 'Hospital identity and branding assets verified.', details: `Hospital Name: ${wizardHospital.name || 'Not Provided'}\nContact Email: ${wizardHospital.contactEmail || 'Not Provided'}` },
                         { id: 2, title: 'Step 2: Org Setup', desc: 'Department hierarchy and facility mapping complete.', details: `Timezone: ${wizardHospital.timezone || 'Not Provided'}\nCurrency: ${wizardHospital.currency || 'Not Provided'}\nDate Format: ${wizardHospital.dateFormat || 'Not Provided'}\nDefault Language: ${wizardHospital.language || 'Not Provided'}` },
                         { id: 3, title: 'Step 3: Legal & Compliance', desc: 'Regulatory documents and HIPAA protocols signed.', details: `PAN Number: ${wizardHospital.panNumber || 'Not Provided'}\nGSTIN: ${wizardHospital.gstin || 'Not Provided'}\nCorporate ID (CIN): ${wizardHospital.corpId || 'Not Provided'}\nAuthorized Signatory: ${wizardHospital.signatoryName || 'Not Provided'}\nDrug License: ${wizardHospital.drugLicense || 'Not Provided'}` },
-                        { id: 4, title: 'Step 4: Subscription & Licensing', desc: 'Entitlements & keys activated for 500 seats.', details: `Subscription Tier: ${(wizardHospital.subscriptionPlan || 'Not Provided').toUpperCase()}\nBilling Cycle: ${(wizardHospital.billingCycle || 'Not Provided').toUpperCase()}\nContract Duration: ${wizardHospital.contractDurationYears || 0} Year(s)` },
+                        { id: 4, title: 'Step 4: Subscription & Licensing', desc: 'Entitlements, clinical operating mode & active modules.', details: `Subscription Tier: ${(wizardHospital.subscriptionPlan || 'Not Provided').toUpperCase()}\nBilling Cycle: ${(wizardHospital.billingCycle || 'Not Provided').toUpperCase()}\nContract Duration: ${wizardHospital.contractDurationYears || 0} Year(s)\nDoctor Clinical Mode: ${wizardHospital.doctorClinicalMode || 'ONLINE'}\nModules: Reception (${isModuleEnabled('reception') ? 'ON' : 'OFF'}), Doctor (${isModuleEnabled('doctor') ? 'ON' : 'OFF'}), Pharmacy (${isModuleEnabled('pharmacy') ? 'ON' : 'OFF'}), Laboratory (${isModuleEnabled('laboratory') ? 'ON' : 'OFF'})` },
                         { id: 5, title: 'Step 5: User & Role Provisioning', desc: 'RBAC matrices applied to 120 staff members.', details: `Sandbox Database Link: ${wizardHospital.sandboxDbUrl || 'Pending'}\nAdmin Username: ${wizardHospital.adminEmail || 'Not Provided'}\nProvisioned Users: Configured` }
                       ].map(step => {
                         const isOpen = expandedSteps.includes(step.id);
@@ -4283,6 +4565,24 @@ const SuperAdminDashboard = () => {
                       {(wizardHospital.currency || wizardHospital.timezone) ? `${wizardHospital.currency || ''} (${wizardHospital.timezone || ''})` : 'Not Specified'}
                     </span>
                   </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <LucideIcon name="activity" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
+                      Doctor Mode
+                    </span>
+                    <span style={{
+                      fontWeight: 800,
+                      fontSize: '10px',
+                      padding: '1px 6px',
+                      borderRadius: '6px',
+                      background: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#EFF6FF' : '#FFF7ED',
+                      color: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#2563EB' : '#EA580C',
+                      border: `1px solid ${(wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#BFDBFE' : '#FED7AA'}`
+                    }}>
+                      ● {wizardHospital.doctorClinicalMode || 'ONLINE'}
+                    </span>
+                  </div>
                 </div>
 
                 <div style={{ height: '1px', background: '#F1F5F9' }} />
@@ -4320,105 +4620,86 @@ const SuperAdminDashboard = () => {
         </div>
 
         <footer style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '60px', background: '#FFFFFF', borderTop: '1px solid #E2E8F0', padding: '0 24px', flexShrink: 0 }}>
-          {wizardStep === 6 ? (
-            <>
-              {/* Left Spacer */}
-              <div />
+          {/* Step Indicator on left */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 700, color: '#64748B' }}>
+            <span style={{ color: '#2563EB', fontWeight: 800 }}>Step {wizardStep} of {totalSteps}</span>
+            <span>•</span>
+            <span style={{ color: '#1E293B' }}>{steps[wizardStep - 1]?.label}</span>
+          </div>
 
-              {/* Right Actions */}
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button 
-                  onClick={handlePrevStep}
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '8px 16px', fontSize: '12.5px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
-                >
-                  <LucideIcon name="arrow-left" style={{ width: '14px', height: '14px' }} />
-                  Previous
-                </button>
-                <button 
-                  onClick={handleNextStep}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', background: isCurrentStepValid ? '#2563EB' : '#94A3B8', border: 'none', color: '#FFFFFF', borderRadius: '6px', padding: '8px 20px', fontSize: '12.5px', fontWeight: 700, cursor: isCurrentStepValid ? 'pointer' : 'not-allowed', opacity: isCurrentStepValid ? 1 : 0.7, transition: 'all 0.2s' }}
-                >
-                  Continue to Step 7
-                  <LucideIcon name="arrow-right" style={{ width: '14px', height: '14px' }} />
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Spacer on left */}
-              <div />
-              {/* Standard Previous/Continue on right */}
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button 
-                  onClick={handlePrevStep}
-                  disabled={wizardStep === 1}
-                  style={{ 
-                    background: '#FFFFFF', 
-                    border: '1px solid #E2E8F0', 
-                    color: wizardStep === 1 ? '#CBD5E1' : '#475569', 
-                    borderRadius: '6px', 
-                    padding: '8px 16px', 
-                    fontSize: '12.5px', 
-                    fontWeight: 700, 
-                    cursor: wizardStep === 1 ? 'default' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <LucideIcon name="arrow-left" style={{ width: '14px', height: '14px' }} />
-                  Previous
-                </button>
-                {wizardStep < totalSteps ? (
-                  <button 
-                    onClick={handleNextStep}
-                    style={{ 
-                      background: isCurrentStepValid ? '#2563EB' : '#94A3B8', 
-                      border: 'none', 
-                      color: '#FFFFFF', 
-                      borderRadius: '6px', 
-                      padding: '8px 20px', 
-                      fontSize: '12.5px', 
-                      fontWeight: 700, 
-                      cursor: isCurrentStepValid ? 'pointer' : 'not-allowed',
-                      opacity: isCurrentStepValid ? 1 : 0.7,
-                      transition: 'all 0.2s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    Continue
-                    <LucideIcon name="arrow-right" style={{ width: '14px', height: '14px' }} />
-                  </button>
-                ) : (
-                  <button 
-                    onClick={handleGoLive}
-                    disabled={isActivating}
-                    style={{ 
-                      background: isActivating ? '#94A3B8' : '#10B981', 
-                      border: 'none', 
-                      color: '#FFFFFF', 
-                      borderRadius: '6px', 
-                      padding: '8px 20px', 
-                      fontSize: '12.5px', 
-                      fontWeight: 700, 
-                      cursor: isActivating ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      boxShadow: isActivating ? 'none' : '0 4px 6px rgba(16, 185, 129, 0.2)',
-                      opacity: isActivating ? 0.7 : 1,
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    {isActivating ? 'Activating...' : 'Activate Subscription & Go Live'}
-                    {!isActivating && <LucideIcon name="rocket" style={{ width: '14px', height: '14px' }} />}
-                  </button>
-                )}
-              </div>
-            </>
-          )}
+          {/* Navigation buttons on right */}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              type="button"
+              onClick={handlePrevStep}
+              disabled={wizardStep === 1}
+              style={{ 
+                background: '#FFFFFF', 
+                border: '1px solid #E2E8F0', 
+                color: wizardStep === 1 ? '#CBD5E1' : '#475569', 
+                borderRadius: '6px', 
+                padding: '8px 16px', 
+                fontSize: '12.5px', 
+                fontWeight: 700, 
+                cursor: wizardStep === 1 ? 'default' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <LucideIcon name="arrow-left" style={{ width: '14px', height: '14px' }} />
+              Previous
+            </button>
+            {wizardStep < totalSteps ? (
+              <button 
+                type="button"
+                onClick={handleNextStep}
+                style={{ 
+                  background: isCurrentStepValid ? '#2563EB' : '#94A3B8', 
+                  border: 'none', 
+                  color: '#FFFFFF', 
+                  borderRadius: '6px', 
+                  padding: '8px 20px', 
+                  fontSize: '12.5px', 
+                  fontWeight: 700, 
+                  cursor: isCurrentStepValid ? 'pointer' : 'not-allowed',
+                  opacity: isCurrentStepValid ? 1 : 0.7,
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>{wizardStep === 6 ? 'Continue to Go Live' : `Next: ${steps[wizardStep]?.label || 'Next Step'}`}</span>
+                <LucideIcon name="arrow-right" style={{ width: '14px', height: '14px' }} />
+              </button>
+            ) : (
+              <button 
+                type="button"
+                onClick={handleGoLive}
+                disabled={isActivating}
+                style={{ 
+                  background: isActivating ? '#94A3B8' : '#10B981', 
+                  border: 'none', 
+                  color: '#FFFFFF', 
+                  borderRadius: '6px', 
+                  padding: '8px 24px', 
+                  fontSize: '13px', 
+                  fontWeight: 800, 
+                  cursor: isActivating ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: isActivating ? 'none' : '0 4px 6px rgba(16, 185, 129, 0.2)',
+                  opacity: isActivating ? 0.7 : 1,
+                  transition: 'all 0.2s'
+                }}
+              >
+                {isActivating ? 'Onboarding Hospital...' : 'Complete Onboarding & Go Live'}
+                {!isActivating && <LucideIcon name="rocket" style={{ width: '15px', height: '15px' }} />}
+              </button>
+            )}
+          </div>
         </footer>
 
         <div style={{ ...styles.drawerOverlay, background: isAddUserDrawerOpen ? 'rgba(15, 23, 42, 0.3)' : 'rgba(15, 23, 42, 0)', backdropFilter: isAddUserDrawerOpen ? 'blur(4px)' : 'blur(0)', pointerEvents: isAddUserDrawerOpen ? 'auto' : 'none', transition: 'background 0.3s ease, backdrop-filter 0.3s ease' }} onClick={() => setIsAddUserDrawerOpen(false)}>
@@ -7611,6 +7892,130 @@ const SuperAdminDashboard = () => {
                               />
                             </div>
                           ))}
+                        </div>
+                      </div>
+
+                      {/* Doctor Clinical Mode Section */}
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <strong style={{ fontSize: '10px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DOCTOR CLINICAL MODE</strong>
+                          <span style={{ 
+                            fontSize: '10px', 
+                            fontWeight: 800, 
+                            padding: '2px 8px', 
+                            borderRadius: '12px',
+                            background: (hosp.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#EFF6FF' : '#FFF7ED',
+                            color: (hosp.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#2563EB' : '#EA580C',
+                            border: `1px solid ${(hosp.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#BFDBFE' : '#FED7AA'}`
+                          }}>
+                            ● {(hosp.doctorClinicalMode || 'ONLINE')}
+                          </span>
+                        </div>
+
+                        <div style={{ background: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div style={{ display: 'flex', gap: '6px', background: '#E2E8F0', padding: '3px', borderRadius: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const newMode = 'ONLINE';
+                                if ((hosp.doctorClinicalMode || 'ONLINE') === newMode) return;
+                                const originalMode = hosp.doctorClinicalMode || 'ONLINE';
+                                setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, doctorClinicalMode: newMode } : h));
+                                const token = localStorage.getItem('token');
+                                try {
+                                  const res = await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                    body: JSON.stringify({ doctorClinicalMode: newMode })
+                                  });
+                                  if (!res.ok) {
+                                    setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, doctorClinicalMode: originalMode } : h));
+                                    showToast('Failed to update Doctor Clinical Mode', 'error');
+                                  } else {
+                                    const updated = await res.json();
+                                    setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, doctorClinicalMode: updated.doctorClinicalMode || newMode } : h));
+                                    showToast('Doctor Clinical Mode set to ONLINE', 'success');
+                                  }
+                                } catch (err) {
+                                  console.error(err);
+                                  setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, doctorClinicalMode: originalMode } : h));
+                                  showToast('Network error updating Doctor Clinical Mode', 'error');
+                                }
+                              }}
+                              style={{
+                                flex: 1,
+                                padding: '8px 12px',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                background: (hosp.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#2563EB' : 'transparent',
+                                color: (hosp.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#FFFFFF' : '#64748B',
+                                boxShadow: (hosp.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                              }}
+                            >
+                              ONLINE
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const newMode = 'OFFLINE';
+                                if ((hosp.doctorClinicalMode || 'ONLINE') === newMode) return;
+                                const originalMode = hosp.doctorClinicalMode || 'ONLINE';
+                                setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, doctorClinicalMode: newMode } : h));
+                                const token = localStorage.getItem('token');
+                                try {
+                                  const res = await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                    body: JSON.stringify({ doctorClinicalMode: newMode })
+                                  });
+                                  if (!res.ok) {
+                                    setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, doctorClinicalMode: originalMode } : h));
+                                    showToast('Failed to update Doctor Clinical Mode', 'error');
+                                  } else {
+                                    const updated = await res.json();
+                                    setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, doctorClinicalMode: updated.doctorClinicalMode || newMode } : h));
+                                    showToast('Doctor Clinical Mode set to OFFLINE', 'success');
+                                  }
+                                } catch (err) {
+                                  console.error(err);
+                                  setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, doctorClinicalMode: originalMode } : h));
+                                  showToast('Network error updating Doctor Clinical Mode', 'error');
+                                }
+                              }}
+                              style={{
+                                flex: 1,
+                                padding: '8px 12px',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                background: (hosp.doctorClinicalMode || 'ONLINE') === 'OFFLINE' ? '#EA580C' : 'transparent',
+                                color: (hosp.doctorClinicalMode || 'ONLINE') === 'OFFLINE' ? '#FFFFFF' : '#64748B',
+                                boxShadow: (hosp.doctorClinicalMode || 'ONLINE') === 'OFFLINE' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                              }}
+                            >
+                              OFFLINE
+                            </button>
+                          </div>
+
+                          <div style={{ fontSize: '11px', lineHeight: 1.4, color: '#64748B' }}>
+                            {(hosp.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? (
+                              <div>
+                                <strong style={{ color: '#1E293B' }}>ONLINE Mode:</strong> Doctors use Curoxa's digital clinical consultation and prescription workflow.
+                              </div>
+                            ) : (
+                              <div>
+                                <strong style={{ color: '#1E293B' }}>OFFLINE Mode:</strong> Doctors use Curoxa for HR/self-service only. Prescriptions are written physically and uploaded by Reception.
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
 
