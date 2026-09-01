@@ -290,7 +290,7 @@ const PatientHospitalHome = ({
         className="hospital-row-2"
       >
         <UpcomingAppointmentCard
-          upcomingAppt={nextUpcomingAppt || todayVisitAppt}
+          upcomingAppt={nextUpcomingAppt}
           hospital={hospital}
           onViewDetails={onViewAppointmentDetails}
         />

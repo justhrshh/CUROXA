@@ -579,6 +579,10 @@ const SuperAdminDashboard = () => {
   const [tasks, setTasks] = useState([]);
   const [hospFilterTab, setHospFilterTab] = useState('All');
   const [hospCurrentPage, setHospCurrentPage] = useState(1);
+  const [subCurrentPage, setSubCurrentPage] = useState(1);
+  const [subSearch, setSubSearch] = useState('');
+  const [subPlanFilter, setSubPlanFilter] = useState('All');
+  const [subStatusFilter, setSubStatusFilter] = useState('All');
 
   const getFormattedPlanString = (subPlan, cycle) => {
     const plan = subPlan || 'professional';
@@ -630,7 +634,6 @@ const SuperAdminDashboard = () => {
   const [isEditingPlanModalOpen, setIsEditingPlanModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isNewOnboardingModalOpen, setIsNewOnboardingModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [impersonatingHospital, setImpersonatingHospital] = useState(null);
@@ -873,20 +876,6 @@ const SuperAdminDashboard = () => {
       fetchImpersonatedDoctors(impersonatingHospital.code);
     }
   }, [impersonatingHospital]);
-  const [newOnboardingForm, setNewOnboardingForm] = useState({
-    name: '',
-    exec: 'Platform Admin',
-    priority: '',
-    panNumber: '',
-    gstin: '',
-    corpId: '',
-    signatoryName: '',
-    sandboxDbUrl: '',
-    adminName: '',
-    adminEmail: '',
-    adminPhone: '',
-    adminPassword: ''
-  });
 
   const emptyEmployeeForm = {
     name: '',
@@ -1006,6 +995,188 @@ const SuperAdminDashboard = () => {
     } catch (err) {
       console.error(err);
       showToast('Error creating onboarding record.', 'error');
+    }
+  };
+
+  const executeHospitalActivation = async (hospitalToActivate, formOverrides = {}) => {
+    const token = localStorage.getItem('token');
+    
+    const hospitalName = (formOverrides.name || hospitalToActivate?.name || '').trim();
+    const adminName = (formOverrides.adminName || hospitalToActivate?.adminName || '').trim();
+    const adminEmail = (formOverrides.adminEmail || hospitalToActivate?.adminEmail || '').trim();
+    const adminPhone = (formOverrides.adminPhone || hospitalToActivate?.adminPhone || '').trim();
+    const adminPassword = (formOverrides.adminPassword || hospitalToActivate?.adminPassword || '').trim();
+    const confirmAdminPassword = formOverrides.confirmAdminPassword !== undefined ? formOverrides.confirmAdminPassword : hospitalToActivate?.confirmAdminPassword;
+
+    if (!hospitalName) {
+      showToast('Hospital name is required to go live.', 'error');
+      return false;
+    }
+    if (!adminName || !adminEmail || !adminPhone || !adminPassword) {
+      showToast('All administrator credentials (name, email, telephone, and password) are required.', 'error');
+      return false;
+    }
+    if (confirmAdminPassword !== undefined && adminPassword !== confirmAdminPassword) {
+      showToast('Admin passwords do not match.', 'error');
+      return false;
+    }
+
+    setIsActivating(true);
+    try {
+      const activePlan = plans.find(p => p.matchKey === (hospitalToActivate.subscriptionPlan || 'professional')) || plans.find(p => p.matchKey === 'professional') || plans[0];
+      
+      let docLimit = activePlan?.docs || (activePlan?.tier?.includes('Enterprise') ? 200 : activePlan?.tier?.includes('Basic') ? 10 : 50);
+      let staffLimit = activePlan?.staff || (activePlan?.tier?.includes('Enterprise') ? 500 : activePlan?.tier?.includes('Basic') ? 20 : 100);
+      let storageLimit = parseInt(activePlan?.storage) || 200;
+      let amount = hospitalToActivate.billingCycle === 'annual' ? (activePlan?.annualPrice ?? 240000) : (activePlan?.monthlyPrice ?? 24000);
+
+      // Resolve module configuration from dossier
+      const checkKey = (moduleKey) => {
+        if (hospitalToActivate?.configuredModules && typeof hospitalToActivate.configuredModules[moduleKey] === 'boolean') {
+          return hospitalToActivate.configuredModules[moduleKey];
+        }
+        if (hospitalToActivate?.configuredModules && hospitalToActivate.configuredModules[moduleKey]?.enabled !== undefined) {
+          return Boolean(hospitalToActivate.configuredModules[moduleKey].enabled);
+        }
+        if (Array.isArray(hospitalToActivate?.modules)) {
+          return hospitalToActivate.modules.includes(moduleKey);
+        }
+        if (hospitalToActivate?.modules && typeof hospitalToActivate.modules === 'object' && hospitalToActivate.modules[moduleKey]) {
+          return Boolean(hospitalToActivate.modules[moduleKey].enabled !== false);
+        }
+        if (activePlan?.modules) {
+          return activePlan.modules.includes(moduleKey);
+        }
+        return true;
+      };
+
+      const modulesObj = {
+        reception: { enabled: checkKey('reception'), lastMod: new Date().toLocaleDateString() },
+        doctor: { enabled: checkKey('doctor'), lastMod: new Date().toLocaleDateString() },
+        dpdp: { enabled: true, lastMod: new Date().toLocaleDateString() },
+        pharmacy: { enabled: checkKey('pharmacy'), lastMod: new Date().toLocaleDateString() },
+        laboratory: { enabled: checkKey('laboratory'), lastMod: new Date().toLocaleDateString() },
+        inventory: { enabled: checkKey('inventory'), lastMod: new Date().toLocaleDateString() }
+      };
+
+      const selectedDoctorMode = (hospitalToActivate.doctorClinicalMode === 'OFFLINE') ? 'OFFLINE' : 'ONLINE';
+      const hospitalCode = formOverrides.code || `MED-${hospitalName.replace(/\s+/g, '-').toUpperCase().slice(0, 5)}-${Math.floor(100 + Math.random() * 900)}`;
+
+      // 1. Create Hospital Record
+      const hospRes = await fetch('/api/superadmin/hospitals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          name: hospitalName,
+          code: hospitalCode,
+          logo: hospitalName.slice(0, 2).toUpperCase(),
+          plan: formOverrides.plan || getFormattedPlanString(hospitalToActivate.subscriptionPlan, hospitalToActivate.billingCycle),
+          status: 'Active',
+          csm: formOverrides.csm || 'Platform Admin',
+          onboardingLead: hospitalToActivate.exec || 'Platform Admin',
+          goLiveDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+          gst: hospitalToActivate.gstin || formOverrides.gst || '',
+          isGstVerified: hospitalToActivate.panGstStatus === 'Approved' || formOverrides.isGstVerified || false,
+          gstVerificationDetails: formOverrides.gstVerificationDetails || {
+            verifiedAt: new Date().toLocaleDateString(),
+            tradeName: hospitalName,
+            address: hospitalToActivate.address || ''
+          },
+          license: hospitalToActivate.drugLicense || formOverrides.license || '',
+          isLicenseVerified: true,
+          licenseVerificationDetails: formOverrides.licenseVerificationDetails || {
+            verifiedAt: new Date().toLocaleDateString(),
+            licenseeName: hospitalName,
+            validUntil: 'December 31, 2031'
+          },
+          address: hospitalToActivate.address || formOverrides.address || '',
+          panNumber: hospitalToActivate.panNumber || '',
+          corpId: hospitalToActivate.corpId || '',
+          signatoryName: hospitalToActivate.signatoryName || '',
+          fireSafetyCertificate: hospitalToActivate.fireSafetyCertificate || '',
+          pollutionCertificate: hospitalToActivate.pollutionCertificate || '',
+          revenue: `₹${amount.toLocaleString()}/mo`,
+          healthScore: 100,
+          limits: {
+            doctorsUsed: 0,
+            doctorsLimit: docLimit,
+            staffUsed: 0,
+            staffLimit: staffLimit,
+            storageUsed: 0,
+            storageLimit: storageLimit,
+            patients: 0
+          },
+          modules: modulesObj,
+          doctorClinicalMode: selectedDoctorMode,
+          onboardingId: hospitalToActivate?._id || undefined,
+          adminName,
+          adminEmail,
+          adminPhone,
+          adminPassword
+        })
+      });
+
+      if (!hospRes.ok) {
+        const errorData = await hospRes.json();
+        throw new Error(errorData.error || 'Failed to create hospital record.');
+      }
+      const newHospital = await hospRes.json();
+
+      // 2. Generate Initial Invoice
+      const invoiceNum = `INV-2026-${Math.floor(100 + Math.random() * 900)}`;
+      const invRes = await fetch('/api/superadmin/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          invoiceNum,
+          hospital: hospitalName,
+          subscription: activePlan?.tier || 'Professional Plan',
+          invoiceDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+          amount,
+          gst: Math.round(amount * 0.18),
+          status: amount === 0 ? 'Paid' : 'Pending',
+          billingCycle: hospitalToActivate.billingCycle === 'annual' ? 'Annual' : 'Monthly',
+          billingPeriod: 'Current Month Cycle',
+          address: hospitalToActivate.address || 'Hospital Address',
+          gstin: hospitalToActivate.gstin || '27AAAAA1111A1Z1',
+          notes: 'Initial activation subscription invoice generated upon Go Live.'
+        })
+      });
+
+      if (invRes.ok) {
+        const newInvoice = await invRes.json();
+        setInvoices(prev => [newInvoice, ...prev]);
+      }
+
+      // 3. Auto-Delete Onboarding Draft from DB (if an onboarding record existed)
+      if (hospitalToActivate?._id) {
+        try {
+          await fetch(`/api/superadmin/onboarding/${hospitalToActivate._id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+        } catch (delErr) {
+          console.warn('Could not delete onboarding draft:', delErr);
+        }
+      }
+
+      // 4. Update UI state
+      setHospitals(prev => [newHospital, ...prev]);
+      setOnboardingHospitals(prev => prev.filter(o => o._id !== hospitalToActivate?._id && o.name !== hospitalName));
+      setSelectedOnboardingHospital(null);
+      setIsOnboardingWizardOpen(false);
+      setIsActivateModalOpen(false);
+      showToast('Hospital subscription activated and Go-Live initialized successfully!', 'success');
+      refreshNotifications();
+      setActiveTab('hospitals');
+      return true;
+    } catch (err) {
+      console.error(err);
+      showToast(err.message || 'Error activating subscription.', 'error');
+      return false;
+    } finally {
+      setIsActivating(false);
     }
   };
 
@@ -1937,7 +2108,7 @@ const SuperAdminDashboard = () => {
         const fetchAndSet = async (url, setter) => {
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            const timeoutId = setTimeout(() => controller.abort(), 25000);
             const res = await fetch(url, { headers, signal: controller.signal });
             clearTimeout(timeoutId);
 
@@ -1954,7 +2125,9 @@ const SuperAdminDashboard = () => {
             }
             return false;
           } catch(err) {
-            console.warn(`Fetch error for ${url}:`, err);
+            if (err.name !== 'AbortError') {
+              console.warn(`Fetch error for ${url}:`, err);
+            }
             return false;
           }
         };
@@ -2302,13 +2475,13 @@ const SuperAdminDashboard = () => {
 
   const renderOnboardingWizard = () => {
     const steps = [
-      { id: 1, label: 'Basic Information', icon: 'info' },
-      { id: 2, label: 'Organisation Setup', icon: 'globe' },
-      { id: 3, label: 'Legal & Compliance', icon: 'file-text' },
-      { id: 4, label: 'Subscription & Licensing', icon: 'credit-card' },
-      { id: 5, label: 'User & Role Provisioning', icon: 'users' },
-      { id: 6, label: 'Review & Validation', icon: 'shield' },
-      { id: 7, label: 'Go Live Activation', icon: 'rocket' }
+      { id: 1, label: 'Basic Information', sub: 'Hospital identity & location', icon: 'building-2' },
+      { id: 2, label: 'Organisation Setup', sub: 'Infrastructure & branches', icon: 'network' },
+      { id: 3, label: 'Legal & Compliance', sub: 'GST, CIN & CDSCO License', icon: 'file-check-2' },
+      { id: 4, label: 'Subscription & Licensing', sub: 'Plan selection & quotas', icon: 'credit-card' },
+      { id: 5, label: 'User & Role Provisioning', sub: 'Admin master credentials', icon: 'shield-check' },
+      { id: 6, label: 'Review & Validation', sub: 'Dossier pre-checks', icon: 'clipboard-check' },
+      { id: 7, label: 'Go Live Activation', sub: 'Final launch & provisioning', icon: 'rocket' }
     ];
 
     const totalSteps = steps.length;
@@ -2670,309 +2843,356 @@ const SuperAdminDashboard = () => {
     };
 
     const handleGoLive = async () => {
-      const token = localStorage.getItem('token');
-      
-      // Pre-check validation for required fields
-      if (!wizardHospital.name?.trim()) {
-        showToast('Hospital name is required to go live. Please configure it in Step 1.', 'error');
-        return;
-      }
-      if (!wizardHospital.adminName?.trim() || !wizardHospital.adminEmail?.trim() || !wizardHospital.adminPhone?.trim() || !wizardHospital.adminPassword?.trim()) {
-        showToast('All administrator credentials (name, email, telephone, and password) are required. Please configure them in Step 5.', 'error');
-        return;
-      }
-      if (wizardHospital.adminPassword !== wizardHospital.confirmAdminPassword) {
-        showToast('Admin passwords do not match. Please confirm the password in Step 5.', 'error');
-        return;
-      }
-
-      setIsActivating(true);
-      try {
-        let docLimit = activePlan?.docs || 20;
-        let staffLimit = activePlan?.staff || 50;
-        let storageLimit = parseInt(activePlan?.storage) || 200;
-        let amount = wizardHospital.billingCycle === 'annual' ? (activePlan?.annualPrice ?? 240000) : (activePlan?.monthlyPrice ?? 24000);
-
-        const modulesObj = {
-          reception: { enabled: isModuleEnabled('reception'), lastMod: new Date().toLocaleDateString() },
-          doctor: { enabled: isModuleEnabled('doctor'), lastMod: new Date().toLocaleDateString() },
-          dpdp: { enabled: true, lastMod: new Date().toLocaleDateString() },
-          pharmacy: { enabled: isModuleEnabled('pharmacy'), lastMod: new Date().toLocaleDateString() },
-          laboratory: { enabled: isModuleEnabled('laboratory'), lastMod: new Date().toLocaleDateString() },
-          inventory: { enabled: isModuleEnabled('inventory'), lastMod: new Date().toLocaleDateString() }
-        };
-
-        const selectedDoctorMode = (wizardHospital.doctorClinicalMode === 'OFFLINE') ? 'OFFLINE' : 'ONLINE';
-
-        const hospRes = await fetch('/api/superadmin/hospitals', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({
-            name: wizardHospital.name,
-            code: `MED-${wizardHospital.name.replace(/\s+/g, '-').toUpperCase().slice(0, 5)}-${Math.floor(100 + Math.random() * 900)}`,
-            logo: wizardHospital.name.slice(0, 2).toUpperCase(),
-            plan: getFormattedPlanString(wizardHospital.subscriptionPlan, wizardHospital.billingCycle),
-            status: 'Active',
-            csm: 'Platform Admin',
-            onboardingLead: wizardHospital.exec || 'Platform Admin',
-            goLiveDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-            gst: wizardHospital.gstin || '',
-            isGstVerified: wizardHospital.panGstStatus === 'Approved',
-            gstVerificationDetails: {
-              verifiedAt: new Date().toLocaleDateString(),
-              tradeName: wizardHospital.name,
-              address: wizardHospital.address || ''
-            },
-            license: wizardHospital.drugLicense || '',
-            isLicenseVerified: true,
-            licenseVerificationDetails: {
-              verifiedAt: new Date().toLocaleDateString(),
-              licenseeName: wizardHospital.name,
-              validUntil: 'December 31, 2031'
-            },
-            address: wizardHospital.address || '',
-            revenue: `₹${amount.toLocaleString()}/mo`,
-            healthScore: 100,
-            limits: {
-              doctorsUsed: 0,
-              doctorsLimit: docLimit,
-              staffUsed: 0,
-              staffLimit: staffLimit,
-              storageUsed: 0,
-              storageLimit: storageLimit,
-              patients: 0
-            },
-            modules: modulesObj,
-            doctorClinicalMode: selectedDoctorMode,
-            adminName: wizardHospital.adminName || '',
-            adminEmail: wizardHospital.adminEmail || '',
-            adminPhone: wizardHospital.adminPhone || '',
-            adminPassword: wizardHospital.adminPassword || ''
-          })
-        });
-
-        if (!hospRes.ok) {
-          const errorData = await hospRes.json();
-          throw new Error(errorData.error || 'Failed to create hospital record.');
-        }
-        const newHospital = await hospRes.json();
-
-        const invoiceNum = `INV-2026-${Math.floor(100 + Math.random() * 900)}`;
-        await fetch('/api/superadmin/invoices', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({
-            invoiceNum,
-            hospital: wizardHospital.name,
-            subscription: activePlan?.tier || 'Professional Plan',
-            invoiceDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-            dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-            amount,
-            gst: Math.round(amount * 0.18),
-            status: amount === 0 ? 'Paid' : 'Pending',
-            billingCycle: wizardHospital.billingCycle === 'annual' ? 'Annual' : 'Monthly',
-            billingPeriod: 'Current Month Cycle',
-            address: wizardHospital.address || 'Hospital Address',
-            gstin: wizardHospital.gstin || '27AAAAA1111A1Z1',
-            notes: 'Initial activation subscription invoice generated upon Go Live.'
-          })
-        });
-
-        const onboardingUpdateData = {
-          ...wizardHospital,
-          isActivated: true,
-          status: 'Completed',
-          progress: 100,
-          currentStep: 7
-        };
-        delete onboardingUpdateData._id;
-        delete onboardingUpdateData.__v;
-
-        const onbRes = await fetch(`/api/superadmin/onboarding/${wizardHospital._id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify(onboardingUpdateData)
-        });
-
-        if (onbRes.ok) {
-          const updatedOnboarding = await onbRes.json();
-          setOnboardingHospitals(prev => prev.map(o => o._id === updatedOnboarding._id ? updatedOnboarding : o));
-        }
-
-        setHospitals(prev => [newHospital, ...prev]);
-        setOnboardingHospitals(prev => prev.filter(o => o._id !== wizardHospital._id));
-        setSelectedOnboardingHospital(null);
-        setIsOnboardingWizardOpen(false);
-        showToast('Hospital subscription activated and Go-Live initialized successfully!', 'success');
-        refreshNotifications();
-        setActiveTab('hospitals');
-      } catch (err) {
-        console.error(err);
-        showToast(err.message || 'Error activating subscription.', 'error');
-      } finally {
-        setIsActivating(false);
-      }
+      await executeHospitalActivation(wizardHospital);
     };
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%', maxWidth: '100%', background: '#F8FAFC', overflow: 'hidden' }}>
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '60px', background: '#FFFFFF', borderBottom: '1px solid #E2E8F0', padding: '0 24px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <button 
+        {/* Top Header */}
+        <header style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: '#FFFFFF',
+          borderBottom: '1px solid #E2E8F0',
+          padding: '14px 28px',
+          flexShrink: 0
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            {/* Breadcrumb Back Link */}
+            <div 
               onClick={() => saveWizardDraft(true)}
-              disabled={isExitingWizard}
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '6px', 
-                background: 'none', 
-                border: '1px solid #CBD5E1', 
-                borderRadius: '6px', 
-                padding: '6px 12px', 
-                cursor: isExitingWizard ? 'not-allowed' : 'pointer', 
-                fontSize: '12px', 
-                fontWeight: 600, 
-                color: '#475569',
-                opacity: isExitingWizard ? 0.7 : 1
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#2563EB',
+                cursor: isExitingWizard ? 'not-allowed' : 'pointer',
+                opacity: isExitingWizard ? 0.7 : 1,
+                width: 'fit-content'
               }}
             >
-              {isExitingWizard ? (
-                <>
-                  <span 
-                    className="animate-spin" 
-                    style={{ 
-                      width: '12px', 
-                      height: '12px', 
-                      border: '2px solid #64748B', 
-                      borderTopColor: 'transparent', 
-                      borderRadius: '50%', 
-                      display: 'inline-block' 
-                    }} 
-                  />
-                  Exiting...
-                </>
-              ) : (
-                <>
-                  <LucideIcon name="arrow-left" style={{ width: '14px', height: '14px' }} />
-                  Exit
-                </>
-              )}
-            </button>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>Onboarding: {wizardHospital.name}</span>
-                <span style={{ fontSize: '10px', background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: '4px', padding: '2px 6px', fontWeight: 700, color: '#64748B' }}>DRAFT</span>
-              </div>
-              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>Lead Executive: {wizardHospital.exec || 'Platform Admin'}</span>
+              <LucideIcon name="arrow-left" style={{ width: '13px', height: '13px' }} />
+              <span>Back to Hospitals</span>
             </div>
+
+            {/* Title Row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <h1 style={{ margin: 0, fontSize: '19px', fontWeight: 850, color: '#0F172A', letterSpacing: '-0.3px' }}>
+                Add New Hospital
+              </h1>
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '18px',
+                height: '18px',
+                borderRadius: '50%',
+                background: '#EFF6FF',
+                color: '#2563EB'
+              }}>
+                <LucideIcon name="check-circle-2" style={{ width: '16px', height: '16px', color: '#2563EB' }} />
+              </span>
+              <span style={{
+                background: '#FEF3C7',
+                color: '#D97706',
+                border: '1px solid #FDE68A',
+                borderRadius: '12px',
+                padding: '2px 8px',
+                fontSize: '11px',
+                fontWeight: 800,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#D97706' }}></span>
+                Draft
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: '12px', color: '#64748B' }}>
+              Register a corporate hospital and configure their enterprise license, facilities, compliance, and administrator credentials.
+            </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', width: '180px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                <span>Wizard Progress</span>
-                <span>{progressPercent}%</span>
-              </div>
-              <div style={{ height: '6px', background: '#E2E8F0', borderRadius: '3px', width: '100%', overflow: 'hidden' }}>
-                <div style={{ width: `${progressPercent}%`, height: '100%', background: '#2563EB', transition: 'width 0.3s ease' }}></div>
-              </div>
-            </div>
-            <button 
-              onClick={() => saveWizardDraft(false)}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', background: isDraftSaved ? '#10B981' : '#FFFFFF', border: isDraftSaved ? '1px solid #10B981' : '1px solid #2563EB', color: isDraftSaved ? '#FFFFFF' : '#2563EB', borderRadius: '6px', padding: '8px 16px', cursor: 'pointer', fontSize: '12.5px', fontWeight: 700, transition: 'all 0.2s ease' }}
+          {/* Top Right Action Buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => saveWizardDraft(true)}
+              disabled={isExitingWizard}
+              style={{
+                background: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                borderRadius: '8px',
+                padding: '8px 16px',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                color: '#475569',
+                cursor: isExitingWizard ? 'not-allowed' : 'pointer'
+              }}
             >
-              <LucideIcon name={isDraftSaved ? "check" : "save"} style={{ width: '14px', height: '14px' }} />
-              {isDraftSaved ? 'Saved' : 'Save Draft'}
+              Cancel
             </button>
-          </div>
-        </header>
-
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          <aside style={{ width: '280px', background: '#FFFFFF', borderRight: '1px solid #E2E8F0', padding: '20px 16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
-            <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.7px', paddingLeft: '8px', marginBottom: '8px' }}>Onboarding Phases</div>
-            {steps.map(step => {
-              const isActive = wizardStep === step.id;
-              const isCompleted = wizardStep > step.id;
-              return (
-                <div 
-                  key={step.id} 
-                  onClick={async () => {
-                    if (step.id < wizardStep) {
-                      saveWizardDraft(false, step.id);
-                      setWizardStep(step.id);
-                    } else if (step.id > wizardStep) {
-                      const missing = getStepValidation(wizardStep);
-                      if (missing.length > 0) {
-                        showToast(`Please fill required fields: ${missing.join(', ')}`, 'error');
-                        return;
-                      }
-                      for (let s = wizardStep; s < step.id; s++) {
-                        const sMissing = getStepValidation(s);
-                        if (sMissing.length > 0) {
-                          showToast(`Please complete Step ${s}: ${sMissing.join(', ')}`, 'error');
-                          return;
-                        }
-                      }
-                      const saved = await saveWizardDraft(false, step.id);
-                      if (saved) {
-                        setWizardStep(step.id);
-                      }
-                    }
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    background: isActive ? '#EFF6FF' : 'transparent',
-                    borderLeft: isActive ? '4px solid #2563EB' : '4px solid transparent',
-                    gap: '12px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: isCompleted ? '#D1FAE5' : isActive ? '#2563EB' : '#F1F5F9',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: isCompleted ? '#065F46' : isActive ? '#FFFFFF' : '#64748B'
-                  }}>
-                    {isCompleted ? <LucideIcon name="check" style={{ width: '12px', height: '12px' }} /> : step.id}
-                  </div>
-                  <span style={{ fontSize: '12.5px', fontWeight: isActive ? 700 : 500, color: isActive ? '#2563EB' : '#475569' }}>
-                    {step.label}
-                  </span>
-                </div>
-              );
-            })}
-          </aside>
-
-          <main 
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
-                e.preventDefault();
+            <button
+              type="button"
+              onClick={() => saveWizardDraft(false)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                borderRadius: '8px',
+                padding: '8px 16px',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                color: '#1E293B',
+                cursor: 'pointer'
+              }}
+            >
+              <LucideIcon name={isDraftSaved ? "check" : "bookmark"} style={{ width: '14px', height: '14px', color: isDraftSaved ? '#10B981' : '#64748B' }} />
+              {isDraftSaved ? 'Saved' : 'Save as Draft'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
                 if (wizardStep === totalSteps) {
                   handleGoLive();
                 } else {
                   handleNextStep();
                 }
-              }
-            }}
-            style={{ flex: 1, padding: '28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', background: '#F8FAFC' }}
-          >
-            <div style={wizardStep === 6 ? { width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' } : { background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '24px', width: '100%', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-              
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '8px 20px',
+                fontSize: '12.5px',
+                fontWeight: 750,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
+              }}
+            >
+              <span>{wizardStep === totalSteps ? 'Register Hospital' : 'Save & Next'}</span>
+              <LucideIcon name="arrow-right" style={{ width: '14px', height: '14px' }} />
+            </button>
+          </div>
+        </header>
+
+        {/* Main Scrollable Body */}
+        <div style={{ flex: 1, padding: '22px 28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', background: '#F8FAFC' }}>
+          
+          {/* Horizontal Multi-Step Stepper Ribbon */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: '16px',
+            padding: '16px 20px',
+            boxShadow: '0 4px 15px rgba(15, 23, 42, 0.02)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            position: 'relative'
+          }}>
+            {steps.map((step, idx) => {
+              const isActive = wizardStep === step.id;
+              const isCompleted = wizardStep > step.id;
+              const isLast = idx === steps.length - 1;
+
+              return (
+                <React.Fragment key={step.id}>
+                  <div
+                    onClick={async () => {
+                      if (step.id < wizardStep) {
+                        saveWizardDraft(false, step.id);
+                        setWizardStep(step.id);
+                      } else if (step.id > wizardStep) {
+                        const missing = getStepValidation(wizardStep);
+                        if (missing.length > 0) {
+                          showToast(`Please fill required fields: ${missing.join(', ')}`, 'error');
+                          return;
+                        }
+                        for (let s = wizardStep; s < step.id; s++) {
+                          const sMissing = getStepValidation(s);
+                          if (sMissing.length > 0) {
+                            showToast(`Please complete Step ${s}: ${sMissing.join(', ')}`, 'error');
+                            return;
+                          }
+                        }
+                        const saved = await saveWizardDraft(false, step.id);
+                        if (saved) {
+                          setWizardStep(step.id);
+                        }
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      cursor: 'pointer',
+                      zIndex: 2,
+                      flexShrink: 0
+                    }}
+                  >
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      background: isCompleted ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)' : isActive ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#F1F5F9',
+                      color: (isCompleted || isActive) ? '#FFFFFF' : '#64748B',
+                      border: isActive ? '2px solid #BFDBFE' : '1px solid transparent',
+                      boxShadow: isActive ? '0 4px 12px rgba(37, 99, 235, 0.35)' : isCompleted ? '0 2px 8px rgba(16, 185, 129, 0.25)' : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                      transition: 'all 0.2s ease'
+                    }}>
+                      {isCompleted ? <LucideIcon name="check" style={{ width: '14px', height: '14px' }} /> : step.id}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{
+                        fontSize: '12px',
+                        fontWeight: isActive ? 800 : 650,
+                        color: isActive ? '#2563EB' : isCompleted ? '#0F172A' : '#64748B',
+                        lineHeight: '1.2'
+                      }}>
+                        {step.label}
+                      </span>
+                      <span style={{
+                        fontSize: '10px',
+                        color: isActive ? '#3B82F6' : '#94A3B8',
+                        marginTop: '2px',
+                        lineHeight: '1.2'
+                      }}>
+                        {step.sub}
+                      </span>
+                    </div>
+                  </div>
+
+                  {!isLast && (
+                    <div style={{
+                      flex: 1,
+                      height: '2px',
+                      background: isCompleted ? '#10B981' : '#E2E8F0',
+                      margin: '0 8px',
+                      minWidth: '15px'
+                    }} />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+
+          {/* Legend & Instructions Ribbon */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '2px 4px',
+            fontSize: '11px',
+            color: '#64748B'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#EF4444' }}></span>
+                <strong style={{ color: '#334155' }}>Required</strong>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3B82F6' }}></span>
+                <strong style={{ color: '#334155' }}>Optional</strong>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }}></span>
+                <strong style={{ color: '#334155' }}>Auto-generated</strong>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <LucideIcon name="check" style={{ width: '12px', height: '12px', color: '#10B981' }} />
+                <strong style={{ color: '#334155' }}>Verified</strong>
+              </span>
+            </div>
+
+            <div>
+              Step {wizardStep} of {totalSteps} — Fields marked <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span> are mandatory before activation.
+            </div>
+          </div>
+
+          {/* 2-Column Split: Main Form & Preview */}
+          <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+            {/* Form Main Area (Left) */}
+            <div 
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+                  e.preventDefault();
+                  if (wizardStep === totalSteps) {
+                    handleGoLive();
+                  } else {
+                    handleNextStep();
+                  }
+                }
+              }}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                background: '#FFFFFF',
+                borderRadius: '20px',
+                border: '1px solid #E2E8F0',
+                boxShadow: '0 10px 30px rgba(15, 23, 42, 0.04)',
+                padding: '28px 32px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '22px'
+              }}
+            >
+              {/* Form Card Header Banner */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #F1F5F9', paddingBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+                    color: '#2563EB',
+                    border: '1px solid #BFDBFE',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <LucideIcon name={steps[wizardStep - 1]?.icon || "file-text"} style={{ width: '20px', height: '20px' }} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 850, color: '#0F172A' }}>
+                      {steps[wizardStep - 1]?.label}
+                    </h3>
+                    <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                      {steps[wizardStep - 1]?.sub}
+                    </p>
+                  </div>
+                </div>
+
+                <span style={{
+                  background: '#F1F5F9',
+                  color: '#475569',
+                  padding: '4px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: 750,
+                  border: '1px solid #E2E8F0'
+                }}>
+                  Step {wizardStep} of {totalSteps}
+                </span>
+              </div>
+
               {wizardStep === 1 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Hospital Identity & Contact Details</h3>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>Configure general hospital information, focal contacts, and facility location.</p>
-                  </div>
 
                   {/* Section 1: Hospital Core Info */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -4393,277 +4613,325 @@ const SuperAdminDashboard = () => {
               )}
 
             </div>
-          </main>
 
-          {wizardStep === 6 ? (
-            <aside style={{ width: '320px', background: '#FFFFFF', borderLeft: '1px solid #E2E8F0', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', flexShrink: 0, overflowY: 'auto' }}>
-              
-              {/* Circular gauge */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '8px', position: 'relative' }}>
-                <span style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.05em' }}>DEPLOYMENT READINESS</span>
+            {/* Right Side: Deployment Readiness (Step 6) OR Live Tenant Mockup Preview */}
+            {wizardStep === 6 ? (
+              <aside style={{ width: '320px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '18px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', flexShrink: 0, boxShadow: '0 4px 15px rgba(15, 23, 42, 0.02)' }}>
                 
-                {/* SVG circular progress */}
-                <div style={{ position: 'relative', width: '120px', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '10px 0' }}>
-                  <svg width="120" height="120" viewBox="0 0 120 120" style={{ transform: 'rotate(-90deg)' }}>
-                    <circle cx="60" cy="60" r="50" fill="transparent" stroke="#F1F5F9" strokeWidth="10" />
-                    <circle cx="60" cy="60" r="50" fill="transparent" stroke="#2563EB" strokeWidth="10" strokeDasharray="314" strokeDashoffset={314 - (314 * (readinessPercent / 100))} strokeLinecap="round" />
-                  </svg>
-                  <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <span style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A' }}>{readinessPercent}%</span>
-                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#64748B' }}>Overall</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Deployment Details */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: '#F8FAFC', borderRadius: '8px', padding: '12px', fontSize: '11.5px', border: '1px solid #E2E8F0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748B', fontWeight: 600 }}>DEPLOYMENT OWNER</span>
-                  <strong style={{ color: '#334155' }}>{wizardHospital.exec || 'Alex Rivera'}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748B', fontWeight: 600 }}>CLINICAL LEAD</span>
-                  <strong style={{ color: '#334155' }}>{wizardHospital.signatoryName || 'Elena Vance'}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748B', fontWeight: 600 }}>GO-LIVE DATE</span>
-                  <strong style={{ color: '#334155' }}>{goLiveDate}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748B', fontWeight: 600 }}>LAST SYNC</span>
-                  <strong style={{ color: '#334155' }}>Just now</strong>
-                </div>
-              </div>
-
-              {/* Progress meters */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {[
-                  { name: 'Infrastructure', val: '100%' },
-                  { name: 'Security', val: '100%' },
-                  { name: 'Migration', val: '100%' },
-                  { name: 'Compliance', val: compliancePassed ? '100%' : '60%' },
-                  { name: 'Provisioning', val: adminApproved ? '100%' : '50%' }
-                ].map(item => (
-                  <div key={item.name} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 700, color: '#475569' }}>
-                      <span>{item.name}</span>
-                      <span>{item.val}</span>
-                    </div>
-                    <div style={{ height: '5px', width: '100%', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: item.val, background: '#2563EB', borderRadius: '3px' }} />
+                {/* Circular gauge */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '8px', position: 'relative' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.05em' }}>DEPLOYMENT READINESS</span>
+                  
+                  {/* SVG circular progress */}
+                  <div style={{ position: 'relative', width: '120px', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '10px 0' }}>
+                    <svg width="120" height="120" viewBox="0 0 120 120" style={{ transform: 'rotate(-90deg)' }}>
+                      <circle cx="60" cy="60" r="50" fill="transparent" stroke="#F1F5F9" strokeWidth="10" />
+                      <circle cx="60" cy="60" r="50" fill="transparent" stroke="#2563EB" strokeWidth="10" strokeDasharray="314" strokeDashoffset={314 - (314 * (readinessPercent / 100))} strokeLinecap="round" />
+                    </svg>
+                    <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <span style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A' }}>{readinessPercent}%</span>
+                      <span style={{ fontSize: '9px', fontWeight: 700, color: '#64748B' }}>Overall</span>
                     </div>
                   </div>
-                ))}
-              </div>
+                </div>
 
-              <div style={{ height: '1px', background: '#E2E8F0' }} />
-
-              {/* Go Live Checklist */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <span style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.05em' }}>GO LIVE CHECKLIST</span>
-                {[
-                  { label: 'Enterprise Licenses Validated', checked: true },
-                  { label: 'Database Health Check Cleared', checked: true },
-                  { label: 'Data Encryption At Rest Enabled', checked: true },
-                  { label: 'Client Administrative Approval', checked: adminApproved },
-                  { label: 'Final Penetration Test Scan', checked: compliancePassed }
-                ].map((item, idx) => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: '#334155', fontWeight: 500 }}>
-                    <LucideIcon 
-                      name={item.checked ? "check-circle" : "circle"} 
-                      style={{ width: '15px', height: '15px', color: item.checked ? '#10B981' : '#94A3B8' }} 
-                    />
-                    <span>{item.label}</span>
+                {/* Deployment Details */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: '#F8FAFC', borderRadius: '12px', padding: '12px', fontSize: '11.5px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748B', fontWeight: 600 }}>DEPLOYMENT OWNER</span>
+                    <strong style={{ color: '#334155' }}>{wizardHospital.exec || 'Alex Rivera'}</strong>
                   </div>
-                ))}
-              </div>
-
-              <div style={{ height: '1px', background: '#E2E8F0', marginTop: 'auto' }} />
-
-              {/* Next Action */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8' }}>NEXT ACTION</span>
-                <a href="#" onClick={e => { e.preventDefault(); finalizeOnboarding('Live'); }} style={{ fontSize: '12.5px', fontWeight: 700, color: '#2563EB', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  Initiate Go Live Protocol
-                  <LucideIcon name="arrow-right" style={{ width: '13px', height: '13px' }} />
-                </a>
-              </div>
-
-            </aside>
-          ) : (
-            <aside style={{ width: '320px', background: '#FFFFFF', borderLeft: '1px solid #E2E8F0', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', flexShrink: 0, overflowY: 'auto' }}>
-              <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
-                LIVE TENANT MOCKUP PREVIEW
-              </div>
-
-              {/* Tenant Card */}
-              <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#2563EB', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '15px' }}>
-                    {wizardHospital.name ? wizardHospital.name.slice(0, 2).toUpperCase() : 'NT'}
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748B', fontWeight: 600 }}>CLINICAL LEAD</span>
+                    <strong style={{ color: '#334155' }}>{wizardHospital.signatoryName || 'Elena Vance'}</strong>
                   </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748B', fontWeight: 600 }}>GO-LIVE DATE</span>
+                    <strong style={{ color: '#334155' }}>{goLiveDate}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748B', fontWeight: 600 }}>LAST SYNC</span>
+                    <strong style={{ color: '#334155' }}>Just now</strong>
+                  </div>
+                </div>
+
+                {/* Progress meters */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {[
+                    { name: 'Infrastructure', val: '100%' },
+                    { name: 'Security', val: '100%' },
+                    { name: 'Migration', val: '100%' },
+                    { name: 'Compliance', val: compliancePassed ? '100%' : '60%' },
+                    { name: 'Provisioning', val: adminApproved ? '100%' : '50%' }
+                  ].map(item => (
+                    <div key={item.name} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 700, color: '#475569' }}>
+                        <span>{item.name}</span>
+                        <span>{item.val}</span>
+                      </div>
+                      <div style={{ height: '5px', width: '100%', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: item.val, background: '#2563EB', borderRadius: '3px' }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ height: '1px', background: '#E2E8F0' }} />
+
+                {/* Go Live Checklist */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.05em' }}>GO LIVE CHECKLIST</span>
+                  {[
+                    { label: 'Enterprise Licenses Validated', checked: true },
+                    { label: 'Database Health Check Cleared', checked: true },
+                    { label: 'Data Encryption At Rest Enabled', checked: true },
+                    { label: 'Client Administrative Approval', checked: adminApproved },
+                    { label: 'Final Penetration Test Scan', checked: compliancePassed }
+                  ].map((item, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: '#334155', fontWeight: 500 }}>
+                      <LucideIcon 
+                        name={item.checked ? "check-circle" : "circle"} 
+                        style={{ width: '15px', height: '15px', color: item.checked ? '#10B981' : '#94A3B8' }} 
+                      />
+                      <span>{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ height: '1px', background: '#E2E8F0', marginTop: 'auto' }} />
+
+                {/* Next Action */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8' }}>NEXT ACTION</span>
+                  <a href="#" onClick={e => { e.preventDefault(); finalizeOnboarding('Live'); }} style={{ fontSize: '12.5px', fontWeight: 700, color: '#2563EB', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    Initiate Go Live Protocol
+                    <LucideIcon name="arrow-right" style={{ width: '13px', height: '13px' }} />
+                  </a>
+                </div>
+
+              </aside>
+            ) : (
+              <aside style={{ width: '320px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '18px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px', flexShrink: 0, boxShadow: '0 4px 15px rgba(15, 23, 42, 0.02)' }}>
+                <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+                  LIVE TENANT MOCKUP PREVIEW
+                </div>
+
+                {/* Tenant Card */}
+                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '14px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)' }}>
+                      {wizardHospital.name ? wizardHospital.name.slice(0, 2).toUpperCase() : 'NT'}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '13.5px', fontWeight: 850, color: wizardHospital.name ? '#0F172A' : '#94A3B8' }}>
+                        {wizardHospital.name || 'Hospital Name Unspecified'}
+                      </div>
+                      <div style={{ fontSize: '10px', fontWeight: 800, color: wizardHospital.subscriptionPlan ? '#2563EB' : '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        {wizardHospital.subscriptionPlan ? `${wizardHospital.subscriptionPlan} PLAN` : 'PLAN NOT SELECTED'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ height: '1px', background: '#E2E8F0' }} />
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '11.5px' }}>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <LucideIcon name="stethoscope" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
+                        Doctors Limit
+                      </span>
+                      <span style={{ fontWeight: 700, color: wizardHospital.doctorsCount || activePlan?.docs ? '#1E293B' : '#94A3B8' }}>
+                        {wizardHospital.doctorsCount ? `${wizardHospital.doctorsCount} seats` : activePlan?.docs ? `${activePlan.docs} seats` : 'Not Specified'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <LucideIcon name="users" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
+                        Staff Limit
+                      </span>
+                      <span style={{ fontWeight: 700, color: activePlan?.staff ? '#1E293B' : '#94A3B8' }}>
+                        {activePlan?.staff ? `${activePlan.staff} seats` : 'Not Specified'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <LucideIcon name="database" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
+                        Storage Limit
+                      </span>
+                      <span style={{ fontWeight: 700, color: activePlan?.storage ? '#1E293B' : '#94A3B8' }}>
+                        {activePlan?.storage ? `${activePlan.storage}` : 'Not Specified'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <LucideIcon name="map-pin" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
+                        Region
+                      </span>
+                      <span style={{ fontWeight: 700, color: (wizardHospital.city || wizardHospital.country) ? '#1E293B' : '#94A3B8' }}>
+                        {(wizardHospital.city || wizardHospital.country) ? `${wizardHospital.city || ''}${wizardHospital.city && wizardHospital.country ? ', ' : ''}${wizardHospital.country || ''}` : 'Not Specified'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <LucideIcon name="clock" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
+                        Currency/Time
+                      </span>
+                      <span style={{ fontWeight: 700, color: (wizardHospital.currency || wizardHospital.timezone) ? '#1E293B' : '#94A3B8' }}>
+                        {(wizardHospital.currency || wizardHospital.timezone) ? `${wizardHospital.currency || ''} (${wizardHospital.timezone || ''})` : 'Not Specified'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <LucideIcon name="activity" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
+                        Doctor Mode
+                      </span>
+                      <span style={{
+                        fontWeight: 800,
+                        fontSize: '10px',
+                        padding: '1px 6px',
+                        borderRadius: '6px',
+                        background: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#EFF6FF' : '#FFF7ED',
+                        color: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#2563EB' : '#EA580C',
+                        border: `1px solid ${(wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#BFDBFE' : '#FED7AA'}`
+                      }}>
+                        ● {wizardHospital.doctorClinicalMode || 'ONLINE'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ height: '1px', background: '#E2E8F0' }} />
+
                   <div>
-                    <div style={{ fontSize: '13.5px', fontWeight: 850, color: wizardHospital.name ? '#0F172A' : '#94A3B8' }}>
-                      {wizardHospital.name || 'Hospital Name Unspecified'}
+                    <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+                      PROVISIONED ERP GATES
+                    </span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                      {['reception', 'doctor', 'pharmacy', 'laboratory', 'emergency', 'billing', 'accounts', 'payroll'].map(mod => {
+                        const enabled = isModuleEnabled(mod);
+                        return (
+                          <span 
+                            key={mod} 
+                            style={{
+                              fontSize: '9.5px',
+                              fontWeight: 750,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              background: enabled ? '#ECFDF5' : '#FFFFFF',
+                              color: enabled ? '#059669' : '#94A3B8',
+                              border: `1px solid ${enabled ? '#A7F3D0' : '#E2E8F0'}`,
+                              textTransform: 'capitalize'
+                            }}
+                          >
+                            {mod}
+                          </span>
+                        );
+                      })}
                     </div>
-                    <div style={{ fontSize: '10px', fontWeight: 800, color: wizardHospital.subscriptionPlan ? '#2563EB' : '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      {wizardHospital.subscriptionPlan ? `${wizardHospital.subscriptionPlan} PLAN` : 'PLAN NOT SELECTED'}
-                    </div>
                   </div>
                 </div>
-
-                <div style={{ height: '1px', background: '#F1F5F9' }} />
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '11.5px' }}>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <LucideIcon name="stethoscope" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
-                      Doctors Limit
-                    </span>
-                    <span style={{ fontWeight: 700, color: wizardHospital.doctorsCount || activePlan?.docs ? '#1E293B' : '#94A3B8' }}>
-                      {wizardHospital.doctorsCount ? `${wizardHospital.doctorsCount} seats` : activePlan?.docs ? `${activePlan.docs} seats` : 'Not Specified'}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <LucideIcon name="users" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
-                      Staff Limit
-                    </span>
-                    <span style={{ fontWeight: 700, color: activePlan?.staff ? '#1E293B' : '#94A3B8' }}>
-                      {activePlan?.staff ? `${activePlan.staff} seats` : 'Not Specified'}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <LucideIcon name="database" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
-                      Storage Limit
-                    </span>
-                    <span style={{ fontWeight: 700, color: activePlan?.storage ? '#1E293B' : '#94A3B8' }}>
-                      {activePlan?.storage ? `${activePlan.storage}` : 'Not Specified'}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <LucideIcon name="map-pin" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
-                      Region
-                    </span>
-                    <span style={{ fontWeight: 700, color: (wizardHospital.city || wizardHospital.country) ? '#1E293B' : '#94A3B8' }}>
-                      {(wizardHospital.city || wizardHospital.country) ? `${wizardHospital.city || ''}${wizardHospital.city && wizardHospital.country ? ', ' : ''}${wizardHospital.country || ''}` : 'Not Specified'}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <LucideIcon name="clock" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
-                      Currency/Time
-                    </span>
-                    <span style={{ fontWeight: 700, color: (wizardHospital.currency || wizardHospital.timezone) ? '#1E293B' : '#94A3B8' }}>
-                      {(wizardHospital.currency || wizardHospital.timezone) ? `${wizardHospital.currency || ''} (${wizardHospital.timezone || ''})` : 'Not Specified'}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <LucideIcon name="activity" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
-                      Doctor Mode
-                    </span>
-                    <span style={{
-                      fontWeight: 800,
-                      fontSize: '10px',
-                      padding: '1px 6px',
-                      borderRadius: '6px',
-                      background: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#EFF6FF' : '#FFF7ED',
-                      color: (wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#2563EB' : '#EA580C',
-                      border: `1px solid ${(wizardHospital.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? '#BFDBFE' : '#FED7AA'}`
-                    }}>
-                      ● {wizardHospital.doctorClinicalMode || 'ONLINE'}
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ height: '1px', background: '#F1F5F9' }} />
-
-                <div>
-                  <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
-                    PROVISIONED ERP GATES
-                  </span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                    {['reception', 'doctor', 'pharmacy', 'laboratory', 'emergency', 'billing', 'accounts', 'payroll'].map(mod => {
-                      const enabled = isModuleEnabled(mod);
-                      return (
-                        <span 
-                          key={mod} 
-                          style={{
-                            fontSize: '9.5px',
-                            fontWeight: 750,
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            background: enabled ? '#ECFDF5' : '#F1F5F9',
-                            color: enabled ? '#059669' : '#94A3B8',
-                            border: `1px solid ${enabled ? '#A7F3D0' : '#E2E8F0'}`,
-                            textTransform: 'capitalize'
-                          }}
-                        >
-                          {mod}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </aside>
-          )}
+              </aside>
+            )}
+          </div>
         </div>
 
-        <footer style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '60px', background: '#FFFFFF', borderTop: '1px solid #E2E8F0', padding: '0 24px', flexShrink: 0 }}>
-          {/* Step Indicator on left */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 700, color: '#64748B' }}>
-            <span style={{ color: '#2563EB', fontWeight: 800 }}>Step {wizardStep} of {totalSteps}</span>
-            <span>•</span>
-            <span style={{ color: '#1E293B' }}>{steps[wizardStep - 1]?.label}</span>
+        {/* Sticky Bottom Action Bar */}
+        <footer style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          height: '60px',
+          background: '#FFFFFF',
+          borderTop: '1px solid #E2E8F0',
+          padding: '0 28px',
+          flexShrink: 0
+        }}>
+          {/* Draft Autosave Indicator on left */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px rgba(16, 185, 129, 0.4)' }} />
+            <span>Draft saved automatically</span>
           </div>
 
           {/* Navigation buttons on right */}
           <div style={{ display: 'flex', gap: '10px' }}>
             <button 
               type="button"
-              onClick={handlePrevStep}
-              disabled={wizardStep === 1}
+              onClick={() => saveWizardDraft(true)}
               style={{ 
                 background: '#FFFFFF', 
                 border: '1px solid #E2E8F0', 
-                color: wizardStep === 1 ? '#CBD5E1' : '#475569', 
-                borderRadius: '6px', 
+                color: '#475569', 
+                borderRadius: '8px', 
                 padding: '8px 16px', 
                 fontSize: '12.5px', 
                 fontWeight: 700, 
-                cursor: wizardStep === 1 ? 'default' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
+                cursor: 'pointer'
               }}
             >
-              <LucideIcon name="arrow-left" style={{ width: '14px', height: '14px' }} />
-              Previous
+              Cancel
             </button>
+            <button 
+              type="button"
+              onClick={() => saveWizardDraft(false)}
+              style={{ 
+                background: '#FFFFFF', 
+                border: '1px solid #CBD5E1', 
+                color: '#1E293B', 
+                borderRadius: '8px', 
+                padding: '8px 16px', 
+                fontSize: '12.5px', 
+                fontWeight: 700, 
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <LucideIcon name="bookmark" style={{ width: '13px', height: '13px', color: '#64748B' }} />
+              Save as Draft
+            </button>
+            {wizardStep > 1 && (
+              <button 
+                type="button"
+                onClick={handlePrevStep}
+                style={{ 
+                  background: '#FFFFFF', 
+                  border: '1px solid #CBD5E1', 
+                  color: '#334155', 
+                  borderRadius: '8px', 
+                  padding: '8px 16px', 
+                  fontSize: '12.5px', 
+                  fontWeight: 700, 
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <LucideIcon name="arrow-left" style={{ width: '13px', height: '13px' }} />
+                Previous
+              </button>
+            )}
             {wizardStep < totalSteps ? (
               <button 
                 type="button"
                 onClick={handleNextStep}
                 style={{ 
-                  background: isCurrentStepValid ? '#2563EB' : '#94A3B8', 
+                  background: isCurrentStepValid ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#94A3B8', 
                   border: 'none', 
                   color: '#FFFFFF', 
-                  borderRadius: '6px', 
+                  borderRadius: '8px', 
                   padding: '8px 20px', 
                   fontSize: '12.5px', 
-                  fontWeight: 700, 
+                  fontWeight: 750, 
                   cursor: isCurrentStepValid ? 'pointer' : 'not-allowed',
                   opacity: isCurrentStepValid ? 1 : 0.7,
+                  boxShadow: isCurrentStepValid ? '0 4px 12px rgba(37, 99, 235, 0.25)' : 'none',
                   transition: 'all 0.2s',
                   display: 'flex',
                   alignItems: 'center',
@@ -4679,10 +4947,10 @@ const SuperAdminDashboard = () => {
                 onClick={handleGoLive}
                 disabled={isActivating}
                 style={{ 
-                  background: isActivating ? '#94A3B8' : '#10B981', 
+                  background: isActivating ? '#94A3B8' : 'linear-gradient(135deg, #10B981 0%, #059669 100%)', 
                   border: 'none', 
                   color: '#FFFFFF', 
-                  borderRadius: '6px', 
+                  borderRadius: '8px', 
                   padding: '8px 24px', 
                   fontSize: '13px', 
                   fontWeight: 800, 
@@ -4690,7 +4958,7 @@ const SuperAdminDashboard = () => {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  boxShadow: isActivating ? 'none' : '0 4px 6px rgba(16, 185, 129, 0.2)',
+                  boxShadow: isActivating ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.3)',
                   opacity: isActivating ? 0.7 : 1,
                   transition: 'all 0.2s'
                 }}
@@ -6054,147 +6322,331 @@ const SuperAdminDashboard = () => {
                   </div>
                 </div>
 
-
-                {/* 2. UNIFIED PREMIUM KPI COMMAND STRIP */}
+                {/* 2. TOP 4 KPI CARDS (Matching Admin Dashboard Gradient & Sparkline Language) */}
                 <div style={{
-                  background: '#FFFFFF',
-                  borderRadius: '16px',
-                  border: '1px solid #E2E8F0',
-                  boxShadow: '0 1px 4px rgba(15,23,42,0.04)',
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  overflow: 'hidden',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                  gap: '16px',
+                  width: '100%',
                   position: 'relative',
                   zIndex: 1
                 }}>
-                  {[
-                    {
-                      label: 'TOTAL HOSPITALS',
-                      val: hospitals.length,
-                      growth: '+4.2%',
-                      desc: 'vs last month',
-                      color: '#2563EB',
-                      accentLight: '#EFF6FF',
-                      icon: 'building-2',
-                      tab: 'hospitals'
-                    },
-                    {
-                      label: 'ACTIVE HOSPITALS',
-                      val: hospitals.filter(h => h.status === 'Active').length,
-                      growth: '+3.8%',
-                      desc: 'vs last month',
-                      color: '#0D9488',
-                      accentLight: '#F0FDFA',
-                      icon: 'activity',
-                      tab: 'hospitals'
-                    },
-                    {
-                      label: 'OPEN TICKETS',
-                      val: tickets.filter(t => t.status === 'Open').length,
-                      growth: 'SLA OK',
-                      desc: 'Active support requests',
-                      color: '#E11D48',
-                      accentLight: '#FFF1F2',
-                      icon: 'ticket',
-                      tab: 'customer-support'
-                    },
-                    {
-                      label: 'MONTHLY RECURRING REVENUE',
-                      val: `₹${invoices.reduce((acc, inv) => acc + (inv.status === 'Paid' ? inv.amount : 0), 0).toLocaleString()}`,
-                      growth: '+12.4%',
-                      desc: 'Current Month MRR',
-                      color: '#7C3AED',
-                      accentLight: '#F5F3FF',
-                      icon: 'trending-up',
-                      tab: 'finance'
-                    }
-                  ].map((kpi, idx) => (
-                    <div
-                      key={kpi.label}
-                      onClick={() => {
-                        if (kpi.tab === 'finance') {
-                          setActiveTab('finance-mgmt');
-                          setFinSubTab('finance-dashboard');
-                        } else if (kpi.tab === 'customer-support') {
-                          setActiveTab('support-success');
-                          setSupportSubTab('support-dashboard');
-                        } else {
-                          setActiveTab(kpi.tab);
-                        }
-                      }}
-                      style={{
-                        padding: '22px 24px',
-                        borderRight: idx < 3 ? '1px solid #F1F5F9' : 'none',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                        position: 'relative',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        background: '#FFFFFF'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#F8FAFC';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = '#FFFFFF';
-                      }}
-                    >
-                      {/* Top micro accent bar on cell */}
+                  {/* Card 1: TOTAL HOSPITALS (Electric Blue Gradient with Radial Glow) */}
+                  <div 
+                    onClick={() => setActiveTab('hospitals')}
+                    style={{
+                      padding: '20px',
+                      borderRadius: '18px',
+                      border: '1px solid rgba(191, 219, 254, 0.95)',
+                      boxShadow: '0 12px 28px rgba(37, 99, 235, 0.08)',
+                      background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease-in-out'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 16px 36px rgba(37, 99, 235, 0.16)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 12px 28px rgba(37, 99, 235, 0.08)'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        height: '3px',
-                        background: kpi.color,
-                        opacity: 0.85
-                      }} />
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%)',
+                        color: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        boxShadow: '0 4px 10px rgba(37, 99, 235, 0.3)'
+                      }}>
+                        <LucideIcon name="building-2" style={{ width: '17px', height: '17px' }} />
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                        TOTAL HOSPITALS
+                      </span>
+                    </div>
 
-                      {/* Header line: label and icon */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
-                          {kpi.label}
-                        </span>
-                        <div style={{
-                          background: kpi.accentLight,
-                          color: kpi.color,
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '8px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0
-                        }}>
-                          <LucideIcon name={kpi.icon} style={{ width: '16px', height: '16px' }} />
+                    <div style={{ marginTop: '16px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', letterSpacing: '-1px', lineHeight: 1 }}>
+                          {hospitals.length}
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#1D4ED8', fontWeight: 750, marginTop: '8px', whiteSpace: 'nowrap' }}>
+                          +{hospitals.length} provisioned in registry
                         </div>
                       </div>
 
-                      {/* Big metric value */}
-                      <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', letterSpacing: '-1px', lineHeight: 1.1, marginBottom: '10px' }}>
-                        {kpi.val}
-                      </div>
-
-                      {/* Growth pill & subtext */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span style={{
-                          fontSize: '10px',
-                          fontWeight: 800,
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          background: kpi.growth.includes('+') || kpi.growth.includes('OK') ? '#D1FAE5' : '#FEE2E2',
-                          color: kpi.growth.includes('+') || kpi.growth.includes('OK') ? '#065F46' : '#991B1B',
-                          border: `1px solid ${kpi.growth.includes('+') || kpi.growth.includes('OK') ? '#A7F3D0' : '#FECACA'}`
-                        }}>
-                          {kpi.growth}
-                        </span>
-                        <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>
-                          {kpi.desc}
-                        </span>
+                      {/* Blue Mini Sparkline */}
+                      <div style={{ width: '64px', height: '32px', flexShrink: 0, position: 'relative' }}>
+                        <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                          <defs>
+                            <linearGradient id="kpiBlueGradSuperAdmin" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
+                              <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
+                            </linearGradient>
+                          </defs>
+                          <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiBlueGradSuperAdmin)" />
+                          <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
                       </div>
                     </div>
-                  ))}
+
+                    {/* Bottom Accent Line */}
+                    <div style={{
+                      height: '4px',
+                      borderBottomRightRadius: '18px',
+                      position: 'absolute',
+                      bottom: 0,
+                      right: 0,
+                      width: '60%',
+                      pointerEvents: 'none',
+                      background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)'
+                    }} />
+                  </div>
+
+                  {/* Card 2: ACTIVE HOSPITALS (Teal / Emerald Gradient with Radial Glow) */}
+                  <div 
+                    onClick={() => setActiveTab('hospitals')}
+                    style={{
+                      padding: '20px',
+                      borderRadius: '18px',
+                      border: '1px solid rgba(153, 246, 228, 0.95)',
+                      boxShadow: '0 12px 28px rgba(13, 148, 136, 0.08)',
+                      background: 'radial-gradient(circle at 0% 0%, rgba(13, 148, 136, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F0FDFA 50%, #CCFBF1 100%)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease-in-out'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 16px 36px rgba(13, 148, 136, 0.16)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 12px 28px rgba(13, 148, 136, 0.08)'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #0F766E 0%, #14B8A6 100%)',
+                        color: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        boxShadow: '0 4px 10px rgba(13, 148, 136, 0.3)'
+                      }}>
+                        <LucideIcon name="activity" style={{ width: '17px', height: '17px' }} />
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#115E59', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                        ACTIVE HOSPITALS
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: '16px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', letterSpacing: '-1px', lineHeight: 1 }}>
+                          {hospitals.filter(h => h.status === 'Active').length} <span style={{ fontSize: '17px', fontWeight: 700, color: '#64748B' }}>/ {hospitals.length}</span>
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#0F766E', fontWeight: 750, marginTop: '8px', whiteSpace: 'nowrap' }}>
+                          {hospitals.length > 0 ? `${Math.round((hospitals.filter(h => h.status === 'Active').length / hospitals.length) * 100)}% operational rate` : '100% operational'}
+                        </div>
+                      </div>
+
+                      {/* Teal Mini Sparkline */}
+                      <div style={{ width: '64px', height: '32px', flexShrink: 0, position: 'relative' }}>
+                        <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                          <defs>
+                            <linearGradient id="kpiTealGradSuperAdmin" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#0D9488" stopOpacity="0.45"/>
+                              <stop offset="100%" stopColor="#0D9488" stopOpacity="0.05"/>
+                            </linearGradient>
+                          </defs>
+                          <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiTealGradSuperAdmin)" />
+                          <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#0D9488" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    {/* Bottom Accent Line */}
+                    <div style={{
+                      height: '4px',
+                      borderBottomRightRadius: '18px',
+                      position: 'absolute',
+                      bottom: 0,
+                      right: 0,
+                      width: '60%',
+                      pointerEvents: 'none',
+                      background: 'linear-gradient(90deg, transparent 0%, #0D9488 100%)'
+                    }} />
+                  </div>
+
+                  {/* Card 3: OPEN TICKETS (Rose / Red Gradient with Radial Glow) */}
+                  <div 
+                    onClick={() => { setActiveTab('support-success'); setSupportSubTab('support-dashboard'); }}
+                    style={{
+                      padding: '20px',
+                      borderRadius: '18px',
+                      border: '1px solid rgba(254, 205, 211, 0.95)',
+                      boxShadow: '0 12px 28px rgba(225, 29, 72, 0.08)',
+                      background: 'radial-gradient(circle at 100% 0%, rgba(225, 29, 72, 0.20) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFF1F2 50%, #FFE4E6 100%)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease-in-out'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 16px 36px rgba(225, 29, 72, 0.16)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 12px 28px rgba(225, 29, 72, 0.08)'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #BE123C 0%, #F43F5E 100%)',
+                        color: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        boxShadow: '0 4px 10px rgba(225, 29, 72, 0.3)'
+                      }}>
+                        <LucideIcon name="ticket" style={{ width: '17px', height: '17px' }} />
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#881337', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                        OPEN TICKETS
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: '16px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', letterSpacing: '-1px', lineHeight: 1 }}>
+                          {tickets.filter(t => t.status === 'Open').length}
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#BE123C', fontWeight: 750, marginTop: '8px', whiteSpace: 'nowrap' }}>
+                          {tickets.filter(t => t.status === 'Open').length === 0 ? '0 pending · SLA 100%' : `${tickets.filter(t => t.status === 'Open').length} active requests`}
+                        </div>
+                      </div>
+
+                      {/* Rose Mini Sparkline */}
+                      <div style={{ width: '64px', height: '32px', flexShrink: 0, position: 'relative' }}>
+                        <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                          <defs>
+                            <linearGradient id="kpiRoseGradSuperAdmin" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#E11D48" stopOpacity="0.45"/>
+                              <stop offset="100%" stopColor="#E11D48" stopOpacity="0.05"/>
+                            </linearGradient>
+                          </defs>
+                          <path d="M 0 24 Q 14 26, 26 22 T 40 14 T 52 18 T 64 8 L 64 32 L 0 32 Z" fill="url(#kpiRoseGradSuperAdmin)" />
+                          <path d="M 0 24 Q 14 26, 26 22 T 40 14 T 52 18 T 64 8" fill="none" stroke="#E11D48" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    {/* Bottom Accent Line */}
+                    <div style={{
+                      height: '4px',
+                      borderBottomRightRadius: '18px',
+                      position: 'absolute',
+                      bottom: 0,
+                      right: 0,
+                      width: '60%',
+                      pointerEvents: 'none',
+                      background: 'linear-gradient(90deg, transparent 0%, #E11D48 100%)'
+                    }} />
+                  </div>
+
+                  {/* Card 4: MONTHLY RECURRING REVENUE (Purple / Violet Gradient with Radial Glow) */}
+                  {(() => {
+                    const mrrTotal = invoices.reduce((acc, inv) => acc + (inv.status === 'Paid' ? inv.amount : 0), 0);
+                    return (
+                      <div 
+                        onClick={() => { setActiveTab('finance-mgmt'); setFinSubTab('finance-dashboard'); }}
+                        style={{
+                          padding: '20px',
+                          borderRadius: '18px',
+                          border: '1px solid rgba(221, 214, 254, 0.95)',
+                          boxShadow: '0 12px 28px rgba(124, 58, 237, 0.08)',
+                          background: 'radial-gradient(circle at 0% 100%, rgba(124, 58, 237, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease-in-out'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 16px 36px rgba(124, 58, 237, 0.16)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 12px 28px rgba(124, 58, 237, 0.08)'; }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '10px',
+                            background: 'linear-gradient(135deg, #6D28D9 0%, #8B5CF6 100%)',
+                            color: '#FFFFFF',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            boxShadow: '0 4px 10px rgba(124, 58, 237, 0.3)'
+                          }}>
+                            <span style={{ fontSize: '16px', fontWeight: 900, fontFamily: 'sans-serif', lineHeight: 1 }}>₹</span>
+                          </div>
+                          <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#4C1D95', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                            MONTHLY RECURRING REVENUE
+                          </span>
+                        </div>
+
+                        <div style={{ marginTop: '16px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                          <div>
+                            <div style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', letterSpacing: '-1px', lineHeight: 1 }}>
+                              ₹{mrrTotal >= 1000 ? (mrrTotal / 1000).toFixed(1) + 'K' : mrrTotal.toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '11.5px', color: '#6D28D9', fontWeight: 750, marginTop: '8px', whiteSpace: 'nowrap' }}>
+                              +12.4% vs last billing cycle
+                            </div>
+                          </div>
+
+                          {/* Purple Mini Sparkline */}
+                          <div style={{ width: '64px', height: '32px', flexShrink: 0, position: 'relative' }}>
+                            <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                              <defs>
+                                <linearGradient id="kpiPurpleGradSuperAdmin" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.45"/>
+                                  <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.05"/>
+                                </linearGradient>
+                              </defs>
+                              <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#kpiPurpleGradSuperAdmin)" />
+                              <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#8B5CF6" strokeWidth="2.4" strokeLinecap="round" />
+                            </svg>
+                          </div>
+                        </div>
+
+                        {/* Bottom Accent Line */}
+                        <div style={{
+                          height: '4px',
+                          borderBottomRightRadius: '18px',
+                          position: 'absolute',
+                          bottom: 0,
+                          right: 0,
+                          width: '60%',
+                          pointerEvents: 'none',
+                          background: 'linear-gradient(90deg, transparent 0%, #7C3AED 100%)'
+                        }} />
+                      </div>
+                    );
+                  })()}
                 </div>
 
 
@@ -6203,17 +6655,17 @@ const SuperAdminDashboard = () => {
                   {/* LEFT COLUMN: RECENT SYSTEM EVENTS & TELEMETRY TIMELINE */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div style={{
-                      background: '#FFFFFF',
+                      background: 'radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.04) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
                       border: '1px solid #E2E8F0',
-                      borderRadius: '16px',
-                      padding: '22px 24px',
-                      boxShadow: '0 1px 4px rgba(15,23,42,0.04)'
+                      borderRadius: '20px',
+                      padding: '24px 26px',
+                      boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(0,0,0,0.02)'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }} />
-                            <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Recent System Events &amp; Logs</h3>
+                            <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#2563EB', display: 'inline-block', boxShadow: '0 0 0 3px rgba(37,99,235,0.2)' }} />
+                            <h3 style={{ fontSize: '15.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Recent System Events &amp; Logs</h3>
                           </div>
                           <span style={{ fontSize: '11.5px', color: '#64748B', marginTop: '3px', display: 'block' }}>Audit log stream — platform administrator operations</span>
                         </div>
@@ -6229,8 +6681,8 @@ const SuperAdminDashboard = () => {
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '5px',
-                            padding: '6px 13px',
-                            borderRadius: '8px',
+                            padding: '7px 14px',
+                            borderRadius: '10px',
                             transition: 'all 0.15s',
                             whiteSpace: 'nowrap'
                           }}
@@ -6317,8 +6769,8 @@ const SuperAdminDashboard = () => {
 
                                 <div style={{
                                   background: index === 0 ? '#F8FAFC' : '#FAFBFD',
-                                  borderRadius: '12px',
-                                  padding: '12px 16px',
+                                  borderRadius: '14px',
+                                  padding: '13px 18px',
                                   flex: 1,
                                   display: 'flex',
                                   justifyContent: 'space-between',
@@ -6330,7 +6782,7 @@ const SuperAdminDashboard = () => {
                                 }}
                                 onMouseEnter={(e) => {
                                   e.currentTarget.style.background = '#FFFFFF';
-                                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(15,23,42,0.06)';
+                                  e.currentTarget.style.boxShadow = '0 3px 10px rgba(15,23,42,0.06)';
                                   e.currentTarget.style.borderColor = markerColor + '60';
                                 }}
                                 onMouseLeave={(e) => {
@@ -6380,15 +6832,15 @@ const SuperAdminDashboard = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     {/* Platform Health Infrastructure Monitor */}
                     <div style={{
-                      background: '#FFFFFF',
+                      background: 'radial-gradient(circle at 100% 0%, rgba(13, 148, 136, 0.06) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
                       border: '1px solid #E2E8F0',
-                      borderRadius: '16px',
-                      padding: '22px 24px',
-                      boxShadow: '0 1px 4px rgba(15,23,42,0.04)'
+                      borderRadius: '20px',
+                      padding: '24px 26px',
+                      boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(0,0,0,0.02)'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#0D9488', display: 'inline-block' }} />
-                        <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Platform Health</h3>
+                        <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#0D9488', display: 'inline-block', boxShadow: '0 0 0 3px rgba(13,148,136,0.2)' }} />
+                        <h3 style={{ fontSize: '15.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Platform Health</h3>
                       </div>
                       <span style={{ fontSize: '11.5px', color: '#64748B', display: 'block', marginBottom: '20px' }}>Real-time infrastructure telemetry &amp; resource checks</span>
                       
@@ -6502,8 +6954,8 @@ const SuperAdminDashboard = () => {
                       {/* Database Connection telemetry pill */}
                       <div style={{
                         background: '#F8FAFC',
-                        borderRadius: '12px',
-                        padding: '12px 16px',
+                        borderRadius: '14px',
+                        padding: '13px 18px',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
@@ -6555,21 +7007,21 @@ const SuperAdminDashboard = () => {
                       
                       return (
                         <div style={{
-                          background: '#FFFFFF',
+                          background: 'radial-gradient(circle at 100% 100%, rgba(79, 70, 229, 0.05) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
                           border: '1px solid #E2E8F0',
-                          borderRadius: '16px',
-                          padding: '20px 24px',
-                          boxShadow: '0 1px 4px rgba(15,23,42,0.04)'
+                          borderRadius: '20px',
+                          padding: '22px 26px',
+                          boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(0,0,0,0.02)'
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                            <h3 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Storage Allocation</h3>
+                            <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Storage Allocation</h3>
                             <span style={{
                               fontSize: '11px',
                               fontWeight: 800,
                               color: storagePercent > 85 ? '#DC2626' : '#4F46E5',
                               background: storagePercent > 85 ? '#FEF2F2' : '#EEF2FF',
                               border: `1px solid ${storagePercent > 85 ? '#FECACA' : '#C7D2FE'}`,
-                              padding: '2px 8px',
+                              padding: '3px 9px',
                               borderRadius: '20px'
                             }}>
                               {storagePercent.toFixed(1)}% Capacity
@@ -6579,7 +7031,7 @@ const SuperAdminDashboard = () => {
                             Cumulative tenant storage usage across active nodes
                           </span>
 
-                          <div style={{ height: '8px', background: '#F1F5F9', borderRadius: '10px', overflow: 'hidden', marginBottom: '10px' }}>
+                          <div style={{ height: '9px', background: '#F1F5F9', borderRadius: '10px', overflow: 'hidden', marginBottom: '10px' }}>
                             <div style={{
                               width: `${Math.min(100, Math.max(5, storagePercent))}%`,
                               height: '100%',
@@ -6591,7 +7043,7 @@ const SuperAdminDashboard = () => {
                             }} />
                           </div>
 
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 700, color: '#64748B' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', fontWeight: 700, color: '#64748B' }}>
                             <span><strong>{totalStorageUsed.toFixed(1)} GB</strong> Used</span>
                             <span>of <strong>{totalStorageLimit} GB</strong> Limit</span>
                           </div>
@@ -6805,7 +7257,12 @@ const SuperAdminDashboard = () => {
                         {/* Dossier Header */}
                         <div style={{ padding: '16px 24px', borderBottom: '1px solid #F1F5F9', background: '#FAF9F6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#1E293B' }}>{selectedOnboardingHospital.name} Onboarding Details</h3>
+                            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#1E293B' }}>
+                              {(() => {
+                                const rawName = selectedOnboardingHospital.name?.trim() || 'New Hospital Setup';
+                                return rawName.toLowerCase().endsWith('onboarding') ? `${rawName} Details` : `${rawName} Onboarding Details`;
+                              })()}
+                            </h3>
                             <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '11.5px', color: '#64748B' }}>
                               <span>Priority: <strong style={{ color: selectedOnboardingHospital.priority === 'High' ? '#EF4444' : '#64748B' }}>{selectedOnboardingHospital.priority}</strong></span>
                               <span>•</span>
@@ -7140,7 +7597,7 @@ const SuperAdminDashboard = () => {
                 return true;
               });
 
-              const itemsPerPage = 5;
+              const itemsPerPage = 10;
               const totalHospPages = Math.ceil(filteredHospitals.length / itemsPerPage) || 1;
               const currentPage = Math.min(hospCurrentPage, totalHospPages);
               const startIndex = (currentPage - 1) * itemsPerPage;
@@ -7148,38 +7605,383 @@ const SuperAdminDashboard = () => {
               const paginatedHospitals = filteredHospitals.slice(startIndex, endIndex);
 
               return (
-                <div style={{ display: 'flex', gap: '24px', flex: 1, padding: '24px', overflowY: 'auto' }}>
-                  {/* Left Column (Main Area) */}
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div>
-                      <h2 style={styles.cardHeaderTitle}>Connected Corporate Hospitals Index</h2>
-                      <p style={styles.cardHeaderSub}>Review tenant health scores, configure software module gates, manage user limits, or apply suspensions.</p>
-                    </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', flex: 1, padding: '24px', overflowY: 'auto' }}>
+                  {/* Top Header */}
+                  <div>
+                    <h2 style={styles.cardHeaderTitle}>Connected Corporate Hospitals Index</h2>
+                    <p style={styles.cardHeaderSub}>Review tenant health scores, configure software module gates, manage user limits, or apply suspensions.</p>
+                  </div>
 
-                    {/* KPI Metrics Ribbon */}
+                  {/* KPI Metrics Ribbon (FULL WIDTH 100%) */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
-                      {[
-                        { label: 'TOTAL HOSPITALS', val: hospitals.length, badge: `+${hospitals.length}`, color: '#2563EB', isGreen: true, sub: 'All provisioned tenants' },
-                        { label: 'ACTIVE TENANTS', val: hospitals.filter(h => h.status === 'Active').length, badge: 'Live', color: '#10B981', isGreen: true, sub: 'Responding normally' },
-                        { label: 'STANDARD PREMIUM', val: hospitals.filter(h => h.plan?.includes('Standard')).length, badge: 'Paid', color: '#8B5CF6', isGreen: true, sub: 'Active monthly subscriptions' },
-                        { label: 'ENTERPRISE ELITE', val: hospitals.filter(h => h.plan?.includes('Enterprise')).length, badge: 'SLA', color: '#F59E0B', isGreen: true, sub: 'Enterprise tier tenants' },
-                        { label: 'AVG HEALTH SCORE', val: `${Math.round(hospitals.reduce((acc, h) => acc + (h.healthScore || 0), 0) / (hospitals.length || 1))}%`, badge: 'Optimal', color: '#06B6D4', isGreen: true, sub: 'Platform compliance metric' }
-                      ].map((card, i) => (
-                        <div key={i} style={{ ...styles.glassCard, padding: '16px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B', letterSpacing: '0.5px' }}>{card.label}</span>
-                            <span style={{ fontSize: '9px', fontWeight: 800, color: card.isGreen ? '#065F46' : '#DC2626', background: card.isGreen ? '#D1FAE5' : '#FEE2E2', padding: '1px 6px', borderRadius: '4px' }}>{card.badge}</span>
+                      {/* Card 1: TOTAL HOSPITALS (Blue Gradient) */}
+                      <div
+                        style={{
+                          padding: '16px 18px',
+                          borderRadius: '18px',
+                          border: '1px solid rgba(191, 219, 254, 0.95)',
+                          boxShadow: '0 10px 25px rgba(37, 99, 235, 0.08)',
+                          background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          transition: 'all 0.2s ease-in-out'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 30px rgba(37, 99, 235, 0.15)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(37, 99, 235, 0.08)'; }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '8px',
+                              background: 'linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%)',
+                              color: '#FFFFFF',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              boxShadow: '0 3px 8px rgba(37, 99, 235, 0.3)'
+                            }}>
+                              <LucideIcon name="building-2" style={{ width: '15px', height: '15px' }} />
+                            </div>
+                            <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              TOTAL HOSPITALS
+                            </span>
                           </div>
-                          <div style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', margin: '6px 0' }}>{card.val}</div>
-                          <div style={{ fontSize: '10px', color: '#64748B' }}>{card.sub}</div>
+                          <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#1D4ED8', background: 'rgba(219, 234, 254, 0.8)', border: '1px solid #BFDBFE', padding: '2px 7px', borderRadius: '12px' }}>
+                            +{hospitals.length}
+                          </span>
                         </div>
-                      ))}
+
+                        <div style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                          <div>
+                            <div style={{ fontSize: '26px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.8px', lineHeight: 1 }}>
+                              {hospitals.length}
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: '#1D4ED8', fontWeight: 700, marginTop: '5px', whiteSpace: 'nowrap' }}>
+                              All provisioned tenants
+                            </div>
+                          </div>
+
+                          <div style={{ width: '48px', height: '26px', flexShrink: 0 }}>
+                            <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 48 26">
+                              <defs>
+                                <linearGradient id="kpiHospBlue" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#2563EB" stopOpacity="0.4"/>
+                                  <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
+                                </linearGradient>
+                              </defs>
+                              <path d="M 0 20 Q 12 22, 18 12 T 30 14 T 40 6 T 48 10 L 48 26 L 0 26 Z" fill="url(#kpiHospBlue)" />
+                              <path d="M 0 20 Q 12 22, 18 12 T 30 14 T 40 6 T 48 10" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" />
+                            </svg>
+                          </div>
+                        </div>
+
+                        <div style={{ height: '3px', position: 'absolute', bottom: 0, right: 0, width: '60%', background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)' }} />
+                      </div>
+
+                      {/* Card 2: ACTIVE TENANTS (Emerald / Teal Gradient) */}
+                      <div
+                        style={{
+                          padding: '16px 18px',
+                          borderRadius: '18px',
+                          border: '1px solid rgba(153, 246, 228, 0.95)',
+                          boxShadow: '0 10px 25px rgba(13, 148, 136, 0.08)',
+                          background: 'radial-gradient(circle at 0% 0%, rgba(13, 148, 136, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F0FDFA 50%, #CCFBF1 100%)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          transition: 'all 0.2s ease-in-out'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 30px rgba(13, 148, 136, 0.15)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(13, 148, 136, 0.08)'; }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '8px',
+                              background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)',
+                              color: '#FFFFFF',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              boxShadow: '0 3px 8px rgba(13, 148, 136, 0.3)'
+                            }}>
+                              <LucideIcon name="activity" style={{ width: '15px', height: '15px' }} />
+                            </div>
+                            <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#115E59', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              ACTIVE TENANTS
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#0F766E', background: 'rgba(204, 251, 241, 0.8)', border: '1px solid #99F6E4', padding: '2px 7px', borderRadius: '12px' }}>
+                            Live
+                          </span>
+                        </div>
+
+                        <div style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                          <div>
+                            <div style={{ fontSize: '26px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.8px', lineHeight: 1 }}>
+                              {hospitals.filter(h => h.status === 'Active').length}
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: '#0F766E', fontWeight: 700, marginTop: '5px', whiteSpace: 'nowrap' }}>
+                              Responding normally
+                            </div>
+                          </div>
+
+                          <div style={{ width: '48px', height: '26px', flexShrink: 0 }}>
+                            <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 48 26">
+                              <defs>
+                                <linearGradient id="kpiHospTeal" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#0D9488" stopOpacity="0.4"/>
+                                  <stop offset="100%" stopColor="#0D9488" stopOpacity="0.05"/>
+                                </linearGradient>
+                              </defs>
+                              <path d="M 0 16 Q 10 6, 20 18 T 34 8 T 48 4 L 48 26 L 0 26 Z" fill="url(#kpiHospTeal)" />
+                              <path d="M 0 16 Q 10 6, 20 18 T 34 8 T 48 4" fill="none" stroke="#0D9488" strokeWidth="2.2" strokeLinecap="round" />
+                            </svg>
+                          </div>
+                        </div>
+
+                        <div style={{ height: '3px', position: 'absolute', bottom: 0, right: 0, width: '60%', background: 'linear-gradient(90deg, transparent 0%, #0D9488 100%)' }} />
+                      </div>
+
+                      {/* Card 3: STANDARD PREMIUM (Purple / Violet Gradient) */}
+                      <div
+                        style={{
+                          padding: '16px 18px',
+                          borderRadius: '18px',
+                          border: '1px solid rgba(221, 214, 254, 0.95)',
+                          boxShadow: '0 10px 25px rgba(124, 58, 237, 0.08)',
+                          background: 'radial-gradient(circle at 0% 100%, rgba(124, 58, 237, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          transition: 'all 0.2s ease-in-out'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 30px rgba(124, 58, 237, 0.15)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(124, 58, 237, 0.08)'; }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '8px',
+                              background: 'linear-gradient(135deg, #6D28D9 0%, #8B5CF6 100%)',
+                              color: '#FFFFFF',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              boxShadow: '0 3px 8px rgba(124, 58, 237, 0.3)'
+                            }}>
+                              <LucideIcon name="credit-card" style={{ width: '15px', height: '15px' }} />
+                            </div>
+                            <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#5B21B6', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              STANDARD PREMIUM
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#6D28D9', background: 'rgba(237, 233, 254, 0.8)', border: '1px solid #DDD6FE', padding: '2px 7px', borderRadius: '12px' }}>
+                            Paid
+                          </span>
+                        </div>
+
+                        <div style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                          <div>
+                            <div style={{ fontSize: '26px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.8px', lineHeight: 1 }}>
+                              {hospitals.filter(h => !h.plan?.toLowerCase().includes('enterprise') && !h.plan?.toLowerCase().includes('custom')).length}
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: '#6D28D9', fontWeight: 700, marginTop: '5px', whiteSpace: 'nowrap' }}>
+                              Active standard subscriptions
+                            </div>
+                          </div>
+
+                          <div style={{ width: '48px', height: '26px', flexShrink: 0 }}>
+                            <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 48 26">
+                              <defs>
+                                <linearGradient id="kpiHospPurple" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.4"/>
+                                  <stop offset="100%" stopColor="#7C3AED" stopOpacity="0.05"/>
+                                </linearGradient>
+                              </defs>
+                              <path d="M 0 20 Q 14 24, 22 14 T 34 16 T 48 6 L 48 26 L 0 26 Z" fill="url(#kpiHospPurple)" />
+                              <path d="M 0 20 Q 14 24, 22 14 T 34 16 T 48 6" fill="none" stroke="#7C3AED" strokeWidth="2.2" strokeLinecap="round" />
+                            </svg>
+                          </div>
+                        </div>
+
+                        <div style={{ height: '3px', position: 'absolute', bottom: 0, right: 0, width: '60%', background: 'linear-gradient(90deg, transparent 0%, #7C3AED 100%)' }} />
+                      </div>
+
+                      {/* Card 4: ENTERPRISE ELITE (Amber / Orange Gradient) */}
+                      <div
+                        style={{
+                          padding: '16px 18px',
+                          borderRadius: '18px',
+                          border: '1px solid rgba(254, 215, 170, 0.95)',
+                          boxShadow: '0 10px 25px rgba(217, 119, 6, 0.08)',
+                          background: 'radial-gradient(circle at 100% 0%, rgba(245, 158, 11, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          transition: 'all 0.2s ease-in-out'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 30px rgba(217, 119, 6, 0.15)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(217, 119, 6, 0.08)'; }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '8px',
+                              background: 'linear-gradient(135deg, #B45309 0%, #F59E0B 100%)',
+                              color: '#FFFFFF',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              boxShadow: '0 3px 8px rgba(217, 119, 6, 0.3)'
+                            }}>
+                              <LucideIcon name="shield-check" style={{ width: '15px', height: '15px' }} />
+                            </div>
+                            <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              ENTERPRISE ELITE
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#B45309', background: 'rgba(254, 243, 199, 0.8)', border: '1px solid #FDE68A', padding: '2px 7px', borderRadius: '12px' }}>
+                            SLA
+                          </span>
+                        </div>
+
+                        <div style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                          <div>
+                            <div style={{ fontSize: '26px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.8px', lineHeight: 1 }}>
+                              {hospitals.filter(h => h.plan?.toLowerCase().includes('enterprise') || h.plan?.toLowerCase().includes('custom')).length}
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: '#B45309', fontWeight: 700, marginTop: '5px', whiteSpace: 'nowrap' }}>
+                              Enterprise tier tenants
+                            </div>
+                          </div>
+
+                          <div style={{ width: '48px', height: '26px', flexShrink: 0 }}>
+                            <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 48 26">
+                              <defs>
+                                <linearGradient id="kpiHospAmber" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.4"/>
+                                  <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.05"/>
+                                </linearGradient>
+                              </defs>
+                              <path d="M 0 18 Q 12 10, 24 16 T 38 6 T 48 8 L 48 26 L 0 26 Z" fill="url(#kpiHospAmber)" />
+                              <path d="M 0 18 Q 12 10, 24 16 T 38 6 T 48 8" fill="none" stroke="#F59E0B" strokeWidth="2.2" strokeLinecap="round" />
+                            </svg>
+                          </div>
+                        </div>
+
+                        <div style={{ height: '3px', position: 'absolute', bottom: 0, right: 0, width: '60%', background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)' }} />
+                      </div>
+
+                      {/* Card 5: AVG HEALTH SCORE (Cyan / Ocean Gradient) */}
+                      <div
+                        style={{
+                          padding: '16px 18px',
+                          borderRadius: '18px',
+                          border: '1px solid rgba(165, 243, 252, 0.95)',
+                          boxShadow: '0 10px 25px rgba(6, 182, 212, 0.08)',
+                          background: 'radial-gradient(circle at 100% 100%, rgba(6, 182, 212, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFEFF 50%, #CFFAFE 100%)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          transition: 'all 0.2s ease-in-out'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 30px rgba(6, 182, 212, 0.15)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(6, 182, 212, 0.08)'; }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '8px',
+                              background: 'linear-gradient(135deg, #0E7490 0%, #06B6D4 100%)',
+                              color: '#FFFFFF',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              boxShadow: '0 3px 8px rgba(6, 182, 212, 0.3)'
+                            }}>
+                              <LucideIcon name="heart-pulse" style={{ width: '15px', height: '15px' }} />
+                            </div>
+                            <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#155E75', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              AVG HEALTH SCORE
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#0E7490', background: 'rgba(207, 250, 254, 0.8)', border: '1px solid #A5F3FC', padding: '2px 7px', borderRadius: '12px' }}>
+                            Optimal
+                          </span>
+                        </div>
+
+                        <div style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                          <div>
+                            <div style={{ fontSize: '26px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.8px', lineHeight: 1 }}>
+                              {Math.round(hospitals.reduce((acc, h) => acc + (h.healthScore || 0), 0) / (hospitals.length || 1))}%
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: '#0E7490', fontWeight: 700, marginTop: '5px', whiteSpace: 'nowrap' }}>
+                              Platform compliance metric
+                            </div>
+                          </div>
+
+                          <div style={{ width: '48px', height: '26px', flexShrink: 0 }}>
+                            <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 48 26">
+                              <defs>
+                                <linearGradient id="kpiHospCyan" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#06B6D4" stopOpacity="0.4"/>
+                                  <stop offset="100%" stopColor="#06B6D4" stopOpacity="0.05"/>
+                                </linearGradient>
+                              </defs>
+                              <path d="M 0 14 Q 10 20, 20 8 T 34 10 T 48 2 L 48 26 L 0 26 Z" fill="url(#kpiHospCyan)" />
+                              <path d="M 0 14 Q 10 20, 20 8 T 34 10 T 48 2" fill="none" stroke="#06B6D4" strokeWidth="2.2" strokeLinecap="round" />
+                            </svg>
+                          </div>
+                        </div>
+
+                        <div style={{ height: '3px', position: 'absolute', bottom: 0, right: 0, width: '60%', background: 'linear-gradient(90deg, transparent 0%, #06B6D4 100%)' }} />
+                      </div>
                     </div>
 
-                    {/* Search and Filters Bar */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF', padding: '12px 16px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                    {/* Lower Area: 2-Column Split Layout */}
+                    <div style={{ display: 'flex', gap: '24px', width: '100%', alignItems: 'flex-start' }}>
+                      {/* Left Column (Main Area) */}
+                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                        {/* Search and Filters Bar */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
+                      padding: '12px 18px',
+                      borderRadius: '16px',
+                      border: '1px solid #E2E8F0',
+                      boxShadow: '0 4px 15px rgba(15, 23, 42, 0.03)'
+                    }}>
                       {/* Search bar */}
-                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '320px' }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '340px' }}>
                         <LucideIcon name="search" style={{ position: 'absolute', left: '12px', width: '15px', height: '15px', color: '#64748B' }} />
                         <input 
                           type="text" 
@@ -7191,14 +7993,15 @@ const SuperAdminDashboard = () => {
                           }}
                           style={{
                             width: '100%',
-                            height: '34px',
+                            height: '36px',
                             padding: '0 12px 0 36px',
                             fontSize: '12px',
                             border: '1px solid #E2E8F0',
-                            borderRadius: '6px',
+                            borderRadius: '8px',
                             outline: 'none',
-                            background: '#F8FAFC',
-                            color: '#1E293B'
+                            background: '#FFFFFF',
+                            color: '#1E293B',
+                            boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)'
                           }}
                         />
                         {hospitalSearch && (
@@ -7216,40 +8019,50 @@ const SuperAdminDashboard = () => {
 
                       {/* Filter Pills */}
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        {['All', 'Active', 'Suspended', 'High Health', 'Needs Attention'].map(tab => (
-                          <button
-                            key={tab}
-                            onClick={() => {
-                              setHospFilterTab(tab);
-                              setHospCurrentPage(1);
-                            }}
-                            style={{
-                              padding: '6px 12px',
-                              borderRadius: '20px',
-                              border: '1px solid',
-                              borderColor: hospFilterTab === tab ? '#2563EB' : '#E2E8F0',
-                              background: hospFilterTab === tab ? '#EFF6FF' : '#FFFFFF',
-                              color: hospFilterTab === tab ? '#2563EB' : '#475569',
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {tab}
-                          </button>
-                        ))}
+                        {['All', 'Active', 'Suspended', 'High Health', 'Needs Attention'].map(tab => {
+                          const isActive = hospFilterTab === tab;
+                          return (
+                            <button
+                              key={tab}
+                              onClick={() => {
+                                setHospFilterTab(tab);
+                                setHospCurrentPage(1);
+                              }}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '20px',
+                                border: isActive ? '1px solid #2563EB' : '1px solid #E2E8F0',
+                                background: isActive ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#FFFFFF',
+                                color: isActive ? '#FFFFFF' : '#475569',
+                                boxShadow: isActive ? '0 4px 12px rgba(37, 99, 235, 0.25)' : 'none',
+                                fontSize: '11px',
+                                fontWeight: 750,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              {tab}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
                     {/* Hospitals Grid / Table */}
-                    <div style={{ background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+                    <div style={{
+                      background: '#FFFFFF',
+                      borderRadius: '18px',
+                      border: '1px solid #E2E8F0',
+                      overflow: 'hidden',
+                      boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(0,0,0,0.02)'
+                    }}>
                       <table style={styles.dataTable}>
                         <thead>
-                          <tr style={{ background: '#F8FAFC' }}>
-                            <th style={{ ...styles.tableTh, padding: '12px 16px', fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>HOSPITAL DETAILS</th>
-                            <th style={{ ...styles.tableTh, padding: '12px 16px', fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>CS OWNER</th>
-                            <th style={{ ...styles.tableTh, padding: '12px 16px', fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>LIFECYCLE</th>
-                            <th style={{ ...styles.tableTh, padding: '12px 16px', fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>HEALTH</th>
+                          <tr style={{ background: 'linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%)', borderBottom: '1px solid #E2E8F0' }}>
+                            <th style={{ ...styles.tableTh, padding: '13px 18px', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>HOSPITAL DETAILS</th>
+                            <th style={{ ...styles.tableTh, padding: '13px 18px', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CS OWNER</th>
+                            <th style={{ ...styles.tableTh, padding: '13px 18px', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LIFECYCLE</th>
+                            <th style={{ ...styles.tableTh, padding: '13px 18px', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>HEALTH</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -7260,30 +8073,49 @@ const SuperAdminDashboard = () => {
                             return (
                               <tr 
                                 key={hosp._id || hosp.id} 
-                                style={{ ...styles.tableRow, cursor: 'pointer', background: selectedHospitalId === hosp._id ? '#EFF6FF' : 'transparent' }}
+                                style={{
+                                  ...styles.tableRow,
+                                  cursor: 'pointer',
+                                  background: selectedHospitalId === hosp._id ? '#EFF6FF' : 'transparent',
+                                  transition: 'all 0.15s ease'
+                                }}
                                 onClick={() => {
                                   setSelectedHospitalId(hosp._id);
-                                  setSelectedPlanForUpgrade(''); // Reset to allow dynamic resolution based on current plans
+                                  setSelectedPlanForUpgrade('');
                                   setCredentialsMsg({ text: '', type: '' });
                                   setIsConfigDrawerOpen(true);
                                 }}
                               >
-                                <td style={{ ...styles.tableTd, padding: '10px 16px', verticalAlign: 'middle' }}>
+                                <td style={{ ...styles.tableTd, padding: '12px 18px', verticalAlign: 'middle' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '12.5px', flexShrink: 0 }}>
+                                    <div style={{
+                                      width: '36px',
+                                      height: '36px',
+                                      borderRadius: '10px',
+                                      background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+                                      color: '#1D4ED8',
+                                      border: '1px solid #BFDBFE',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontWeight: 800,
+                                      fontSize: '12.5px',
+                                      flexShrink: 0,
+                                      boxShadow: '0 2px 6px rgba(37, 99, 235, 0.08)'
+                                    }}>
                                       {initials}
                                     </div>
                                     <div>
                                       <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', lineHeight: '1.3' }}>{hosp.name}</div>
-                                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px', lineHeight: '1.3' }}>ID: {hosp.code} • {hosp.limits?.storageUsed || 0} GB used</div>
+                                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', lineHeight: '1.3' }}>ID: {hosp.code} • {hosp.limits?.storageUsed || 0} GB used</div>
                                     </div>
                                   </div>
                                 </td>
-                                <td style={{ ...styles.tableTd, padding: '10px 16px', verticalAlign: 'middle' }}>
+                                <td style={{ ...styles.tableTd, padding: '12px 18px', verticalAlign: 'middle' }}>
                                   <div style={{ fontWeight: 800, fontSize: '12px', color: '#1E293B', lineHeight: '1.3' }}>{hosp.csm || 'Unassigned'}</div>
-                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px', lineHeight: '1.3' }}>Customer Success</div>
+                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', lineHeight: '1.3' }}>Customer Success</div>
                                 </td>
-                                <td style={{ ...styles.tableTd, padding: '10px 16px', verticalAlign: 'middle' }}>
+                                <td style={{ ...styles.tableTd, padding: '12px 18px', verticalAlign: 'middle' }}>
                                   <div style={{ fontWeight: 700, fontSize: '12px', color: '#334155', lineHeight: '1.3' }}>
                                     {hosp.plan 
                                       ? (() => {
@@ -7298,15 +8130,15 @@ const SuperAdminDashboard = () => {
                                       : 'No Plan'
                                     }
                                   </div>
-                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px', lineHeight: '1.3' }}>Status: {hosp.status}</div>
+                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', lineHeight: '1.3' }}>Status: {hosp.status}</div>
                                 </td>
-                                <td style={{ ...styles.tableTd, padding: '10px 16px', verticalAlign: 'middle' }}>
+                                <td style={{ ...styles.tableTd, padding: '12px 18px', verticalAlign: 'middle' }}>
                                   <span style={{ 
                                     display: 'inline-flex', alignItems: 'center', gap: '6px',
                                     padding: '4px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: 800,
-                                    background: healthColor + '10', color: healthColor, border: `1px solid ${healthColor}30`
+                                    background: healthColor + '15', color: healthColor, border: `1px solid ${healthColor}35`
                                   }}>
-                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: healthColor }}></span>
+                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: healthColor, boxShadow: `0 0 6px ${healthColor}` }}></span>
                                     {hosp.healthScore}%
                                   </span>
                                 </td>
@@ -7325,58 +8157,98 @@ const SuperAdminDashboard = () => {
                           : 'Showing 0 of 0 entries'
                         }
                       </span>
-                      <div style={{ display: 'flex', gap: '4px' }}>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                         <button 
                           disabled={currentPage === 1}
                           onClick={() => setHospCurrentPage(currentPage - 1)}
                           style={{ 
                             height: '30px', 
-                            padding: '0 10px', 
-                            borderRadius: '4px', 
+                            padding: '0 12px', 
+                            borderRadius: '6px', 
                             border: '1px solid #CBD5E1', 
                             background: '#FFFFFF', 
                             fontSize: '12px', 
+                            fontWeight: 600,
+                            color: '#334155',
                             cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                            opacity: currentPage === 1 ? 0.5 : 1
+                            opacity: currentPage === 1 ? 0.5 : 1,
+                            transition: 'all 0.15s ease'
                           }}
                         >
                           Previous
                         </button>
-                        {Array.from({ length: totalHospPages }, (_, idx) => {
-                          const pageNum = idx + 1;
-                          const isPageActive = currentPage === pageNum;
-                          return (
-                            <button 
-                              key={pageNum}
-                              onClick={() => setHospCurrentPage(pageNum)}
-                              style={{ 
-                                height: '30px', 
-                                width: '30px', 
-                                borderRadius: '4px', 
-                                border: isPageActive ? '1px solid #2563EB' : '1px solid #CBD5E1', 
-                                background: isPageActive ? '#2563EB' : '#FFFFFF', 
-                                color: isPageActive ? '#FFFFFF' : '#0F172A', 
-                                fontSize: '12px', 
-                                fontWeight: 'bold', 
-                                cursor: 'pointer' 
-                              }}
-                            >
-                              {pageNum}
-                            </button>
-                          );
-                        })}
+                        {(() => {
+                          const getPaginationList = (cur, total) => {
+                            if (total <= 7) {
+                              return Array.from({ length: total }, (_, i) => i + 1);
+                            }
+                            if (cur <= 3) {
+                              return [1, 2, 3, 4, '...', total];
+                            }
+                            if (cur >= total - 2) {
+                              return [1, '...', total - 3, total - 2, total - 1, total];
+                            }
+                            return [1, '...', cur - 1, cur, cur + 1, '...', total];
+                          };
+
+                          return getPaginationList(currentPage, totalHospPages).map((item, idx) => {
+                            if (item === '...') {
+                              return (
+                                <span 
+                                  key={`ellipsis-${idx}`} 
+                                  style={{ 
+                                    padding: '0 4px', 
+                                    color: '#94A3B8', 
+                                    fontSize: '13px', 
+                                    fontWeight: 800,
+                                    userSelect: 'none'
+                                  }}
+                                >
+                                  ...
+                                </span>
+                              );
+                            }
+                            const pageNum = item;
+                            const isPageActive = currentPage === pageNum;
+                            return (
+                              <button 
+                                key={pageNum}
+                                onClick={() => setHospCurrentPage(pageNum)}
+                                style={{ 
+                                  height: '30px', 
+                                  minWidth: '30px', 
+                                  padding: '0 8px',
+                                  borderRadius: '6px', 
+                                  border: isPageActive ? '1px solid #2563EB' : '1px solid #CBD5E1', 
+                                  background: isPageActive ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#FFFFFF', 
+                                  color: isPageActive ? '#FFFFFF' : '#0F172A', 
+                                  fontSize: '12px', 
+                                  fontWeight: 'bold', 
+                                  cursor: 'pointer',
+                                  boxShadow: isPageActive ? '0 2px 8px rgba(37, 99, 235, 0.25)' : 'none',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          });
+                        })()}
                         <button 
                           disabled={currentPage === totalHospPages}
                           onClick={() => setHospCurrentPage(currentPage + 1)}
                           style={{ 
                             height: '30px', 
-                            padding: '0 10px', 
-                            borderRadius: '4px', 
+                            padding: '0 12px', 
+                            borderRadius: '6px', 
                             border: '1px solid #CBD5E1', 
                             background: '#FFFFFF', 
                             fontSize: '12px', 
+                            fontWeight: 600,
+                            color: '#334155',
                             cursor: currentPage === totalHospPages ? 'not-allowed' : 'pointer',
-                            opacity: currentPage === totalHospPages ? 0.5 : 1
+                            opacity: currentPage === totalHospPages ? 0.5 : 1,
+                            transition: 'all 0.15s ease'
                           }}
                         >
                           Next
@@ -7388,16 +8260,22 @@ const SuperAdminDashboard = () => {
                   {/* Right Column (Insights Panel) */}
                   <div style={{ width: '300px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     {/* Needs Attention */}
-                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{
+                      background: 'radial-gradient(circle at 100% 0%, rgba(239, 68, 68, 0.05) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '18px',
+                      padding: '18px',
+                      boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.04)'
+                    }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                         <span style={{ fontSize: '11px', fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Needs Attention</span>
-                        <span style={{ background: hospitals.filter(h => (h.healthScore || 100) < 90 || h.status === 'Suspended').length > 0 ? '#FEE2E2' : '#D1FAE5', color: hospitals.filter(h => (h.healthScore || 100) < 90 || h.status === 'Suspended').length > 0 ? '#EF4444' : '#065F46', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '10px' }}>
+                        <span style={{ background: hospitals.filter(h => (h.healthScore || 100) < 90 || h.status === 'Suspended').length > 0 ? '#FEE2E2' : '#D1FAE5', color: hospitals.filter(h => (h.healthScore || 100) < 90 || h.status === 'Suspended').length > 0 ? '#EF4444' : '#065F46', fontSize: '10px', fontWeight: 800, padding: '2px 8px', borderRadius: '12px', border: `1px solid ${hospitals.filter(h => (h.healthScore || 100) < 90 || h.status === 'Suspended').length > 0 ? '#FECACA' : '#A7F3D0'}` }}>
                           {hospitals.filter(h => (h.healthScore || 100) < 90 || h.status === 'Suspended').length}
                         </span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {hospitals.filter(h => (h.healthScore || 100) < 90 || h.status === 'Suspended').map((h, idx) => (
-                          <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '8px', background: '#FEF2F2', borderRadius: '8px', border: '1px solid #FCA5A5' }}>
+                          <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '10px 12px', background: '#FEF2F2', borderRadius: '10px', border: '1px solid #FCA5A5' }}>
                             <LucideIcon name="alert-triangle" style={{ width: '16px', height: '16px', color: '#EF4444', marginTop: '2px', flexShrink: 0 }} />
                             <div>
                               <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#991B1B' }}>{h.name}</div>
@@ -7408,7 +8286,7 @@ const SuperAdminDashboard = () => {
                           </div>
                         ))}
                         {hospitals.filter(h => (h.healthScore || 100) < 90 || h.status === 'Suspended').length === 0 && (
-                          <div style={{ fontSize: '11px', color: '#64748B', textAlign: 'center', padding: '8px 0' }}>
+                          <div style={{ fontSize: '11px', color: '#64748B', textAlign: 'center', padding: '10px 0' }}>
                             ✓ All connected hospital systems operating smoothly.
                           </div>
                         )}
@@ -7416,10 +8294,16 @@ const SuperAdminDashboard = () => {
                     </div>
 
                     {/* Renewals This Week */}
-                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{
+                      background: 'radial-gradient(circle at 100% 0%, rgba(37, 99, 235, 0.05) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '18px',
+                      padding: '18px',
+                      boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.04)'
+                    }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                         <span style={{ fontSize: '11px', fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Renewals This Week</span>
-                        <span style={{ background: '#EFF6FF', color: '#2563EB', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '10px' }}>
+                        <span style={{ background: '#EFF6FF', color: '#2563EB', fontSize: '10px', fontWeight: 800, padding: '2px 8px', borderRadius: '12px', border: '1px solid #BFDBFE' }}>
                           {hospitals.filter(h => h.status === 'Active').length}
                         </span>
                       </div>
@@ -7428,7 +8312,7 @@ const SuperAdminDashboard = () => {
                           const activeHospitals = hospitals.filter(h => h.status === 'Active');
                           if (activeHospitals.length === 0) {
                             return (
-                              <div style={{ fontSize: '11px', color: '#64748B', textAlign: 'center', padding: '8px 0' }}>
+                              <div style={{ fontSize: '11px', color: '#64748B', textAlign: 'center', padding: '10px 0' }}>
                                 No upcoming renewals scheduled.
                               </div>
                             );
@@ -7439,19 +8323,19 @@ const SuperAdminDashboard = () => {
                             // Calculate dynamic remaining days
                             const createdDate = hosp.createdAt ? new Date(hosp.createdAt) : new Date();
                             const isAnnual = hosp.plan && hosp.plan.toLowerCase().includes('annual');
-                            const durationMs = isAnnual ? 365 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
+                            const durationMs = isAnnual ? 365 * 24 * 60 * 1000 * 60 : 30 * 24 * 60 * 60 * 1000;
                             const expiryDate = new Date(createdDate.getTime() + durationMs);
                             const diffMs = expiryDate.getTime() - Date.now();
                             const daysDue = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
                             const daysText = daysDue === 0 ? 'Today' : `In ${daysDue} days`;
                              
                             return (
-                              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 12px', background: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                                 <div>
                                   <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#1E293B' }}>{hosp.name}</div>
-                                  <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>{planLabel} License</div>
+                                  <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>{planLabel} License</div>
                                 </div>
-                                <span style={{ fontSize: '10px', fontWeight: 800, color: '#2563EB' }}>{daysText}</span>
+                                <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#2563EB' }}>{daysText}</span>
                               </div>
                             );
                           });
@@ -7460,10 +8344,16 @@ const SuperAdminDashboard = () => {
                     </div>
 
                     {/* Onboarding Delays */}
-                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{
+                      background: 'radial-gradient(circle at 100% 0%, rgba(245, 158, 11, 0.05) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '18px',
+                      padding: '18px',
+                      boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.04)'
+                    }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                         <span style={{ fontSize: '11px', fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Onboarding Delays</span>
-                        <span style={{ background: onboardingHospitals.filter(h => h.progress < 100).length > 0 ? '#FEF3C7' : '#D1FAE5', color: onboardingHospitals.filter(h => h.progress < 100).length > 0 ? '#D97706' : '#065F46', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '10px' }}>
+                        <span style={{ background: onboardingHospitals.filter(h => h.progress < 100).length > 0 ? '#FEF3C7' : '#D1FAE5', color: onboardingHospitals.filter(h => h.progress < 100).length > 0 ? '#D97706' : '#065F46', fontSize: '10px', fontWeight: 800, padding: '2px 8px', borderRadius: '12px', border: `1px solid ${onboardingHospitals.filter(h => h.progress < 100).length > 0 ? '#FDE68A' : '#A7F3D0'}` }}>
                           {onboardingHospitals.filter(h => h.progress < 100).length}
                         </span>
                       </div>
@@ -7472,16 +8362,16 @@ const SuperAdminDashboard = () => {
                           const pendingOnboarding = onboardingHospitals.filter(h => h.progress < 100);
                           if (pendingOnboarding.length === 0) {
                             return (
-                              <div style={{ fontSize: '11px', color: '#64748B', textAlign: 'center', padding: '8px 0' }}>
+                              <div style={{ fontSize: '11px', color: '#64748B', textAlign: 'center', padding: '10px 0' }}>
                                 ✓ All onboarding pipelines are up to date.
                               </div>
                             );
                           }
                           return pendingOnboarding.map((onb, idx) => (
-                            <div key={onb._id || idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#FFFBEB', borderRadius: '8px', border: '1px solid #FDE68A' }}>
+                            <div key={onb._id || idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 12px', background: '#FFFBEB', borderRadius: '10px', border: '1px solid #FDE68A' }}>
                               <div>
                                 <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#92400E' }}>{onb.name}</div>
-                                <div style={{ fontSize: '10px', color: '#B45309', marginTop: '2px' }}>Stalled on: {onb.stage || 'Verification'} ({onb.progress}%)</div>
+                                <div style={{ fontSize: '10px', color: '#B45309', marginTop: '1px' }}>Stalled on: {onb.stage || 'Verification'} ({onb.progress}%)</div>
                               </div>
                               <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#D97706' }}>Day {Math.max(1, 14 - (onb.daysLeft || 10))}</span>
                             </div>
@@ -7491,7 +8381,13 @@ const SuperAdminDashboard = () => {
                     </div>
 
                     {/* Operational Insights */}
-                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{
+                      background: 'radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.05) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '18px',
+                      padding: '18px',
+                      boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.04)'
+                    }}>
                       <div style={{ fontSize: '11px', fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Operational Insights</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {(() => {
@@ -7517,7 +8413,7 @@ const SuperAdminDashboard = () => {
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
                                 padding: '8px 0',
-                                borderBottom: '1px solid #F1F5F9',
+                                borderBottom: idx === 3 ? 'none' : '1px solid #F1F5F9',
                                 cursor: ins.isInteractive ? 'pointer' : 'default',
                                 transition: 'all 0.15s ease'
                               }}
@@ -7531,6 +8427,7 @@ const SuperAdminDashboard = () => {
                     </div>
                   </div>
                 </div>
+              </div>
               );
             })()}
 
@@ -8757,311 +9654,730 @@ const SuperAdminDashboard = () => {
             })()}
 
             {/* SUBSCRIPTION MANAGEMENT TAB */}
-            {isTabAllowed && activeTab === 'subscription-mgmt' && (
-              <div style={styles.pageBodyScroll}>
-                <div>
-                  <h2 style={styles.cardHeaderTitle}>SaaS Pricing Plans & Limits</h2>
-                  <p style={styles.cardHeaderSub}>Configure subscription tiers, price metrics, and resource allocation templates. Active subscriber counts are live from the hospitals database.</p>
-                </div>
+            {isTabAllowed && activeTab === 'subscription-mgmt' && (() => {
+              const subItemsPerPage = 10;
+              const filteredSubHospitals = hospitals.filter(h => {
+                const q = subSearch.trim().toLowerCase();
+                const matchesSearch = !q || 
+                  (h.name && h.name.toLowerCase().includes(q)) ||
+                  (h.plan && h.plan.toLowerCase().includes(q)) ||
+                  (h.status && h.status.toLowerCase().includes(q)) ||
+                  (h.code && h.code.toLowerCase().includes(q));
+                
+                const matchesPlan = subPlanFilter === 'All' || 
+                  (h.plan && h.plan.toLowerCase().includes(subPlanFilter.toLowerCase()));
+                const matchesStatus = subStatusFilter === 'All' || h.status === subStatusFilter;
+                
+                return matchesSearch && matchesPlan && matchesStatus;
+              });
 
-                <style>{`
-                  .subscription-plans-section {
-                    margin-top: 14px;
-                  }
-                  .plan-toggle-container {
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    gap: 16px;
-                    margin-bottom: 24px;
-                  }
-                  .toggle-switch-pill {
-                    display: flex;
-                    background: #E2E8F0;
-                    border-radius: 99px;
-                    padding: 4px;
-                    position: relative;
-                    cursor: pointer;
-                    width: 220px;
-                    user-select: none;
-                  }
-                  .toggle-switch-bg {
-                    position: absolute;
-                    top: 4px;
-                    bottom: 4px;
-                    width: 106px;
-                    background: #FFFFFF;
-                    border-radius: 99px;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-                    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-                  }
-                  .toggle-switch-pill.annual .toggle-switch-bg {
-                    transform: translateX(106px);
-                  }
-                  .toggle-option {
-                    flex: 1;
-                    text-align: center;
-                    padding: 8px 0;
-                    font-size: 13px;
-                    font-weight: 800;
-                    color: #64748B;
-                    z-index: 2;
-                    transition: color 0.3s;
-                  }
-                  .toggle-option.active {
-                    color: #2563EB;
-                  }
-                  .plans-grid {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-                    gap: 30px;
-                  }
-                  .flip-card {
-                    perspective: 1000px;
-                    height: 540px;
-                  }
-                  .flip-card-inner {
-                    position: relative;
-                    width: 100%;
-                    height: 100%;
-                    transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-                    transform-style: preserve-3d;
-                  }
-                  .flip-card.flipped .flip-card-inner {
-                    transform: rotateY(180deg);
-                  }
-                  .flip-card-front, .flip-card-back {
-                    position: absolute;
-                    width: 100%;
-                    height: 100%;
-                    -webkit-backface-visibility: hidden;
-                    backface-visibility: hidden;
-                    border-radius: 20px;
-                    border: 1px solid #E2E8F0;
-                    background: #FFFFFF;
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-                    padding: 24px;
-                    box-sizing: border-box;
-                    display: flex;
-                    flex-direction: column;
-                  }
-                  .flip-card-back {
-                    transform: rotateY(180deg);
-                    background: linear-gradient(135deg, #FFFFFF 0%, #F0FDF4 100%);
-                    border-color: #10B981;
-                  }
-                  .plan-title {
-                    font-size: 20px;
-                    font-weight: 900;
-                    color: #0F172A;
-                    margin-bottom: 4px;
-                  }
-                  .plan-price-val {
-                    font-size: 32px;
-                    font-weight: 900;
-                    color: #2563EB;
-                    font-family: 'Outfit', sans-serif;
-                    margin-bottom: 12px;
-                  }
-                `}</style>
+              const totalSubPages = Math.max(1, Math.ceil(filteredSubHospitals.length / subItemsPerPage));
+              const safeCurrentPage = Math.min(subCurrentPage, totalSubPages);
+              const paginatedSubHospitals = filteredSubHospitals.slice((safeCurrentPage - 1) * subItemsPerPage, safeCurrentPage * subItemsPerPage);
 
-                {/* Toggle Switch */}
-                <div className="plan-toggle-container">
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: billingCycle === 'monthly' ? '#2563EB' : '#64748B' }}>Monthly Pricing</span>
-                  <div 
-                    className={`toggle-switch-pill ${billingCycle === 'annual' ? 'annual' : ''}`}
-                    onClick={() => setBillingCycle(prev => prev === 'monthly' ? 'annual' : 'monthly')}
-                  >
-                    <div className="toggle-switch-bg" />
-                    <span className={`toggle-option ${billingCycle === 'monthly' ? 'active' : ''}`}>Monthly</span>
-                    <span className={`toggle-option ${billingCycle === 'annual' ? 'active' : ''}`}>Annual</span>
+              return (
+                <div style={styles.pageBodyScroll}>
+                  {/* Top Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      <div style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '12px',
+                        background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+                        color: '#2563EB',
+                        border: '1px solid #BFDBFE',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 8px rgba(37, 99, 235, 0.12)'
+                      }}>
+                        <LucideIcon name="credit-card" style={{ width: '22px', height: '22px' }} />
+                      </div>
+                      <div>
+                        <h2 style={{ ...styles.cardHeaderTitle, margin: 0, fontSize: '20px', letterSpacing: '-0.3px' }}>
+                          SaaS Pricing Plans & Limits
+                        </h2>
+                        <p style={{ ...styles.cardHeaderSub, margin: '3px 0 0 0', fontSize: '12.5px' }}>
+                          Configure subscription tiers, price metrics, and resource allocation templates. Active subscriber counts are live from the hospitals database.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: billingCycle === 'annual' ? '#10B981' : '#64748B' }}>Annual Pricing</span>
-                    <span style={{
-                      background: '#D1FAE5',
-                      color: '#065F46',
-                      fontSize: '11px',
-                      fontWeight: 900,
-                      padding: '3px 8px',
-                      borderRadius: '12px',
-                      textTransform: 'uppercase'
-                    }}>
-                      Save 20%
-                    </span>
+
+                  <style>{`
+                    .subscription-plans-section {
+                      margin-top: 14px;
+                    }
+                    .plan-toggle-container {
+                      display: flex;
+                      justify-content: center;
+                      align-items: center;
+                      gap: 16px;
+                      margin: 20px 0 24px 0;
+                    }
+                    .toggle-switch-pill {
+                      display: flex;
+                      background: #E2E8F0;
+                      border-radius: 99px;
+                      padding: 4px;
+                      position: relative;
+                      cursor: pointer;
+                      width: 220px;
+                      user-select: none;
+                      box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+                    }
+                    .toggle-switch-bg {
+                      position: absolute;
+                      top: 4px;
+                      bottom: 4px;
+                      width: 106px;
+                      background: #FFFFFF;
+                      border-radius: 99px;
+                      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+                      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    }
+                    .toggle-switch-pill.annual .toggle-switch-bg {
+                      transform: translateX(106px);
+                    }
+                    .toggle-option {
+                      flex: 1;
+                      text-align: center;
+                      padding: 8px 0;
+                      font-size: 13px;
+                      font-weight: 800;
+                      color: #64748B;
+                      z-index: 2;
+                      transition: color 0.3s;
+                    }
+                    .toggle-option.active {
+                      color: #2563EB;
+                    }
+                    .plans-grid {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+                      gap: 24px;
+                    }
+                    .flip-card {
+                      perspective: 1000px;
+                      height: 550px;
+                    }
+                    .flip-card-inner {
+                      position: relative;
+                      width: 100%;
+                      height: 100%;
+                      transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                      transform-style: preserve-3d;
+                    }
+                    .flip-card.flipped .flip-card-inner {
+                      transform: rotateY(180deg);
+                    }
+                    .flip-card-front, .flip-card-back {
+                      position: absolute;
+                      width: 100%;
+                      height: 100%;
+                      -webkit-backface-visibility: hidden;
+                      backface-visibility: hidden;
+                      border-radius: 20px;
+                      border: 1px solid #E2E8F0;
+                      background: #FFFFFF;
+                      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+                      padding: 24px;
+                      box-sizing: border-box;
+                      display: flex;
+                      flex-direction: column;
+                      transition: box-shadow 0.2s ease, transform 0.2s ease;
+                    }
+                    .flip-card-front:hover, .flip-card-back:hover {
+                      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+                    }
+                    .flip-card-back {
+                      transform: rotateY(180deg);
+                      background: linear-gradient(135deg, #FFFFFF 0%, #F0FDF4 100%);
+                      border-color: #10B981;
+                    }
+                    .plan-title {
+                      font-size: 20px;
+                      font-weight: 900;
+                      color: #0F172A;
+                      margin: 0;
+                    }
+                    .plan-price-val {
+                      font-size: 32px;
+                      font-weight: 900;
+                      color: #2563EB;
+                      font-family: 'Outfit', sans-serif;
+                      margin-bottom: 12px;
+                    }
+                  `}</style>
+
+                  {/* Toggle Switch */}
+                  <div className="plan-toggle-container">
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: billingCycle === 'monthly' ? '#2563EB' : '#64748B' }}>Monthly Pricing</span>
+                    <div 
+                      className={`toggle-switch-pill ${billingCycle === 'annual' ? 'annual' : ''}`}
+                      onClick={() => setBillingCycle(prev => prev === 'monthly' ? 'annual' : 'monthly')}
+                    >
+                      <div className="toggle-switch-bg" />
+                      <span className={`toggle-option ${billingCycle === 'monthly' ? 'active' : ''}`}>Monthly</span>
+                      <span className={`toggle-option ${billingCycle === 'annual' ? 'active' : ''}`}>Annual</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: billingCycle === 'annual' ? '#10B981' : '#64748B' }}>Annual Pricing</span>
+                      <span style={{
+                        background: '#D1FAE5',
+                        color: '#065F46',
+                        fontSize: '11px',
+                        fontWeight: 900,
+                        padding: '3px 8px',
+                        borderRadius: '12px',
+                        textTransform: 'uppercase',
+                        border: '1px solid #A7F3D0'
+                      }}>
+                        Save 20%
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                <div className="plans-grid" style={{ marginBottom: '24px' }}>
-                  {plans.map(plan => {
-                    const activeCount = hospitals.filter(h => {
-                      if (h.status !== 'Active') return false;
-                      if (!h.plan) return false;
-                      const pLower = h.plan.toLowerCase();
-                      let planCategory = 'basic';
-                      
-                      if (pLower.includes('enterprise') || pLower.includes('elite')) {
-                        planCategory = 'enterprise';
-                      } else if (pLower.includes('pro') || pLower.includes('professional') || pLower.includes('premium')) {
-                        planCategory = 'professional';
-                      } else if (pLower.includes('custom')) {
-                        planCategory = 'custom';
-                      } else if (pLower.includes('basic') || pLower.includes('standard') || pLower.includes('starter')) {
-                        planCategory = 'basic';
-                      }
-                      
-                      return planCategory === plan.matchKey.toLowerCase();
-                    }).length;
+                  {/* Pricing Cards Grid */}
+                  <div className="plans-grid" style={{ marginBottom: '28px' }}>
+                    {plans.map(plan => {
+                      const activeCount = hospitals.filter(h => {
+                        if (h.status !== 'Active') return false;
+                        if (!h.plan) return false;
+                        const pLower = h.plan.toLowerCase();
+                        let planCategory = 'basic';
+                        
+                        if (pLower.includes('enterprise') || pLower.includes('elite')) {
+                          planCategory = 'enterprise';
+                        } else if (pLower.includes('pro') || pLower.includes('professional') || pLower.includes('premium')) {
+                          planCategory = 'professional';
+                        } else if (pLower.includes('custom')) {
+                          planCategory = 'custom';
+                        } else if (pLower.includes('basic') || pLower.includes('standard') || pLower.includes('starter')) {
+                          planCategory = 'basic';
+                        }
+                        
+                        return planCategory === plan.matchKey.toLowerCase();
+                      }).length;
 
-                    const priceVal = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
-                    const totalRevenue = activeCount * priceVal;
-                    const planColor = plan.matchKey === 'basic' ? '#2563EB' : plan.matchKey === 'professional' ? '#10B981' : plan.matchKey === 'enterprise' ? '#8B5CF6' : '#64748B';
+                      const priceVal = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
+                      const totalRevenue = activeCount * priceVal;
+                      const planColor = plan.matchKey === 'basic' ? '#2563EB' : plan.matchKey === 'professional' ? '#10B981' : plan.matchKey === 'enterprise' ? '#8B5CF6' : '#64748B';
 
-                    return (
-                      <div key={plan._id || plan.matchKey} className={`flip-card ${billingCycle === 'annual' ? 'flipped' : ''}`}>
-                        <div className="flip-card-inner">
-                          
-                          {/* FRONT - MONTHLY */}
-                          <div className="flip-card-front" style={{ borderTop: `4px solid ${planColor}` }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                              <h4 className="plan-title">{plan.tier}</h4>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingPlan(JSON.parse(JSON.stringify(plan)));
-                                  setIsEditingPlanModalOpen(true);
-                                }}
-                                style={{ background: '#F1F5F9', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', fontWeight: 700, color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                              >
-                                <LucideIcon name="settings" style={{ width: '12px', height: '12px' }} />
-                                Edit
-                              </button>
-                            </div>
-                            <div className="plan-price-val" style={{ color: planColor }}>
-                              ₹{plan.monthlyPrice.toLocaleString()}
-                              <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>/ month</span>
-                            </div>
-
-                            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '14px', background: '#F8FAFC', padding: '8px', borderRadius: '8px' }}>
-                              <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '16px', fontWeight: 900, color: planColor }}>{activeCount}</div>
-                                <div style={{ fontSize: '8px', color: '#64748B', fontWeight: 700 }}>ACTIVE HOSPITALS</div>
+                      return (
+                        <div key={plan._id || plan.matchKey} className={`flip-card ${billingCycle === 'annual' ? 'flipped' : ''}`}>
+                          <div className="flip-card-inner">
+                            
+                            {/* FRONT - MONTHLY */}
+                            <div className="flip-card-front" style={{ borderTop: `4px solid ${planColor}` }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <h4 className="plan-title">{plan.tier}</h4>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingPlan(JSON.parse(JSON.stringify(plan)));
+                                    setIsEditingPlanModalOpen(true);
+                                  }}
+                                  style={{ background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '5px 10px', fontSize: '11px', fontWeight: 700, color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', transition: 'all 0.2s' }}
+                                >
+                                  <LucideIcon name="settings" style={{ width: '12px', height: '12px' }} />
+                                  Edit
+                                </button>
                               </div>
-                              <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '16px', fontWeight: 900, color: '#10B981' }}>₹{totalRevenue.toLocaleString()}</div>
-                                <div style={{ fontSize: '8px', color: '#64748B', fontWeight: 700 }}>MONTHLY MRR</div>
+                              <div className="plan-price-val" style={{ color: planColor }}>
+                                ₹{plan.monthlyPrice.toLocaleString()}
+                                <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>/ month</span>
+                              </div>
+
+                              <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '14px', background: '#F8FAFC', padding: '10px', borderRadius: '10px', border: '1px solid #F1F5F9' }}>
+                                <div style={{ textAlign: 'center' }}>
+                                  <div style={{ fontSize: '17px', fontWeight: 900, color: planColor }}>{activeCount}</div>
+                                  <div style={{ fontSize: '8.5px', color: '#64748B', fontWeight: 750, letterSpacing: '0.3px' }}>ACTIVE HOSPITALS</div>
+                                </div>
+                                <div style={{ width: '1px', background: '#E2E8F0' }} />
+                                <div style={{ textAlign: 'center' }}>
+                                  <div style={{ fontSize: '17px', fontWeight: 900, color: '#10B981' }}>₹{totalRevenue.toLocaleString()}</div>
+                                  <div style={{ fontSize: '8.5px', color: '#64748B', fontWeight: 750, letterSpacing: '0.3px' }}>MONTHLY MRR</div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11.5px', color: '#475569', margin: '8px 0', textAlign: 'left', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
+                                <div style={{ marginBottom: '2px', fontSize: '10px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.5px' }}>RESOURCE LIMITS</div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748B' }}>Max Doctor Slots:</span><strong style={{ color: '#0F172A' }}>{plan.docs}</strong></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748B' }}>Max Staff Seats:</span><strong style={{ color: '#0F172A' }}>{plan.staff}</strong></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748B' }}>Storage Vault:</span><strong style={{ color: '#0F172A' }}>{plan.storage}</strong></div>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: '#475569', margin: '8px 0', textAlign: 'left', borderTop: '1px solid #F1F5F9', paddingTop: '10px', overflowY: 'auto', flex: 1 }}>
+                                <div style={{ marginBottom: '4px', fontSize: '10px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.5px' }}>INCLUDED MODULES</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                  {plan.modules?.map(m => (
+                                    <span key={m} style={{ fontSize: '9.5px', background: '#F1F5F9', color: '#334155', padding: '3px 7px', borderRadius: '6px', textTransform: 'capitalize', fontWeight: 650, border: '1px solid #E2E8F0' }}>{m}</span>
+                                  ))}
+                                </div>
                               </div>
                             </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: '#475569', margin: '8px 0', textAlign: 'left', borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
-                              <div style={{ marginBottom: '2px', fontSize: '10px', fontWeight: 700, color: '#64748B' }}>RESOURCE LIMITS</div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Max Doctor Slots:</span><strong>{plan.docs}</strong></div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Max Staff Seats:</span><strong>{plan.staff}</strong></div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Storage Vault:</span><strong>{plan.storage}</strong></div>
-                            </div>
+                            {/* BACK - ANNUAL */}
+                            <div className="flip-card-back" style={{ borderTop: `4px solid ${planColor}` }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <h4 className="plan-title">{plan.tier} (Annual)</h4>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingPlan(JSON.parse(JSON.stringify(plan)));
+                                    setIsEditingPlanModalOpen(true);
+                                  }}
+                                  style={{ background: '#FFFFFF', border: '1px solid #A7F3D0', borderRadius: '8px', padding: '5px 10px', fontSize: '11px', fontWeight: 700, color: '#047857', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                                >
+                                  <LucideIcon name="settings" style={{ width: '12px', height: '12px' }} />
+                                  Edit
+                                </button>
+                              </div>
+                              <div className="plan-price-val" style={{ color: '#10B981' }}>
+                                ₹{plan.annualPrice.toLocaleString()}
+                                <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>/ month</span>
+                              </div>
+                              <div style={{ fontSize: '11px', fontWeight: 800, color: '#047857', marginTop: '-8px', marginBottom: '8px', textAlign: 'center' }}>
+                                ₹{(plan.annualPrice * 12).toLocaleString()} billed annually
+                              </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11px', color: '#475569', margin: '8px 0', textAlign: 'left', borderTop: '1px solid #F1F5F9', paddingTop: '8px', overflowY: 'auto', flex: 1 }}>
-                              <div style={{ marginBottom: '4px', fontSize: '10px', fontWeight: 700, color: '#64748B' }}>INCLUDED MODULES</div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                {plan.modules?.map(m => (
-                                  <span key={m} style={{ fontSize: '9px', background: '#F1F5F9', color: '#475569', padding: '2px 5px', borderRadius: '4px', textTransform: 'capitalize', fontWeight: 600 }}>{m}</span>
-                                ))}
+                              <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '14px', background: '#F0FDF4', padding: '10px', borderRadius: '10px', border: '1px solid #DCFCE7' }}>
+                                <div style={{ textAlign: 'center' }}>
+                                  <div style={{ fontSize: '17px', fontWeight: 900, color: '#10B981' }}>{activeCount}</div>
+                                  <div style={{ fontSize: '8.5px', color: '#047857', fontWeight: 750, letterSpacing: '0.3px' }}>ACTIVE HOSPITALS</div>
+                                </div>
+                                <div style={{ width: '1px', background: '#BBF7D0' }} />
+                                <div style={{ textAlign: 'center' }}>
+                                  <div style={{ fontSize: '17px', fontWeight: 900, color: '#10B981' }}>₹{(totalRevenue * 12).toLocaleString()}</div>
+                                  <div style={{ fontSize: '8.5px', color: '#047857', fontWeight: 750, letterSpacing: '0.3px' }}>ANNUAL REVENUE</div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11.5px', color: '#475569', margin: '8px 0', textAlign: 'left', borderTop: '1px solid #E2E8F0', paddingTop: '10px' }}>
+                                <div style={{ marginBottom: '2px', fontSize: '10px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.5px' }}>RESOURCE LIMITS</div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748B' }}>Max Doctor Slots:</span><strong style={{ color: '#0F172A' }}>{plan.docs}</strong></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748B' }}>Max Staff Seats:</span><strong style={{ color: '#0F172A' }}>{plan.staff}</strong></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748B' }}>Storage Vault:</span><strong style={{ color: '#0F172A' }}>{plan.storage}</strong></div>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: '#475569', margin: '8px 0', textAlign: 'left', borderTop: '1px solid #E2E8F0', paddingTop: '10px', overflowY: 'auto', flex: 1 }}>
+                                <div style={{ marginBottom: '4px', fontSize: '10px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.5px' }}>INCLUDED MODULES</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                  {plan.modules?.map(m => (
+                                    <span key={m} style={{ fontSize: '9.5px', background: '#F1F5F9', color: '#334155', padding: '3px 7px', borderRadius: '6px', textTransform: 'capitalize', fontWeight: 650, border: '1px solid #E2E8F0' }}>{m}</span>
+                                  ))}
+                                </div>
                               </div>
                             </div>
+
                           </div>
+                        </div>
+                      );
+                    })}
+                  </div>
 
-                          {/* BACK - ANNUAL */}
-                          <div className="flip-card-back" style={{ borderTop: `4px solid ${planColor}` }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                              <h4 className="plan-title">{plan.tier} (Annual)</h4>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingPlan(JSON.parse(JSON.stringify(plan)));
-                                  setIsEditingPlanModalOpen(true);
-                                }}
-                                style={{ background: '#F1F5F9', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', fontWeight: 700, color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                              >
-                                <LucideIcon name="settings" style={{ width: '12px', height: '12px' }} />
-                                Edit
-                              </button>
-                            </div>
-                            <div className="plan-price-val" style={{ color: '#10B981' }}>
-                              ₹{plan.annualPrice.toLocaleString()}
-                              <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>/ month</span>
-                            </div>
-                            <div style={{ fontSize: '11px', fontWeight: 800, color: '#047857', marginTop: '-8px', marginBottom: '8px', textAlign: 'center' }}>
-                              ₹{(plan.annualPrice * 12).toLocaleString()} billed annually
-                            </div>
+                  {/* Active Subscribers Table Card with Filter & Pagination */}
+                  <div style={{
+                    background: '#FFFFFF',
+                    borderRadius: '18px',
+                    border: '1px solid #E2E8F0',
+                    padding: '24px',
+                    boxShadow: '0 10px 30px rgba(15, 23, 42, 0.03)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px'
+                  }}>
+                    {/* Header Controls Bar */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 650, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>Active Subscriber Breakdown</span>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 550,
+                            background: '#EFF6FF',
+                            color: '#2563EB',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            border: '1px solid #DBEAFE'
+                          }}>
+                            {filteredSubHospitals.length} Hospitals
+                          </span>
+                        </h3>
+                        <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#64748B', fontWeight: 400 }}>
+                          Review tenant subscription plans, monthly revenue contributions, and live operational status.
+                        </p>
+                      </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '14px', background: '#F0FDF4', padding: '8px', borderRadius: '8px' }}>
-                              <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '16px', fontWeight: 900, color: '#10B981' }}>{activeCount}</div>
-                                <div style={{ fontSize: '8px', color: '#047857', fontWeight: 700 }}>ACTIVE HOSPITALS</div>
-                              </div>
-                              <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '16px', fontWeight: 900, color: '#10B981' }}>₹{(totalRevenue * 12).toLocaleString()}</div>
-                                <div style={{ fontSize: '8px', color: '#047857', fontWeight: 700 }}>ANNUAL REVENUE</div>
-                              </div>
-                            </div>
+                      {/* Search & Filter Controls */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        {/* Search Input */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          background: '#F8FAFC',
+                          border: '1px solid #E2E8F0',
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                          width: '230px'
+                        }}>
+                          <LucideIcon name="search" style={{ width: '14px', height: '14px', color: '#94A3B8' }} />
+                          <input
+                            type="text"
+                            value={subSearch}
+                            onChange={(e) => {
+                              setSubSearch(e.target.value);
+                              setSubCurrentPage(1);
+                            }}
+                            placeholder="Search subscribers..."
+                            style={{
+                              border: 'none',
+                              outline: 'none',
+                              background: 'transparent',
+                              fontSize: '12px',
+                              color: '#334155',
+                              width: '100%',
+                              fontWeight: 400
+                            }}
+                          />
+                          {subSearch && (
+                            <button
+                              onClick={() => {
+                                setSubSearch('');
+                                setSubCurrentPage(1);
+                              }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#94A3B8', display: 'flex' }}
+                            >
+                              <LucideIcon name="x" style={{ width: '12px', height: '12px' }} />
+                            </button>
+                          )}
+                        </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: '#475569', margin: '8px 0', textAlign: 'left', borderTop: '1px solid #E2E8F0', paddingTop: '8px' }}>
-                              <div style={{ marginBottom: '2px', fontSize: '10px', fontWeight: 700, color: '#64748B' }}>RESOURCE LIMITS</div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Max Doctor Slots:</span><strong>{plan.docs}</strong></div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Max Staff Seats:</span><strong>{plan.staff}</strong></div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Storage Vault:</span><strong>{plan.storage}</strong></div>
-                            </div>
+                        {/* Plan Filter */}
+                        <select
+                          value={subPlanFilter}
+                          onChange={(e) => {
+                            setSubPlanFilter(e.target.value);
+                            setSubCurrentPage(1);
+                          }}
+                          style={{
+                            background: '#F8FAFC',
+                            border: '1px solid #E2E8F0',
+                            borderRadius: '8px',
+                            padding: '6px 10px',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            color: '#475569',
+                            cursor: 'pointer',
+                            outline: 'none'
+                          }}
+                        >
+                          <option value="All">All Plans</option>
+                          <option value="Basic">Basic Plan</option>
+                          <option value="Enterprise">Enterprise Elite</option>
+                          <option value="Trial">Trial Plan</option>
+                        </select>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11px', color: '#475569', margin: '8px 0', textAlign: 'left', borderTop: '1px solid #E2E8F0', paddingTop: '8px', overflowY: 'auto', flex: 1 }}>
-                              <div style={{ marginBottom: '4px', fontSize: '10px', fontWeight: 700, color: '#64748B' }}>INCLUDED MODULES</div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                {plan.modules?.map(m => (
-                                  <span key={m} style={{ fontSize: '9px', background: '#F1F5F9', color: '#475569', padding: '2px 5px', borderRadius: '4px', textTransform: 'capitalize', fontWeight: 600 }}>{m}</span>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
+                        {/* Status Filter */}
+                        <select
+                          value={subStatusFilter}
+                          onChange={(e) => {
+                            setSubStatusFilter(e.target.value);
+                            setSubCurrentPage(1);
+                          }}
+                          style={{
+                            background: '#F8FAFC',
+                            border: '1px solid #E2E8F0',
+                            borderRadius: '8px',
+                            padding: '6px 10px',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            color: '#475569',
+                            cursor: 'pointer',
+                            outline: 'none'
+                          }}
+                        >
+                          <option value="All">All Statuses</option>
+                          <option value="Active">Active</option>
+                          <option value="Suspended">Suspended</option>
+                          <option value="Pending">Pending</option>
+                        </select>
+                      </div>
+                    </div>
 
+                    {/* Table Container */}
+                    <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                            <th style={{ padding: '11px 16px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Hospital Name
+                            </th>
+                            <th style={{ padding: '11px 16px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Active Plan
+                            </th>
+                            <th style={{ padding: '11px 16px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Status
+                            </th>
+                            <th style={{ padding: '11px 16px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Monthly Revenue
+                            </th>
+                            <th style={{ padding: '11px 16px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Go-Live Date
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedSubHospitals.length > 0 ? (
+                            paginatedSubHospitals.map((h, idx) => {
+                              const planStr = h.plan ? h.plan.replace('$', '₹') : 'Unassigned';
+                              const pLower = planStr.toLowerCase();
+                              let badgeBg = '#F8FAFC';
+                              let badgeColor = '#475569';
+                              let badgeBorder = '#E2E8F0';
+
+                              if (pLower.includes('enterprise') || pLower.includes('elite')) {
+                                badgeBg = '#FBF8FF';
+                                badgeColor = '#6B21A8';
+                                badgeBorder = '#E9D5FF';
+                              } else if (pLower.includes('pro') || pLower.includes('professional')) {
+                                badgeBg = '#F0FDF4';
+                                badgeColor = '#166534';
+                                badgeBorder = '#BBF7D0';
+                              } else if (pLower.includes('basic') || pLower.includes('standard')) {
+                                badgeBg = '#EFF6FF';
+                                badgeColor = '#1D4ED8';
+                                badgeBorder = '#BFDBFE';
+                              } else if (pLower.includes('trial') || pLower.includes('custom') || pLower.includes('₹0')) {
+                                badgeBg = '#FFFBEB';
+                                badgeColor = '#B45309';
+                                badgeBorder = '#FDE68A';
+                              }
+
+                              return (
+                                <tr
+                                  key={h._id || h.code || idx}
+                                  style={{
+                                    borderBottom: idx === paginatedSubHospitals.length - 1 ? 'none' : '1px solid #F1F5F9',
+                                    transition: 'background 0.15s ease',
+                                    background: '#FFFFFF'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.background = '#F8FAFC'}
+                                  onMouseLeave={(e) => e.currentTarget.style.background = '#FFFFFF'}
+                                >
+                                  {/* Hospital Name */}
+                                  <td style={{ padding: '12px 16px', fontSize: '13px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                      <div style={{
+                                        width: '28px',
+                                        height: '28px',
+                                        borderRadius: '7px',
+                                        background: '#EFF6FF',
+                                        color: '#2563EB',
+                                        border: '1px solid #DBEAFE',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        flexShrink: 0
+                                      }}>
+                                        {h.name ? h.name.slice(0, 2).toUpperCase() : 'HP'}
+                                      </div>
+                                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <span style={{ color: '#1E293B', fontWeight: 600, fontSize: '13px' }}>{h.name}</span>
+                                        <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 400 }}>{h.code || h._id ? `ID: ${(h.code || h._id).slice(-8)}` : ''}</span>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Active Plan */}
+                                  <td style={{ padding: '12px 16px', fontSize: '12px' }}>
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
+                                      fontSize: '11px',
+                                      fontWeight: 500,
+                                      background: badgeBg,
+                                      color: badgeColor,
+                                      border: `1px solid ${badgeBorder}`
+                                    }}>
+                                      {planStr}
+                                    </span>
+                                  </td>
+
+                                  {/* Status */}
+                                  <td style={{ padding: '12px 16px', fontSize: '12px' }}>
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px',
+                                      padding: '2px 8px',
+                                      borderRadius: '12px',
+                                      fontSize: '11px',
+                                      fontWeight: 500,
+                                      background: h.status === 'Active' ? '#F0FDF4' : '#FEF2F2',
+                                      color: h.status === 'Active' ? '#166534' : '#991B1B',
+                                      border: `1px solid ${h.status === 'Active' ? '#DCFCE7' : '#FEE2E2'}`
+                                    }}>
+                                      <span style={{
+                                        width: '5px',
+                                        height: '5px',
+                                        borderRadius: '50%',
+                                        background: h.status === 'Active' ? '#22C55E' : '#EF4444'
+                                      }}></span>
+                                      {h.status}
+                                    </span>
+                                  </td>
+
+                                  {/* Monthly Revenue */}
+                                  <td style={{ padding: '12px 16px', fontSize: '12.5px', color: '#334155', fontWeight: 500 }}>
+                                    {h.revenue ? h.revenue.replace('$', '₹') : '₹0/mo'}
+                                  </td>
+
+                                  {/* Go-Live Date */}
+                                  <td style={{ padding: '12px 16px', fontSize: '12px', color: '#64748B', fontWeight: 400 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <LucideIcon name="calendar" style={{ width: '13px', height: '13px', color: '#94A3B8' }} />
+                                      <span>{h.goLiveDate || 'N/A'}</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan="5" style={{ padding: '36px 16px', textAlign: 'center', color: '#94A3B8', fontSize: '12.5px', fontWeight: 400 }}>
+                                <LucideIcon name="search-x" style={{ width: '24px', height: '24px', margin: '0 auto 6px auto', display: 'block', opacity: 0.5 }} />
+                                No hospitals found matching "{subSearch}".
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination Footer */}
+                    {filteredSubHospitals.length > 0 && (
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '12px',
+                        paddingTop: '6px'
+                      }}>
+                        {/* Info */}
+                        <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 400 }}>
+                          Showing <span style={{ color: '#1E293B', fontWeight: 550 }}>{(safeCurrentPage - 1) * subItemsPerPage + 1}</span> to <span style={{ color: '#1E293B', fontWeight: 550 }}>{Math.min(safeCurrentPage * subItemsPerPage, filteredSubHospitals.length)}</span> of <span style={{ color: '#1E293B', fontWeight: 550 }}>{filteredSubHospitals.length}</span> hospitals
+                        </div>
+
+                        {/* Page Buttons */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            disabled={safeCurrentPage === 1}
+                            onClick={() => setSubCurrentPage(prev => Math.max(1, prev - 1))}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid #E2E8F0',
+                              background: '#FFFFFF',
+                              color: safeCurrentPage === 1 ? '#CBD5E1' : '#475569',
+                              fontSize: '11.5px',
+                              fontWeight: 500,
+                              cursor: safeCurrentPage === 1 ? 'not-allowed' : 'pointer'
+                            }}
+                          >
+                            <LucideIcon name="chevron-left" style={{ width: '13px', height: '13px' }} />
+                            <span>Previous</span>
+                          </button>
+
+                          {/* Smart Truncated Pagination */}
+                          {(() => {
+                            const pages = [];
+                            if (totalSubPages <= 7) {
+                              for (let i = 1; i <= totalSubPages; i++) pages.push(i);
+                            } else {
+                              if (safeCurrentPage <= 4) {
+                                pages.push(1, 2, 3, 4, 5, '...', totalSubPages);
+                              } else if (safeCurrentPage >= totalSubPages - 3) {
+                                pages.push(1, '...', totalSubPages - 4, totalSubPages - 3, totalSubPages - 2, totalSubPages - 1, totalSubPages);
+                              } else {
+                                pages.push(1, '...', safeCurrentPage - 1, safeCurrentPage, safeCurrentPage + 1, '...', totalSubPages);
+                              }
+                            }
+
+                            return pages.map((page, idx) => {
+                              if (page === '...') {
+                                return (
+                                  <span key={`dots-${idx}`} style={{ padding: '0 4px', color: '#94A3B8', fontSize: '12px' }}>
+                                    ...
+                                  </span>
+                                );
+                              }
+                              const isCur = safeCurrentPage === page;
+                              return (
+                                <button
+                                  key={page}
+                                  type="button"
+                                  onClick={() => setSubCurrentPage(page)}
+                                  style={{
+                                    width: '28px',
+                                    height: '28px',
+                                    borderRadius: '6px',
+                                    border: isCur ? 'none' : '1px solid #E2E8F0',
+                                    background: isCur ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#FFFFFF',
+                                    color: isCur ? '#FFFFFF' : '#475569',
+                                    fontSize: '11.5px',
+                                    fontWeight: isCur ? 600 : 450,
+                                    cursor: 'pointer',
+                                    boxShadow: isCur ? '0 2px 6px rgba(37, 99, 235, 0.25)' : 'none',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                >
+                                  {page}
+                                </button>
+                              );
+                            });
+                          })()}
+
+                          <button
+                            type="button"
+                            disabled={safeCurrentPage === totalSubPages}
+                            onClick={() => setSubCurrentPage(prev => Math.min(totalSubPages, prev + 1))}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid #E2E8F0',
+                              background: '#FFFFFF',
+                              color: safeCurrentPage === totalSubPages ? '#CBD5E1' : '#475569',
+                              fontSize: '11.5px',
+                              fontWeight: 500,
+                              cursor: safeCurrentPage === totalSubPages ? 'not-allowed' : 'pointer'
+                            }}
+                          >
+                            <span>Next</span>
+                            <LucideIcon name="chevron-right" style={{ width: '13px', height: '13px' }} />
+                          </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-
-                {/* Active Subscribers Table */}
-                {hospitals.length > 0 && (
-                  <div style={{ marginTop: '24px', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px' }}>
-                    <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 800 }}>Active Subscriber Breakdown</h3>
-                    <table style={styles.dataTable}>
-                      <thead>
-                        <tr>
-                          <th style={styles.tableTh}>Hospital Name</th>
-                          <th style={styles.tableTh}>Active Plan</th>
-                          <th style={styles.tableTh}>Status</th>
-                          <th style={styles.tableTh}>Monthly Revenue</th>
-                          <th style={styles.tableTh}>Go-Live Date</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {hospitals.map(h => (
-                          <tr key={h._id || h.code} style={styles.tableRow}>
-                            <td style={styles.tableTd}><strong>{h.name}</strong></td>
-                            <td style={styles.tableTd}>{h.plan ? h.plan.replace('$', '₹') : ''}</td>
-                            <td style={styles.tableTd}>
-                              <span style={{ ...styles.statusBadge, background: h.status === 'Active' ? '#D1FAE5' : '#FEE2E2', color: h.status === 'Active' ? '#10B981' : '#EF4444' }}>
-                                {h.status}
-                              </span>
-                            </td>
-                            <td style={styles.tableTd}><strong>{h.revenue ? h.revenue.replace('$', '₹') : 'N/A'}</strong></td>
-                            <td style={styles.tableTd}>{h.goLiveDate || 'N/A'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              );
+            })()}
 
             {/* CUSTOMER SUPPORT & TICKETS TAB */}
             {isTabAllowed && activeTab === 'support-success' && (
@@ -11377,262 +12693,6 @@ const SuperAdminDashboard = () => {
         </div>
       )}
 
-      {isNewOnboardingModalOpen && (
-        <div style={styles.modalOverlay} onClick={() => setIsNewOnboardingModalOpen(false)}>
-          <div style={{ ...styles.searchModalContainer, width: '680px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-            <div style={styles.drawerHeader}>
-              <h3 style={styles.drawerTitle}>Add Hospital for Onboarding</h3>
-              <button style={styles.drawerCloseBtn} onClick={() => setIsNewOnboardingModalOpen(false)}>
-                <LucideIcon name="x" style={{ width: '18px', height: '18px' }} />
-              </button>
-            </div>
-            
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              try {
-                const token = localStorage.getItem('token');
-                const res = await fetch('/api/superadmin/onboarding', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                  },
-                  body: JSON.stringify({
-                    name: newOnboardingForm.name,
-                    exec: currentUser.name || 'Platform Admin',
-                    progress: 0,
-                    daysLeft: 10,
-                    priority: newOnboardingForm.priority || 'Medium',
-                    stage: 'Verification',
-                    panNumber: newOnboardingForm.panNumber,
-                    gstin: newOnboardingForm.gstin,
-                    corpId: newOnboardingForm.corpId,
-                    signatoryName: newOnboardingForm.signatoryName,
-                    sandboxDbUrl: newOnboardingForm.sandboxDbUrl,
-                    adminName: newOnboardingForm.adminName,
-                    adminEmail: newOnboardingForm.adminEmail,
-                    adminPhone: newOnboardingForm.adminPhone,
-                    adminPassword: newOnboardingForm.adminPassword
-                  })
-                });
-
-                if (res.ok) {
-                  const newOnb = await res.json();
-                  setOnboardingHospitals(prev => [newOnb, ...prev]);
-                  setIsNewOnboardingModalOpen(false);
-                  setNewOnboardingForm({
-                    name: '',
-                    exec: 'Platform Admin',
-                    priority: 'Medium',
-                    panNumber: '',
-                    gstin: '',
-                    corpId: '',
-                    signatoryName: '',
-                    sandboxDbUrl: '',
-                    adminName: '',
-                    adminEmail: '',
-                    adminPhone: '',
-                    adminPassword: ''
-                  });
-                  showToast('Hospital onboarding initiated successfully.');
-                  refreshNotifications();
-                  setWizardHospital(newOnb);
-                  setWizardStep(1);
-                  setIsOnboardingWizardOpen(true);
-                } else {
-                  const errData = await res.json();
-                  showToast(errData.error || 'Failed to initiate onboarding.', 'error');
-                }
-              } catch (err) {
-                console.error(err);
-                showToast('Error creating onboarding record.', 'error');
-              }
-            }} style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-              
-              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                
-                {/* Section 1: Basic Info */}
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 805, color: '#475569' }}>HOSPITAL NAME</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Sacred Heart Clinics"
-                      style={styles.formInput}
-                      value={newOnboardingForm.name}
-                      onChange={(e) => setNewOnboardingForm(prev => ({ ...prev, name: e.target.value }))}
-                    />
-                  </div>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 805, color: '#475569' }}>PRIORITY LEVEL</label>
-                    <select
-                      style={styles.filterSelect}
-                      value={newOnboardingForm.priority}
-                      onChange={(e) => setNewOnboardingForm(prev => ({ ...prev, priority: e.target.value }))}
-                    >
-                      <option value="Low">Low</option>
-                      <option value="Medium">Medium</option>
-                      <option value="High">High</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Section 2: Taxation & Registration */}
-                <div style={{ borderBottom: '1px solid #E2E8F0', paddingBottom: '4px', marginTop: '6px' }}>
-                  <span style={{ fontSize: '10px', fontWeight: 850, color: '#1E293B', letterSpacing: '0.5px' }}>REGISTRATION & TAXATION</span>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 805, color: '#475569' }}>PAN NUMBER (OPTIONAL)</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. ABCDE1234F"
-                      style={styles.formInput}
-                      value={newOnboardingForm.panNumber}
-                      onChange={(e) => setNewOnboardingForm(prev => ({ ...prev, panNumber: e.target.value.toUpperCase() }))}
-                    />
-                  </div>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 805, color: '#475569' }}>GSTIN NUMBER (OPTIONAL)</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 07ABCDE1234F1Z1"
-                      style={styles.formInput}
-                      value={newOnboardingForm.gstin}
-                      onChange={(e) => setNewOnboardingForm(prev => ({ ...prev, gstin: e.target.value.toUpperCase() }))}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 805, color: '#475569' }}>CORPORATE ID (CIN) (OPTIONAL)</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. U85110DL2026PTC123456"
-                      style={styles.formInput}
-                      value={newOnboardingForm.corpId}
-                      onChange={(e) => setNewOnboardingForm(prev => ({ ...prev, corpId: e.target.value.toUpperCase() }))}
-                    />
-                  </div>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 805, color: '#475569' }}>AUTHORIZED SIGNATORY (OPTIONAL)</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Dr. Rajesh Kumar (Managing Director)"
-                      style={styles.formInput}
-                      value={newOnboardingForm.signatoryName}
-                      onChange={(e) => setNewOnboardingForm(prev => ({ ...prev, signatoryName: e.target.value }))}
-                    />
-                  </div>
-                </div>
-
-                {/* Section 3: Sandbox & Credentials */}
-                <div style={{ borderBottom: '1px solid #E2E8F0', paddingBottom: '4px', marginTop: '6px' }}>
-                  <span style={{ fontSize: '10px', fontWeight: 850, color: '#1E293B', letterSpacing: '0.5px' }}>SANDBOX & ADMIN ACCESS</span>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '10px', fontWeight: 805, color: '#475569' }}>SANDBOX DATABASE CONNECTION URL (OPTIONAL)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. mongodb+srv://sandbox-max.curoxa.net/db (leave blank for shared DB)"
-                    style={styles.formInput}
-                    value={newOnboardingForm.sandboxDbUrl}
-                    onChange={(e) => setNewOnboardingForm(prev => ({ ...prev, sandboxDbUrl: e.target.value }))}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 805, color: '#475569' }}>ADMIN FULL NAME (OPTIONAL)</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Rajesh Kumar"
-                      style={styles.formInput}
-                      value={newOnboardingForm.adminName}
-                      onChange={(e) => setNewOnboardingForm(prev => ({ ...prev, adminName: e.target.value }))}
-                    />
-                  </div>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 805, color: '#475569' }}>ADMIN PHONE (LOGIN STAFF ID) (OPTIONAL)</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 9876543210"
-                      style={styles.formInput}
-                      value={newOnboardingForm.adminPhone}
-                      onChange={(e) => setNewOnboardingForm(prev => ({ ...prev, adminPhone: e.target.value }))}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 805, color: '#475569' }}>ADMIN EMAIL (OPTIONAL)</label>
-                    <input
-                      type="email"
-                      placeholder="e.g. r.kumar@hospital.com"
-                      style={styles.formInput}
-                      value={newOnboardingForm.adminEmail}
-                      onChange={(e) => setNewOnboardingForm(prev => ({ ...prev, adminEmail: e.target.value }))}
-                    />
-                  </div>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 805, color: '#475569' }}>ADMIN PASSWORD (OPTIONAL)</label>
-                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
-                      <input
-                        type={showPasswords['newOnboarding'] ? 'text' : 'password'}
-                        placeholder="e.g. password123"
-                        style={{ ...styles.formInput, paddingRight: '40px', width: '100%' }}
-                        value={newOnboardingForm.adminPassword}
-                        onChange={(e) => setNewOnboardingForm(prev => ({ ...prev, adminPassword: e.target.value }))}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => togglePasswordVisibility('newOnboarding')}
-                        style={{
-                          position: 'absolute',
-                          right: '10px',
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: '4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#64748B'
-                        }}
-                      >
-                        <LucideIcon name={showPasswords['newOnboarding'] ? 'eye-off' : 'eye'} style={{ width: '15px', height: '15px' }} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{ padding: '16px 20px', borderTop: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  style={styles.btnSecondary}
-                  onClick={() => setIsNewOnboardingModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  style={{ ...styles.btnPrimary, background: '#2563EB' }}
-                >
-                  Initiate Onboarding
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {/* EDIT SUBSCRIPTION PLAN MODAL */}
       {isEditingPlanModalOpen && editingPlan && (
         <div style={styles.modalOverlay} onClick={() => setIsEditingPlanModalOpen(false)}>
@@ -11797,160 +12857,7 @@ const SuperAdminDashboard = () => {
             </div>
             <form onSubmit={async (e) => {
               e.preventDefault();
-              if (!activateForm.isLicenseVerified) {
-                showToast('Please verify the drug license number via the CDSCO API before activation.', 'error');
-                return;
-              }
-              if (!activateForm.isGstVerified) {
-                showToast('Please verify the GSTIN registration number before activation.', 'error');
-                return;
-              }
-              const token = localStorage.getItem('token');
-
-              // Parse plan details
-              let docLimit = 10;
-              let staffLimit = 20;
-              let storageLimit = 50;
-              let amount = 5000;
-
-              if (activateForm.plan.includes('Enterprise')) {
-                docLimit = 200;
-                staffLimit = 500;
-                storageLimit = 1000;
-                amount = activateForm.plan.includes('Annual') ? 480000 : 50000;
-              } else if (activateForm.plan.includes('Professional')) {
-                docLimit = 50;
-                staffLimit = 100;
-                storageLimit = 200;
-                amount = activateForm.plan.includes('Annual') ? 230400 : 24000;
-              } else if (activateForm.plan.includes('Basic')) {
-                docLimit = 10;
-                staffLimit = 20;
-                storageLimit = 50;
-                amount = activateForm.plan.includes('Annual') ? 48000 : 5000;
-              } else if (activateForm.plan.includes('Custom')) {
-                docLimit = 9999;
-                staffLimit = 9999;
-                storageLimit = 9999;
-                amount = 0;
-              }
-
-              try {
-                let modules = {
-                  reception: { enabled: true },
-                  doctor: { enabled: true },
-                  dpdp: { enabled: true },
-                  pharmacy: { enabled: false },
-                  laboratory: { enabled: false },
-                  inventory: { enabled: false }
-                };
-
-                if (activateForm.plan.includes('Professional') || activateForm.plan.includes('Enterprise') || activateForm.plan.includes('Custom')) {
-                  modules.pharmacy = { enabled: true };
-                  modules.laboratory = { enabled: true };
-                }
-                if (activateForm.plan.includes('Enterprise') || activateForm.plan.includes('Custom')) {
-                  modules.inventory = { enabled: true };
-                }
-
-                // 1. Create Hospital Record
-                const hospRes = await fetch('/api/superadmin/hospitals', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                  body: JSON.stringify({
-                    name: selectedOnboardingHospital.name,
-                    code: activateForm.code,
-                    logo: selectedOnboardingHospital.name.slice(0, 2).toUpperCase(),
-                    plan: activateForm.plan,
-                    status: 'Active',
-                    csm: activateForm.csm,
-                    onboardingLead: selectedOnboardingHospital.exec,
-                    goLiveDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-                    gst: activateForm.gst,
-                    isGstVerified: activateForm.isGstVerified,
-                    gstVerificationDetails: activateForm.gstVerificationDetails,
-                    license: activateForm.license,
-                    isLicenseVerified: activateForm.isLicenseVerified,
-                    licenseVerificationDetails: activateForm.licenseVerificationDetails,
-                    address: activateForm.address,
-                    panNumber: selectedOnboardingHospital.panNumber || '',
-                    corpId: selectedOnboardingHospital.corpId || '',
-                    signatoryName: selectedOnboardingHospital.signatoryName || '',
-                    fireSafetyCertificate: selectedOnboardingHospital.fireSafetyCertificate || '',
-                    pollutionCertificate: selectedOnboardingHospital.pollutionCertificate || '',
-                    revenue: `₹${amount}/mo`,
-                    healthScore: 100,
-                    limits: {
-                      doctorsUsed: 0,
-                      doctorsLimit: docLimit,
-                      staffUsed: 0,
-                      staffLimit: staffLimit,
-                      storageUsed: 0,
-                      storageLimit: storageLimit,
-                      patients: 0
-                    },
-                    modules,
-                    adminName: activateForm.adminName,
-                    adminEmail: activateForm.adminEmail,
-                    adminPhone: activateForm.adminPhone,
-                    adminPassword: activateForm.adminPassword
-                  })
-                });
-
-                if (!hospRes.ok) {
-                  const errorData = await hospRes.json();
-                  throw new Error(errorData.error || 'Failed to create hospital record.');
-                }
-                const newHospital = await hospRes.json();
-
-                // 2. Generate First Invoice Record
-                const invoiceNum = `INV-2026-${Math.floor(100 + Math.random() * 900)}`;
-                const invRes = await fetch('/api/superadmin/invoices', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                  body: JSON.stringify({
-                    invoiceNum,
-                    hospital: selectedOnboardingHospital.name,
-                    subscription: activateForm.plan.split(' (₹')[0],
-                    invoiceDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-                    dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-                    amount,
-                    gst: Math.round(amount * 0.18),
-                    status: 'Paid',
-                    billingCycle: 'Monthly',
-                    billingPeriod: 'Current Month Cycle',
-                    address: activateForm.address,
-                    gstin: activateForm.gst,
-                    notes: 'Initial activation subscription invoice generated upon Go Live.'
-                  })
-                });
-
-                if (invRes.ok) {
-                  const newInvoice = await invRes.json();
-                  setInvoices(prev => [newInvoice, ...prev]);
-                }
-
-                // 3. Delete Onboarding Record on backend
-                try {
-                  await fetch(`/api/superadmin/onboarding/${selectedOnboardingHospital._id}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                  });
-                } catch (onbDelErr) {
-                  console.error("Failed to clean up onboarding record:", onbDelErr);
-                }
-
-                // Update UI state
-                setHospitals(prev => [newHospital, ...prev]);
-                setOnboardingHospitals(prev => prev.filter(o => o._id !== selectedOnboardingHospital._id));
-                setIsActivateModalOpen(false);
-                showToast('Hospital subscription activated and Go-Live initialized successfully!');
-                refreshNotifications();
-                setActiveTab('hospitals');
-              } catch (err) {
-                console.error(err);
-                showToast(err.message || 'Error activating subscription.', 'error');
-              }
+              await executeHospitalActivation(selectedOnboardingHospital, activateForm);
             }} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={styles.formRow}>
                 <div style={styles.formCol}>

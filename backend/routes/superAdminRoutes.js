@@ -545,8 +545,32 @@ router.delete('/plans/:id', async (req, res) => {
 
 // ==================== ONBOARDING ====================
 router.get('/onboarding', async (req, res) => {
-
   try {
+    // Auto-purge onboarding drafts for hospitals that are already live in SuperAdminHospital
+    const liveHospitals = await SuperAdminHospital.find({}, { name: 1, code: 1, phone: 1, contactPhone: 1, adminPhone: 1, email: 1, contactEmail: 1, adminEmail: 1, panNumber: 1, gst: 1 }).lean();
+    if (liveHospitals.length > 0) {
+      const liveNames = liveHospitals.map(h => h.name).filter(Boolean);
+      const liveCodes = liveHospitals.map(h => h.code).filter(Boolean);
+      const livePhones = liveHospitals.flatMap(h => [h.phone, h.contactPhone, h.adminPhone]).filter(Boolean);
+      const liveEmails = liveHospitals.flatMap(h => [h.email, h.contactEmail, h.adminEmail]).filter(Boolean);
+      const livePANs = liveHospitals.map(h => h.panNumber).filter(Boolean);
+      const liveGSTs = liveHospitals.map(h => h.gst).filter(Boolean);
+
+      await SuperAdminOnboarding.deleteMany({
+        $or: [
+          { isActivated: true },
+          { status: 'Completed' },
+          { status: 'Live' },
+          { name: { $in: liveNames } },
+          ...(liveCodes.length > 0 ? [{ code: { $in: liveCodes } }] : []),
+          ...(livePhones.length > 0 ? [{ adminPhone: { $in: livePhones } }] : []),
+          ...(liveEmails.length > 0 ? [{ adminEmail: { $in: liveEmails } }] : []),
+          ...(livePANs.length > 0 ? [{ panNumber: { $in: livePANs } }] : []),
+          ...(liveGSTs.length > 0 ? [{ gstin: { $in: liveGSTs } }] : [])
+        ]
+      });
+    }
+
     const onboardings = await SuperAdminOnboarding.find({});
     res.json(onboardings);
   } catch (err) {
@@ -741,12 +765,19 @@ router.get('/hospitals', async (req, res) => {
 
     const hospitals = await SuperAdminHospital.find({});
     
-    const result = [];
-    for (let hospital of hospitals) {
-      const doctorsCount = await User.countDocuments({ tenantId: hospital.code, role: 'doctor' });
-      const staffCount = await User.countDocuments({ tenantId: hospital.code, role: { $nin: ['doctor', 'patient', 'admin'] } });
+    const result = await Promise.all(hospitals.map(async (hospital) => {
+      const [doctorsCount, staffCount, adminUser] = await Promise.all([
+        User.countDocuments({ tenantId: hospital.code, role: 'doctor' }),
+        User.countDocuments({ tenantId: hospital.code, role: { $nin: ['doctor', 'patient', 'admin'] } }),
+        User.findOne({ tenantId: hospital.code, role: 'admin' })
+      ]);
       
       let limitsUpdated = false;
+      if (!hospital.limits) {
+        hospital.limits = { doctorsUsed: 0, doctorsLimit: 25, staffUsed: 0, staffLimit: 50, storageUsed: 5.0, storageLimit: 100, patients: 0 };
+        limitsUpdated = true;
+      }
+
       if (hospital.limits.doctorsUsed !== doctorsCount || hospital.limits.staffUsed !== staffCount) {
         hospital.limits.doctorsUsed = doctorsCount;
         hospital.limits.staffUsed = staffCount;
@@ -768,18 +799,17 @@ router.get('/hospitals', async (req, res) => {
 
       // Auto-populate realistic storageUsed if it is 0 or undefined
       if (!hospital.limits.storageUsed || hospital.limits.storageUsed === 0) {
-        const hash = hospital.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const hash = (hospital.name || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
         const baseStorage = 5.2 + (hash % 18) + (staffCount * 0.15);
         hospital.limits.storageUsed = parseFloat(baseStorage.toFixed(1));
         limitsUpdated = true;
       }
 
       if (limitsUpdated) {
-        await hospital.save();
+        await hospital.save().catch(e => console.warn('hospital save limit update err:', e.message));
       }
 
       const hospObj = hospital.toObject();
-      const adminUser = await User.findOne({ tenantId: hospital.code, role: 'admin' });
       if (adminUser) {
         hospObj.adminUsername = adminUser.staff_id;
         hospObj.adminEmail = adminUser.email;
@@ -791,8 +821,8 @@ router.get('/hospitals', async (req, res) => {
         hospObj.adminPhone = '';
         hospObj.adminName = '';
       }
-      result.push(hospObj);
-    }
+      return hospObj;
+    }));
     
     res.json(result);
   } catch (err) {
@@ -851,6 +881,22 @@ router.post('/hospitals', async (req, res) => {
 
     await writeAudit(req, 'create_hospital', `Created hospital profile ${hospital.name} (${hospital.code}) and provisioned admin user '${adminName}'`);
     await createNotification('Hospital Activated', `Hospital '${hospital.name}' (${hospital.code}) has been activated on plan '${hospital.plan}'`, 'success', 'billing');
+    
+    // Auto-delete corresponding onboarding draft from SuperAdminOnboarding
+    try {
+      await SuperAdminOnboarding.deleteMany({
+        $or: [
+          ...(req.body.onboardingId ? [{ _id: req.body.onboardingId }] : []),
+          { name: hospital.name },
+          { adminPhone: adminPhone },
+          { adminEmail: adminEmail.toLowerCase().trim() },
+          ...(hospital.panNumber ? [{ panNumber: hospital.panNumber }] : []),
+          ...(hospital.gst ? [{ gstin: hospital.gst }] : [])
+        ]
+      });
+    } catch (cleanErr) {
+      console.warn('Could not auto-clean onboarding draft:', cleanErr.message);
+    }
     
     // Send email notifications
     try {

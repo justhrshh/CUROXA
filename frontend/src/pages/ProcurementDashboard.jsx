@@ -4905,43 +4905,6 @@ const ProcurementDashboard = () => {
                         {editingVendor ? 'Modify existing supplier profile and contract terms.' : 'Register a supplier and submit their commercial details for admin approval.'}
                       </p>
                     </div>
-
-                    <div className="vendor-header-actions">
-                      <div className="vendor-btn-group">
-                        <button 
-                          type="button" 
-                          className="proc-btn proc-btn-secondary" 
-                          onClick={() => {
-                            setIsAddingVendor(false);
-                            setEditingVendor(null);
-                            resetVendorForm();
-                          }}
-                        >
-                          Cancel
-                        </button>
-                        <button 
-                          type="submit" 
-                          name="saveVendor" 
-                          className="proc-btn proc-btn-secondary"
-                          style={{ backgroundColor: '#F8FAFC', color: '#1E293B', border: '1px solid #CBD5E1', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                        >
-                          <i data-lucide="bookmark" style={{ width: '14px', height: '14px', color: '#2563EB' }}></i> Save as Draft
-                        </button>
-                        <button 
-                          type="submit" 
-                          name="saveAndAddPrice" 
-                          className="proc-btn proc-btn-primary"
-                          id="vendor-primary-submit-btn"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                        >
-                          {editingVendor ? 'Save Changes' : 'Register Vendor'}
-                          <i data-lucide="arrow-right" style={{ width: '15px', height: '15px' }}></i>
-                        </button>
-                      </div>
-                      <div className="vendor-kbd-hint">
-                        Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to submit
-                      </div>
-                    </div>
                   </div>
 
                   {/* 2. STEP / PROGRESS NAVIGATION */}

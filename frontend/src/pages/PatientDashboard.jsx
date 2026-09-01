@@ -510,27 +510,50 @@ const PatientDashboard = () => {
     return upcoming || null;
   }, [hospitalAppointments, todayStr]);
 
-  // Today's visit (specifically today's appointment for the live token card)
+  // Today's visit (specifically today's appointment for the live OPD Visit card)
+  // Supports: Approved, Checked In, In Progress, Prescription Pending, Completed, Checked Out
   const todayVisitAppt = useMemo(() => {
     const candidateList = hospitalAppointments;
-    return candidateList.find(app => {
+    const todayAppts = candidateList.filter(app => {
       const isToday = (app.tokenDate === todayStr) || (app.date && getLocalDateString(app.date) === todayStr);
-      return isToday && !['Completed', 'Cancelled', 'Checked Out'].includes(app.status);
-    }) || null;
+      return isToday && app.status !== 'Cancelled';
+    });
+    if (todayAppts.length === 0) return null;
+    // Prefer active appointment today (In Progress, Checked In, Approved, Prescription Pending) over Completed if multiple exist
+    const activeToday = todayAppts.find(app => !['Completed', 'Checked Out'].includes(app.status));
+    return activeToday || todayAppts[0];
   }, [hospitalAppointments, todayStr]);
 
-  // Next upcoming scheduled appointment
+  // Next upcoming scheduled appointment (ONLY genuinely upcoming/active appointments, NOT Completed/Cancelled/Checked Out/Rx Pending)
   const nextUpcomingAppt = useMemo(() => {
     const candidateList = hospitalAppointments;
-    const future = candidateList.filter(app => {
-      const appDate = app.date ? getLocalDateString(app.date) : '';
-      const isFuture = appDate >= todayStr;
-      const isNotDone = !['Completed', 'Cancelled', 'Checked Out'].includes(app.status);
-      const isDifferentFromTodayVisit = todayVisitAppt ? app._id !== todayVisitAppt._id : true;
-      return isFuture && isNotDone && isDifferentFromTodayVisit;
+    const activeAppointments = candidateList.filter(app => {
+      const appDate = app.date ? getLocalDateString(app.date) : (app.tokenDate || '');
+      const isFutureOrToday = appDate >= todayStr || (app.tokenDate === todayStr);
+      const isTerminalOrDone = ['Completed', 'Cancelled', 'Checked Out', 'Prescription Pending'].includes(app.status);
+      return isFutureOrToday && !isTerminalOrDone;
     });
-    return future[0] || null;
-  }, [hospitalAppointments, todayStr, todayVisitAppt]);
+
+    if (activeAppointments.length === 0) return null;
+
+    // Prioritize future date appointments (> todayStr) if any exist
+    const futureDateAppts = activeAppointments.filter(app => {
+      const appDate = app.date ? getLocalDateString(app.date) : '';
+      return appDate > todayStr;
+    });
+    if (futureDateAppts.length > 0) {
+      return futureDateAppts[0];
+    }
+
+    // Otherwise check for active today's appointment (Approved / Scheduled / Checked In)
+    const todayActive = activeAppointments.filter(app => {
+      const appDate = app.date ? getLocalDateString(app.date) : '';
+      const isToday = (app.tokenDate === todayStr) || (appDate === todayStr);
+      return isToday;
+    });
+
+    return todayActive[0] || null;
+  }, [hospitalAppointments, todayStr]);
 
   // Appointment counts for segmented filters
   const apptCounts = useMemo(() => {
@@ -7175,112 +7198,189 @@ const PatientDashboard = () => {
         const apptStatus = selectedAppointment.status;
         const isCancelled = apptStatus === 'Cancelled';
         const isCompleted = apptStatus === 'Completed' || apptStatus === 'Checked Out';
+        const isRxPending = apptStatus === 'Prescription Pending';
+        const isPostConsultation = isCompleted || isRxPending;
+        const isLocked = isCancelled || isCompleted || isRxPending;
+
         const statusColors = isCancelled
-          ? { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA', badgeBg: '#FEE2E2', icon: '🚫' }
+          ? { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA', badgeBg: '#FEE2E2', badgeBorder: '#FCA5A5', icon: '✕', label: 'Cancelled' }
           : isCompleted
-          ? { bg: '#F0FDF4', color: '#059669', border: '#A7F3D0', badgeBg: '#DCFCE7', icon: '✅' }
-          : { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE', badgeBg: '#DBEAFE', icon: '📅' };
+          ? { bg: '#F0FDF4', color: '#16A34A', border: '#BBF7D0', badgeBg: '#DCFCE7', badgeBorder: '#86EFAC', icon: '✓', label: 'Completed' }
+          : isRxPending
+          ? { bg: '#FFFBEB', color: '#D97706', border: '#FDE68A', badgeBg: '#FEF3C7', badgeBorder: '#FCD34D', icon: '⏳', label: 'Prescription Pending' }
+          : apptStatus === 'In Progress'
+          ? { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE', badgeBg: '#DBEAFE', badgeBorder: '#93C5FD', icon: '●', label: 'In Consultation' }
+          : { bg: '#F8FAFC', color: '#0284C7', border: '#BAE6FD', badgeBg: '#E0F2FE', badgeBorder: '#7DD3FC', icon: '📅', label: apptStatus || 'Scheduled' };
+
+        const hospitalInfo = getHospitalDetails(selectedAppointment.tenantId);
+        const formattedDate = selectedAppointment.date ? new Date(selectedAppointment.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'Today';
+        const formattedTime = selectedAppointment.time || 'Standard Slot';
+        const doctorName = selectedAppointment.doctorId?.name || 'Dr. Specialist';
+        const doctorSpecialty = selectedAppointment.doctorId?.specialty || selectedAppointment.reason || 'General OPD';
+        const doctorDept = selectedAppointment.doctorId?.department || 'Outpatient Department';
+        const docInitials = doctorName.replace('Dr. ', '').substring(0, 2).toUpperCase();
 
         return (
           <div 
             className="modal-overlay mobile-detail-sheet-overlay" 
-            style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }} 
+            style={{ 
+              position: 'fixed', inset: 0, 
+              background: 'rgba(15, 23, 42, 0.65)', 
+              backdropFilter: 'blur(8px)', 
+              WebkitBackdropFilter: 'blur(8px)',
+              zIndex: 1000, 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+              padding: '16px' 
+            }} 
             onClick={() => setDetailsModalOpen(false)}
           >
             <div 
               className="modal-box mobile-detail-sheet" 
-              style={{ background: '#FFFFFF', borderRadius: '24px', width: '100%', maxWidth: '520px', boxShadow: '0 32px 64px -12px rgba(0,0,0,0.28)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid #E2E8F0' }} 
+              style={{ 
+                background: '#FFFFFF', 
+                borderRadius: '24px', 
+                width: '100%', 
+                maxWidth: '520px', 
+                boxShadow: '0 25px 60px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(226, 232, 240, 0.9)', 
+                maxHeight: '90vh', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                overflow: 'hidden'
+              }} 
               onClick={e => e.stopPropagation()}
             >
               {/* ── HEADER ── */}
               <div style={{ 
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-                padding: '18px 22px', 
-                background: 'linear-gradient(135deg, #F8FAFF 0%, #FFFFFF 100%)',
-                borderBottom: '1px solid #E8EEF4', flexShrink: 0 
+                padding: '20px 24px', 
+                background: '#FFFFFF',
+                borderBottom: '1px solid #F1F5F9', 
+                flexShrink: 0 
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{ 
-                    width: '40px', height: '40px', borderRadius: '12px', 
+                    width: '42px', height: '42px', borderRadius: '14px', 
                     background: statusColors.badgeBg, 
+                    border: `1px solid ${statusColors.badgeBorder}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                    fontSize: '18px', flexShrink: 0
+                    fontSize: '18px', flexShrink: 0,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
                   }}>
                     {statusColors.icon}
                   </div>
                   <div>
-                    <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif", lineHeight: 1.2 }}>Appointment Details</h2>
-                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', fontWeight: 600 }}>
-                      {getHospitalDetails(selectedAppointment.tenantId).name}
+                    <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+                      Appointment Details
+                    </h2>
+                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span>🏥</span>
+                      <span>{hospitalInfo.name || 'Curoxa Healthcare'}</span>
                     </div>
                   </div>
                 </div>
                 <button 
                   type="button" 
                   onClick={() => setDetailsModalOpen(false)} 
-                  style={{ background: '#F1F5F9', border: 'none', borderRadius: '10px', width: '34px', height: '34px', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '16px', flexShrink: 0 }}
+                  style={{ 
+                    background: '#F8FAFC', 
+                    border: '1px solid #E2E8F0', 
+                    borderRadius: '50%', 
+                    width: '34px', height: '34px', 
+                    cursor: 'pointer', 
+                    color: '#64748B', 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                    fontWeight: 800, fontSize: '14px', 
+                    transition: 'all 0.15s ease',
+                    flexShrink: 0 
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#0F172A'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.color = '#64748B'; }}
                 >
                   ✕
                 </button>
               </div>
 
               {/* ── BODY ── */}
-              <div style={{ padding: '20px 22px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }} data-lenis-prevent>
+              <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }} data-lenis-prevent>
 
-                {/* Doctor + Status card */}
-                <div style={{ borderRadius: '16px', border: `1.5px solid ${statusColors.border}`, background: statusColors.bg, padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
+                {/* Top Doctor & Status Banner */}
+                <div style={{ 
+                  borderRadius: '18px', 
+                  border: `1.5px solid ${statusColors.border}`, 
+                  background: statusColors.bg, 
+                  padding: '16px 18px', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '14px',
+                  boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{
-                        width: '46px', height: '46px', borderRadius: '14px',
-                        background: '#FFFFFF', border: `1.5px solid ${statusColors.border}`,
-                        color: statusColors.color,
+                        width: '48px', height: '48px', borderRadius: '16px',
+                        background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                        color: '#FFFFFF',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontWeight: 900, fontSize: '16px', flexShrink: 0, boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
+                        fontWeight: 900, fontSize: '16px', flexShrink: 0, 
+                        boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
                       }}>
-                        {selectedAppointment.doctorId?.name ? selectedAppointment.doctorId.name.replace('Dr. ', '').substring(0, 2).toUpperCase() : 'DR'}
+                        {docInitials || 'DR'}
                       </div>
                       <div>
-                        <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>
-                          {selectedAppointment.doctorId?.name || 'Assigned Doctor'}
+                        <div style={{ fontSize: '15.5px', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>
+                          {doctorName}
                         </div>
-                        <div style={{ fontSize: '11.5px', color: statusColors.color, fontWeight: 700, marginTop: '2px' }}>
-                          {selectedAppointment.doctorId?.specialty || selectedAppointment.reason || 'General Consultation'} • {selectedAppointment.doctorId?.department || 'OPD'}
+                        <div style={{ fontSize: '12px', color: '#475569', fontWeight: 650, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>{doctorSpecialty}</span>
+                          <span>•</span>
+                          <span style={{ color: '#64748B' }}>{doctorDept}</span>
                         </div>
                       </div>
                     </div>
                     <span style={{
-                      padding: '4px 11px', borderRadius: '20px', fontSize: '11px', fontWeight: 800,
+                      padding: '5px 12px', borderRadius: '99px', fontSize: '11px', fontWeight: 800,
                       background: '#FFFFFF', color: statusColors.color,
-                      border: `1.5px solid ${statusColors.border}`,
-                      whiteSpace: 'nowrap', flexShrink: 0
+                      border: `1px solid ${statusColors.border}`,
+                      whiteSpace: 'nowrap', flexShrink: 0,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
                     }}>
-                      {apptStatus}
+                      {statusColors.label}
                     </span>
                   </div>
 
+                  {/* Date & Time Slot Dual Chips */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', paddingTop: '12px', borderTop: `1px solid ${statusColors.border}` }}>
-                    <div style={{ background: '#FFFFFF', borderRadius: '10px', padding: '10px 12px', border: `1px solid ${statusColors.border}` }}>
-                      <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>📅 Date</div>
-                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', marginTop: '4px' }}>
-                        {selectedAppointment.date ? new Date(selectedAppointment.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
+                    <div style={{ background: '#FFFFFF', borderRadius: '12px', padding: '10px 12px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>
+                        📅
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '9.5px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>APPOINTMENT DATE</div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#1E293B', marginTop: '2px' }}>
+                          {formattedDate}
+                        </div>
                       </div>
                     </div>
-                    <div style={{ background: '#FFFFFF', borderRadius: '10px', padding: '10px 12px', border: `1px solid ${statusColors.border}` }}>
-                      <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>🕐 Time Slot</div>
-                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', marginTop: '4px' }}>
-                        {selectedAppointment.time || 'Standard Slot'}
+                    <div style={{ background: '#FFFFFF', borderRadius: '12px', padding: '10px 12px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>
+                        🕐
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '9.5px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>TIME WINDOW</div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#1E293B', marginTop: '2px' }}>
+                          {formattedTime}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Live Queue Token (only if token exists AND not cancelled) */}
-                {selectedAppointment.tokenNumber && !isCancelled && (
+                {/* Live Queue Token (ONLY for active/upcoming appointments participating in the live queue; NEVER for completed/cancelled/checked out/rx pending) */}
+                {selectedAppointment.tokenNumber && !isCancelled && !isPostConsultation && (
                   <div style={{
                     background: 'linear-gradient(135deg, #EFF6FF 0%, #FFFFFF 100%)',
-                    borderRadius: '16px', border: '1.5px solid #BFDBFE',
-                    padding: '16px', boxShadow: '0 4px 12px -2px rgba(37,99,235,0.08)'
+                    borderRadius: '18px', border: '1.5px solid #BFDBFE',
+                    padding: '16px', boxShadow: '0 4px 14px -2px rgba(37,99,235,0.08)'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                       <span style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: '#2563EB', letterSpacing: '0.06em' }}>🎟 Live Queue Token</span>
@@ -7309,63 +7409,113 @@ const PatientDashboard = () => {
                   </div>
                 )}
 
-                {/* Visit Details */}
-                <div style={{ background: '#F8FAFC', borderRadius: '14px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-                  <div style={{ padding: '10px 14px', background: '#F1F5F9', borderBottom: '1px solid #E2E8F0' }}>
+                {/* Visit Information Group */}
+                <div style={{ background: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                  <div style={{ padding: '10px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📋 Visit Details</span>
                   </div>
-                  <div style={{ padding: '4px 0' }}>
+                  <div>
                     {[
-                      { label: 'Reason / Type', value: selectedAppointment.reason || 'General Consultation', valueColor: '#0F172A' },
-                      { label: 'Payment Status', value: selectedAppointment.billingStatus === 'Paid' ? 'Paid ✓' : 'Unpaid — Pay at Reception', valueColor: selectedAppointment.billingStatus === 'Paid' ? '#16A34A' : '#D97706' },
-                      { label: 'Booking Source', value: selectedAppointment.source || 'Curoxa Patient Portal', valueColor: '#0F172A' },
+                      { label: 'Reason / Concern', value: selectedAppointment.reason || 'General Health Consultation', valueColor: '#0F172A' },
+                      { label: 'Settlement Status', value: selectedAppointment.billingStatus === 'Paid' ? 'Paid ✓' : 'Pay at Front Desk', valueColor: selectedAppointment.billingStatus === 'Paid' ? '#16A34A' : '#D97706' },
+                      { label: 'Booking Origin', value: selectedAppointment.source || 'Curoxa Patient Portal', valueColor: '#475569' },
                     ].map(({ label, value, valueColor }, idx, arr) => (
-                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
-                        <span style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>{label}</span>
-                        <span style={{ fontSize: '12.5px', fontWeight: 800, color: valueColor, textAlign: 'right', maxWidth: '55%' }}>{value}</span>
+                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 16px', borderBottom: idx < arr.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                        <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>{label}</span>
+                        <span style={{ fontSize: '12.5px', fontWeight: 750, color: valueColor, textAlign: 'right', maxWidth: '60%' }}>{value}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* SECTION: IF COMPLETED — CONSULTATION SUMMARY */}
+                {/* SECTION: IF COMPLETED OR RX PENDING — CONSULTATION SUMMARY & PRESCRIPTION FLOW */}
                 {(() => {
                   const originalStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
                   const isComp = originalStatus === 'Completed' || originalStatus === 'Checked Out';
-                  if (!isComp) return null;
+                  const isPendingRx = originalStatus === 'Prescription Pending';
+                  if (!isComp && !isPendingRx) return null;
+
                   return (
-                    <div style={{ background: '#F0FDF4', borderRadius: '16px', border: '1px solid #BBF7D0', padding: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                        <i data-lucide="clipboard-check" style={{ color: '#16A34A', width: '18px', height: '18px' }}></i>
-                        <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#166534', margin: 0 }}>Consultation Summary</h4>
+                    <div style={{ 
+                      background: isPendingRx ? 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)' : 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)', 
+                      borderRadius: '18px', 
+                      border: `1.5px solid ${isPendingRx ? '#FDE68A' : '#BBF7D0'}`, 
+                      padding: '18px',
+                      boxShadow: '0 4px 14px -2px rgba(0,0,0,0.03)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '16px' }}>{isPendingRx ? '⏳' : '📋'}</span>
+                          <h4 style={{ fontSize: '13.5px', fontWeight: 800, color: isPendingRx ? '#92400E' : '#166534', margin: 0 }}>
+                            {isPendingRx ? 'Prescription Processing' : 'Consultation Summary'}
+                          </h4>
+                        </div>
+                        <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', background: '#FFFFFF', color: isPendingRx ? '#B45309' : '#15803D' }}>
+                          {isPendingRx ? 'Upload in Progress' : 'Completed Visit'}
+                        </span>
                       </div>
-                      <div style={{ fontSize: '13px', color: '#334155', marginBottom: '12px', lineHeight: 1.6 }}>
-                        <div><strong>Attending Doctor:</strong> {selectedAppointment.doctorId?.name || 'Dr. Specialist'}</div>
-                        <div><strong>Visit Date:</strong> {selectedAppointment.date ? new Date(selectedAppointment.date).toLocaleDateString() : 'Recorded'}</div>
-                        {selectedAppointment.diagnosis && <div style={{ marginTop: '4px' }}><strong>Diagnosis:</strong> <span dangerouslySetInnerHTML={{ __html: selectedAppointment.diagnosis }} /></div>}
+
+                      <div style={{ background: '#FFFFFF', borderRadius: '12px', padding: '12px 14px', border: `1px solid ${isPendingRx ? '#FDE68A' : '#BBF7D0'}`, fontSize: '12.5px', color: '#334155', lineHeight: 1.6 }}>
+                        <div><strong style={{ color: '#0F172A' }}>Attending Doctor:</strong> {doctorName}</div>
+                        <div><strong style={{ color: '#0F172A' }}>Visit Recorded:</strong> {formattedDate}</div>
+                        {selectedAppointment.diagnosis && (
+                          <div style={{ marginTop: '4px' }}>
+                            <strong style={{ color: '#0F172A' }}>Diagnosis:</strong> <span dangerouslySetInnerHTML={{ __html: selectedAppointment.diagnosis }} />
+                          </div>
+                        )}
                       </div>
-                      <div style={{ paddingTop: '10px', borderTop: '1px solid #DCFCE7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+
+                      {/* Prescription Row */}
+                      <div style={{ marginTop: '12px', background: '#FFFFFF', borderRadius: '12px', padding: '12px 14px', border: `1px solid ${isPendingRx ? '#FDE68A' : '#BBF7D0'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                         <div>
-                          <div style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B' }}>Prescription</div>
-                          <div style={{ fontSize: '11px', color: '#64748B' }}>
-                            {selectedAppointmentDetails.prescriptions.length > 0 ? `${selectedAppointmentDetails.prescriptions[0].items?.length || 0} medicine(s) prescribed` : 'No medicines recorded'}
+                          <div style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <span>💊</span>
+                            <span>Prescription</span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: isPendingRx ? '#D97706' : '#64748B', fontWeight: isPendingRx ? 700 : 500, marginTop: '2px' }}>
+                            {isPendingRx 
+                              ? 'Clinic team is currently preparing & uploading your prescription'
+                              : selectedAppointmentDetails.prescriptions.length > 0 
+                                ? `${selectedAppointmentDetails.prescriptions[0].items?.length || 0} medication(s) prescribed` 
+                                : 'Prescription archived in patient records'}
                           </div>
                         </div>
                         {selectedAppointmentDetails.prescriptions.length > 0 && (
-                          <button type="button" onClick={() => { setSelectedPrescription(selectedAppointmentDetails.prescriptions[0]); setPrescriptionModalOpen(true); }}
-                            style={{ padding: '6px 14px', borderRadius: '8px', border: 'none', background: '#2563EB', color: '#FFFFFF', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}>
+                          <button 
+                            type="button" 
+                            onClick={() => { setSelectedPrescription(selectedAppointmentDetails.prescriptions[0]); setPrescriptionModalOpen(true); }}
+                            style={{ 
+                              padding: '7px 16px', borderRadius: '10px', border: 'none', 
+                              background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', 
+                              color: '#FFFFFF', fontSize: '12px', fontWeight: 800, 
+                              cursor: 'pointer', boxShadow: '0 2px 6px rgba(37,99,235,0.2)' 
+                            }}
+                          >
                             View Prescription
                           </button>
                         )}
                       </div>
+
+                      {/* Lab Tests Row */}
                       {selectedAppointmentDetails.labs.length > 0 && (
-                        <div style={{ paddingTop: '10px', marginTop: '10px', borderTop: '1px solid #DCFCE7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ marginTop: '8px', background: '#FFFFFF', borderRadius: '12px', padding: '12px 14px', border: '1px solid #E9D5FF', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                           <div>
-                            <div style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B' }}>Ordered Laboratory Tests</div>
-                            <div style={{ fontSize: '11px', color: '#64748B' }}>{selectedAppointmentDetails.labs.map(l => l.testName).join(', ')}</div>
+                            <div style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <span>🧪</span>
+                              <span>Ordered Laboratory Tests</span>
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{selectedAppointmentDetails.labs.map(l => l.testName).join(', ')}</div>
                           </div>
-                          <button type="button" onClick={() => { setSelectedLabReport(selectedAppointmentDetails.labs[0]); setLabModalOpen(true); }}
-                            style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid #9333EA', background: '#FAF5FF', color: '#9333EA', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}>
+                          <button 
+                            type="button" 
+                            onClick={() => { setSelectedLabReport(selectedAppointmentDetails.labs[0]); setLabModalOpen(true); }}
+                            style={{ 
+                              padding: '7px 16px', borderRadius: '10px', 
+                              border: '1px solid #C084FC', background: '#FAF5FF', 
+                              color: '#9333EA', fontSize: '12px', fontWeight: 800, 
+                              cursor: 'pointer' 
+                            }}
+                          >
                             View Lab Report
                           </button>
                         </div>
@@ -7374,89 +7524,89 @@ const PatientDashboard = () => {
                   );
                 })()}
 
-                {/* SECTION: RESCHEDULE / CANCEL */}
-                {(() => {
-                  const originalStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
-                  const isLocked = originalStatus === 'Cancelled' || originalStatus === 'Completed' || originalStatus === 'Checked Out';
+                {/* Status Lock Notice for Completed / Cancelled / Prescription Pending */}
+                {isLocked && (
+                  <div style={{ padding: '12px 16px', background: '#F8FAFC', borderRadius: '14px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '13px' }}>🔒</span>
+                    <span style={{ fontSize: '12px', fontWeight: 650, color: '#64748B', lineHeight: 1.4 }}>
+                      This appointment is <strong>{statusColors.label}</strong>. Rescheduling is disabled for archived encounters.
+                    </span>
+                  </div>
+                )}
 
-                  if (isLocked) {
-                    return (
-                      <div style={{ padding: '12px 14px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#475569' }}>
-                          🔒 Status Lock: This appointment is <strong>{originalStatus}</strong>. It cannot be rescheduled or modified.
-                        </span>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: '#F8FAFC', padding: '16px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em' }}>🔄 Reschedule Appointment</div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1A1D23' }}>Select New Date</label>
-                        <input type="date" className="form-control" style={{ background: 'white', border: '1px solid #CBD5E1', borderRadius: '8px', height: '40px', width: '100%', padding: '0 12px', fontWeight: 600 }}
-                          value={selectedAppointment.date ? new Date(selectedAppointment.date).toISOString().split('T')[0] : ''} min={getLocalDateString()}
-                          onChange={(e) => setSelectedAppointment({...selectedAppointment, date: e.target.value})} />
-                      </div>
-                      {!rescheduleAvailability.available && (
-                        <div style={{ color: '#EF4444', background: '#FEF2F2', padding: '10px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, border: '1px solid #FEE2E2' }}>
-                          Doctor Unavailable: {rescheduleAvailability.reason || 'Doctor is on leave or weekly off'}
-                        </div>
-                      )}
-                      {rescheduleAvailability.available && (
-                        <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1A1D23' }}>Select New Time Slot</label>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(95px, 1fr))', gap: '6px', maxHeight: '120px', overflowY: 'auto', paddingRight: '4px' }}>
-                            {(rescheduleAvailability.slots && rescheduleAvailability.slots.length > 0 ? rescheduleAvailability.slots : DEFAULT_TIME_SLOTS).map(time => {
-                              const isSelected = selectedAppointment.time === time;
-                              const displayTime = time.split(/\(Limit:/i)[0].trim();
-                              return (
-                                <button key={time} type="button" onClick={() => setSelectedAppointment({ ...selectedAppointment, time })}
-                                  style={{ minHeight: '34px', padding: '4px 6px', borderRadius: '6px', border: isSelected ? '2px solid #2563EB' : '1px solid #CBD5E1', background: isSelected ? '#EFF6FF' : 'white', color: isSelected ? '#2563EB' : '#1E293B', fontWeight: isSelected ? 800 : 600, fontSize: '11px', cursor: 'pointer' }}>
-                                  {displayTime}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1A1D23' }}>Appointment Status</label>
-                        <select className="form-control" style={{ background: 'white', border: '1px solid #CBD5E1', borderRadius: '8px', height: '40px', width: '100%', padding: '0 12px', fontWeight: 600 }}
-                          value={selectedAppointment.status} onChange={(e) => setSelectedAppointment({...selectedAppointment, status: e.target.value})}>
-                          <option value="Pending">Keep Active (Pending)</option>
-                          <option value="Cancelled">Cancel Appointment</option>
-                        </select>
-                      </div>
+                {/* SECTION: RESCHEDULE / CANCEL (Active appointments only) */}
+                {!isLocked && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: '#F8FAFC', padding: '16px 18px', borderRadius: '18px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span>🔄</span>
+                      <span>Reschedule Appointment</span>
                     </div>
-                  );
-                })()}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1E293B' }}>Select New Date</label>
+                      <input type="date" className="form-control" style={{ background: 'white', border: '1px solid #CBD5E1', borderRadius: '10px', height: '40px', width: '100%', padding: '0 12px', fontWeight: 600 }}
+                        value={selectedAppointment.date ? new Date(selectedAppointment.date).toISOString().split('T')[0] : ''} min={getLocalDateString()}
+                        onChange={(e) => setSelectedAppointment({...selectedAppointment, date: e.target.value})} />
+                    </div>
+                    {!rescheduleAvailability.available && (
+                      <div style={{ color: '#EF4444', background: '#FEF2F2', padding: '10px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 700, border: '1px solid #FEE2E2' }}>
+                        Doctor Unavailable: {rescheduleAvailability.reason || 'Doctor is on leave or weekly off'}
+                      </div>
+                    )}
+                    {rescheduleAvailability.available && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1E293B' }}>Select New Time Slot</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(95px, 1fr))', gap: '6px', maxHeight: '120px', overflowY: 'auto', paddingRight: '4px' }}>
+                          {(rescheduleAvailability.slots && rescheduleAvailability.slots.length > 0 ? rescheduleAvailability.slots : DEFAULT_TIME_SLOTS).map(time => {
+                            const isSelected = selectedAppointment.time === time;
+                            const displayTime = time.split(/\(Limit:/i)[0].trim();
+                            return (
+                              <button key={time} type="button" onClick={() => setSelectedAppointment({ ...selectedAppointment, time })}
+                                style={{ minHeight: '34px', padding: '4px 6px', borderRadius: '8px', border: isSelected ? '2px solid #2563EB' : '1px solid #CBD5E1', background: isSelected ? '#EFF6FF' : 'white', color: isSelected ? '#2563EB' : '#1E293B', fontWeight: isSelected ? 800 : 600, fontSize: '11px', cursor: 'pointer' }}>
+                                {displayTime}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1E293B' }}>Appointment Status</label>
+                      <select className="form-control" style={{ background: 'white', border: '1px solid #CBD5E1', borderRadius: '10px', height: '40px', width: '100%', padding: '0 12px', fontWeight: 600 }}
+                        value={selectedAppointment.status} onChange={(e) => setSelectedAppointment({...selectedAppointment, status: e.target.value})}>
+                        <option value="Pending">Keep Active (Pending)</option>
+                        <option value="Cancelled">Cancel Appointment</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ── FOOTER ── */}
-              <div style={{ display: 'flex', gap: '10px', padding: '16px 22px', borderTop: '1px solid #E8EEF4', flexShrink: 0, justifyContent: 'flex-end', background: '#FAFBFC' }}>
-                <button className="btn" style={{ background: '#FEE2E2', color: '#DC2626', fontWeight: 800, padding: '0 16px', borderRadius: '10px', height: '40px', fontSize: '13px', border: 'none', cursor: 'pointer' }}
-                  onClick={() => handleDeleteAppointment(selectedAppointment._id)}>
+              <div style={{ display: 'flex', gap: '10px', padding: '16px 24px', borderTop: '1px solid #F1F5F9', flexShrink: 0, justifyContent: 'flex-end', background: '#FAFBFC' }}>
+                <button 
+                  className="btn" 
+                  style={{ background: '#FFFFFF', color: '#DC2626', fontWeight: 750, padding: '0 14px', borderRadius: '10px', height: '40px', fontSize: '12.5px', border: '1px solid #FECACA', cursor: 'pointer' }}
+                  onClick={() => handleDeleteAppointment(selectedAppointment._id)}
+                >
                   🗑 Delete
                 </button>
-                {(() => {
-                  const originalStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
-                  const isLocked = originalStatus === 'Cancelled' || originalStatus === 'Completed' || originalStatus === 'Checked Out';
-                  if (!isLocked) {
-                    return (
-                      <button className="btn btn-primary" style={{ fontWeight: 800, padding: '0 20px', borderRadius: '10px', height: '40px', fontSize: '13px', cursor: 'pointer' }}
-                        onClick={() => handleUpdateAppointment(selectedAppointment)}>
-                        Save Changes
-                      </button>
-                    );
-                  }
-                  return (
-                    <button className="btn btn-secondary" style={{ fontWeight: 800, padding: '0 20px', borderRadius: '10px', height: '40px', background: '#F1F5F9', color: '#475569', fontSize: '13px', border: '1px solid #CBD5E1', cursor: 'pointer' }}
-                      onClick={() => setDetailsModalOpen(false)}>
-                      Close
-                    </button>
-                  );
-                })()}
+                {!isLocked ? (
+                  <button 
+                    className="btn btn-primary" 
+                    style={{ fontWeight: 800, padding: '0 22px', borderRadius: '10px', height: '40px', fontSize: '13px', cursor: 'pointer', background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', boxShadow: '0 2px 6px rgba(37,99,235,0.2)' }}
+                    onClick={() => handleUpdateAppointment(selectedAppointment)}
+                  >
+                    Save Changes
+                  </button>
+                ) : (
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ fontWeight: 800, padding: '0 22px', borderRadius: '10px', height: '40px', background: '#0F172A', color: '#FFFFFF', fontSize: '13px', border: 'none', cursor: 'pointer', boxShadow: '0 2px 6px rgba(15,23,42,0.1)' }}
+                    onClick={() => setDetailsModalOpen(false)}
+                  >
+                    Done
+                  </button>
+                )}
               </div>
             </div>
           </div>
