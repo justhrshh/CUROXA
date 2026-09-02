@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../utils/api';
+import { socket, joinTenantRoom } from '../utils/socket';
 import { useRealTimeSync } from '../hooks/useRealTimeSync';
 import HRPayroll from './HRPayroll';
 import WaitingQueuePanel from '../components/WaitingQueuePanel';
@@ -512,6 +513,115 @@ const ReceptionistDashboard = () => {
       prevCoverageKeysRef.current = activeKeys;
     }
   }, [coverageState]);
+
+  const fetchStaffNotifications = useCallback(async () => {
+    try {
+      const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
+      const clearedKey = `curoxa_cleared_notifications_${userKey}`;
+      const clearedIds = JSON.parse(localStorage.getItem(clearedKey) || '[]');
+      const lastSeenKey = `curoxa_notifications_last_seen_${userKey}`;
+      const lastSeen = Number(localStorage.getItem(lastSeenKey) || 0);
+
+      const [broadcastRes, leavesRes] = await Promise.allSettled([
+        api.get('/admin/broadcasts'),
+        api.get('/hr/leaves')
+      ]);
+
+      const broadcasts = broadcastRes.status === 'fulfilled' && Array.isArray(broadcastRes.value?.data) ? broadcastRes.value.data : [];
+      const leaves = leavesRes.status === 'fulfilled' && Array.isArray(leavesRes.value?.data) ? leavesRes.value.data : [];
+
+      const broadcastNotifs = broadcasts
+        .filter(b => !clearedIds.includes(`broadcast-${b._id}`))
+        .map(b => {
+          const date = new Date(b.createdAt);
+          const timeMs = date.getTime();
+          return {
+            id: `broadcast-${b._id}`,
+            title: b.subject,
+            message: b.message,
+            time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' · ' + date.toLocaleDateString(),
+            isNew: !isNaN(timeMs) && timeMs > lastSeen,
+            createdAt: !isNaN(timeMs) ? timeMs : 0
+          };
+        });
+
+      const leaveNotifs = leaves
+        .filter(l => !clearedIds.includes(`leave-${l._id || l.id}-${l.status}`))
+        .map(l => {
+          const date = new Date(l.approvedDate || l.updatedAt || l.createdAt || l.appliedDate || Date.now());
+          const timeMs = date.getTime();
+          const isApproved = l.status === 'Approved';
+          const isRejected = l.status === 'Rejected';
+          const title = isApproved
+            ? `✅ Leave Approved (${l.leaveType})`
+            : isRejected
+            ? `❌ Leave Rejected (${l.leaveType})`
+            : `⏳ Leave Application (${l.leaveType})`;
+          const message = isApproved
+            ? `Your request for ${l.days} day(s) from ${l.fromDate} to ${l.toDate} was approved by ${l.approvedBy || 'HR'}.`
+            : isRejected
+            ? `Your request for ${l.days} day(s) from ${l.fromDate} to ${l.toDate} was rejected.`
+            : `Your request for ${l.days} day(s) from ${l.fromDate} to ${l.toDate} is currently pending review.`;
+
+          return {
+            id: `leave-${l._id || l.id}-${l.status}`,
+            title,
+            message,
+            time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' · ' + date.toLocaleDateString(),
+            isNew: !isNaN(timeMs) && timeMs > lastSeen,
+            targetTab: 'hr-payroll',
+            createdAt: !isNaN(timeMs) ? timeMs : 0
+          };
+        });
+
+      const allNotifs = [...leaveNotifs, ...broadcastNotifs].sort((a, b) => b.createdAt - a.createdAt);
+      setNotifications(prev => {
+        const coverageNotifs = prev.filter(n => !n.id.startsWith('leave-') && !n.id.startsWith('broadcast-'));
+        return [...allNotifs, ...coverageNotifs];
+      });
+
+      const unread = allNotifs.filter(n => n.isNew).length;
+      setUnreadCount(prev => Math.max(prev, unread));
+    } catch (err) {
+      console.error('Failed to fetch staff notifications:', err);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    const tId = currentUser.tenantId || localStorage.getItem('tenantId');
+    if (tId) {
+      joinTenantRoom(tId);
+    }
+
+    fetchStaffNotifications();
+
+    const onDataChanged = (data) => {
+      if (data && (data.type === 'leaves' || data.type === 'broadcast' || data.type === 'staff')) {
+        fetchStaffNotifications();
+      }
+    };
+
+    const handleSync = (e) => {
+      const { type } = e.detail || {};
+      if (!type || type === 'leaves' || type === 'leave' || type === 'broadcast' || type === 'all') {
+        fetchStaffNotifications();
+      }
+    };
+
+    const onWindowFocus = () => {
+      fetchStaffNotifications();
+    };
+
+    socket.on('data_changed', onDataChanged);
+    window.addEventListener('curoxa_sync', handleSync);
+    window.addEventListener('focus', onWindowFocus);
+
+    return () => {
+      socket.off('data_changed', onDataChanged);
+      window.removeEventListener('curoxa_sync', handleSync);
+      window.removeEventListener('focus', onWindowFocus);
+    };
+  }, [fetchStaffNotifications, currentUser]);
 
   const [appointments, setAppointments] = useState([]);
   const [patientsList, setPatientsList] = useState([]);
@@ -4976,12 +5086,34 @@ const ReceptionistDashboard = () => {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {notifications.map(n => (
-                      <div key={n.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px', borderRadius: '8px', background: n.isNew ? '#EFF6FF' : '#F8FAFC', borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #E2E8F0' }}>
+                      <div 
+                        key={n.id} 
+                        onClick={() => {
+                          if (n.targetTab) {
+                            setActiveTab(n.targetTab);
+                          }
+                          setShowNotifications(false);
+                        }}
+                        style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          gap: '4px', 
+                          padding: '10px', 
+                          borderRadius: '8px', 
+                          background: n.isNew ? '#EFF6FF' : '#F8FAFC', 
+                          borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #CBD5E1',
+                          cursor: n.targetTab ? 'pointer' : 'default',
+                          transition: 'background 0.15s ease'
+                        }}
+                      >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontWeight: 800, fontSize: '12px', color: '#1E293B' }}>{n.title}</span>
                           <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>{n.time}</span>
                         </div>
                         <span style={{ fontSize: '11.5px', color: '#475569', fontWeight: 550, lineHeight: 1.4 }}>{n.message}</span>
+                        {n.targetTab && (
+                          <span style={{ fontSize: '10.5px', color: '#2563EB', fontWeight: 700, marginTop: '2px' }}>Click to view leave portal →</span>
+                        )}
                       </div>
                     ))}
                     {notifications.length === 0 && (

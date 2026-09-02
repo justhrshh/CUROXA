@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import { socket, joinTenantRoom } from '../utils/socket';
 import HRPayroll from './HRPayroll';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import { printPO, printGRN } from '../utils/printDocHelper';
@@ -507,6 +508,7 @@ const AdminDashboard = () => {
   }, [pmSelectedStaffId]);
 
   const [staff, setStaff] = useState([]);
+  const [serverLeaves, setServerLeaves] = useState([]);
   const [staffPage, setStaffPage] = useState(1);
   const [newStaff, setNewStaff] = useState({ staff_id: '', password: '', confirmPassword: '', role: getAvailableRoles()[0]?.value || 'doctor', name: '', max_slots: '', email: '', phone: '', weeklyOff: 'Sunday', shiftName: 'General Shift', doctorSlots: ['09:00 AM - 09:30 AM', '09:30 AM - 10:00 AM', '10:00 AM - 10:30 AM', '10:30 AM - 11:00 AM', '11:00 AM - 11:30 AM', '11:30 AM - 12:00 PM', '12:00 PM - 12:30 PM', '12:30 PM - 01:00 PM', '02:00 PM - 02:30 PM', '02:30 PM - 03:00 PM', '03:00 PM - 03:30 PM', '03:30 PM - 04:00 PM', '04:00 PM - 04:30 PM', '04:30 PM - 05:00 PM', '05:00 PM - 05:30 PM'] });
   const [checkingUsername, setCheckingUsername] = useState(false);
@@ -643,6 +645,12 @@ const AdminDashboard = () => {
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
 
   const openApprovalModal = (item) => {
+    if (item.category === 'leave' || item.raw?.type === 'leave' || item.targetTab === 'hr-payroll') {
+      setHrInitialTab('Attendance');
+      setHrInitialAdding(false);
+      setActiveTab('hr-payroll');
+      return;
+    }
     setViewingApproval(item);
     setApprovalSubmitting(false);
     setApprovalCommentDraft(item.comment || item.raw?.comment || '');
@@ -1084,7 +1092,12 @@ const AdminDashboard = () => {
     fetchSubscription();
     fetchNotifications();
     fetchLabTestCatalog();
-  }, []);
+
+    const tId = currentUser.tenantId || localStorage.getItem('tenantId');
+    if (tId) {
+      joinTenantRoom(tId);
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     const handleBroadcastEvent = (e) => {
@@ -1152,10 +1165,15 @@ const AdminDashboard = () => {
         fetchApprovals();
         fetchVendors();
         fetchAuditLogs();
+      } else if (type === 'leaves' || type === 'leave') {
+        fetchApprovals();
+        fetchNotifications();
+        fetchStaff();
       } else if (type === 'labs') {
         fetchWarningAlerts();
       } else if (type === 'staff' || type === 'users') {
         fetchStaff();
+        fetchNotifications();
       } else if (type === 'subscription' || type === 'hospital' || type === 'hospitals') {
         fetchSubscription();
       } else if (type === 'all' || !type) {
@@ -1178,26 +1196,38 @@ const AdminDashboard = () => {
         fetchWarningAlerts();
         fetchDiscountSetting();
         fetchSubscription();
+        fetchNotifications();
       }
     };
     window.addEventListener('curoxa_sync', handleSync);
 
+    // Direct Socket.IO data_changed listener for instant live notifications
+    const onDirectSocketData = (event) => {
+      console.log('[SOCKET] AdminDashboard direct socket data_changed:', event);
+      if (event && (event.type === 'leaves' || event.type === 'leave')) {
+        fetchApprovals();
+        fetchNotifications();
+        fetchStaff();
+      } else if (event && (event.type === 'staff' || event.type === 'attendance')) {
+        fetchStaff();
+        fetchNotifications();
+      }
+    };
+    socket.on('data_changed', onDirectSocketData);
+
     const onAdminWindowFocus = () => {
       fetchApprovals();
+      fetchNotifications();
+      fetchStaff();
       fetchVendors();
       fetchAuditLogs();
     };
     window.addEventListener('focus', onAdminWindowFocus);
 
-    const adminAutoSyncTimer = setInterval(() => {
-      fetchApprovals();
-      fetchVendors();
-    }, 6000);
-
     return () => {
       window.removeEventListener('curoxa_sync', handleSync);
+      socket.off('data_changed', onDirectSocketData);
       window.removeEventListener('focus', onAdminWindowFocus);
-      clearInterval(adminAutoSyncTimer);
     };
   }, []);
 
@@ -1386,37 +1416,60 @@ const AdminDashboard = () => {
 
   const fetchNotifications = async () => {
     try {
-      const response = await api.get('/admin/broadcasts');
       const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
       const clearedKey = `curoxa_cleared_notifications_${userKey}`;
       const clearedIds = JSON.parse(localStorage.getItem(clearedKey) || '[]');
-      
-      const formatted = response.data
+      const lastSeenKey = `curoxa_notifications_last_seen_${userKey}`;
+      const lastSeen = Number(localStorage.getItem(lastSeenKey) || 0);
+
+      const [broadcastRes, leavesRes] = await Promise.allSettled([
+        api.get('/admin/broadcasts'),
+        api.get('/hr/leaves')
+      ]);
+
+      const broadcasts = broadcastRes.status === 'fulfilled' && Array.isArray(broadcastRes.value?.data) ? broadcastRes.value.data : [];
+      const leaves = leavesRes.status === 'fulfilled' && Array.isArray(leavesRes.value?.data) ? leavesRes.value.data : [];
+
+      const broadcastNotifs = broadcasts
         .filter(b => !clearedIds.includes(`broadcast-${b._id}`))
         .map(b => {
           const date = new Date(b.createdAt);
+          const timeMs = date.getTime();
           return {
             id: `broadcast-${b._id}`,
             title: b.subject,
             message: b.message,
             time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' · ' + date.toLocaleDateString(),
-            isNew: false
+            isNew: !isNaN(timeMs) && timeMs > lastSeen,
+            createdAt: !isNaN(timeMs) ? timeMs : 0
           };
         });
-      
-      setNotifications(formatted);
-      setSystemBroadcasts(response.data);
-      
-      const lastSeenKey = `curoxa_notifications_last_seen_${userKey}`;
-      const lastSeen = Number(localStorage.getItem(lastSeenKey) || 0);
-      const unread = response.data.filter(b => {
-        if (clearedIds.includes(`broadcast-${b._id}`)) return false;
-        return new Date(b.createdAt).getTime() > lastSeen;
-      }).length;
-      
+
+      const leaveNotifs = leaves
+        .filter(l => l.status === 'Pending' && !clearedIds.includes(`leave-${l._id || l.id}`))
+        .map(l => {
+          const date = new Date(l.createdAt || l.appliedDate || Date.now());
+          const timeMs = date.getTime();
+          return {
+            id: `leave-${l._id || l.id}`,
+            title: `🏖️ Leave Request: ${l.employeeName || 'Staff'}`,
+            message: `${l.employeeName || 'Staff'} applied for ${l.days} day(s) of ${l.leaveType} (${l.fromDate} to ${l.toDate})`,
+            time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' · ' + date.toLocaleDateString(),
+            isNew: !isNaN(timeMs) && timeMs > lastSeen,
+            targetTab: 'hr-payroll',
+            hrTab: 'Attendance',
+            createdAt: !isNaN(timeMs) ? timeMs : 0
+          };
+        });
+
+      const allNotifs = [...leaveNotifs, ...broadcastNotifs].sort((a, b) => b.createdAt - a.createdAt);
+      setNotifications(allNotifs);
+      setSystemBroadcasts(broadcasts);
+
+      const unread = allNotifs.filter(n => n.isNew).length;
       setUnreadCount(unread);
     } catch (err) {
-      console.error('Failed to fetch broadcasts for notification drawer:', err);
+      console.error('Failed to fetch notifications for drawer:', err);
     }
   };
 
@@ -1942,8 +1995,15 @@ const AdminDashboard = () => {
   const fetchApprovals = async () => {
     setDomainLoading('attention', true);
     try {
-      const response = await api.get('/approvals');
-      const dbApprovals = (Array.isArray(response.data) ? response.data : []).map(appItem => {
+      const [approvalsRes, leavesRes] = await Promise.allSettled([
+        api.get('/approvals'),
+        api.get('/hr/leaves')
+      ]);
+
+      const approvalsData = approvalsRes.status === 'fulfilled' && Array.isArray(approvalsRes.value?.data) ? approvalsRes.value.data : [];
+      const leavesData = leavesRes.status === 'fulfilled' && Array.isArray(leavesRes.value?.data) ? leavesRes.value.data : [];
+
+      const dbApprovals = approvalsData.map(appItem => {
         let category = 'reorder';
         if (appItem.type === 'staff_signup' || appItem.type === 'permission_request' || appItem.type === 'role_change' || appItem.type === 'leave') {
           category = 'leave';
@@ -1985,7 +2045,28 @@ const AdminDashboard = () => {
         };
       });
 
-      setPendingApprovals(dbApprovals);
+      const leaveApprovals = leavesData
+        .filter(l => l.status === 'Pending')
+        .map(l => ({
+          id: `leave-${l._id || l.id}`,
+          category: 'leave',
+          title: `Leave Request: ${l.employeeName || 'Staff'} (${l.leaveType})`,
+          raisedBy: `${l.employeeName || 'Staff'} (${l.department || 'Staff'}) • ${new Date(l.createdAt || l.appliedDate || Date.now()).toLocaleDateString()}`,
+          status: 'Pending',
+          details: `${l.days} day(s) from ${l.fromDate} to ${l.toDate}. Reason: ${l.reason || 'Personal'}`,
+          raw: {
+            ...l,
+            type: 'leave',
+            requesterName: l.employeeName,
+            requestedAt: l.createdAt || l.appliedDate
+          },
+          isDbItem: false,
+          targetTab: 'hr-payroll',
+          hrTab: 'Attendance'
+        }));
+
+      const allApprovals = [...leaveApprovals, ...dbApprovals];
+      setPendingApprovals(allApprovals);
 
       // Compute approvedTodayCount
       const today = new Date().toDateString();
@@ -2094,8 +2175,15 @@ const AdminDashboard = () => {
   const fetchStaff = async () => {
     setDomainLoading('staff', true);
     try {
-      const response = await api.get('/admin/users');
+      const [usersRes, leavesRes] = await Promise.allSettled([
+        api.get('/admin/users'),
+        api.get('/hr/leaves')
+      ]);
       
+      const usersData = usersRes.status === 'fulfilled' && Array.isArray(usersRes.value?.data) ? usersRes.value.data : [];
+      const leavesData = leavesRes.status === 'fulfilled' && Array.isArray(leavesRes.value?.data) ? leavesRes.value.data : [];
+      setServerLeaves(leavesData);
+
       const formatLastLogin = (dateString) => {
         if (!dateString) return 'Never';
         const date = new Date(dateString);
@@ -2107,7 +2195,7 @@ const AdminDashboard = () => {
         return isToday ? `Today ${timeStr}` : `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${timeStr}`;
       };
 
-      const dbUsers = response.data.map(user => {
+      const dbUsers = usersData.map(user => {
         let initials = user.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
         if (!initials) initials = 'ST';
         let avatarColor = 'blue';
@@ -3048,18 +3136,34 @@ const AdminDashboard = () => {
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     
-    // Check leaves
+    // 1. Authoritative check against real MongoDB approved leaves
+    const empId = String(emp.staff_id || emp._id || emp.id || '');
+    const empName = (emp.name || '').trim().toLowerCase();
+
+    const hasApprovedServerLeave = (serverLeaves || []).some(l => {
+      if (l.status !== 'Approved') return false;
+      const matchEmp = (l.employeeId && String(l.employeeId) === empId) ||
+                       (l.employeeName && l.employeeName.trim().toLowerCase() === empName);
+      if (!matchEmp) return false;
+      const from = l.fromDate || l.startDate || l.from;
+      const to = l.toDate || l.endDate || l.to;
+      return todayStr >= from && todayStr <= to;
+    });
+
+    if (hasApprovedServerLeave) return 'On Leave';
+
+    // 2. Check localStorage fallback
     const leavesKey = `curoxa_hr_leaves_${emp.staff_id || emp.name}`;
     const leavesSaved = localStorage.getItem(leavesKey);
     if (leavesSaved) {
       try {
         const leavesList = JSON.parse(leavesSaved);
-        const hasLeave = leavesList.some(l => l.status === 'Approved' && todayStr >= l.from && todayStr <= l.to);
+        const hasLeave = leavesList.some(l => l.status === 'Approved' && todayStr >= (l.from || l.fromDate) && todayStr <= (l.to || l.toDate));
         if (hasLeave) return 'On Leave';
       } catch (e) {}
     }
     
-    // Check attendance
+    // 3. Check attendance overrides
     const attKey = `curoxa_hr_attendance_${emp.staff_id || emp.name}`;
     const attSaved = localStorage.getItem(attKey);
     if (attSaved) {
@@ -3070,6 +3174,7 @@ const AdminDashboard = () => {
           if (statusVal === 'Present' || statusVal === 'Late') return 'On duty';
           if (statusVal === 'Absent') return 'Absent';
           if (statusVal === 'Off') return 'Off';
+          if (statusVal === 'On Leave' || statusVal === 'Leave') return 'On Leave';
         }
       } catch (e) {}
     }
@@ -3221,7 +3326,8 @@ const AdminDashboard = () => {
     return isSameCalendarDay(p.createdAt, new Date());
   }).length;
 
-  const staffPresentCount = staff.filter(s => getStaffStatus(s) === 'On duty').length;
+  const staffPresentCount = staff.filter(s => getStaffStatus(s) === 'On duty' || getStaffStatus(s) === 'Active').length;
+  const staffOnLeaveCount = staff.filter(s => getStaffStatus(s) === 'On Leave').length;
 
   const targetApptsForKpi = selectedDateFilter === 'Today' ? todayAppts : appointments;
 
@@ -11528,12 +11634,38 @@ const AdminDashboard = () => {
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {notifications.map(n => (
-                        <div key={n.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px', borderRadius: '8px', background: n.isNew ? '#EFF6FF' : '#F8FAFC', borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #E2E8F0' }}>
+                        <div 
+                          key={n.id} 
+                          onClick={() => {
+                            if (n.targetTab === 'hr-payroll') {
+                              setHrInitialTab(n.hrTab || 'Attendance');
+                              setHrInitialAdding(false);
+                              setActiveTab('hr-payroll');
+                            } else if (n.targetTab) {
+                              setActiveTab(n.targetTab);
+                            }
+                            setShowNotifications(false);
+                          }}
+                          style={{ 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: '4px', 
+                            padding: '10px', 
+                            borderRadius: '8px', 
+                            background: n.isNew ? '#EFF6FF' : '#F8FAFC', 
+                            borderLeft: n.isNew ? '3px solid #2563EB' : '3px solid #CBD5E1',
+                            cursor: n.targetTab ? 'pointer' : 'default',
+                            transition: 'background 0.15s ease'
+                          }}
+                        >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#1E293B' }}>{n.title}</span>
                             <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>{n.time}</span>
                           </div>
                           <span style={{ fontSize: '11.5px', color: '#475569', fontWeight: 550, lineHeight: 1.4 }}>{n.message}</span>
+                          {n.targetTab && (
+                            <span style={{ fontSize: '10.5px', color: '#2563EB', fontWeight: 700, marginTop: '2px' }}>Click to view & approve →</span>
+                          )}
                         </div>
                       ))}
                       {notifications.length === 0 && (
@@ -11856,8 +11988,13 @@ const AdminDashboard = () => {
                     <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
                       {staffPresentCount} <span className="text-lg font-bold text-slate-500">/ {staff.length}</span>
                     </div>
-                    <div className="text-xs text-amber-700 font-bold mt-2 truncate">
-                      {staff.length > 0 ? `${Math.round((staffPresentCount / staff.length) * 100)}% on duty` : '0% on duty'}
+                    <div className="text-xs text-amber-700 font-bold mt-2 truncate flex items-center gap-1.5 flex-wrap">
+                      <span>{staff.length > 0 ? `${Math.round((staffPresentCount / staff.length) * 100)}% on duty` : '0% on duty'}</span>
+                      {staffOnLeaveCount > 0 && (
+                        <span className="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded text-[10.5px] font-extrabold border border-rose-200 inline-flex items-center">
+                          {staffOnLeaveCount} on leave
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -12281,7 +12418,13 @@ const AdminDashboard = () => {
                           key={item.id}
                           className="attention-item-row"
                           onClick={() => {
-                            if (item.isDbItem) {
+                            if (item.targetTab === 'hr-payroll' || item.category === 'leave') {
+                              setHrInitialTab(item.hrTab || 'Attendance');
+                              setHrInitialAdding(false);
+                              setActiveTab('hr-payroll');
+                            } else if (item.targetTab) {
+                              setActiveTab(item.targetTab);
+                            } else if (item.isDbItem) {
                               openApprovalModal(item);
                             } else {
                               setActiveTab('approvals');

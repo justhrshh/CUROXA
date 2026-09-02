@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import SearchableDropdown from '../components/SearchableDropdown';
+import { socket, joinTenantRoom } from '../utils/socket';
 
 export default function HRPayrollStaff({ onExit }) {
   const navigate = useNavigate();
@@ -573,8 +574,23 @@ export default function HRPayrollStaff({ onExit }) {
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [globalLeaves, setGlobalLeaves] = useState([]);
   const [globalAttendance, setGlobalAttendance] = useState([]);
+  const [leaveYear, setLeaveYear] = useState(() => new Date().getFullYear());
+  const [leaveBalances, setLeaveBalances] = useState(null);
+  const [leaveLedger, setLeaveLedger] = useState([]);
+  const [leavePolicy, setLeavePolicy] = useState(null);
+  const [isLeavesLoading, setIsLeavesLoading] = useState(false);
+  const [leavesError, setLeavesError] = useState(null);
+  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
+  const [leaveActionModal, setLeaveActionModal] = useState({
+    isOpen: false,
+    leave: null,
+    action: 'Approved',
+    rejectionReason: '',
+    isProcessing: false
+  });
+
   const [newLeave, setNewLeave] = useState({
-    type: 'Casual',
+    type: 'Casual Leave',
     from: '',
     to: '',
     reason: '',
@@ -601,22 +617,100 @@ export default function HRPayrollStaff({ onExit }) {
     }
   };
 
+  const fetchStaffLeaveData = async (targetYear = leaveYear, emp = selectedEmployee) => {
+    const targetStaffId = emp?.staff_id || emp?.id || emp?._id || currentUser.staff_id;
+    if (!targetStaffId && currentUser.role !== 'admin' && currentUser.role !== 'hr') return;
+
+    setIsLeavesLoading(true);
+    setLeavesError(null);
+    try {
+      const params = { year: targetYear };
+      if (targetStaffId) params.staff_id = targetStaffId;
+
+      const [balanceRes, ledgerRes, policyRes] = await Promise.all([
+        api.get('/hr/leave-balances', { params }),
+        api.get('/hr/leave-ledger', { params }),
+        api.get('/hr/leave-policy')
+      ]);
+
+      setLeaveBalances(balanceRes.data);
+      setLeaveLedger(Array.isArray(ledgerRes.data) ? ledgerRes.data : []);
+      setLeavePolicy(policyRes.data);
+    } catch (err) {
+      console.error('Failed to fetch authoritative staff leave data:', err);
+      setLeavesError(err.response?.data?.error || 'Failed to load leave records. Please click Retry.');
+    } finally {
+      setIsLeavesLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchGlobalLeaves();
     fetchGlobalAttendance();
-  }, [refreshPendingTrigger]);
+    fetchStaffLeaveData(leaveYear, selectedEmployee);
+  }, [refreshPendingTrigger, leaveYear, selectedEmployee?.staff_id, selectedEmployee?.id]);
 
-  const leaves = selectedEmployee ? globalLeaves.filter(l => 
-    l.employeeId === selectedEmployee.id || 
-    l.employeeId === selectedEmployee._id ||
-    l.employeeId === selectedEmployee.staff_id ||
-    l.employeeName === selectedEmployee.name
-  ).map(l => ({
+  const selectedEmployeeRef = useRef(selectedEmployee);
+  selectedEmployeeRef.current = selectedEmployee;
+  const leaveYearRef = useRef(leaveYear);
+  leaveYearRef.current = leaveYear;
+
+  // Real-time synchronization via Socket.IO, window focus, & interval
+  useEffect(() => {
+    const tId = currentUser.tenantId || localStorage.getItem('tenantId');
+    if (tId) {
+      joinTenantRoom(tId);
+    }
+
+    const refreshAll = () => {
+      fetchGlobalLeaves();
+      fetchGlobalAttendance();
+      fetchStaffLeaveData(leaveYearRef.current, selectedEmployeeRef.current);
+    };
+
+    const onDataChanged = (data) => {
+      if (data && (data.type === 'leaves' || data.type === 'attendance' || data.type === 'staff')) {
+        refreshAll();
+      }
+    };
+
+    const handleSync = (e) => {
+      const { type } = e.detail || {};
+      if (!type || type === 'leaves' || type === 'leave' || type === 'attendance' || type === 'all') {
+        refreshAll();
+      }
+    };
+
+    const onWindowFocus = () => {
+      refreshAll();
+    };
+
+    socket.on('data_changed', onDataChanged);
+    window.addEventListener('curoxa_sync', handleSync);
+    window.addEventListener('focus', onWindowFocus);
+
+    return () => {
+      socket.off('data_changed', onDataChanged);
+      window.removeEventListener('curoxa_sync', handleSync);
+      window.removeEventListener('focus', onWindowFocus);
+    };
+  }, []);
+
+  const leaves = (selectedEmployee || currentUser) ? globalLeaves.filter(l => {
+    const emp = selectedEmployee || currentUser;
+    const targetId = String(emp.id || emp._id || emp.staff_id || '');
+    const targetStaffId = String(emp.staff_id || '');
+    const targetName = (emp.name || '').trim().toLowerCase();
+    
+    return (l.employeeId && (String(l.employeeId) === targetId || String(l.employeeId) === targetStaffId)) ||
+           (l.employeeName && l.employeeName.trim().toLowerCase() === targetName);
+  }).map(l => ({
     ...l,
     id: l._id || l.id,
-    from: l.fromDate,
-    to: l.toDate,
-    approver: l.approvedBy || 'Pending Review'
+    type: l.leaveType || l.type || 'Leave',
+    from: l.fromDate || l.from,
+    to: l.toDate || l.to,
+    approver: l.status === 'Approved' ? (l.approvedBy || 'HR Manager') : (l.approvedBy || 'Pending Review')
   })) : [];
 
   const attendanceRecord = React.useMemo(() => {
@@ -636,7 +730,7 @@ export default function HRPayrollStaff({ onExit }) {
   }, [selectedEmployee, globalAttendance]);
 
   useEffect(() => {
-    if (showLeaveModal || previewDoc) {
+    if (showLeaveModal || previewDoc || leaveActionModal.isOpen) {
       document.body.classList.add('modal-open');
     } else {
       document.body.classList.remove('modal-open');
@@ -644,7 +738,7 @@ export default function HRPayrollStaff({ onExit }) {
     return () => {
       document.body.classList.remove('modal-open');
     };
-  }, [showLeaveModal, previewDoc]);
+  }, [showLeaveModal, previewDoc, leaveActionModal.isOpen]);
 
   const getAllPendingLeaves = () => {
     return globalLeaves.filter(l => l.status === 'Pending').map(l => {
@@ -663,81 +757,131 @@ export default function HRPayrollStaff({ onExit }) {
     });
   };
 
-  const handleApproveRejectLeave = async (emp, leaveId, status) => {
-    try {
-      const res = await api.put(`/hr/leaves/${leaveId}`, {
-        status,
-        approvedBy: currentUser.name || 'HR Manager',
-        approvedDate: new Date().toISOString().split('T')[0]
-      });
-      if (res.data) {
-        showToast(`Leave request ${status.toLowerCase()} successfully`, "success");
-        setRefreshPendingTrigger(prev => prev + 1);
+  const handleOpenLeaveActionModal = (leave, action) => {
+    setLeaveActionModal({
+      isOpen: true,
+      leave,
+      action,
+      rejectionReason: '',
+      isProcessing: false
+    });
+  };
 
-        // Send email notification (best-effort, non-blocking)
-        if (emp.email) {
-          api.post('/hr/notify-leave', {
-            employeeName: emp.name,
-            employeeEmail: emp.email,
-            leaveType: res.data.leaveType || '',
-            fromDate: res.data.fromDate || '',
-            toDate: res.data.toDate || '',
-            days: res.data.days || 0,
-            status,
-            approverName: currentUser.name || 'HR Manager'
-          }).catch(err => {
-            console.warn('[HR] Email notification failed (non-critical):', err.message);
-          });
-        }
+  const handleConfirmLeaveAction = async () => {
+    if (!leaveActionModal.leave || leaveActionModal.isProcessing) return;
+    setLeaveActionModal(prev => ({ ...prev, isProcessing: true }));
+    const leave = leaveActionModal.leave;
+    const leaveId = leave.id || leave._id;
+    const action = leaveActionModal.action;
+
+    try {
+      const payload = {
+        status: action,
+        approvedBy: currentUser.name || 'HR Administrator',
+        approvedDate: new Date().toISOString().split('T')[0]
+      };
+      if (action === 'Rejected') {
+        payload.rejectionReason = leaveActionModal.rejectionReason || '';
+      }
+
+      const res = await api.put(`/hr/leaves/${leaveId}`, payload);
+      if (res.data) {
+        showToast(`Leave request ${action.toLowerCase()} successfully`, "success");
+        setLeaveActionModal({ isOpen: false, leave: null, action: 'Approved', rejectionReason: '', isProcessing: false });
+        setRefreshPendingTrigger(prev => prev + 1);
+        fetchGlobalLeaves();
+        fetchStaffLeaveData(leaveYear, selectedEmployee);
       }
     } catch (err) {
-      console.error('Failed to update leave request status', err);
-      showToast('Failed to update leave request status', 'error');
+      console.error('Failed to process leave request:', err);
+      const errMsg = err.response?.data?.error || `Failed to ${action.toLowerCase()} leave request`;
+      showToast(errMsg, 'error');
+      setLeaveActionModal(prev => ({ ...prev, isProcessing: false }));
     }
   };
 
-  // Helper to dynamically calculate leave allocations from selectedEmployee
-  const getLeaveAllocations = (emp) => {
-    const cf = Number(emp?.carriedForwardLeaves) || 0;
-    const monthlyAlloc = emp?.monthlyLeaveAllocation || { sick: 1, casual: 1, annual: 1.25 };
-    const sickTotal = (Number(monthlyAlloc.sick) || 0) * 12;
-    const casualTotal = (Number(monthlyAlloc.casual) || 0) * 12;
-    const annualTotal = (Number(monthlyAlloc.annual) || 0) * 12;
-    return { cf, sickTotal, casualTotal, annualTotal };
+  const handleApproveRejectLeave = async (emp, leaveId, status) => {
+    const foundLeave = globalLeaves.find(l => (l._id === leaveId || l.id === leaveId));
+    if (foundLeave) {
+      handleOpenLeaveActionModal(foundLeave, status);
+    }
   };
 
-  const allocations = getLeaveAllocations(selectedEmployee);
-  
-  const approvedLeaves = leaves.filter(l => l.status === 'Approved');
-  
-  const casualTaken = approvedLeaves
-    .filter(l => l.leaveType === 'Casual' || l.type === 'Casual')
-    .reduce((sum, l) => sum + (l.days || 0), 0);
-    
-  const sickTaken = approvedLeaves
-    .filter(l => l.leaveType === 'Sick' || l.type === 'Sick')
-    .reduce((sum, l) => sum + (l.days || 0), 0);
-    
-  const earnedTaken = approvedLeaves
-    .filter(l => l.leaveType === 'Annual' || l.type === 'Annual' || l.leaveType === 'Earned' || l.type === 'Earned')
-    .reduce((sum, l) => sum + (l.days || 0), 0);
+  // Canonical leave type normalizer to prevent runtime errors
+  const normalizeLeaveTypeName = (name = '') => {
+    const clean = String(name || '').toLowerCase().trim();
+    if (clean.includes('sick')) return 'Sick Leave';
+    if (clean.includes('casual')) return 'Casual Leave';
+    if (clean.includes('earned') || clean.includes('annual')) return 'Earned Leave';
+    if (clean.includes('maternity')) return 'Maternity Leave';
+    if (clean.includes('paternity')) return 'Paternity Leave';
+    if (clean.includes('comp')) return 'Comp Off';
+    if (clean.includes('loss') || clean.includes('unpaid') || clean.includes('lwp')) return 'Loss of Pay';
+    return name || 'Leave';
+  };
 
-  const casualAvailable = Math.max(0, allocations.casualTotal - casualTaken);
-  const sickAvailable = Math.max(0, allocations.sickTotal - sickTaken);
-  const earnedAvailable = Math.max(0, allocations.annualTotal + allocations.cf - earnedTaken);
+  // Staff gender eligibility check
+  const isLeaveTypeEligibleForStaff = (typeName, staffGender) => {
+    const clean = String(typeName || '').toLowerCase().trim();
+    const g = String(staffGender || '').toLowerCase().trim();
+    if (clean.includes('maternity')) {
+      return g === 'female' || g === 'f';
+    }
+    if (clean.includes('paternity')) {
+      return g === 'male' || g === 'm';
+    }
+    return true;
+  };
+
+  // Authoritative operational year range (only from tenant start year to current+1)
+  const tenantStartYear = leaveBalances?.tenantStartYear || leavePolicy?.tenantStartYear || 2026;
+  const currentYear = new Date().getFullYear();
+  const maxYear = currentYear + 1;
+  const availableYears = [];
+  for (let y = Math.max(2000, tenantStartYear); y <= maxYear; y++) {
+    availableYears.push(y);
+  }
+
+  // Authoritative balance accessors from backend
+  const getBalanceForType = (typeName) => {
+    if (!leaveBalances || !leaveBalances.balances) return null;
+    const clean = String(typeName).trim().toLowerCase();
+    const entry = Object.values(leaveBalances.balances).find(
+      b => b.leaveType.toLowerCase() === clean || b.code.toLowerCase() === clean
+    );
+    return entry || null;
+  };
+
+  const casualBal = getBalanceForType('Casual Leave') || getBalanceForType('CASUAL') || { currentBalance: 0, consumed: 0, opening: 0, accrued: 0, carryForward: 0 };
+  const sickBal = getBalanceForType('Sick Leave') || getBalanceForType('SICK') || { currentBalance: 0, consumed: 0, opening: 0, accrued: 0, carryForward: 0 };
+  const earnedBal = getBalanceForType('Earned Leave') || getBalanceForType('EARNED') || { currentBalance: 0, consumed: 0, opening: 0, accrued: 0, carryForward: 0 };
+
+  const casualAvailable = casualBal.currentBalance;
+  const sickAvailable = sickBal.currentBalance;
+  const earnedAvailable = earnedBal.currentBalance;
 
   const today = new Date();
   const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   
+  const approvedLeaves = leaves.filter(l => l.status === 'Approved');
   const takenThisMonth = approvedLeaves
     .filter(l => (l.fromDate || l.from || '').startsWith(currentMonthStr))
-    .reduce((acc, curr) => acc + (curr.days || 0), 0);
+    .reduce((acc, curr) => acc + (Number(curr.days) || 0), 0);
 
-  // Form submit handler for new leave request
+  // Form submit handler for staff new leave request
   const handleApplyLeave = async (e) => {
     e.preventDefault();
-    if (!newLeave.from || !newLeave.to || !selectedEmployee) return;
-    
+    if (isSubmittingLeave) return;
+
+    if (!newLeave.from || !newLeave.to) {
+      showToast('Please select valid start and end dates', 'error');
+      return;
+    }
+    if (newLeave.from > newLeave.to) {
+      showToast('Start date cannot be after end date', 'error');
+      return;
+    }
+
     // Calculate days between from and to
     const date1 = new Date(newLeave.from);
     const date2 = new Date(newLeave.to);
@@ -748,29 +892,68 @@ export default function HRPayrollStaff({ onExit }) {
       diffDays = 0.5;
     }
 
+    if (diffDays <= 0) {
+      showToast('Requested days must be greater than 0', 'error');
+      return;
+    }
+
+    // Check against leave policy & balance
+    const chosenType = newLeave.type || 'Casual Leave';
+    const typeBalance = getBalanceForType(chosenType);
+
+    if (typeBalance && typeBalance.paid && typeBalance.code !== 'LWP') {
+      if (diffDays > typeBalance.currentBalance) {
+        showToast(`Insufficient balance for ${typeBalance.leaveType}. Requested: ${diffDays}d, Available: ${typeBalance.currentBalance}d`, 'error');
+        return;
+      }
+    }
+
+    // Check for conflicting requests in the existing leaves array
+    const hasConflict = leaves.some(l => {
+      if (l.status === 'Rejected' || l.status === 'Cancelled') return false;
+      const lFrom = l.fromDate || l.from;
+      const lTo = l.toDate || l.to;
+      return (newLeave.from <= lTo && newLeave.to >= lFrom);
+    });
+
+    if (hasConflict) {
+      showToast('You already have a pending or approved leave request covering these dates', 'error');
+      return;
+    }
+
+    setIsSubmittingLeave(true);
     try {
+      const targetEmpId = selectedEmployee?.staff_id || selectedEmployee?.id || selectedEmployee?._id || currentUser.staff_id;
+      const targetEmpName = selectedEmployee?.name || currentUser.name;
+      const targetDept = selectedEmployee?.dept || selectedEmployee?.department || currentUser.department || 'General';
+
       const newRequest = {
-        employeeId: selectedEmployee.id || selectedEmployee._id,
-        employeeName: selectedEmployee.name,
-        department: selectedEmployee.dept || 'General',
-        leaveType: newLeave.type,
+        employeeId: targetEmpId,
+        employeeName: targetEmpName,
+        department: targetDept,
+        leaveType: chosenType,
         fromDate: newLeave.from,
         toDate: newLeave.to,
         days: diffDays,
+        halfDay: newLeave.halfDay || false,
         status: 'Pending',
         reason: newLeave.reason || ''
       };
 
       const res = await api.post('/hr/leaves', newRequest);
       if (res.data) {
-        showToast('Leave request submitted successfully!', 'success');
-        setNewLeave({ type: 'Casual', from: '', to: '', reason: '', halfDay: false });
+        showToast('Leave request submitted successfully (Pending Review)', 'success');
+        setNewLeave({ type: 'Casual Leave', from: '', to: '', reason: '', halfDay: false });
         setShowLeaveModal(false);
         setRefreshPendingTrigger(prev => prev + 1);
+        fetchGlobalLeaves();
+        fetchStaffLeaveData(leaveYear, selectedEmployee);
       }
     } catch (err) {
-      console.error('Failed to apply for leave', err);
-      showToast('Failed to submit leave request', 'error');
+      console.error('Failed to apply for leave:', err);
+      showToast(err.response?.data?.error || 'Failed to submit leave request', 'error');
+    } finally {
+      setIsSubmittingLeave(false);
     }
   };
 
@@ -1601,127 +1784,203 @@ export default function HRPayrollStaff({ onExit }) {
 
             {activeTab === 'hr-leaves' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                <div>
-                  <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Leave Request Inbox</h1>
-                  <p style={{ fontSize: '13.5px', color: '#64748B', margin: '4px 0 0 0' }}>Review and approve employee leave requests.</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                  <div>
+                    <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Leave Request Inbox</h1>
+                    <p style={{ fontSize: '13.5px', color: '#64748B', margin: '4px 0 0 0' }}>Review, verify balances, and approve or reject clinical staff leave applications.</p>
+                  </div>
+
+                  {/* Summary KPI Badges */}
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div style={{ padding: '6px 14px', borderRadius: '8px', background: '#FFFBEB', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#D97706' }}></span>
+                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#B45309' }}>
+                        Pending: <strong>{globalLeaves.filter(l => l.status === 'Pending').length}</strong>
+                      </span>
+                    </div>
+                    <div style={{ padding: '6px 14px', borderRadius: '8px', background: '#ECFDF5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }}></span>
+                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#047857' }}>
+                        Approved: <strong>{globalLeaves.filter(l => l.status === 'Approved').length}</strong>
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Pending Section */}
-                <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <span style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>Pending Approvals</span>
+                {/* 1. Pending Approvals Section */}
+                <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+                    <span style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
+                      Pending Approvals ({globalLeaves.filter(l => l.status === 'Pending').length})
+                    </span>
+                    <span style={{ fontSize: '12px', color: '#64748B' }}>Requires administrative review</span>
+                  </div>
+
                   <div style={{ overflowX: 'auto' }}>
-                    {getAllPendingLeaves().length > 0 ? (
+                    {globalLeaves.filter(l => l.status === 'Pending').length > 0 ? (
                       <table className="hr-admin-list-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
-                          <tr>
-                            <th>Employee</th>
-                            <th>Leave Type</th>
-                            <th>Dates</th>
-                            <th>Days</th>
-                            <th>Reason</th>
-                            <th>Actions</th>
+                          <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
+                            <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Employee</th>
+                            <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Department</th>
+                            <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Leave Type</th>
+                            <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Dates</th>
+                            <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Days</th>
+                            <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Reason</th>
+                            <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {getAllPendingLeaves().map(req => (
-                            <tr key={req.id}>
-                              <td>
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontWeight: 800 }}>{req.employee.name}</span>
-                                  <span style={{ fontSize: '11px', color: '#94A3B8' }}>{req.employee.staff_id}</span>
-                                </div>
-                              </td>
-                              <td>{req.type}</td>
-                              <td>{formatDate(req.from)} - {formatDate(req.to)}</td>
-                              <td>{req.days} day(s)</td>
-                              <td style={{ fontStyle: 'italic', color: '#64748B' }}>"{req.reason || 'No reason specified'}"</td>
-                              <td>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                  <button className="hr-btn-xs approve" onClick={() => handleApproveRejectLeave(req.employee, req.id, 'Approved')}>Approve</button>
-                                  <button className="hr-btn-xs reject" onClick={() => handleApproveRejectLeave(req.employee, req.id, 'Rejected')}>Reject</button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                          {globalLeaves.filter(l => l.status === 'Pending').map(req => {
+                            const emp = employees.find(e => e.id === req.employeeId || e.staff_id === req.employeeId) || {
+                              name: req.employeeName,
+                              staff_id: req.employeeId,
+                              dept: req.department || 'General'
+                            };
+
+                            return (
+                              <tr key={req._id || req.id} style={{ borderBottom: '1px solid #F8FAFC' }}>
+                                <td style={{ padding: '12px 14px' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px' }}>{req.employeeName || emp.name}</span>
+                                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>{req.employeeId || emp.staff_id}</span>
+                                  </div>
+                                </td>
+                                <td style={{ padding: '12px 14px', fontSize: '12.5px', color: '#475569', textTransform: 'capitalize' }}>
+                                  {req.department || emp.dept || 'General'}
+                                </td>
+                                <td style={{ padding: '12px 14px', fontWeight: 700, color: '#2563EB', fontSize: '12.5px' }}>
+                                  {req.leaveType || req.type}
+                                </td>
+                                <td style={{ padding: '12px 14px', fontSize: '12.5px', color: '#334155' }}>
+                                  {formatDate(req.fromDate || req.from)} - {formatDate(req.toDate || req.to)}
+                                </td>
+                                <td style={{ padding: '12px 14px', fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>
+                                  {req.days} day{req.days > 1 ? 's' : ''}
+                                </td>
+                                <td style={{ padding: '12px 14px', fontStyle: 'italic', color: '#64748B', fontSize: '12px', maxWidth: '240px' }}>
+                                  "{req.reason || 'No reason specified'}"
+                                </td>
+                                <td style={{ padding: '12px 14px' }}>
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button 
+                                      className="hr-btn-xs approve" 
+                                      onClick={() => handleOpenLeaveActionModal(req, 'Approved')}
+                                      style={{ background: '#10B981', color: 'white', border: 'none', padding: '5px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      Approve
+                                    </button>
+                                    <button 
+                                      className="hr-btn-xs reject" 
+                                      onClick={() => handleOpenLeaveActionModal(req, 'Rejected')}
+                                      style={{ background: '#EF4444', color: 'white', border: 'none', padding: '5px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      Reject
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     ) : (
-                      <div style={{ textAlign: 'center', padding: '24px 0', color: '#64748B', fontSize: '13px', fontWeight: 600 }}>
-                        No pending requests to approve.
+                      <div style={{ textAlign: 'center', padding: '36px 0', color: '#64748B', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        </div>
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: '#334155' }}>All caught up!</span>
+                        <span style={{ fontSize: '12px', color: '#94A3B8' }}>There are no pending leave requests requiring review.</span>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* History Section */}
-                <div className="glass-card" style={{ padding: 0 }} data-lenis-prevent>
-                  <div style={{ padding: '16px 20px', borderBottom: '1px solid #F1F5F9', fontWeight: 800, fontSize: '15px' }}>
-                    Processed Requests History
+                {/* 2. Processed Requests History Section */}
+                <div className="glass-card" style={{ padding: 0, background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', overflow: 'hidden' }} data-lenis-prevent>
+                  <div style={{ padding: '16px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 800, fontSize: '15px', color: '#0F172A' }}>Processed Requests History</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>
+                      {globalLeaves.filter(l => l.status !== 'Pending').length} record(s)
+                    </span>
                   </div>
                   {(() => {
-                    const history = [];
-                    employees.forEach(emp => {
-                      const key = `curoxa_hr_leaves_${emp.staff_id || emp.name}`;
-                      const saved = localStorage.getItem(key);
-                      if (saved) {
-                        try {
-                          const list = JSON.parse(saved);
-                          list.forEach(l => {
-                            if (l.status !== 'Pending') {
-                              history.push({ ...l, employee: emp });
-                            }
-                          });
-                        } catch (e) {}
-                      }
-                    });
+                    const processedLeaves = globalLeaves.filter(l => l.status !== 'Pending');
 
-                    if (history.length === 0) {
+                    if (processedLeaves.length === 0) {
                       return (
-                        <div style={{ textAlign: 'center', padding: '32px 0', color: '#64748B', fontSize: '13px' }}>
-                          No leave history log found.
+                        <div style={{ textAlign: 'center', padding: '36px 0', color: '#94A3B8', fontSize: '13px' }}>
+                          No processed leave requests recorded yet.
                         </div>
                       );
                     }
 
                     return (
-                      <table className="hr-admin-list-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr>
-                            <th>Employee</th>
-                            <th>Leave Type</th>
-                            <th>Dates</th>
-                            <th>Total Days</th>
-                            <th>Approver</th>
-                            <th>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {history.reverse().map(l => (
-                            <tr key={l.id}>
-                              <td>
-                                <span style={{ fontWeight: 800 }}>{l.employee.name}</span>
-                                <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>{l.employee.staff_id}</span>
-                              </td>
-                              <td>{l.type}</td>
-                              <td>{l.from} to {l.to}</td>
-                              <td>{l.days} day(s)</td>
-                              <td>{l.approver || 'System'}</td>
-                              <td>
-                                <span style={{
-                                  fontSize: '11px',
-                                  fontWeight: 800,
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  background: l.status === 'Approved' ? '#ECFDF5' : '#FEF2F2',
-                                  color: l.status === 'Approved' ? '#10B981' : '#EF4444'
-                                }}>
-                                  {l.status}
-                                </span>
-                              </td>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table className="hr-admin-list-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid #F1F5F9', background: '#F8FAFC' }}>
+                              <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Employee</th>
+                              <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Leave Type</th>
+                              <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Dates</th>
+                              <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Total Days</th>
+                              <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Status</th>
+                              <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: '11.5px', color: '#64748B', fontWeight: 800 }}>Approver / Remarks</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {processedLeaves.map(l => {
+                              const sLower = (l.status || '').toLowerCase();
+                              const statusStyles = {
+                                approved: { bg: '#ECFDF5', color: '#047857', border: '#A7F3D0' },
+                                rejected: { bg: '#FEF2F2', color: '#B91C1C', border: '#FECACA' },
+                                cancelled: { bg: '#F8FAFC', color: '#64748B', border: '#E2E8F0' }
+                              };
+                              const sStyle = statusStyles[sLower] || statusStyles.cancelled;
+
+                              return (
+                                <tr key={l._id || l.id} style={{ borderBottom: '1px solid #F8FAFC' }}>
+                                  <td style={{ padding: '12px 14px' }}>
+                                    <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px' }}>{l.employeeName || l.employeeId}</span>
+                                    <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>{l.employeeId} • {l.department || 'General'}</span>
+                                  </td>
+                                  <td style={{ padding: '12px 14px', fontWeight: 700, fontSize: '12.5px', color: '#334155' }}>
+                                    {l.leaveType || l.type}
+                                  </td>
+                                  <td style={{ padding: '12px 14px', fontSize: '12.5px', color: '#475569' }}>
+                                    {formatDate(l.fromDate || l.from)} - {formatDate(l.toDate || l.to)}
+                                  </td>
+                                  <td style={{ padding: '12px 14px', fontSize: '12.5px', fontWeight: 800 }}>
+                                    {l.days} day(s)
+                                  </td>
+                                  <td style={{ padding: '12px 14px' }}>
+                                    <span style={{
+                                      fontSize: '11px',
+                                      fontWeight: 800,
+                                      padding: '4px 8px',
+                                      borderRadius: '6px',
+                                      background: sStyle.bg,
+                                      color: sStyle.color,
+                                      border: `1px solid ${sStyle.border}`,
+                                      textTransform: 'capitalize'
+                                    }}>
+                                      {l.status}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '12px 14px', fontSize: '12px', color: '#64748B' }}>
+                                    <div>{l.approvedBy || 'HR Administrator'} {l.approvedDate ? `(${l.approvedDate})` : ''}</div>
+                                    {l.rejectionReason && (
+                                      <div style={{ fontSize: '11px', color: '#DC2626', marginTop: '2px', fontStyle: 'italic' }}>
+                                        Remarks: "{l.rejectionReason}"
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     );
                   })()}
                 </div>
@@ -2346,7 +2605,7 @@ export default function HRPayrollStaff({ onExit }) {
                     onChange={e => setCalendarYear(parseInt(e.target.value))}
                     style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', fontWeight: 700, fontSize: '13px', outline: 'none' }}
                   >
-                    {[2024, 2025, 2026, 2027].map(y => (
+                    {availableYears.map(y => (
                       <option key={y} value={y}>{y}</option>
                     ))}
                   </select>
@@ -5014,122 +5273,359 @@ export default function HRPayrollStaff({ onExit }) {
 
           {/* TAB 3: LEAVE MANAGEMENT */}
           {activeTab === 'leave' && (
-            <div className="animate-in">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* Top Header & Year Selector Controls */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <h1 style={{ fontSize: '24px', fontWeight: 800 }}>Leave Management</h1>
-                  <p style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>Apply, track and manage your leave</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Leave Management</h1>
+                    {leaveYear < new Date().getFullYear() && (
+                      <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: '#F1F5F9', color: '#64748B', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        🔒 Read-Only History
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, margin: 0 }}>
+                    Yearly accounting, real-time balance ledger and request history for <strong>{selectedEmployee?.name || currentUser.name || 'Staff'}</strong>
+                  </p>
                 </div>
-                <button className="hr-btn hr-btn-primary" onClick={() => setShowLeaveModal(true)}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-                  Apply leave
-                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  {/* Year Switcher */}
+                  <div style={{ display: 'inline-flex', alignItems: 'center', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '3px', gap: '2px' }}>
+                    {availableYears.map(yr => (
+                      <button
+                        key={yr}
+                        type="button"
+                        onClick={() => setLeaveYear(yr)}
+                        style={{
+                          border: 'none',
+                          background: leaveYear === yr ? '#2563EB' : 'transparent',
+                          color: leaveYear === yr ? '#FFFFFF' : '#64748B',
+                          fontWeight: leaveYear === yr ? 800 : 600,
+                          fontSize: '12.5px',
+                          padding: '6px 14px',
+                          borderRadius: '7px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {yr}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Apply Leave CTA */}
+                  <button 
+                    className="hr-btn hr-btn-primary" 
+                    onClick={() => setShowLeaveModal(true)}
+                    disabled={leaveYear < new Date().getFullYear()}
+                    style={{
+                      opacity: leaveYear < new Date().getFullYear() ? 0.6 : 1,
+                      cursor: leaveYear < new Date().getFullYear() ? 'not-allowed' : 'pointer'
+                    }}
+                    title={leaveYear < new Date().getFullYear() ? 'Cannot apply leave in past historical years' : 'Apply for leave'}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                    Apply leave
+                  </button>
+                </div>
               </div>
 
-              {/* Leave KPIs */}
-              <div className="hr-leave-kpis">
-                <div className="hr-leave-kpi-card semantic-card-info">
-                  <div className="hr-leave-kpi-left">
-                    <span className="hr-leave-kpi-lbl">Casual Leave</span>
-                    <span className="hr-leave-kpi-count">{casualAvailable}</span>
-                    <span className="hr-leave-kpi-subtitle">available</span>
+              {/* Error Alert if loading failed */}
+              {leavesError && (
+                <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', padding: '12px 16px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#991B1B', fontSize: '13px' }}>
+                  <span>⚠️ {leavesError}</span>
+                  <button 
+                    type="button" 
+                    onClick={() => fetchStaffLeaveData(leaveYear, selectedEmployee)}
+                    style={{ background: '#EF4444', color: 'white', border: 'none', padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {/* Authoritative Leave KPI Balance Cards */}
+              <div className="hr-leave-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                {/* 1. Sick Leave Card */}
+                <div className="hr-leave-kpi-card semantic-card-info" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '18px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                  <div className="hr-leave-kpi-left" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span className="hr-leave-kpi-lbl" style={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>Sick Leave</span>
+                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: '#ECFDF5', color: '#047857' }}>+{sickBal.monthlyAccrual || 0.5}/mo</span>
+                    </div>
+                    <span className="hr-leave-kpi-count" style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                      {isLeavesLoading ? '...' : (sickAvailable ?? 0)}
+                    </span>
+                    <span className="hr-leave-kpi-subtitle" style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>
+                      Used: <strong>{sickBal.consumed || 0}d</strong> • Quota: {Number((sickBal.opening + sickBal.carryForward + sickBal.accrued).toFixed(2))}d
+                    </span>
                   </div>
-                  <div className="hr-leave-kpi-icon-wrapper green">
+                  <div className="hr-leave-kpi-icon-wrapper green" style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#ECFDF5', color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  </div>
+                </div>
+
+                {/* 2. Casual Leave Card */}
+                <div className="hr-leave-kpi-card semantic-card-info" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '18px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                  <div className="hr-leave-kpi-left" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span className="hr-leave-kpi-lbl" style={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>Casual Leave</span>
+                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: '#EFF6FF', color: '#2563EB' }}>+{casualBal.monthlyAccrual || 0.5}/mo</span>
+                    </div>
+                    <span className="hr-leave-kpi-count" style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                      {isLeavesLoading ? '...' : (casualAvailable ?? 0)}
+                    </span>
+                    <span className="hr-leave-kpi-subtitle" style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>
+                      Used: <strong>{casualBal.consumed || 0}d</strong> • Quota: {Number((casualBal.opening + casualBal.carryForward + casualBal.accrued).toFixed(2))}d
+                    </span>
+                  </div>
+                  <div className="hr-leave-kpi-icon-wrapper green" style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                   </div>
                 </div>
 
-                <div className="hr-leave-kpi-card semantic-card-info">
-                  <div className="hr-leave-kpi-left">
-                    <span className="hr-leave-kpi-lbl">Sick Leave</span>
-                    <span className="hr-leave-kpi-count">{sickAvailable}</span>
-                    <span className="hr-leave-kpi-subtitle">available</span>
+                {/* 3. Earned Leave Card */}
+                <div className="hr-leave-kpi-card semantic-card-info" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '18px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                  <div className="hr-leave-kpi-left" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span className="hr-leave-kpi-lbl" style={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>Earned Leave</span>
+                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: '#F5F3FF', color: '#7C3AED' }}>+{earnedBal.monthlyAccrual || 1.25}/mo</span>
+                    </div>
+                    <span className="hr-leave-kpi-count" style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                      {isLeavesLoading ? '...' : (earnedAvailable ?? 0)}
+                    </span>
+                    <span className="hr-leave-kpi-subtitle" style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>
+                      Used: <strong>{earnedBal.consumed || 0}d</strong> • Quota: {Number((earnedBal.opening + earnedBal.carryForward + earnedBal.accrued).toFixed(2))}d
+                    </span>
                   </div>
-                  <div className="hr-leave-kpi-icon-wrapper green">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                  </div>
-                </div>
-
-                <div className="hr-leave-kpi-card semantic-card-info">
-                  <div className="hr-leave-kpi-left">
-                    <span className="hr-leave-kpi-lbl">Earned Leave</span>
-                    <span className="hr-leave-kpi-count">{earnedAvailable}</span>
-                    <span className="hr-leave-kpi-subtitle">available</span>
-                  </div>
-                  <div className="hr-leave-kpi-icon-wrapper green">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                  <div className="hr-leave-kpi-icon-wrapper green" style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#F5F3FF', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                   </div>
                 </div>
 
-                <div className="hr-leave-kpi-card semantic-card-info">
-                  <div className="hr-leave-kpi-left">
-                    <span className="hr-leave-kpi-lbl">Taken This Month</span>
-                    <span className="hr-leave-kpi-count">{takenThisMonth}</span>
-                    <span className="hr-leave-kpi-subtitle">{takenThisMonth} day casual</span>
+                {/* 4. Month Consumption KPI */}
+                <div className="hr-leave-kpi-card semantic-card-info" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '18px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                  <div className="hr-leave-kpi-left" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span className="hr-leave-kpi-lbl" style={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>This Month Taken</span>
+                    <span className="hr-leave-kpi-count" style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                      {takenThisMonth}
+                    </span>
+                    <span className="hr-leave-kpi-subtitle" style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>
+                      Approved leaves in {new Date().toLocaleString('default', { month: 'short' })} {leaveYear}
+                    </span>
                   </div>
-                  <div className="hr-leave-kpi-icon-wrapper blue">
+                  <div className="hr-leave-kpi-icon-wrapper blue" style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#FFF7ED', color: '#EA580C', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 20 4s-2 1-3.5 3.5L8 6l-8.2 1.8 7.3 3.6-1.8 4.6 2.7 2.7 4.6-1.8z"/></svg>
                   </div>
                 </div>
               </div>
 
-              {/* Leave Requests Table */}
-              <div className="hr-table-card">
-                <table className="hr-table">
-                  <thead>
-                    <tr>
-                      <th>Leave Type</th>
-                      <th>From</th>
-                      <th>To</th>
-                      <th>Days</th>
-                      <th>Status</th>
-                      <th>Approver</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leaves.length > 0 ? (
-                      leaves.map((leave) => (
-                        <tr key={leave.id}>
-                          <td><b>{leave.type}</b></td>
-                          <td>{formatDate(leave.from)}</td>
-                          <td>{formatDate(leave.to)}</td>
-                          <td>{leave.days} day{leave.days > 1 ? 's' : ''}</td>
-                          <td>
-                            <span className={`hr-badge ${leave.status.toLowerCase()}`}>
-                              {leave.status}
-                            </span>
-                          </td>
-                          <td>
-                            {leave.status === 'Pending' && (currentUser.role === 'admin' || currentUser.role === 'hr') ? (
-                              <div style={{ display: 'flex', gap: '8px' }}>
-                                <button 
-                                  className="hr-btn-xs approve"
-                                  onClick={() => handleApproveRejectLeave(selectedEmployee, leave.id, 'Approved')}
-                                >
-                                  Approve
-                                </button>
-                                <button 
-                                  className="hr-btn-xs reject"
-                                  onClick={() => handleApproveRejectLeave(selectedEmployee, leave.id, 'Rejected')}
-                                >
-                                  Reject
-                                </button>
+              {/* Split View: Requests History Table & Authoritative Ledger Timeline */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: '24px' }}>
+                {/* Left Column: Leave Requests Table */}
+                <div className="glass-card" style={{ padding: '20px', borderRadius: '14px', background: '#FFFFFF', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Leave Requests ({leaveYear})</h3>
+                      <span style={{ fontSize: '12px', color: '#64748B' }}>Real-time status of applied leave applications</span>
+                    </div>
+                    <span style={{ fontSize: '12px', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', background: '#F8FAFC', color: '#475569' }}>
+                      {leaves.filter(l => (l.from || '').startsWith(String(leaveYear))).length} record(s)
+                    </span>
+                  </div>
+
+                  <div style={{ overflowX: 'auto' }}>
+                    {isLeavesLoading ? (
+                      <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748B', fontSize: '13px' }}>
+                        Loading leave records...
+                      </div>
+                    ) : (() => {
+                      const yearLeaves = leaves.filter(l => (l.from || '').startsWith(String(leaveYear)));
+                      if (yearLeaves.length === 0) {
+                        return (
+                          <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8' }}>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                            </div>
+                            <span style={{ fontSize: '14px', fontWeight: 700, color: '#334155' }}>No leave requests yet</span>
+                            <span style={{ fontSize: '12px' }}>You haven't submitted any leave requests for {leaveYear}.</span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <table className="hr-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ textAlign: 'left', fontSize: '12px', fontWeight: 800, color: '#475569', padding: '10px 8px' }}>Leave Type</th>
+                              <th style={{ textAlign: 'left', fontSize: '12px', fontWeight: 800, color: '#475569', padding: '10px 8px' }}>Dates</th>
+                              <th style={{ textAlign: 'left', fontSize: '12px', fontWeight: 800, color: '#475569', padding: '10px 8px' }}>Days</th>
+                              <th style={{ textAlign: 'left', fontSize: '12px', fontWeight: 800, color: '#475569', padding: '10px 8px' }}>Status</th>
+                              <th style={{ textAlign: 'left', fontSize: '12px', fontWeight: 800, color: '#475569', padding: '10px 8px' }}>Approver / Reason</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {yearLeaves.map((leave) => {
+                              const statusLower = (leave.status || 'Pending').toLowerCase();
+                              const statusStyles = {
+                                pending: { bg: '#FFFBEB', color: '#B45309', border: '#FDE68A' },
+                                approved: { bg: '#ECFDF5', color: '#047857', border: '#A7F3D0' },
+                                rejected: { bg: '#FEF2F2', color: '#B91C1C', border: '#FECACA' },
+                                cancelled: { bg: '#F8FAFC', color: '#64748B', border: '#E2E8F0' }
+                              };
+                              const sStyle = statusStyles[statusLower] || statusStyles.pending;
+
+                              return (
+                                <tr key={leave.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                  <td style={{ padding: '12px 8px', fontWeight: 700, color: '#0F172A', fontSize: '13px' }}>
+                                    {leave.type}
+                                  </td>
+                                  <td style={{ padding: '12px 8px', fontSize: '12.5px', color: '#334155' }}>
+                                    {formatDate(leave.from)} - {formatDate(leave.to)}
+                                  </td>
+                                  <td style={{ padding: '12px 8px', fontSize: '12.5px', fontWeight: 700 }}>
+                                    {leave.days} day{leave.days > 1 ? 's' : ''}
+                                  </td>
+                                  <td style={{ padding: '12px 8px' }}>
+                                    <span style={{
+                                      fontSize: '11px',
+                                      fontWeight: 800,
+                                      padding: '4px 8px',
+                                      borderRadius: '6px',
+                                      background: sStyle.bg,
+                                      color: sStyle.color,
+                                      border: `1px solid ${sStyle.border}`,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      textTransform: 'capitalize'
+                                    }}>
+                                      {leave.status}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '12px 8px', fontSize: '12px', color: '#64748B' }}>
+                                    <div>{leave.approver || 'Pending Review'}</div>
+                                    {leave.reason && (
+                                      <div style={{ fontSize: '11px', fontStyle: 'italic', color: '#94A3B8', marginTop: '2px' }}>
+                                        "{leave.reason}"
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Right Column: Authoritative Ledger & Accrual Timeline */}
+                <div className="glass-card" style={{ padding: '20px', borderRadius: '14px', background: '#FFFFFF', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Activity Ledger ({leaveYear})</h3>
+                      <span style={{ fontSize: '12px', color: '#64748B' }}>Authoritative audit trail of credits & approved debits</span>
+                    </div>
+                    {(() => {
+                      const empGender = selectedEmployee?.gender || currentUser?.gender || '';
+                      const eligibleLedger = leaveLedger.filter(tx => isLeaveTypeEligibleForStaff(tx.leaveType, empGender));
+                      return (
+                        <span style={{ fontSize: '12px', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', background: '#F8FAFC', color: '#475569' }}>
+                          {eligibleLedger.length} transaction(s)
+                        </span>
+                      );
+                    })()}
+                  </div>
+
+                  <div style={{ maxHeight: '480px', overflowY: 'auto' }} data-lenis-prevent>
+                    {(() => {
+                      const empGender = selectedEmployee?.gender || currentUser?.gender || '';
+                      const eligibleLedger = leaveLedger.filter(tx => isLeaveTypeEligibleForStaff(tx.leaveType, empGender));
+
+                      if (isLeavesLoading) {
+                        return (
+                          <div style={{ textAlign: 'center', padding: '32px 0', color: '#64748B', fontSize: '13px' }}>
+                            Loading ledger activity...
+                          </div>
+                        );
+                      }
+
+                      if (eligibleLedger.length === 0) {
+                        return (
+                          <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8' }}>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                            </div>
+                            <span style={{ fontSize: '14px', fontWeight: 700, color: '#334155' }}>No leave activity recorded</span>
+                            <span style={{ fontSize: '12px' }}>No accrual or consumption transactions for {leaveYear}.</span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {eligibleLedger.map((tx, idx) => {
+                            const isCredit = Number(tx.amount) > 0;
+                            const formattedAmt = isCredit ? `+${tx.amount.toFixed(2)}` : `${tx.amount.toFixed(2)}`;
+                            const txDate = tx.createdAt ? new Date(tx.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : `${leaveYear}`;
+
+                          return (
+                            <div 
+                              key={tx._id || idx}
+                              style={{
+                                padding: '12px 14px',
+                                borderRadius: '10px',
+                                background: isCredit ? '#F0FDF4' : '#FFF1F2',
+                                border: `1px solid ${isCredit ? '#DCFCE7' : '#FFE4E6'}`,
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: '12px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <strong style={{ fontSize: '13px', color: '#0F172A' }}>{tx.leaveType}</strong>
+                                  <span style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    background: isCredit ? '#DCFCE7' : '#FFE4E6',
+                                    color: isCredit ? '#15803D' : '#BE123C',
+                                    textTransform: 'uppercase'
+                                  }}>
+                                    {tx.transactionType?.replace(/_/g, ' ')}
+                                  </span>
+                                </div>
+                                <span style={{ fontSize: '12px', color: '#475569' }}>
+                                  {tx.reason || 'Ledger transaction'}
+                                </span>
+                                <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                                  {txDate} • {tx.actor || 'System'}
+                                </span>
                               </div>
-                            ) : (
-                              leave.approver
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', color: '#94A3B8', padding: '24px 0' }}>
-                          No leave requests found for this employee
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+
+                              <div style={{
+                                fontSize: '15px',
+                                fontWeight: 800,
+                                color: isCredit ? '#16A34A' : '#E11D48',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {formattedAmt}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -5432,15 +5928,48 @@ export default function HRPayrollStaff({ onExit }) {
             
             <form onSubmit={handleApplyLeave} className="hr-modal-form">
               <div className="hr-form-group">
-                <label>Leave type</label>
+                <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Leave type</span>
+                  {(() => {
+                    const chosenBal = getBalanceForType(newLeave.type || 'Casual Leave');
+                    if (chosenBal) {
+                      return (
+                        <span style={{ fontSize: '11.5px', fontWeight: 700, color: chosenBal.currentBalance > 0 ? '#059669' : '#DC2626' }}>
+                          Available: {chosenBal.currentBalance} day(s)
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
+                </label>
                 <SearchableDropdown
                   value={newLeave.type}
                   onChange={(val) => setNewLeave({ ...newLeave, type: val })}
-                  options={[
-                    { value: 'Casual', label: 'Casual' },
-                    { value: 'Sick', label: 'Sick' },
-                    { value: 'Earned', label: 'Earned' }
-                  ]}
+                  options={(() => {
+                    const empGender = selectedEmployee?.gender || currentUser?.gender || '';
+                    if (leavePolicy && Array.isArray(leavePolicy.leaveTypes)) {
+                      return leavePolicy.leaveTypes
+                        .filter(lt => lt.enabled && isLeaveTypeEligibleForStaff(lt.leaveType, empGender))
+                        .map(lt => {
+                          const bal = getBalanceForType(lt.leaveType);
+                          const balTxt = bal ? `(${bal.currentBalance}d available)` : '';
+                          return {
+                            value: lt.leaveType,
+                            label: `${lt.leaveType} ${balTxt}`.trim()
+                          };
+                        });
+                    }
+                    const defaultOptions = [
+                      { value: 'Casual Leave', label: 'Casual Leave' },
+                      { value: 'Sick Leave', label: 'Sick Leave' },
+                      { value: 'Earned Leave', label: 'Earned Leave' },
+                      { value: 'Maternity Leave', label: 'Maternity Leave' },
+                      { value: 'Paternity Leave', label: 'Paternity Leave' },
+                      { value: 'Comp Off', label: 'Comp Off' },
+                      { value: 'Loss of Pay', label: 'Loss of Pay' }
+                    ];
+                    return defaultOptions.filter(opt => isLeaveTypeEligibleForStaff(opt.value, empGender));
+                  })()}
                   placeholder="Select Leave Type"
                 />
               </div>
@@ -5467,6 +5996,70 @@ export default function HRPayrollStaff({ onExit }) {
                 </div>
               </div>
 
+              {/* Duration Preview */}
+              {newLeave.from && newLeave.to && (
+                <div style={{ padding: '8px 12px', borderRadius: '8px', background: '#F8FAFC', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
+                  <span style={{ color: '#64748B', fontWeight: 600 }}>Estimated Duration:</span>
+                  <strong style={{ color: '#0F172A' }}>
+                    {(() => {
+                      if (newLeave.halfDay) return '0.5 day (Half Day)';
+                      const d1 = new Date(newLeave.from);
+                      const d2 = new Date(newLeave.to);
+                      if (d2 < d1) return 'Invalid Range (End < Start)';
+                      const diff = Math.ceil(Math.abs(d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
+                      return `${diff} day(s)`;
+                    })()}
+                  </strong>
+                </div>
+              )}
+
+              {/* Live Insufficient Balance Warning */}
+              {(() => {
+                const chosenBal = getBalanceForType(newLeave.type || 'Casual Leave');
+                const empGender = selectedEmployee?.gender || currentUser?.gender || '';
+                const isIneligible = !isLeaveTypeEligibleForStaff(newLeave.type || 'Casual Leave', empGender);
+                
+                let requestedDays = 0;
+                if (newLeave.halfDay) {
+                  requestedDays = 0.5;
+                } else if (newLeave.from && newLeave.to) {
+                  const d1 = new Date(newLeave.from);
+                  const d2 = new Date(newLeave.to);
+                  if (d2 >= d1) {
+                    requestedDays = Math.ceil(Math.abs(d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
+                  }
+                }
+
+                const isPaidType = chosenBal ? chosenBal.paid : (newLeave.type !== 'Loss of Pay' && newLeave.type !== 'LWP');
+                const isInsufficient = Boolean(
+                  chosenBal &&
+                  isPaidType &&
+                  requestedDays > 0 &&
+                  requestedDays > chosenBal.currentBalance
+                );
+
+                return (
+                  <>
+                    {isIneligible && (
+                      <div style={{ padding: '10px 14px', borderRadius: '8px', background: '#FEF2F2', border: '1px solid #FECACA', color: '#B91C1C', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '16px' }}>⚠️</span>
+                        <div>
+                          <strong>Ineligible Leave Type:</strong> You are not eligible to apply for {newLeave.type}.
+                        </div>
+                      </div>
+                    )}
+                    {isInsufficient && !isIneligible && (
+                      <div style={{ padding: '10px 14px', borderRadius: '8px', background: '#FEF2F2', border: '1px solid #FECACA', color: '#B91C1C', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '16px' }}>⚠️</span>
+                        <div>
+                          <strong>Insufficient balance:</strong> You have <strong>{chosenBal.currentBalance} day(s)</strong> available, but this request requires <strong>{requestedDays} day(s)</strong>.
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
               <div className="hr-half-day-container">
                 <label className="hr-half-day-label">
                   <input 
@@ -5476,28 +6069,175 @@ export default function HRPayrollStaff({ onExit }) {
                     onChange={(e) => setNewLeave({ ...newLeave, halfDay: e.target.checked })}
                   />
                   <span className="hr-half-day-custom-check"></span>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>Half day</span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>Half day application</span>
                 </label>
               </div>
 
               <div className="hr-form-group">
-                <label>Reason</label>
+                <label>Reason for Leave</label>
                 <textarea 
-                  placeholder="Brief reason for leave"
+                  placeholder="Provide a brief reason for your leave request"
                   required
+                  rows={3}
                   value={newLeave.reason}
                   onChange={(e) => setNewLeave({ ...newLeave, reason: e.target.value })}
                 />
               </div>
 
-              <div className="hr-modal-footer">
-                <button type="button" className="hr-modal-cancel-btn" onClick={() => setShowLeaveModal(false)}>Cancel</button>
-                <button type="submit" className="hr-modal-submit-btn">Submit request</button>
+              <div className="hr-modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button 
+                  type="button" 
+                  className="hr-modal-cancel-btn" 
+                  onClick={() => setShowLeaveModal(false)}
+                  disabled={isSubmittingLeave}
+                >
+                  Cancel
+                </button>
+                {(() => {
+                  const chosenBal = getBalanceForType(newLeave.type || 'Casual Leave');
+                  const empGender = selectedEmployee?.gender || currentUser?.gender || '';
+                  const isIneligible = !isLeaveTypeEligibleForStaff(newLeave.type || 'Casual Leave', empGender);
+                  
+                  let requestedDays = 0;
+                  if (newLeave.halfDay) {
+                    requestedDays = 0.5;
+                  } else if (newLeave.from && newLeave.to) {
+                    const d1 = new Date(newLeave.from);
+                    const d2 = new Date(newLeave.to);
+                    if (d2 >= d1) {
+                      requestedDays = Math.ceil(Math.abs(d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
+                    }
+                  }
+
+                  const isPaidType = chosenBal ? chosenBal.paid : (newLeave.type !== 'Loss of Pay' && newLeave.type !== 'LWP');
+                  const isInsufficient = Boolean(
+                    chosenBal &&
+                    isPaidType &&
+                    requestedDays > 0 &&
+                    requestedDays > chosenBal.currentBalance
+                  );
+
+                  const isInvalidDates = !newLeave.from || !newLeave.to || (newLeave.to < newLeave.from);
+                  const isBlocked = isSubmittingLeave || isIneligible || isInsufficient || isInvalidDates || requestedDays <= 0;
+
+                  return (
+                    <button 
+                      type="submit" 
+                      className="hr-modal-submit-btn"
+                      disabled={isBlocked}
+                      style={{
+                        opacity: isBlocked ? 0.6 : 1,
+                        cursor: isBlocked ? 'not-allowed' : 'pointer'
+                      }}
+                      title={isInsufficient ? 'Insufficient leave balance' : isIneligible ? 'Ineligible for this leave type' : ''}
+                    >
+                      {isSubmittingLeave ? 'Submitting...' : 'Submit Request'}
+                    </button>
+                  );
+                })()}
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Leave Action Confirmation Modal */}
+      {leaveActionModal.isOpen && leaveActionModal.leave && (
+        <div className="hr-modal-overlay" data-lenis-prevent>
+          <div className="hr-modal-box" style={{ maxWidth: '480px' }}>
+            <div className="hr-modal-header" style={{ width: '100%' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: leaveActionModal.action === 'Approved' ? '#047857' : '#B91C1C', margin: 0 }}>
+                  {leaveActionModal.action === 'Approved' ? 'Approve Leave Request' : 'Reject Leave Request'}
+                </h3>
+                <span style={{ fontSize: '12px', color: '#64748B' }}>
+                  Applicant: <strong style={{ color: '#0F172A' }}>{leaveActionModal.leave.employeeName || leaveActionModal.leave.employeeId}</strong>
+                </span>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setLeaveActionModal({ isOpen: false, leave: null, action: 'Approved', rejectionReason: '', isProcessing: false })}
+                disabled={leaveActionModal.isProcessing}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', fontSize: '18px', fontWeight: 800, padding: 0 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px' }}>
+              <div style={{ background: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                  <span style={{ color: '#64748B' }}>Leave Type:</span>
+                  <strong style={{ color: '#0F172A' }}>{leaveActionModal.leave.leaveType || leaveActionModal.leave.type}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                  <span style={{ color: '#64748B' }}>Dates:</span>
+                  <span style={{ fontWeight: 600, color: '#334155' }}>
+                    {formatDate(leaveActionModal.leave.fromDate || leaveActionModal.leave.from)} - {formatDate(leaveActionModal.leave.toDate || leaveActionModal.leave.to)}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                  <span style={{ color: '#64748B' }}>Total Days:</span>
+                  <strong style={{ color: '#0F172A' }}>{leaveActionModal.leave.days} day(s)</strong>
+                </div>
+                {leaveActionModal.leave.reason && (
+                  <div style={{ borderTop: '1px dashed #CBD5E1', paddingTop: '8px', fontSize: '12px', color: '#64748B', fontStyle: 'italic' }}>
+                    Staff Reason: "{leaveActionModal.leave.reason}"
+                  </div>
+                )}
+              </div>
+
+              {leaveActionModal.action === 'Approved' ? (
+                <div style={{ padding: '10px 12px', borderRadius: '8px', background: '#ECFDF5', border: '1px solid #A7F3D0', fontSize: '12px', color: '#065F46', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>ℹ️</span>
+                  <span>Approving will deduct <strong>{leaveActionModal.leave.days} day(s)</strong> from balance and log a debit transaction in the authoritative ledger.</span>
+                </div>
+              ) : (
+                <div className="hr-form-group">
+                  <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>Rejection Reason / Remarks (Optional)</label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. Inadequate shift coverage on requested dates"
+                    value={leaveActionModal.rejectionReason}
+                    onChange={(e) => setLeaveActionModal({ ...leaveActionModal, rejectionReason: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
+                  />
+                </div>
+              )}
+
+              <div className="hr-modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+                <button 
+                  type="button" 
+                  className="hr-modal-cancel-btn" 
+                  onClick={() => setLeaveActionModal({ isOpen: false, leave: null, action: 'Approved', rejectionReason: '', isProcessing: false })}
+                  disabled={leaveActionModal.isProcessing}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  className="hr-btn"
+                  onClick={handleConfirmLeaveAction}
+                  disabled={leaveActionModal.isProcessing}
+                  style={{
+                    background: leaveActionModal.action === 'Approved' ? '#10B981' : '#EF4444',
+                    color: 'white',
+                    fontWeight: 800,
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: leaveActionModal.isProcessing ? 'not-allowed' : 'pointer',
+                    opacity: leaveActionModal.isProcessing ? 0.7 : 1
+                  }}
+                >
+                  {leaveActionModal.isProcessing ? 'Processing...' : leaveActionModal.action === 'Approved' ? 'Confirm Approval' : 'Confirm Rejection'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Document Preview Modal */}
       {previewDoc && (
         <div className="hr-preview-modal-overlay" data-lenis-prevent onClick={() => setPreviewDoc(null)}>

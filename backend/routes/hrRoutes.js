@@ -148,6 +148,20 @@ router.post("/notify-leave", async (req, res) => {
   return res.status(200).json({ success: false, message: "Leave processed but email notification could not be sent." });
 });
 
+const {
+  normalizeLeaveType,
+  isEmployeeEligibleForLeaveType,
+  getTenantStartYear,
+  getLeavePolicy,
+  updateLeavePolicy,
+  getStaffLeaveBalance,
+  initializeYearForStaff,
+  initializeYearForTenant,
+  accrueMonthlyLeaves,
+  processLeaveApproval,
+  processLeaveRejectionOrCancellation
+} = require("../services/leaveService");
+
 router.get("/leaves", verifyToken, async (req, res) => {
   try {
     await seedIfNeeded(req.tenantId);
@@ -156,7 +170,21 @@ router.get("/leaves", verifyToken, async (req, res) => {
       tenantId: req.tenantId,
       employeeName: { $in: ['Marcus Vance', 'Emily Rose', 'Kevin Smith'] }
     });
-    const leaves = await LeaveRequest.find({ tenantId: req.tenantId });
+
+    const isManager = req.user && (req.user.role === 'admin' || req.user.role === 'hr' || req.user.role === 'superadmin');
+    const query = { tenantId: req.tenantId };
+    
+    if (!isManager) {
+      const userStaffId = req.user.staff_id || req.user.userId || req.user.id;
+      query.$or = [
+        { employeeId: userStaffId },
+        { employeeName: req.user.name }
+      ];
+    } else if (req.query.staff_id || req.query.employeeId) {
+      query.employeeId = req.query.staff_id || req.query.employeeId;
+    }
+
+    const leaves = await LeaveRequest.find(query).sort({ createdAt: -1 });
     res.json(leaves);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -165,10 +193,141 @@ router.get("/leaves", verifyToken, async (req, res) => {
 
 router.post("/leaves", verifyToken, async (req, res) => {
   try {
-    const leave = await LeaveRequest.create({
-      ...req.body,
-      tenantId: req.tenantId
+    const isManager = req.user && (req.user.role === 'admin' || req.user.role === 'hr' || req.user.role === 'superadmin');
+    
+    // Security: Derive authenticated identity for staff
+    const employeeId = (!isManager || !req.body.employeeId) 
+      ? (req.user.staff_id || req.user.userId || req.user.id) 
+      : String(req.body.employeeId).trim();
+      
+    const employeeName = (!isManager || !req.body.employeeName) 
+      ? (req.user.name || 'Staff Member') 
+      : String(req.body.employeeName).trim();
+      
+    const department = req.body.department || req.user.department || req.user.dept || 'General';
+
+    const { fromDate, toDate, reason, halfDay } = req.body;
+
+    // Validation 1: Valid date presence
+    if (!fromDate || !toDate) {
+      return res.status(400).json({ error: "Start date and End date are required." });
+    }
+
+    // Validation 2: Date order check
+    const start = new Date(fromDate);
+    const end = new Date(toDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ error: "Invalid date format provided." });
+    }
+    if (fromDate > toDate) {
+      return res.status(400).json({ error: "Start date cannot be after End date." });
+    }
+
+    // Validation: Tenant operational start year check
+    const targetYear = start.getFullYear() || new Date().getFullYear();
+    const tenantStartYear = await getTenantStartYear(req.tenantId);
+    if (targetYear < tenantStartYear || end.getFullYear() < tenantStartYear) {
+      return res.status(400).json({
+        error: `Cannot apply for leave in year ${targetYear} prior to hospital start year (${tenantStartYear}).`
+      });
+    }
+
+    // Validation 3: Days calculation & > 0 check
+    let days = Number(req.body.days);
+    if (isNaN(days) || days <= 0) {
+      const diffTime = Math.abs(end - start);
+      days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    }
+    if (halfDay) {
+      days = 0.5;
+    }
+    if (days <= 0) {
+      return res.status(400).json({ error: "Requested days must be greater than 0." });
+    }
+
+    // Validation 4: Leave type policy validation
+    const norm = normalizeLeaveType(req.body.leaveType || req.body.type);
+    const policy = await getLeavePolicy(req.tenantId);
+    const policyType = policy.leaveTypes.find(
+      lt => lt.code === norm.code || lt.leaveType.toLowerCase() === norm.leaveType.toLowerCase()
+    );
+
+    if (!policyType || !policyType.enabled) {
+      return res.status(400).json({ error: `Leave type "${norm.leaveType}" is not enabled in clinic policy.` });
+    }
+
+    // Validation: Gender / Employee eligibility check
+    const isObjId = typeof employeeId === 'string' && employeeId.length === 24 && /^[0-9a-fA-F]+$/.test(employeeId);
+    const empUser = await User.findOne({
+      tenantId: req.tenantId,
+      $or: [
+        { staff_id: employeeId },
+        ...(isObjId ? [{ _id: employeeId }] : [])
+      ]
+    }).lean();
+    const empGender = empUser?.gender || req.user.gender || '';
+    if (empGender && !isEmployeeEligibleForLeaveType(norm.leaveType, empGender)) {
+      return res.status(400).json({ error: `Employee is not eligible for ${norm.leaveType}.` });
+    }
+
+    // Validation 5: Overlapping conflict check
+    const conflict = await LeaveRequest.findOne({
+      tenantId: req.tenantId,
+      employeeId,
+      status: { $in: ['Pending', 'Approved'] },
+      $or: [
+        { fromDate: { $lte: toDate }, toDate: { $gte: fromDate } }
+      ]
     });
+
+    if (conflict) {
+      return res.status(400).json({
+        error: `Conflicting ${conflict.status.toLowerCase()} leave exists from ${conflict.fromDate} to ${conflict.toDate}.`
+      });
+    }
+
+    // Validation 6: Balance check for balance-controlled leave types
+    if (policyType.paid && norm.code !== 'LWP') {
+      const balanceData = await getStaffLeaveBalance(req.tenantId, employeeId, targetYear);
+      const balanceInfo = balanceData.balances[policyType.leaveType] || balanceData.balances[norm.leaveType];
+      const available = balanceInfo ? balanceInfo.currentBalance : 0;
+      
+      if (days > available) {
+        return res.status(400).json({
+          error: `Insufficient ${norm.leaveType} balance. Requested: ${days} day(s), Available: ${available} day(s).`
+        });
+      }
+    }
+
+    const desiredStatus = isManager && req.body.status === 'Approved' ? 'Approved' : 'Pending';
+
+    const leave = await LeaveRequest.create({
+      tenantId: req.tenantId,
+      employeeId,
+      employeeName,
+      department,
+      leaveType: norm.leaveType,
+      fromDate,
+      toDate,
+      days,
+      reason: reason || '',
+      status: desiredStatus,
+      appliedDate: new Date().toISOString().split('T')[0],
+      approvedBy: desiredStatus === 'Approved' ? (req.user.name || 'HR Manager') : undefined,
+      approvedDate: desiredStatus === 'Approved' ? new Date().toISOString().split('T')[0] : undefined
+    });
+
+    // If approved directly by manager, record debit transaction
+    if (leave.status === 'Approved') {
+      await processLeaveApproval(req.tenantId, leave, req.user?.name || 'HR Administrator');
+    }
+
+    // Emit real-time synchronization
+    const io = req.app.get("socketio");
+    if (io) {
+      io.to(req.tenantId).emit("data_changed", { type: "leaves", employeeId });
+    }
+
     res.status(201).json(leave);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -177,11 +336,181 @@ router.post("/leaves", verifyToken, async (req, res) => {
 
 router.put("/leaves/:id", verifyToken, async (req, res) => {
   try {
+    const prevLeave = await LeaveRequest.findOne({ _id: req.params.id, tenantId: req.tenantId });
+    if (!prevLeave) {
+      return res.status(404).json({ error: "Leave request not found." });
+    }
+
+    const isManager = req.user && (req.user.role === 'admin' || req.user.role === 'hr' || req.user.role === 'superadmin');
+    const targetStatus = req.body.status;
+
+    // 1. Regular staff permissions check
+    if (!isManager) {
+      const userStaffId = req.user.staff_id || req.user.userId || req.user.id;
+      if (prevLeave.employeeId !== userStaffId) {
+        return res.status(403).json({ error: "Unauthorized to modify this leave request." });
+      }
+      if (targetStatus && targetStatus !== 'Cancelled') {
+        return res.status(403).json({ error: "Staff can only cancel their own pending leave requests." });
+      }
+      if (prevLeave.status !== 'Pending') {
+        return res.status(400).json({ error: `Cannot cancel a leave request that is already ${prevLeave.status.toLowerCase()}.` });
+      }
+    }
+
+    // 2. Manager Approval Flow
+    if (targetStatus === 'Approved') {
+      if (prevLeave.status === 'Approved') {
+        return res.status(409).json({ error: "This leave request has already been approved." });
+      }
+      if (prevLeave.status === 'Rejected') {
+        return res.status(400).json({ error: "Cannot approve a rejected leave request." });
+      }
+      if (prevLeave.status === 'Cancelled') {
+        return res.status(400).json({ error: "Cannot approve a cancelled leave request." });
+      }
+      if (prevLeave.status !== 'Pending') {
+        return res.status(400).json({ error: "Only pending leave requests can be approved." });
+      }
+
+      // Process authoritative debit and balance revalidation
+      try {
+        await processLeaveApproval(req.tenantId, prevLeave, req.user?.name || 'HR Administrator');
+      } catch (debitErr) {
+        return res.status(400).json({ error: debitErr.message });
+      }
+
+      // Update request state
+      const updatedLeave = await LeaveRequest.findOneAndUpdate(
+        { _id: req.params.id, tenantId: req.tenantId, status: 'Pending' },
+        { 
+          $set: { 
+            status: 'Approved',
+            approvedBy: req.user?.name || 'HR Administrator',
+            approvedDate: new Date().toISOString().split('T')[0]
+          } 
+        },
+        { returnDocument: 'after' }
+      );
+
+      if (!updatedLeave) {
+        // Handled race condition: request was concurrently modified
+        return res.status(409).json({ error: "This leave request has already been processed." });
+      }
+
+      // Send Staff Notification Email (best-effort, non-blocking)
+      (async () => {
+        try {
+          const emp = await User.findOne({ tenantId: req.tenantId, staff_id: updatedLeave.employeeId }, 'name email').lean();
+          if (emp && emp.email) {
+            const { sendEmail } = require('../utils/emailService');
+            await sendEmail({
+              to: emp.email,
+              subject: `✅ Leave Approved — ${updatedLeave.leaveType} (${updatedLeave.fromDate} to ${updatedLeave.toDate})`,
+              html: `<p>Hello <strong>${emp.name}</strong>,</p><p>Your request for <strong>${updatedLeave.days} day(s)</strong> of <strong>${updatedLeave.leaveType}</strong> from ${updatedLeave.fromDate} to ${updatedLeave.toDate} has been <strong>Approved</strong> by ${req.user?.name || 'HR Manager'}.</p>`
+            });
+          }
+        } catch (mailErr) {
+          console.warn('[HR] Email notification failed (non-blocking):', mailErr.message);
+        }
+      })();
+
+      // Emit real-time synchronization
+      const io = req.app.get("socketio");
+      if (io) {
+        io.to(req.tenantId).emit("data_changed", { type: "leaves", employeeId: updatedLeave.employeeId, action: "approved" });
+      }
+
+      return res.json(updatedLeave);
+    }
+
+    // 3. Manager Rejection Flow
+    if (targetStatus === 'Rejected') {
+      if (prevLeave.status === 'Approved') {
+        return res.status(400).json({ error: "Cannot reject an already approved leave request." });
+      }
+      if (prevLeave.status === 'Cancelled') {
+        return res.status(400).json({ error: "Cannot reject a cancelled leave request." });
+      }
+      if (prevLeave.status !== 'Pending') {
+        return res.status(400).json({ error: "Only pending leave requests can be rejected." });
+      }
+
+      const updatedLeave = await LeaveRequest.findOneAndUpdate(
+        { _id: req.params.id, tenantId: req.tenantId, status: 'Pending' },
+        { 
+          $set: { 
+            status: 'Rejected',
+            approvedBy: req.user?.name || 'HR Administrator',
+            approvedDate: new Date().toISOString().split('T')[0],
+            rejectionReason: req.body.rejectionReason || req.body.comments || req.body.reason || ''
+          } 
+        },
+        { returnDocument: 'after' }
+      );
+
+      if (!updatedLeave) {
+        return res.status(409).json({ error: "This leave request has already been processed." });
+      }
+
+      // Send Staff Notification Email (best-effort, non-blocking)
+      (async () => {
+        try {
+          const emp = await User.findOne({ tenantId: req.tenantId, staff_id: updatedLeave.employeeId }, 'name email').lean();
+          if (emp && emp.email) {
+            const { sendEmail } = require('../utils/emailService');
+            await sendEmail({
+              to: emp.email,
+              subject: `❌ Leave Rejected — ${updatedLeave.leaveType} (${updatedLeave.fromDate} to ${updatedLeave.toDate})`,
+              html: `<p>Hello <strong>${emp.name}</strong>,</p><p>Your request for <strong>${updatedLeave.days} day(s)</strong> of <strong>${updatedLeave.leaveType}</strong> from ${updatedLeave.fromDate} to ${updatedLeave.toDate} has been <strong>Rejected</strong> by ${req.user?.name || 'HR Manager'}.</p>${updatedLeave.rejectionReason ? `<p><em>Reason: ${updatedLeave.rejectionReason}</em></p>` : ''}`
+            });
+          }
+        } catch (mailErr) {
+          console.warn('[HR] Email notification failed (non-blocking):', mailErr.message);
+        }
+      })();
+
+      // Emit real-time synchronization
+      const io = req.app.get("socketio");
+      if (io) {
+        io.to(req.tenantId).emit("data_changed", { type: "leaves", employeeId: updatedLeave.employeeId, action: "rejected" });
+      }
+
+      return res.json(updatedLeave);
+    }
+
+    // 4. Staff Cancellation Flow
+    if (targetStatus === 'Cancelled') {
+      const updatedLeave = await LeaveRequest.findOneAndUpdate(
+        { _id: req.params.id, tenantId: req.tenantId, status: 'Pending' },
+        { $set: { status: 'Cancelled' } },
+        { returnDocument: 'after' }
+      );
+
+      if (!updatedLeave) {
+        return res.status(409).json({ error: "This leave request has already been processed." });
+      }
+
+      const io = req.app.get("socketio");
+      if (io) {
+        io.to(req.tenantId).emit("data_changed", { type: "leaves", employeeId: updatedLeave.employeeId, action: "cancelled" });
+      }
+
+      return res.json(updatedLeave);
+    }
+
+    // 5. Generic update for managers
     const leave = await LeaveRequest.findOneAndUpdate(
       { _id: req.params.id, tenantId: req.tenantId },
       { $set: req.body },
       { returnDocument: 'after' }
     );
+
+    const io = req.app.get("socketio");
+    if (io) {
+      io.to(req.tenantId).emit("data_changed", { type: "leaves", employeeId: leave.employeeId });
+    }
+
     res.json(leave);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -190,8 +519,167 @@ router.put("/leaves/:id", verifyToken, async (req, res) => {
 
 router.delete("/leaves/:id", verifyToken, async (req, res) => {
   try {
+    const leave = await LeaveRequest.findOne({ _id: req.params.id, tenantId: req.tenantId });
+    if (leave && leave.status === 'Approved') {
+      await processLeaveRejectionOrCancellation(req.tenantId, leave, req.user?.name || 'HR Manager');
+    }
     await LeaveRequest.findOneAndDelete({ _id: req.params.id, tenantId: req.tenantId });
+    
+    const io = req.app.get("socketio");
+    if (io) {
+      io.to(req.tenantId).emit("data_changed", { type: "leaves" });
+    }
+
     res.json({ message: "Leave deleted" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Leave Policy REST Endpoints
+router.get("/leave-policy", verifyToken, async (req, res) => {
+  try {
+    const policy = await getLeavePolicy(req.tenantId);
+    const tenantStartYear = await getTenantStartYear(req.tenantId);
+    res.json({
+      ...(policy ? policy.toObject() : {}),
+      tenantStartYear
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/leave-policy", verifyToken, async (req, res) => {
+  try {
+    const policy = await updateLeavePolicy(req.tenantId, req.body, req.user?.name || 'HR Administrator');
+    
+    const io = req.app.get("socketio");
+    if (io) {
+      io.to(req.tenantId).emit("data_changed", { type: "leaves" });
+    }
+
+    res.json(policy);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Leave Balances (Authoritative yearly calculation)
+router.get("/leave-balances", verifyToken, async (req, res) => {
+  try {
+    const isManager = req.user && (req.user.role === 'admin' || req.user.role === 'hr' || req.user.role === 'superadmin');
+    const year = Number(req.query.year) || new Date().getFullYear();
+    let staffId = req.query.staff_id || req.query.employeeId;
+
+    if (!isManager) {
+      staffId = req.user.staff_id || req.user.userId || req.user.id;
+    }
+
+    if (staffId) {
+      const balance = await getStaffLeaveBalance(req.tenantId, staffId, year);
+      return res.json(balance);
+    }
+
+    const employees = await User.find({ tenantId: req.tenantId }, 'staff_id name email department').lean();
+    const allBalances = await Promise.all(
+      employees.map(async emp => {
+        const empId = emp.staff_id || emp._id.toString();
+        const b = await getStaffLeaveBalance(req.tenantId, empId, year);
+        return {
+          employeeId: empId,
+          employeeName: emp.name,
+          department: emp.department,
+          ...b
+        };
+      })
+    );
+    res.json(allBalances);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Leave Ledger / Audit Trail
+router.get("/leave-ledger", verifyToken, async (req, res) => {
+  try {
+    const isManager = req.user && (req.user.role === 'admin' || req.user.role === 'hr' || req.user.role === 'superadmin');
+    const year = Number(req.query.year) || new Date().getFullYear();
+    let staffId = req.query.staff_id || req.query.employeeId;
+
+    if (!isManager) {
+      staffId = req.user.staff_id || req.user.userId || req.user.id;
+    }
+
+    const LeaveLedger = require("../models/LeaveLedger");
+    const query = { tenantId: req.tenantId, year };
+    if (staffId) {
+      query.employeeId = staffId;
+    }
+
+    let empGender = '';
+    if (staffId) {
+      const isObjId = typeof staffId === 'string' && staffId.length === 24 && /^[0-9a-fA-F]+$/.test(staffId);
+      const empUser = await User.findOne({
+        tenantId: req.tenantId,
+        $or: [
+          { staff_id: staffId },
+          ...(isObjId ? [{ _id: staffId }] : [])
+        ]
+      }).lean();
+      empGender = empUser?.gender || req.user?.gender || '';
+    }
+
+    const ledger = await LeaveLedger.find(query).sort({ createdAt: -1 }).lean();
+    const filteredLedger = empGender
+      ? ledger.filter(entry => isEmployeeEligibleForLeaveType(entry.leaveType, empGender))
+      : ledger;
+
+    res.json(filteredLedger);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Trigger Monthly Accrual
+router.post("/leave-accrual", verifyToken, async (req, res) => {
+  try {
+    const year = Number(req.body.year) || new Date().getFullYear();
+    const month = Number(req.body.month) || (new Date().getMonth() + 1);
+    const staffId = req.body.staff_id || req.body.employeeId || null;
+
+    const result = await accrueMonthlyLeaves(req.tenantId, year, month, staffId, req.user?.name || 'HR Administrator');
+    
+    const io = req.app.get("socketio");
+    if (io) {
+      io.to(req.tenantId).emit("data_changed", { type: "leaves" });
+    }
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Trigger Year Initialization
+router.post("/leave-year-init", verifyToken, async (req, res) => {
+  try {
+    const year = Number(req.body.year) || new Date().getFullYear();
+    const staffId = req.body.staff_id || req.body.employeeId || null;
+
+    let result;
+    if (staffId) {
+      result = await initializeYearForStaff(req.tenantId, staffId, year, req.user?.name || 'HR Administrator');
+    } else {
+      result = await initializeYearForTenant(req.tenantId, year, req.user?.name || 'HR Administrator');
+    }
+
+    const io = req.app.get("socketio");
+    if (io) {
+      io.to(req.tenantId).emit("data_changed", { type: "leaves" });
+    }
+
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

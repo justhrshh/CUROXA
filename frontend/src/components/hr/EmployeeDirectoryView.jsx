@@ -68,9 +68,9 @@ export default function EmployeeDirectoryView({
   };
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedRole, setSelectedRole] = useState('All');
   const [selectedDept, setSelectedDept] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
-  const [selectedType, setSelectedType] = useState('All');
   const [showExportModal, setShowExportModal] = useState(false);
 
 
@@ -212,28 +212,7 @@ export default function EmployeeDirectoryView({
     setShowConfirmPassword(true);
   };
 
-  // Filter logic
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          emp.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          emp.email.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const empRoleLower = (emp.role || '').toLowerCase();
-    const empDeptLower = (emp.department || '').toLowerCase();
-    const empDesignationLower = (emp.designation || '').toLowerCase();
 
-    const matchesDept = selectedDept === 'All' || 
-                        emp.department === selectedDept ||
-                        (selectedDept === 'Pharmacy' && (empRoleLower === 'pharmacy' || empRoleLower === 'pharmacist' || empDeptLower === 'pharmacy' || empDesignationLower.includes('pharmacist'))) ||
-                        (selectedDept === 'Pathology & Lab' && (empRoleLower === 'lab' || empRoleLower === 'laboratory' || empDeptLower === 'pathology & lab' || empDesignationLower.includes('lab'))) ||
-                        (selectedDept === 'Hospital Administration' && (empRoleLower === 'hr' || empRoleLower === 'admin' || empRoleLower === 'superadmin' || empRoleLower === 'super admin' || empDeptLower === 'hospital administration' || empDesignationLower.includes('admin') || empDesignationLower.includes('hr'))) ||
-                        (selectedDept === 'Outpatient Services' && (empRoleLower === 'receptionist' || empRoleLower === 'reception' || empDeptLower === 'outpatient services'));
-
-    const matchesStatus = selectedStatus === 'All' || emp.status === selectedStatus;
-    const matchesType = selectedType === 'All' || emp.employmentType === selectedType;
-
-    return matchesSearch && matchesDept && matchesStatus && matchesType;
-  });
 
   // Automatically generate Employee ID & add default parameters
   const handleCreateEmployee = async (e) => {
@@ -358,203 +337,617 @@ export default function EmployeeDirectoryView({
 
 
 
+  // Helper functions matching Admin Panel
+  const getStaffStatus = (emp) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayDay = WEEKDAYS[new Date().getDay()];
+    
+    // Check if on approved leave
+    const onLeave = leaveRequests.some(l => {
+      const matchEmp = (
+        l.employeeId === emp.id || 
+        l.employeeId === emp.staff_id || 
+        l.employeeId === emp._id || 
+        (l.employeeName && emp.name && l.employeeName.toLowerCase() === emp.name.toLowerCase())
+      );
+      if (!matchEmp || l.status !== 'Approved') return false;
+      const from = (l.fromDate || l.startDate || '').split('T')[0];
+      const to = (l.toDate || l.endDate || '').split('T')[0];
+      return from && to && todayStr >= from && todayStr <= to;
+    });
+
+    if (onLeave) return 'On Leave';
+
+    // Check weekly off
+    const daysOff = Array.isArray(emp.weeklyOff) ? emp.weeklyOff : (typeof emp.weeklyOff === 'string' ? emp.weeklyOff.split(',').map(s => s.trim()) : ['Sunday']);
+    if (daysOff.includes(todayDay)) return 'Weekly Off';
+
+    if (emp.status === 'Active' || !emp.status) return 'On Duty';
+    return emp.status;
+  };
+
+  const getDaysOffString = (emp) => {
+    if (Array.isArray(emp.weeklyOff)) {
+      return emp.weeklyOff.length > 0 ? emp.weeklyOff.join(' + ') : 'Sunday';
+    }
+    if (typeof emp.weeklyOff === 'string' && emp.weeklyOff.trim()) {
+      return emp.weeklyOff.replace(/,/g, ' +');
+    }
+    return 'Sunday';
+  };
+
+  const getInitials = (name = '') => {
+    return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'ST';
+  };
+
+  const activeTodayCount = employees.filter(e => {
+    const st = getStaffStatus(e);
+    return st === 'On Duty' || st === 'Active';
+  }).length;
+
+  const onLeaveCount = employees.filter(e => {
+    const st = getStaffStatus(e);
+    return st === 'On Leave';
+  }).length;
+
+  const pendingRequestsCount = leaveRequests.filter(l => l.status === 'Pending').length;
+
+  // Unique departments for filter dropdown
+  const uniqueDepts = Array.from(new Set([
+    ...HOSPITAL_DEPARTMENTS,
+    ...employees.map(e => e.department).filter(Boolean)
+  ]));
+
+  // Filtered employees list
+  const filteredEmployees = employees.filter(emp => {
+    // Search
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = !term || 
+      (emp.name && emp.name.toLowerCase().includes(term)) ||
+      (emp.staff_id && String(emp.staff_id).toLowerCase().includes(term)) ||
+      (emp.id && String(emp.id).toLowerCase().includes(term)) ||
+      (emp.email && emp.email.toLowerCase().includes(term)) ||
+      (emp.phone && String(emp.phone).includes(term)) ||
+      (emp.department && emp.department.toLowerCase().includes(term)) ||
+      (emp.designation && emp.designation.toLowerCase().includes(term)) ||
+      (emp.role && emp.role.toLowerCase().includes(term)) ||
+      ((emp.assignedRoles || []).some(r => r.toLowerCase().includes(term)));
+
+    // Role
+    let matchesRole = true;
+    if (selectedRole !== 'All') {
+      const empRole = (emp.role || '').toLowerCase();
+      const assigned = (emp.assignedRoles || []).map(r => r.toLowerCase());
+      if (selectedRole === 'doctor') {
+        matchesRole = empRole.includes('doc') || assigned.some(r => r.includes('doc'));
+      } else if (selectedRole === 'receptionist') {
+        matchesRole = empRole.includes('reception') || assigned.some(r => r.includes('reception'));
+      } else if (selectedRole === 'hr') {
+        matchesRole = empRole.includes('hr') || assigned.some(r => r.includes('hr'));
+      } else if (selectedRole === 'nurse') {
+        matchesRole = empRole.includes('nurse') || assigned.some(r => r.includes('nurse'));
+      } else if (selectedRole === 'staff') {
+        matchesRole = !empRole.includes('doc') && !empRole.includes('reception') && !empRole.includes('hr');
+      }
+    }
+
+    // Dept
+    const matchesDept = selectedDept === 'All' || emp.department === selectedDept;
+
+    // Status
+    let matchesStatus = true;
+    if (selectedStatus !== 'All') {
+      const st = getStaffStatus(emp).toLowerCase();
+      if (selectedStatus === 'onduty') {
+        matchesStatus = st === 'on duty' || st === 'active';
+      } else if (selectedStatus === 'onleave') {
+        matchesStatus = st === 'on leave' || st === 'absent';
+      } else if (selectedStatus === 'weeklyoff') {
+        matchesStatus = st === 'weekly off';
+      } else if (selectedStatus === 'inactive') {
+        matchesStatus = st === 'inactive' || st === 'deactivated' || emp.status === 'Exited';
+      }
+    }
+
+    return matchesSearch && matchesRole && matchesDept && matchesStatus;
+  });
+
   return (
     <div className="space-y-6" id="employee-directory-root">
       
-      {/* Header bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-display font-bold text-slate-900">Hospital Medical & Admin Staff</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Comprehensive employee records, credential settings, and reporting structure.</p>
+      {/* 1. TOP KPI CARDS MATCHING ADMIN PANEL */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        {/* Card 1: Total Staff (Blue Gradient with Bottom-Right Radial Glow) */}
+        <div
+          className="p-4 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+          style={{
+            background: 'radial-gradient(circle at 100% 100%, rgba(37, 99, 235, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)'
+          }}
+          onClick={() => { setSelectedStatus('All'); setSelectedRole('All'); setSelectedDept('All'); setSearchTerm(''); }}
+          title="Show all registered staff members"
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
+              <Users className="w-4.5 h-4.5" />
+            </div>
+            <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">Total Staff</span>
+          </div>
+
+          <div className="mt-3 flex items-end justify-between">
+            <div>
+              <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{employees.length}</div>
+              <div className="text-xs text-blue-700 font-bold mt-1.5 truncate">
+                Registered team members
+              </div>
+            </div>
+
+            {/* Blue Mini Sparkline */}
+            <div className="w-16 h-8 shrink-0 relative">
+              <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                <defs>
+                  <linearGradient id="staffBlueGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
+                    <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
+                  </linearGradient>
+                </defs>
+                <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#staffBlueGrad)" />
+                <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Half Gradient Accent Line Beneath Card */}
+          <div 
+            className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+            style={{
+              background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)'
+            }}
+          />
         </div>
-        <div className="flex items-center gap-2 self-start">
-          <button 
-            type="button"
-            onClick={() => setShowExportModal(true)}
-            className="bg-white hover:bg-slate-50 text-blue-600 border border-blue-200 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
-            title="Export filtered staff records"
-          >
-            <Download className="w-4 h-4 stroke-[2.2]" />
-            Export
-          </button>
-          <button 
-            onClick={() => { resetForm(); setIsAdding(true); }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            Onboard New Staff
-          </button>
+
+        {/* Card 2: On Duty Today (Emerald Gradient with Top-Right Radial Glow) */}
+        <div
+          className="p-4 rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+          style={{
+            background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)'
+          }}
+          onClick={() => { setSelectedStatus('onduty'); }}
+          title="Filter by staff on duty"
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
+              <Clock className="w-4.5 h-4.5" />
+            </div>
+            <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider">On Duty Today</span>
+          </div>
+
+          <div className="mt-3 flex items-end justify-between">
+            <div>
+              <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{activeTodayCount}</div>
+              <div className="text-xs text-emerald-700 font-bold mt-1.5 truncate">
+                Active on duty
+              </div>
+            </div>
+
+            {/* Green Mini Sparkline */}
+            <div className="w-16 h-8 shrink-0 relative">
+              <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                <defs>
+                  <linearGradient id="staffGreenGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#059669" stopOpacity="0.45"/>
+                    <stop offset="100%" stopColor="#059669" stopOpacity="0.05"/>
+                  </linearGradient>
+                </defs>
+                <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#staffGreenGrad)" />
+                <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#059669" strokeWidth="2.4" strokeLinecap="round" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Half Gradient Accent Line Beneath Card */}
+          <div 
+            className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+            style={{
+              background: 'linear-gradient(90deg, transparent 0%, #059669 100%)'
+            }}
+          />
+        </div>
+
+        {/* Card 3: On Leave / Absent (Amber Gradient with Bottom-Left Radial Glow) */}
+        <div
+          className="p-4 rounded-2xl border border-amber-200/90 shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+          style={{
+            background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)'
+          }}
+          onClick={() => { setSelectedStatus('onleave'); }}
+          title="Filter by staff on leave"
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/25">
+              <Calendar className="w-4.5 h-4.5" />
+            </div>
+            <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">On Leave / Absent</span>
+          </div>
+
+          <div className="mt-3 flex items-end justify-between">
+            <div>
+              <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{onLeaveCount}</div>
+              <div className="text-xs text-amber-700 font-bold mt-1.5 truncate">
+                Away from duty
+              </div>
+            </div>
+
+            {/* Amber Mini Sparkline */}
+            <div className="w-16 h-8 shrink-0 relative">
+              <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                <defs>
+                  <linearGradient id="staffAmberGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#D97706" stopOpacity="0.45"/>
+                    <stop offset="100%" stopColor="#D97706" stopOpacity="0.05"/>
+                  </linearGradient>
+                </defs>
+                <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22 L 64 32 L 0 32 Z" fill="url(#staffAmberGrad)" />
+                <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22" fill="none" stroke="#D97706" strokeWidth="2.4" strokeLinecap="round" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Half Gradient Accent Line Beneath Card */}
+          <div 
+            className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+            style={{
+              background: 'linear-gradient(90deg, transparent 0%, #D97706 100%)'
+            }}
+          />
+        </div>
+
+        {/* Card 4: Pending Requests (Purple Gradient with Top-Left Radial Glow) */}
+        <div
+          className="p-4 rounded-2xl border border-purple-200/90 shadow-[0_12px_28px_rgba(139,92,246,0.08)] hover:shadow-[0_16px_36px_rgba(139,92,246,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+          style={{
+            background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)'
+          }}
+          title="Pending HR and leave requests"
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/25">
+              <AlertCircle className="w-4.5 h-4.5" />
+            </div>
+            <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider">Pending Requests</span>
+          </div>
+
+          <div className="mt-3 flex items-end justify-between">
+            <div>
+              <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{pendingRequestsCount}</div>
+              <div className="text-xs text-purple-700 font-bold mt-1.5 truncate">
+                Awaiting approval
+              </div>
+            </div>
+
+            {/* Purple Mini Sparkline */}
+            <div className="w-16 h-8 shrink-0 relative">
+              <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                <defs>
+                  <linearGradient id="staffPurpleGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.45"/>
+                    <stop offset="100%" stopColor="#7C3AED" stopOpacity="0.05"/>
+                  </linearGradient>
+                </defs>
+                <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#staffPurpleGrad)" />
+                <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#7C3AED" strokeWidth="2.4" strokeLinecap="round" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Half Gradient Accent Line Beneath Card */}
+          <div 
+            className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+            style={{
+              background: 'linear-gradient(90deg, transparent 0%, #7C3AED 100%)'
+            }}
+          />
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          
-          {/* Search */}
-          <div className="relative flex items-center">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
-            <input 
-              type="text" 
-              placeholder="Search by Name, ID, or Email..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 h-10 rounded-lg text-xs font-medium border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-            />
+      {/* 2. SEARCH & FILTER TOOLBAR MATCHING REFERENCE UI */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-2 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-xs">
+        {/* Left Side: Search Bar */}
+        <div className="relative flex items-center min-w-[260px] max-w-[380px] flex-1">
+          <Search className="absolute left-3 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            className="w-full h-9 pl-9 pr-8 bg-slate-50/80 border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+            placeholder="Search staff by name, role, department..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+          {searchTerm && (
+            <button
+              className="absolute right-2.5 text-slate-400 hover:text-slate-600 font-bold text-xs"
+              onClick={() => setSearchTerm('')}
+              title="Clear search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Right Side: Select Dropdowns & CTA */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Role Dropdown */}
+          <div className="relative inline-flex items-center">
+            <select
+              className="h-9 pl-3 pr-8 bg-white border border-slate-200/90 rounded-xl text-xs font-bold text-slate-700 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer hover:border-slate-300 transition-colors appearance-none"
+              value={selectedRole}
+              onChange={e => setSelectedRole(e.target.value)}
+            >
+              <option value="All">All Roles</option>
+              <option value="doctor">Doctors</option>
+              <option value="receptionist">Receptionists</option>
+              <option value="hr">HR Managers</option>
+              <option value="nurse">Nurses</option>
+              <option value="staff">Other Staff</option>
+            </select>
+            <ChevronDown className="absolute right-2.5 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
           </div>
 
-          {/* Dept filter */}
-          <div className="relative flex items-center">
-            <select 
+          {/* Department Dropdown */}
+          <div className="relative inline-flex items-center">
+            <select
+              className="h-9 pl-3 pr-8 bg-white border border-slate-200/90 rounded-xl text-xs font-bold text-slate-700 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer hover:border-slate-300 transition-colors appearance-none"
               value={selectedDept}
-              onChange={(e) => setSelectedDept(e.target.value)}
-              className="w-full pl-3 pr-8 h-10 rounded-lg text-xs font-semibold border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white appearance-none"
+              onChange={e => setSelectedDept(e.target.value)}
             >
               <option value="All">All Departments</option>
-              {HOSPITAL_DEPARTMENTS.map(dept => (
-                <option key={dept} value={dept}>{dept}</option>
+              {uniqueDepts.map(d => (
+                <option key={d} value={d}>{d}</option>
               ))}
             </select>
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
+            <ChevronDown className="absolute right-2.5 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
           </div>
 
-          {/* Status filter */}
-          <div className="relative flex items-center">
-            <select 
+          {/* Status Dropdown */}
+          <div className="relative inline-flex items-center">
+            <select
+              className="h-9 pl-3 pr-8 bg-white border border-slate-200/90 rounded-xl text-xs font-bold text-slate-700 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer hover:border-slate-300 transition-colors appearance-none"
               value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full pl-3 pr-8 h-10 rounded-lg text-xs font-semibold border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white appearance-none"
+              onChange={e => setSelectedStatus(e.target.value)}
             >
               <option value="All">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="Probation">Probation</option>
-              <option value="Notice Period">Notice Period</option>
-              <option value="Exited">Exited</option>
+              <option value="onduty">On Duty / Active</option>
+              <option value="onleave">On Leave / Absent</option>
+              <option value="weeklyoff">Weekly Off</option>
+              <option value="inactive">Inactive / Deactivated</option>
             </select>
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
+            <ChevronDown className="absolute right-2.5 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
           </div>
 
-          {/* Employment Type filter */}
-          <div className="relative flex items-center">
-            <select 
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full pl-3 pr-8 h-10 rounded-lg text-xs font-semibold border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white appearance-none"
+          {/* Reset Button */}
+          {(searchTerm || selectedRole !== 'All' || selectedDept !== 'All' || selectedStatus !== 'All') && (
+            <button
+              className="h-9 px-3 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer"
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedRole('All');
+                setSelectedDept('All');
+                setSelectedStatus('All');
+              }}
             >
-              <option value="All">All Types</option>
-              <option value="Full-Time">Full-Time</option>
-              <option value="Part-Time">Part-Time</option>
-              <option value="Consultant">Consultant</option>
-              <option value="Contract">Contract</option>
-            </select>
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
-          </div>
+              <X className="w-3.5 h-3.5" />
+              Reset
+            </button>
+          )}
 
+          {/* + Add Staff CTA */}
+          <button
+            className="h-9 px-4 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-md shadow-blue-500/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+            onClick={() => { resetForm(); setIsAdding(true); }}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Staff Member
+          </button>
         </div>
       </div>
 
-      {/* Directory Table */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      {/* 3. STAFF DIRECTORY CARD & FULL DETAILED TABLE */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        
+        {/* Table Subheader */}
+        <div className="flex items-center justify-between p-4 border-b border-slate-100 flex-wrap gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+              <Users className="w-4.5 h-4.5 text-blue-600" />
+              Staff Directory
+            </h3>
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
+              {filteredEmployees.length} {filteredEmployees.length === 1 ? 'staff member' : 'staff members'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowExportModal(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 hover:border-blue-300 rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer"
+            title="Export filtered staff records"
+          >
+            <Download className="w-3.5 h-3.5 stroke-[2.2]" />
+            Export
+          </button>
+        </div>
+
+        {/* Detailed Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/50">
-                <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Employee Name & ID</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Role & Specialization</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Assigned Security Roles</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Weekly Off</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Actions</th>
+              <tr className="border-b border-slate-200/80 bg-slate-50/75">
+                <th className="py-3 px-3 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider text-center w-11">#</th>
+                <th className="py-3 px-4 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider">STAFF</th>
+                <th className="py-3 px-3 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider">ROLE</th>
+                <th className="py-3 px-3 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider">DEPARTMENT</th>
+                <th className="py-3 px-3 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider">CONTACT</th>
+                <th className="py-3 px-3 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider">JOINED</th>
+                <th className="py-3 px-3 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider">DAYS OFF</th>
+                <th className="py-3 px-3 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider">SHIFT / CAPACITY</th>
+                <th className="py-3 px-3 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider">LAST LOGIN</th>
+                <th className="py-3 px-3 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider">STATUS</th>
+                <th className="py-3 pr-4 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider text-right">ACTIONS</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
-              {filteredEmployees.map((emp) => (
-                <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
-                  
-                  {/* Photo & Name */}
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      {emp.photoUrl ? (
-                        <img 
-                          src={emp.photoUrl} 
-                          alt={emp.name} 
-                          className="w-10 h-10 rounded-full object-cover border border-slate-200"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-blue-50 border border-slate-200 text-blue-600 font-bold flex items-center justify-center text-xs shrink-0 select-none">
-                          {emp.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+              {filteredEmployees.map((emp, idx) => {
+                const serialNo = String(idx + 1).padStart(2, '0');
+                const currentStatus = getStaffStatus(emp);
+                const roleKey = (emp.role || emp.assignedRoles?.[0] || 'staff').toLowerCase();
+                const daysOff = getDaysOffString(emp);
+
+                // Avatar colors matching admin panel
+                const avatarBg = roleKey.includes('doctor') ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                                 roleKey.includes('reception') ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                                 roleKey.includes('nurse') ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                                 'bg-blue-100 text-blue-700 border border-blue-200';
+
+                // Role pill badge
+                const rolePillClass = roleKey.includes('doctor') ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                      roleKey.includes('reception') ? 'bg-amber-50 text-amber-800 border border-amber-200' :
+                                      roleKey.includes('nurse') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                      roleKey.includes('hr') ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                      'bg-slate-50 text-slate-700 border border-slate-200';
+
+                // Status dot pill
+                const statusDotClass = (currentStatus === 'On Duty' || currentStatus === 'Active') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                       currentStatus === 'On Leave' ? 'bg-amber-50 text-amber-800 border border-amber-200' :
+                                       currentStatus === 'Weekly Off' ? 'bg-orange-50 text-orange-800 border border-orange-200' :
+                                       'bg-slate-100 text-slate-600 border border-slate-200';
+
+                return (
+                  <tr key={emp.id} className="hover:bg-slate-50/60 transition-colors">
+                    
+                    {/* 1. # */}
+                    <td className="text-center font-extrabold text-slate-400 text-[11.5px] py-3.5 px-3">
+                      {serialNo}
+                    </td>
+
+                    {/* 2. STAFF */}
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-2.5">
+                        {emp.photoUrl ? (
+                          <img 
+                            src={emp.photoUrl} 
+                            alt={emp.name} 
+                            className="w-8.5 h-8.5 rounded-lg object-cover border border-slate-200 shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className={`w-8.5 h-8.5 rounded-lg ${avatarBg} font-extrabold text-xs flex items-center justify-center shrink-0 select-none shadow-2xs`}>
+                            {getInitials(emp.name)}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div 
+                            onClick={() => onSelectEmployee(emp.id)}
+                            className="font-extrabold text-slate-900 hover:text-blue-600 cursor-pointer transition-colors text-xs truncate max-w-[160px]"
+                          >
+                            {emp.name}
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-medium truncate max-w-[160px] mt-0.5">
+                            {emp.designation || (roleKey.includes('doctor') ? 'Consultant Practitioner' : roleKey.includes('reception') ? 'Receptionist' : roleKey.includes('hr') ? 'HR Manager' : 'Staff Member')}
+                          </div>
                         </div>
-                      )}
-                      <div>
-                        <h4 
-                          onClick={() => onSelectEmployee(emp.id)}
-                          className="font-semibold text-slate-900 hover:text-blue-600 cursor-pointer transition-colors"
-                        >
-                          {emp.name}
-                        </h4>
                       </div>
-                    </div>
-                  </td>
+                    </td>
 
-                  {/* Role & Specialization */}
-                  <td className="px-6 py-4">
-                    <div className="text-slate-700 font-medium">{emp.assignedRoles?.[0] || emp.designation || 'Staff'}</div>
-                    {(emp.specialty || emp.department) && (
-                      <span className="text-[10px] text-slate-400 block mt-0.5">{emp.specialty || emp.department}</span>
-                    )}
-                  </td>
-                  {/* Assigned Security Roles */}
-                  <td className="px-6 py-4">
-                    <div className="flex flex-wrap gap-1">
-                      {emp.assignedRoles.map((role) => (
-                        <span 
-                          key={role} 
-                          className="px-2 py-0.5 bg-blue-50 text-blue-700 font-semibold rounded text-[10px] flex items-center gap-0.5"
-                        >
-                          <Shield className="w-3 h-3" />
-                          {role}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
+                    {/* 3. ROLE */}
+                    <td className="py-3.5 px-3 whitespace-nowrap">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${rolePillClass}`}>
+                        {emp.assignedRoles?.[0]?.toUpperCase() || emp.role?.toUpperCase() || 'STAFF'}
+                      </span>
+                    </td>
 
-                  {/* Weekly Off */}
-                  <td className="px-6 py-4">
-                    <span className="px-2 py-0.5 bg-orange-50 text-orange-700 font-semibold rounded text-[10px]">
-                      {Array.isArray(emp.weeklyOff) ? emp.weeklyOff.join(', ') : (emp.weeklyOff || 'Sunday')}
-                    </span>
-                  </td>
+                    {/* 4. DEPARTMENT */}
+                    <td className="py-3.5 px-3 whitespace-nowrap">
+                      <span className="px-2.5 py-0.5 bg-slate-50 text-slate-700 border border-slate-200/90 rounded text-[11px] font-semibold">
+                        {emp.department || 'Outpatient Services'}
+                      </span>
+                    </td>
 
-                  {/* Status Badge */}
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                      emp.status === 'Active' ? 'bg-emerald-50 text-emerald-700' :
-                      emp.status === 'Probation' ? 'bg-orange-50 text-orange-700' :
-                      emp.status === 'Notice Period' ? 'bg-red-50 text-red-700' :
-                      'bg-slate-100 text-slate-500'
-                    }`}>
-                      {emp.status}
-                    </span>
-                  </td>
+                    {/* 5. CONTACT */}
+                    <td className="py-3.5 px-3">
+                      <div className="font-extrabold text-slate-800 text-[11.5px] font-mono whitespace-nowrap">
+                        {emp.phone || emp.staff_id || '—'}
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-medium truncate max-w-[150px] mt-0.5" title={emp.email || ''}>
+                        {emp.email || '—'}
+                      </div>
+                    </td>
 
-                  {/* Actions Column */}
-                  <td className="px-6 py-4 text-right space-x-1.5 whitespace-nowrap">
-                    <button 
-                      onClick={() => onSelectEmployee(emp.id)}
-                      className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                      title="View Profile"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    {/* 6. JOINED */}
+                    <td className="py-3.5 px-3 whitespace-nowrap">
+                      <div className="font-bold text-slate-800 text-xs">
+                        {emp.joiningDate || '1 Sept 2026'}
+                      </div>
+                      <div className="text-[10.5px] text-slate-500 font-semibold mt-0.5">
+                        {emp.employmentType || 'Full-Time'}
+                      </div>
+                    </td>
+
+                    {/* 7. DAYS OFF */}
+                    <td className="py-3.5 px-3 whitespace-nowrap">
+                      <div className="font-bold text-slate-800 text-xs">
+                        {daysOff}
+                      </div>
+                      <div className="text-[10.5px] text-slate-400 font-medium mt-0.5">
+                        {emp.workLocation || 'Main Wing'}
+                      </div>
+                    </td>
+
+                    {/* 8. SHIFT / CAPACITY */}
+                    <td className="py-3.5 px-3 whitespace-nowrap">
+                      <div className="font-bold text-slate-800 text-xs">
+                        {emp.shiftName || 'General Shift'}
+                      </div>
+                      <div className="text-[10.5px] text-slate-500 font-semibold mt-0.5">
+                        {roleKey.includes('doctor') ? `${emp.doctorSlots?.length || 10} slots/day` : 'Standard'}
+                      </div>
+                    </td>
+
+                    {/* 9. LAST LOGIN */}
+                    <td className="py-3.5 px-3 whitespace-nowrap">
+                      <div className="text-xs text-slate-600 font-semibold">
+                        {emp.lastLogin || 'Active Today'}
+                      </div>
+                    </td>
+
+                    {/* 10. STATUS */}
+                    <td className="py-3.5 px-3 whitespace-nowrap">
+                      <span className={`px-2.5 py-0.8 rounded-full text-[10.5px] font-bold inline-flex items-center gap-1.5 ${statusDotClass}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                        {currentStatus}
+                      </span>
+                    </td>
+
+                    {/* 11. ACTIONS */}
+                    <td className="py-3.5 pr-4 text-right whitespace-nowrap">
+                      <button
+                        onClick={() => onSelectEmployee(emp.id)}
+                        className="px-3 py-1 bg-white hover:bg-blue-50 text-blue-600 border border-blue-200 hover:border-blue-300 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                        title="View Employee Profile"
+                      >
+                        View Profile
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {filteredEmployees.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
-                    No hospital staff records matching the specified filters.
+                  <td colSpan={11} className="px-6 py-16 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center">
+                      <Users className="w-10 h-10 text-slate-300 mb-2" />
+                      <p className="font-bold text-sm text-slate-600">No staff members found</p>
+                      <p className="text-xs text-slate-400 mt-0.5">No records matching the selected search and filter criteria.</p>
+                    </div>
                   </td>
                 </tr>
               )}

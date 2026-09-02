@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import { socket, joinTenantRoom } from '../utils/socket';
 
 // Icons
 import { 
@@ -350,7 +351,39 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
   };
 
   useEffect(() => {
+    const tId = currentUser.tenantId || localStorage.getItem('tenantId');
+    if (tId) {
+      joinTenantRoom(tId);
+    }
+
     fetchData(true);
+
+    const onDataChanged = (data) => {
+      if (data && (data.type === 'leaves' || data.type === 'leave' || data.type === 'attendance' || data.type === 'staff' || data.type === 'users')) {
+        fetchData(false);
+      }
+    };
+
+    const handleSync = (e) => {
+      const { type } = e.detail || {};
+      if (!type || type === 'leaves' || type === 'leave' || type === 'attendance' || type === 'staff' || type === 'all') {
+        fetchData(false);
+      }
+    };
+
+    const onWindowFocus = () => {
+      fetchData(false);
+    };
+
+    socket.on('data_changed', onDataChanged);
+    window.addEventListener('curoxa_sync', handleSync);
+    window.addEventListener('focus', onWindowFocus);
+
+    return () => {
+      socket.off('data_changed', onDataChanged);
+      window.removeEventListener('curoxa_sync', handleSync);
+      window.removeEventListener('focus', onWindowFocus);
+    };
   }, []);
 
   // State manipulation callbacks
@@ -543,7 +576,12 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
       
       setLeaveRequests(prev => prev.map(item => ((item._id === id || item.id === id) ? res.data : item)));
 
-      const emp = employees.find(e => e.id === match.employeeId);
+      const emp = employees.find(e => 
+        e.id === match.employeeId || 
+        e.staff_id === match.employeeId || 
+        e._id === match.employeeId || 
+        (e.name && match.employeeName && e.name.toLowerCase() === match.employeeName.toLowerCase())
+      );
       if (emp && emp.email) {
         try {
           await api.post('/hr/notify-leave', {
@@ -576,7 +614,12 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
       
       setLeaveRequests(prev => prev.map(item => ((item._id === id || item.id === id) ? res.data : item)));
 
-      const emp = employees.find(e => e.id === match.employeeId);
+      const emp = employees.find(e => 
+        e.id === match.employeeId || 
+        e.staff_id === match.employeeId || 
+        e._id === match.employeeId || 
+        (e.name && match.employeeName && e.name.toLowerCase() === match.employeeName.toLowerCase())
+      );
       if (emp && emp.email) {
         try {
           await api.post('/hr/notify-leave', {
@@ -1061,6 +1104,8 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
                 allAssets={assets}
                 onBack={isAdminOrHR ? () => setSelectedEmployeeId(null) : null}
                 onUpdateEmployee={handleUpdateEmployee}
+                onApproveLeave={handleApproveLeave}
+                onRejectLeave={handleRejectLeave}
                 isAdminOrHR={isAdminOrHR}
               />
             ) : (

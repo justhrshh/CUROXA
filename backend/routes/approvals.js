@@ -506,6 +506,146 @@ router.patch('/:id', verifyToken, isAdmin, tenantMiddleware, async (req, res) =>
       }
     }
 
+    // ── LEAVE ALLOCATION APPROVAL ──────────────────────────────────────────────
+    if (approval.type === 'leave_allocation' && status === 'approved') {
+      const { updateLeavePolicy, getLeavePolicy } = require('../services/leaveService');
+      const User = require('../models/User');
+      const LeaveLedger = require('../models/LeaveLedger');
+      const { staffId: targetStaffId, changes, currentValues } = approval.details || {};
+
+      if (targetStaffId && changes) {
+        const mongoose = require('mongoose');
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1; // 1-indexed
+        const approvedBy = req.user?.name || 'Admin';
+        const reason = `HR Allocation approved by ${approvedBy} — ${approval.comment || ''}`;
+
+        // 1. Update the User document's stored allocation fields
+        const isObjId = mongoose.Types.ObjectId.isValid(targetStaffId) && String(new mongoose.Types.ObjectId(targetStaffId)) === targetStaffId;
+        const userQuery = isObjId
+          ? { tenantId: req.tenantId, $or: [{ staff_id: targetStaffId }, { _id: targetStaffId }] }
+          : { tenantId: req.tenantId, staff_id: targetStaffId };
+
+        await User.updateOne(userQuery, {
+          $set: {
+            carriedForwardLeaves: changes.carriedForwardLeaves ?? 0,
+            monthlyLeaveAllocation: {
+              sick: changes.sick ?? 0,
+              casual: changes.casual ?? 0,
+              annual: changes.annual ?? 0
+            }
+          }
+        });
+
+        // 2. Update LeavePolicy monthly accrual rates going forward
+        const policy = await getLeavePolicy(req.tenantId);
+        if (policy && Array.isArray(policy.leaveTypes)) {
+          const updatedTypes = policy.leaveTypes.map(lt => {
+            const code = (lt.code || '').toUpperCase();
+            const t = lt.toObject ? lt.toObject() : { ...lt };
+            if (code === 'SICK' || lt.leaveType?.toLowerCase().includes('sick')) {
+              t.monthlyAccrual = Number(changes.sick) ?? lt.monthlyAccrual;
+            } else if (code === 'CASUAL' || lt.leaveType?.toLowerCase().includes('casual')) {
+              t.monthlyAccrual = Number(changes.casual) ?? lt.monthlyAccrual;
+            } else if (code === 'EARNED' || lt.leaveType?.toLowerCase().includes('earned') || lt.leaveType?.toLowerCase().includes('annual')) {
+              t.monthlyAccrual = Number(changes.annual) ?? lt.monthlyAccrual;
+            }
+            return t;
+          });
+          await updateLeavePolicy(req.tenantId, { leaveTypes: updatedTypes }, approvedBy);
+        }
+
+        // 3. Write ADJUSTMENT ledger entries:
+        //    Find what was actually accrued this year vs expected at new rate, write the diff
+        const monthsElapsed = currentMonth;
+
+        const leaveAdjustments = [
+          { leaveType: 'Sick Leave',   code: 'SICK',   newRate: Number(changes.sick)   || 0 },
+          { leaveType: 'Casual Leave', code: 'CASUAL', newRate: Number(changes.casual) || 0 },
+          { leaveType: 'Earned Leave', code: 'EARNED', newRate: Number(changes.annual) || 0 }
+        ];
+
+        for (const adj of leaveAdjustments) {
+          // Sum all MONTHLY_ACCRUAL entries for this leave type this year
+          const accrualEntries = await LeaveLedger.find({
+            tenantId: req.tenantId,
+            employeeId: targetStaffId,
+            year: currentYear,
+            transactionType: 'MONTHLY_ACCRUAL',
+            leaveTypeCode: adj.code
+          }).lean();
+          const totalAccrued = accrualEntries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+          // Expected at new rate for months elapsed
+          const expectedAccrual = parseFloat((adj.newRate * monthsElapsed).toFixed(2));
+          const adjustmentAmount = parseFloat((expectedAccrual - totalAccrued).toFixed(2));
+
+          if (adjustmentAmount === 0) continue;
+
+          // Check idempotency
+          const existingAdj = await LeaveLedger.findOne({
+            tenantId: req.tenantId,
+            employeeId: targetStaffId,
+            year: currentYear,
+            month: currentMonth,
+            transactionType: 'ADJUSTMENT',
+            leaveTypeCode: adj.code,
+            'metadata.approvalId': String(approval._id)
+          });
+
+          if (!existingAdj) {
+            await LeaveLedger.create({
+              tenantId: req.tenantId,
+              employeeId: targetStaffId,
+              year: currentYear,
+              month: currentMonth,
+              leaveType: adj.leaveType,
+              leaveTypeCode: adj.code,
+              transactionType: 'ADJUSTMENT',
+              amount: adjustmentAmount,
+              reason,
+              actor: approvedBy,
+              metadata: {
+                approvalId: String(approval._id),
+                newRate: adj.newRate,
+                totalAccrued,
+                expectedAccrual,
+                monthsElapsed
+              }
+            });
+          }
+        }
+
+        // 4. Write CARRY_FORWARD ledger entry if carriedForwardLeaves > 0
+        if ((changes.carriedForwardLeaves || 0) > 0) {
+          const existingCF = await LeaveLedger.findOne({
+            tenantId: req.tenantId,
+            employeeId: targetStaffId,
+            year: currentYear,
+            transactionType: 'CARRY_FORWARD',
+            leaveTypeCode: 'EARNED',
+            'metadata.approvalId': String(approval._id)
+          });
+          if (!existingCF) {
+            await LeaveLedger.create({
+              tenantId: req.tenantId,
+              employeeId: targetStaffId,
+              year: currentYear,
+              month: 1,
+              leaveType: 'Earned Leave',
+              leaveTypeCode: 'EARNED',
+              transactionType: 'CARRY_FORWARD',
+              amount: Number(changes.carriedForwardLeaves),
+              reason: reason,
+              actor: approvedBy,
+              metadata: { approvalId: String(approval._id) }
+            });
+          }
+        }
+      }
+    }
+
     // Update and save approval document
     approval.status = status;
     approval.comment = comment || '';

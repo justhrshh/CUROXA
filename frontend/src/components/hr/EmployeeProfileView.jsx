@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   User, Shield, CalendarDays, Wallet, Trophy, FileLock, ClipboardList, 
   MapPin, Clock, Phone, Mail, FileText, CheckCircle, AlertCircle, Printer, Plus, AlertTriangle,
-  ShieldCheck, X, Settings, Check, Trash2, Trash, Edit3
+  ShieldCheck, X, Settings, Check, Trash2, Trash, Edit3, ChevronRight, History, ArrowDownRight, ArrowUpRight, Send
 } from 'lucide-react';
+import api from '../../utils/api';
 
 const ALL_TIME_SLOTS = [
   '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
@@ -38,6 +39,8 @@ export default function EmployeeProfileView({
   allAssets = [],
   onBack,
   onUpdateEmployee,
+  onApproveLeave,
+  onRejectLeave,
   isAdminOrHR = false
 }) {
   const [activeTab, setActiveTab] = useState('Overview');
@@ -50,6 +53,13 @@ export default function EmployeeProfileView({
   const [damageReportAssetId, setDamageReportAssetId] = useState(null);
   const [damageComments, setDamageComments] = useState('');
 
+  // Live Authoritative Leave Management states
+  const [leaveYear, setLeaveYear] = useState(() => new Date().getFullYear());
+  const [leaveBalances, setLeaveBalances] = useState(null);
+  const [leaveLedger, setLeaveLedger] = useState([]);
+  const [leavePolicy, setLeavePolicy] = useState(null);
+  const [isLeavesLoading, setIsLeavesLoading] = useState(false);
+
   // Settings edit states (synchronized with employee prop)
   const [assignedRoles, setAssignedRoles] = useState([]);
   const [permissions, setPermissions] = useState(null);
@@ -57,6 +67,7 @@ export default function EmployeeProfileView({
   const [shiftName, setShiftName] = useState('');
   const [carriedForwardLeaves, setCarriedForwardLeaves] = useState(0);
   const [monthlyLeaveAllocation, setMonthlyLeaveAllocation] = useState({ sick: 1, casual: 1, annual: 1.25 });
+  const [leaveAllocationReason, setLeaveAllocationReason] = useState('');
   const [employeeDocuments, setEmployeeDocuments] = useState([]);
 
   // Upload/Preview states for documents tab
@@ -197,6 +208,77 @@ export default function EmployeeProfileView({
     }
   };
 
+  // Fetch authoritative leave data for the selected employee
+  const fetchStaffLeaveData = async (targetYear = leaveYear, emp = employee) => {
+    if (!emp) return;
+    const targetEmpId = emp.staff_id || emp.id || emp._id;
+    if (!targetEmpId) return;
+
+    setIsLeavesLoading(true);
+    try {
+      const params = { staff_id: targetEmpId, year: targetYear };
+      const [balanceRes, ledgerRes, policyRes] = await Promise.all([
+        api.get('/hr/leave-balances', { params }),
+        api.get('/hr/leave-ledger', { params }),
+        api.get('/hr/leave-policy')
+      ]);
+
+      setLeaveBalances(balanceRes.data);
+      setLeaveLedger(Array.isArray(ledgerRes.data) ? ledgerRes.data : []);
+      setLeavePolicy(policyRes.data);
+
+      if (policyRes.data && policyRes.data.leaveTypes) {
+        const sickLt = policyRes.data.leaveTypes.find(lt => lt.code === 'SICK' || lt.leaveType?.toLowerCase().includes('sick'));
+        const casualLt = policyRes.data.leaveTypes.find(lt => lt.code === 'CASUAL' || lt.leaveType?.toLowerCase().includes('casual'));
+        const annualLt = policyRes.data.leaveTypes.find(lt => lt.code === 'EARNED' || lt.leaveType?.toLowerCase().includes('earned') || lt.leaveType?.toLowerCase().includes('annual'));
+
+        if (!emp.monthlyLeaveAllocation) {
+          setMonthlyLeaveAllocation({
+            sick: sickLt?.monthlyAccrual ?? 0.5,
+            casual: casualLt?.monthlyAccrual ?? 0.5,
+            annual: annualLt?.monthlyAccrual ?? 1.25
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch staff leave data in EmployeeProfileView:', err);
+    } finally {
+      setIsLeavesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (employee) {
+      fetchStaffLeaveData(leaveYear, employee);
+    }
+  }, [employee?.id, employee?.staff_id, leaveYear]);
+
+  // Helper to extract balance item for any leave type
+  const getBalanceForType = (typeName) => {
+    if (!leaveBalances || !leaveBalances.balances) return null;
+    const clean = String(typeName).trim().toLowerCase();
+    const entry = Object.values(leaveBalances.balances).find(
+      b => b.leaveType.toLowerCase() === clean || b.code.toLowerCase() === clean
+    );
+    return entry || null;
+  };
+
+  const sickBal = getBalanceForType('Sick Leave') || getBalanceForType('SICK');
+  const casualBal = getBalanceForType('Casual Leave') || getBalanceForType('CASUAL');
+  const earnedBal = getBalanceForType('Earned Leave') || getBalanceForType('Annual Leave') || getBalanceForType('EARNED');
+  const compBal = getBalanceForType('Comp Off') || getBalanceForType('COMP_OFF');
+  const matBal = getBalanceForType('Maternity Leave') || getBalanceForType('MATERNITY');
+  const patBal = getBalanceForType('Paternity Leave') || getBalanceForType('PATERNITY');
+  const lwpBal = getBalanceForType('Loss of Pay') || getBalanceForType('LWP');
+
+  const tenantStartYear = leaveBalances?.tenantStartYear || leavePolicy?.tenantStartYear || 2026;
+  const currentYear = new Date().getFullYear();
+  const maxYear = currentYear + 1;
+  const availableYears = [];
+  for (let y = Math.max(2000, tenantStartYear); y <= maxYear; y++) {
+    availableYears.push(y);
+  }
+
   // Local document state for simulation
   const [documentsList, setDocumentsList] = useState([]);
 
@@ -215,10 +297,55 @@ export default function EmployeeProfileView({
     );
   }
 
-  // Derived records
-  const leaves = allLeaveRequests.filter(l => l.employeeId === employee.id);
-  const attendance = allAttendanceRecords.filter(a => a.employeeId === employee.id);
-  const assets = allAssets.filter(as => as.allocatedToEmployeeId === employee.id);
+  // Robust matching for child records across id, staff_id, _id and name
+  const leaves = allLeaveRequests.filter(l => {
+    if (!l || !employee) return false;
+    const empId = String(employee.id || '');
+    const staffId = String(employee.staff_id || '');
+    const empDbId = String(employee._id || '');
+    const lEmpId = String(l.employeeId || '');
+    const lName = String(l.employeeName || '').toLowerCase().trim();
+    const empName = String(employee.name || '').toLowerCase().trim();
+
+    return (
+      (empId && lEmpId === empId) ||
+      (staffId && lEmpId === staffId) ||
+      (empDbId && lEmpId === empDbId) ||
+      (empName && lName && empName === lName)
+    );
+  });
+
+  const attendance = allAttendanceRecords.filter(a => {
+    if (!a || !employee) return false;
+    const empId = String(employee.id || '');
+    const staffId = String(employee.staff_id || '');
+    const empDbId = String(employee._id || '');
+    const aEmpId = String(a.employeeId || '');
+    const aName = String(a.employeeName || '').toLowerCase().trim();
+    const empName = String(employee.name || '').toLowerCase().trim();
+
+    return (
+      (empId && aEmpId === empId) ||
+      (staffId && aEmpId === staffId) ||
+      (empDbId && aEmpId === empDbId) ||
+      (empName && aName && empName === aName)
+    );
+  });
+
+  const assets = allAssets.filter(as => {
+    if (!as || !employee) return false;
+    const empId = String(employee.id || '');
+    const staffId = String(employee.staff_id || '');
+    const asEmpId = String(as.allocatedToEmployeeId || '');
+    const asName = String(as.allocatedToName || '').toLowerCase().trim();
+    const empName = String(employee.name || '').toLowerCase().trim();
+
+    return (
+      (empId && asEmpId === empId) ||
+      (staffId && asEmpId === staffId) ||
+      (empName && asName && empName === asName)
+    );
+  });
 
   // Generate salary slips dynamically based on joining date
   const getEmployeeSalarySlips = () => {
@@ -315,6 +442,17 @@ export default function EmployeeProfileView({
     setDamageComments('');
   };
 
+  const getRoleGradient = (role = '') => {
+    const r = String(role).toLowerCase();
+    if (r.includes('doctor')) return 'from-blue-600 to-cyan-500 text-white shadow-blue-500/20';
+    if (r.includes('reception')) return 'from-purple-600 to-pink-500 text-white shadow-purple-500/20';
+    if (r.includes('nurse')) return 'from-teal-600 to-emerald-500 text-white shadow-emerald-500/20';
+    if (r.includes('lab') || r.includes('patholog')) return 'from-amber-500 to-orange-500 text-white shadow-orange-500/20';
+    if (r.includes('pharm')) return 'from-emerald-600 to-teal-500 text-white shadow-teal-500/20';
+    if (r.includes('hr') || r.includes('admin')) return 'from-indigo-600 to-violet-600 text-white shadow-indigo-500/20';
+    return 'from-slate-700 to-slate-800 text-white shadow-slate-500/20';
+  };
+
   return (
     <div className="space-y-6" id="employee-profile-workspace">
       {toast && (
@@ -365,36 +503,46 @@ export default function EmployeeProfileView({
 
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+      {/* Employee Profile Header Card */}
+      <div 
+        className="rounded-3xl border border-blue-200/70 shadow-[0_12px_40px_rgba(37,99,235,0.08)] p-6 relative overflow-hidden"
+        style={{
+          background: 'radial-gradient(ellipse at 100% 0%, rgba(99,102,241,0.18) 0%, transparent 55%), radial-gradient(ellipse at 0% 100%, rgba(37,99,235,0.12) 0%, transparent 50%), linear-gradient(135deg, #FFFFFF 0%, #F0F6FF 50%, #EEF2FF 100%)'
+        }}
+      >
+        {/* Ambient Glows */}
+        <div className="absolute top-0 right-0 w-72 h-72 bg-gradient-to-bl from-indigo-400/20 via-blue-400/12 to-transparent rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-blue-300/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+        
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
           <div className="flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
             {employee.photoUrl ? (
               <img 
                 src={employee.photoUrl} 
                 alt={employee.name} 
-                className="w-24 h-24 rounded-2xl object-cover border-4 border-slate-50 shadow-md"
+                className="w-24 h-24 rounded-3xl object-cover border-4 border-white shadow-lg ring-4 ring-blue-100/80 shrink-0"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-24 h-24 rounded-2xl bg-blue-50 border-4 border-slate-50 text-blue-600 font-bold flex items-center justify-center text-2xl shadow-md select-none shrink-0">
+              <div className={`w-24 h-24 rounded-3xl bg-gradient-to-tr ${getRoleGradient(employee.role || employee.assignedRoles?.[0])} border-4 border-white font-black flex items-center justify-center text-2xl shadow-lg ring-4 ring-blue-100/80 select-none shrink-0`}>
                 {employee.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
               </div>
             )}
-            <div className="space-y-1">
-              <div className="flex flex-col sm:flex-row items-center gap-2">
-                <h2 className="text-xl font-display font-bold text-slate-900">{employee.name}</h2>
-                <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 font-bold rounded-md text-[10px] uppercase font-mono">
-                  {employee.id}
+            <div className="space-y-1.5">
+              <div className="flex flex-col sm:flex-row items-center gap-2.5">
+                <h2 className="text-2xl font-display font-extrabold text-slate-900 tracking-tight">{employee.name}</h2>
+                <span className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold rounded-lg text-[10.5px] uppercase font-mono shadow-2xs">
+                  {employee.staff_id || employee.id}
                 </span>
               </div>
-              <p className="text-slate-600 font-medium text-xs flex items-center justify-center sm:justify-start gap-1">
-                <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                {employee.designation} &bull; {employee.department}
+              <p className="text-slate-600 font-semibold text-xs flex items-center justify-center sm:justify-start gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                {employee.designation || 'Staff Practitioner'} &bull; <span className="text-blue-700 font-bold">{employee.department}</span>
               </p>
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5 mt-2">
-                {employee.assignedRoles.map(role => (
-                  <span key={role} className="px-2 py-0.5 bg-slate-100 text-slate-600 font-semibold rounded text-[10px] inline-flex items-center gap-0.5">
-                    <Shield className="w-3 h-3 text-slate-400" />
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5 pt-1">
+                {(employee.assignedRoles || []).map(role => (
+                  <span key={role} className="px-2.5 py-0.8 bg-white/90 text-blue-800 border border-blue-200/80 font-bold rounded-lg text-[10.5px] inline-flex items-center gap-1 shadow-2xs">
+                    <Shield className="w-3 h-3 text-blue-600" />
                     {role}
                   </span>
                 ))}
@@ -402,20 +550,21 @@ export default function EmployeeProfileView({
             </div>
           </div>
 
-          <div className="flex flex-wrap sm:flex-nowrap gap-4 w-full lg:w-auto border-t lg:border-t-0 pt-4 lg:pt-0 border-slate-100">
-            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100 w-full sm:w-32 text-center sm:text-left">
-              <span className="text-[10px] text-slate-400 block uppercase font-bold">JOINING DATE</span>
-              <span className="text-xs font-semibold text-slate-800">{employee.joiningDate}</span>
+          <div className="flex flex-wrap sm:flex-nowrap gap-3 w-full lg:w-auto border-t lg:border-t-0 pt-4 lg:pt-0 border-slate-200/70">
+            <div className="bg-white/90 backdrop-blur-xs p-3.5 rounded-2xl border border-blue-100/80 shadow-2xs w-full sm:w-34 text-center sm:text-left">
+              <span className="text-[10px] text-slate-400 block uppercase font-bold tracking-wider">JOINING DATE</span>
+              <span className="text-xs font-bold text-slate-800 font-mono mt-0.5 block">{employee.joiningDate || '-'}</span>
             </div>
-            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100 w-full sm:w-32 text-center sm:text-left">
-              <span className="text-[10px] text-slate-400 block uppercase font-bold">GRADE TIER</span>
-              <span className="text-xs font-semibold text-slate-800">{employee.grade}</span>
+            <div className="bg-white/90 backdrop-blur-xs p-3.5 rounded-2xl border border-blue-100/80 shadow-2xs w-full sm:w-34 text-center sm:text-left">
+              <span className="text-[10px] text-slate-400 block uppercase font-bold tracking-wider">GRADE TIER</span>
+              <span className="text-xs font-bold text-slate-800 font-mono mt-0.5 block">{employee.grade || 'G1 - Level I'}</span>
             </div>
-            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100 w-full sm:w-32 text-center sm:text-left">
-              <span className="text-[10px] text-slate-400 block uppercase font-bold">EMPLOYEE STATUS</span>
-              <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold mt-1 ${
-                employee.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'
+            <div className="bg-white/90 backdrop-blur-xs p-3.5 rounded-2xl border border-blue-100/80 shadow-2xs w-full sm:w-34 text-center sm:text-left">
+              <span className="text-[10px] text-slate-400 block uppercase font-bold tracking-wider">EMPLOYEE STATUS</span>
+              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10.5px] font-extrabold mt-1 shadow-2xs ${
+                employee.status === 'Active' ? 'bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-800 border border-emerald-200' : 'bg-gradient-to-r from-orange-50 to-amber-50 text-orange-800 border border-orange-200'
               }`}>
+                {employee.status === 'Active' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
                 {employee.status}
               </span>
             </div>
@@ -423,55 +572,69 @@ export default function EmployeeProfileView({
         </div>
       </div>
 
-      {/* Tabs Navigation (Inspired by Keka) */}
-      <div className="flex border-b border-slate-200 overflow-x-auto whitespace-nowrap bg-white px-6 rounded-xl border border-slate-100 shadow-sm scrollbar-none">
-        {(() => {
-          const isDoctor = employee.role === 'doctor' || 
-                           (employee.assignedRoles && employee.assignedRoles.some(r => r.toLowerCase() === 'doctor')) ||
-                           (employee.designation && employee.designation.toLowerCase().includes('doctor'));
-          const tabsList = [
-            { id: 'Overview', label: 'Overview', icon: ClipboardList },
-            { id: 'Personal', label: 'Personal Information', icon: User },
-            { id: 'Professional', label: 'Professional Info', icon: MapPin },
-            { id: 'Attendance', label: 'Attendance logs', icon: Clock },
-            { id: 'Leave', label: 'Leave & Balance', icon: CalendarDays },
-            { id: 'Documents', label: 'Verification Docs', icon: FileLock },
-          ];
+      {/* Tabs Navigation (Modern Gradient Pill Bar) */}
+      <div className="bg-white/95 p-1.5 rounded-2xl border border-slate-200/80 shadow-sm overflow-x-auto scrollbar-none backdrop-blur-xs">
+        <div className="flex gap-1.5 min-w-max">
+          {(() => {
+            const isDoctor = employee.role === 'doctor' || 
+                             (employee.assignedRoles && employee.assignedRoles.some(r => r.toLowerCase() === 'doctor')) ||
+                             (employee.designation && employee.designation.toLowerCase().includes('doctor'));
+            const tabsList = [
+              { id: 'Overview', label: 'Overview', icon: ClipboardList },
+              { id: 'Personal', label: 'Personal Information', icon: User },
+              { id: 'Professional', label: 'Professional Info', icon: MapPin },
+              { id: 'Attendance', label: 'Attendance logs', icon: Clock },
+              { id: 'Leave', label: 'Leave & Balance', icon: CalendarDays },
+              { id: 'Documents', label: 'Verification Docs', icon: FileLock },
+            ];
 
-          if (isDoctor) {
-            tabsList.push({ id: 'Slots', label: 'Appointment Slots', icon: Clock });
-          }
-          return tabsList.map((tab) => {
-            const IconComponent = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-3.5 text-xs font-semibold border-b-2 transition-all ${
-                  activeTab === tab.id
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <IconComponent className="w-4 h-4" />
-                {tab.label}
-              </button>
-            );
-          });
-        })()}
+            if (isDoctor) {
+              tabsList.push({ id: 'Slots', label: 'Appointment Slots', icon: Clock });
+            }
+            return tabsList.map((tab) => {
+              const IconComponent = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-md shadow-blue-500/25'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                  }`}
+                >
+                  <IconComponent className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                  {tab.label}
+                </button>
+              );
+            });
+          })()}
+        </div>
       </div>
 
       {/* Profile Tab Contents */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm min-h-[300px]">
+      <div 
+        className="p-6 rounded-3xl border border-slate-200/60 shadow-sm min-h-[300px]"
+        style={{ background: 'linear-gradient(135deg, #FAFBFF 0%, #F8FAFC 50%, #F5F7FF 100%)' }}
+      >
         
         {/* TAB 1: Overview */}
         {activeTab === 'Overview' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-2 space-y-6">
+            <div className="md:col-span-2 space-y-5">
               
               {/* Overview brief */}
-              <div>
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">Professional Bio</h3>
+              <div
+                className="p-5 rounded-2xl border border-indigo-100/80 shadow-[0_4px_16px_rgba(99,102,241,0.04)] relative overflow-hidden"
+                style={{ background: 'radial-gradient(ellipse at 100% 0%, rgba(99,102,241,0.1) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 60%, #EEF2FF 100%)' }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-indigo-600 to-blue-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <User className="w-3.5 h-3.5" />
+                  </div>
+                  <h3 className="text-xs font-extrabold text-indigo-900 uppercase tracking-wider">Professional Bio</h3>
+                </div>
                 <p className="text-xs text-slate-600 leading-relaxed">
                   {employee.name} serves as a {employee.designation || 'Staff Practitioner'} in the {employee.department || 'Clinical Operations'} division. 
                   Having joined our hospital on {employee.joiningDate || 'recently'}, {employee.gender === 'Male' ? 'he' : employee.gender === 'Female' ? 'she' : 'they'} maintains an active operational footprint 
@@ -480,38 +643,51 @@ export default function EmployeeProfileView({
               </div>
 
               {/* General Work parameters */}
-              <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-6">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold block">REPORTING MANAGER</span>
-                  <span className="text-xs font-semibold text-slate-800">{employee.reportingManagerName || 'None assigned'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold block">HOSPITAL SHIFT WORK</span>
-                  <span className="text-xs font-semibold text-slate-800">{employee.shiftName || 'General Shift'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold block">OFFICIAL EMAIL</span>
-                  <span className="text-xs font-semibold text-slate-800">{employee.email}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold block">PHONE CONTACT</span>
-                  <span className="text-xs font-semibold text-slate-800">{employee.phone || 'Not provided'}</span>
+              <div
+                className="p-5 rounded-2xl border border-blue-100/80 shadow-[0_4px_16px_rgba(37,99,235,0.04)] relative overflow-hidden"
+                style={{ background: 'radial-gradient(ellipse at 0% 100%, rgba(37,99,235,0.08) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #F0F6FF 60%, #EBF4FF 100%)' }}
+              >
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-[10px] text-blue-500 font-extrabold block mb-0.5 uppercase tracking-wider">Reporting Manager</span>
+                    <span className="text-xs font-semibold text-slate-800">{employee.reportingManagerName || 'None assigned'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-blue-500 font-extrabold block mb-0.5 uppercase tracking-wider">Hospital Shift Work</span>
+                    <span className="text-xs font-semibold text-slate-800">{employee.shiftName || 'General Shift'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-blue-500 font-extrabold block mb-0.5 uppercase tracking-wider">Official Email</span>
+                    <span className="text-xs font-semibold text-slate-800">{employee.email}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-blue-500 font-extrabold block mb-0.5 uppercase tracking-wider">Phone Contact</span>
+                    <span className="text-xs font-semibold text-slate-800">{employee.phone || 'Not provided'}</span>
+                  </div>
                 </div>
               </div>
 
               {/* Activity log timeline */}
-              <div className="border-t border-slate-100 pt-6">
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4">Audit & Activity Log</h3>
+              <div
+                className="p-5 rounded-2xl border border-emerald-100/80 shadow-[0_4px_16px_rgba(16,185,129,0.04)] relative overflow-hidden"
+                style={{ background: 'radial-gradient(ellipse at 100% 100%, rgba(16,185,129,0.08) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #F0FDF8 60%, #ECFDF5 100%)' }}
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <History className="w-3.5 h-3.5" />
+                  </div>
+                  <h3 className="text-xs font-extrabold text-emerald-900 uppercase tracking-wider">Audit & Activity Log</h3>
+                </div>
                 <div className="space-y-4">
                   <div className="flex gap-3">
-                    <span className="w-2.5 h-2.5 bg-blue-600 rounded-full mt-1 shrink-0" />
+                    <span className="w-2.5 h-2.5 bg-blue-600 rounded-full mt-1 shrink-0 shadow-sm shadow-blue-400/40" />
                     <div>
                       <span className="text-xs font-semibold text-slate-800">Staff Account Created & Registered</span>
                       <span className="text-[10px] text-slate-400 block">{employee.joiningDate || 'Today'} - Onboarding Workflow</span>
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full mt-1 shrink-0" />
+                    <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full mt-1 shrink-0 shadow-sm shadow-emerald-400/40" />
                     <div>
                       <span className="text-xs font-semibold text-slate-800">Role Credentials Active ({employee.assignedRoles?.[0] || employee.role || 'Staff'})</span>
                       <span className="text-[10px] text-slate-400 block">{employee.joiningDate || 'Today'} - Security Clearance Granted</span>
@@ -523,46 +699,38 @@ export default function EmployeeProfileView({
             </div>
 
             {/* Quick overview side stats */}
-            <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Workspace Quick Stats</h3>
+            <div 
+              className="space-y-4 p-5 rounded-2xl border border-blue-200/80 shadow-[0_4px_20px_rgba(37,99,235,0.03)]"
+              style={{
+                background: 'radial-gradient(circle at 100% 0%, rgba(37, 99, 235, 0.12) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 60%, #EFF6FF 100%)'
+              }}
+            >
+              <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-xs">
+                  <ClipboardList className="w-3.5 h-3.5" />
+                </div>
+                <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Workspace Quick Stats</h3>
+              </div>
               
-              <div className="space-y-3.5">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Attendance Logged</span>
-                  <span className="font-semibold text-slate-900 font-mono">
+              <div className="space-y-3.5 pt-1">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-medium">Attendance Logged</span>
+                  <span className="font-extrabold text-slate-900 font-mono px-2 py-0.5 rounded bg-white border border-slate-200/80 shadow-2xs">
                     {attendance.length > 0 ? `${Math.round((attendance.filter(a => a.status === 'Present' || a.status === 'Late').length / attendance.length) * 100)}%` : 'N/A (New Joiner)'}
                   </span>
                 </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Remaining Annual Leaves</span>
-                  <span className="font-semibold text-slate-900 font-mono">{employee.leaveBalance?.annual || 0} Days</span>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-medium">Remaining Annual / Earned</span>
+                  <span className="font-extrabold text-blue-700 font-mono px-2 py-0.5 rounded bg-blue-50 border border-blue-200/80 shadow-2xs">
+                    {earnedBal ? `${earnedBal.currentBalance} Days` : `${employee.leaveBalance?.annual || 0} Days`}
+                  </span>
                 </div>
 
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Documents Uploaded</span>
-                  <span className="font-semibold text-emerald-600 font-mono">{employeeDocuments.length || 0} Verified</span>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-200">
-                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Assigned Permissions Overview</h4>
-                <div className="grid grid-cols-2 gap-2 text-[10px]">
-                  <div className={`flex items-center gap-1 font-medium ${employee.permissions?.EMR?.view !== false ? 'text-emerald-600' : 'text-red-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${employee.permissions?.EMR?.view !== false ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                    EMR View: {employee.permissions?.EMR?.view !== false ? 'Yes' : 'No'}
-                  </div>
-                  <div className={`flex items-center gap-1 font-medium ${employee.permissions?.['Patient Management']?.edit !== false ? 'text-emerald-600' : 'text-red-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${employee.permissions?.['Patient Management']?.edit !== false ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                    Patient Edit: {employee.permissions?.['Patient Management']?.edit !== false ? 'Yes' : 'No'}
-                  </div>
-                  <div className={`flex items-center gap-1 font-medium ${employee.permissions?.Billing?.edit ? 'text-emerald-600' : 'text-red-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${employee.permissions?.Billing?.edit ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                    Billing Edit: {employee.permissions?.Billing?.edit ? 'Yes' : 'No'}
-                  </div>
-                  <div className={`flex items-center gap-1 font-medium ${employee.permissions?.['Staff Management']?.view ? 'text-emerald-600' : 'text-red-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${employee.permissions?.['Staff Management']?.view ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                    Staff Manage: {employee.permissions?.['Staff Management']?.view ? 'Yes' : 'No'}
-                  </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-medium">Documents Uploaded</span>
+                  <span className="font-extrabold text-emerald-700 font-mono px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200/80 shadow-2xs">
+                    {employeeDocuments.length || 0} Verified
+                  </span>
                 </div>
               </div>
             </div>
@@ -571,11 +739,19 @@ export default function EmployeeProfileView({
 
         {/* TAB 2: Personal Information */}
         {activeTab === 'Personal' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Demographics & Identity Details</h3>
+          <div className="space-y-5">
+            <div
+              className="flex justify-between items-center p-4 rounded-2xl border border-violet-100/80"
+              style={{ background: 'radial-gradient(ellipse at 100% 0%, rgba(139,92,246,0.1) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #FAF8FF 60%, #F5F3FF 100%)' }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-violet-600 to-purple-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <User className="w-3.5 h-3.5" />
+                </div>
+                <h3 className="text-xs font-extrabold text-violet-900 uppercase tracking-wider">Demographics & Identity Details</h3>
+              </div>
               {isAdminOrHR && !isEditingPersonal && (
-                <button onClick={() => setIsEditingPersonal(true)} className="px-4 py-2 text-xs font-bold bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 shadow-sm transition-all flex items-center gap-1.5">
+                <button onClick={() => setIsEditingPersonal(true)} className="px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 shadow-sm transition-all flex items-center gap-1.5">
                   <Edit3 className="w-3.5 h-3.5" />
                   Edit Details
                 </button>
@@ -656,11 +832,18 @@ export default function EmployeeProfileView({
                 </div>
               </div>
 
-              <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100/40 space-y-3 h-fit">
-                <span className="text-xs font-bold text-blue-955 uppercase tracking-wider flex items-center gap-1">
-                  <Phone className="w-4 h-4 text-blue-600" />
-                  Emergency Hospital Contact
-                </span>
+              <div
+                className="p-5 rounded-2xl border border-blue-200/80 shadow-[0_4px_16px_rgba(37,99,235,0.06)] space-y-3 h-fit relative overflow-hidden"
+                style={{ background: 'radial-gradient(ellipse at 0% 0%, rgba(37,99,235,0.12) 0%, transparent 60%), linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 40%, #EFF6FF 100%)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <Phone className="w-3 h-3" />
+                  </div>
+                  <span className="text-xs font-extrabold text-blue-900 uppercase tracking-wider">
+                    Emergency Hospital Contact
+                  </span>
+                </div>
                 <p className="text-[11px] text-blue-700 leading-relaxed">This contact is flagged for critical shift/medical alerts.</p>
                 <div className="space-y-2 text-xs pt-1">
                   <div>
@@ -696,11 +879,19 @@ export default function EmployeeProfileView({
 
         {/* TAB 3: Professional Information */}
         {activeTab === 'Professional' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Hospital Assignment Metadata</h3>
+          <div className="space-y-5">
+            <div
+              className="flex justify-between items-center p-4 rounded-2xl border border-amber-100/80"
+              style={{ background: 'radial-gradient(ellipse at 100% 0%, rgba(245,158,11,0.1) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #FFFCF0 60%, #FEF9E7 100%)' }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-amber-500 to-orange-400 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <Shield className="w-3.5 h-3.5" />
+                </div>
+                <h3 className="text-xs font-extrabold text-amber-900 uppercase tracking-wider">Hospital Assignment Metadata</h3>
+              </div>
               {isAdminOrHR && !isEditingProfessional && (
-                <button onClick={() => setIsEditingProfessional(true)} className="px-4 py-2 text-xs font-bold bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 shadow-sm transition-all flex items-center gap-1.5">
+                <button onClick={() => setIsEditingProfessional(true)} className="px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 shadow-sm transition-all flex items-center gap-1.5">
                   <Edit3 className="w-3.5 h-3.5" />
                   Edit Details
                 </button>
@@ -888,13 +1079,21 @@ export default function EmployeeProfileView({
 
         {/* TAB 4: Attendance logs */}
         {activeTab === 'Attendance' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Punch In/Out Log</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">Automated synchronization with fingerprint scanners and RFID logs.</p>
+          <div className="space-y-5">
+            <div
+              className="flex justify-between items-center p-4 rounded-2xl border border-cyan-100/80"
+              style={{ background: 'radial-gradient(ellipse at 0% 0%, rgba(6,182,212,0.1) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #ECFEFF 60%, #CFFAFE 100%)' }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-cyan-600 to-teal-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <Clock className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-extrabold text-cyan-900 uppercase tracking-wider">Punch In/Out Log</h3>
+                  <p className="text-[10px] text-cyan-600 mt-0.5">Automated synchronization with fingerprint scanners and RFID logs.</p>
+                </div>
               </div>
-              <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full flex items-center gap-1">
+              <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200 flex items-center gap-1">
                 <CheckCircle className="w-3.5 h-3.5" />
                 Biometric Node Online
               </span>
@@ -913,13 +1112,13 @@ export default function EmployeeProfileView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {attendance.map((att) => (
-                    <tr key={att.id} className="hover:bg-slate-50/50">
+                  {attendance.map((att, idx) => (
+                    <tr key={att._id || att.id || idx} className="hover:bg-slate-50/50">
                       <td className="px-6 py-3 font-semibold text-slate-800">{att.date}</td>
-                      <td className="px-6 py-3 font-mono text-slate-600">{att.punchIn}</td>
-                      <td className="px-6 py-3 font-mono text-slate-600">{att.punchOut}</td>
-                      <td className="px-6 py-3 font-mono text-slate-700">{att.workingHours > 0 ? `${att.workingHours.toFixed(1)} Hrs` : 'Active / Pending'}</td>
-                      <td className="px-6 py-3 font-mono text-emerald-600">{att.overtimeHours > 0 ? `+${att.overtimeHours.toFixed(1)} Hrs` : '0.0'}</td>
+                      <td className="px-6 py-3 font-mono text-slate-600">{att.clockIn || att.punchIn || '--:--'}</td>
+                      <td className="px-6 py-3 font-mono text-slate-600">{att.clockOut || att.punchOut || '--:--'}</td>
+                      <td className="px-6 py-3 font-mono text-slate-700">{(att.workingHours || att.workHours || 0) > 0 ? `${(att.workingHours || att.workHours).toFixed(1)} Hrs` : 'Active / Pending'}</td>
+                      <td className="px-6 py-3 font-mono text-emerald-600">{(att.overtimeHours || 0) > 0 ? `+${Number(att.overtimeHours).toFixed(1)} Hrs` : '0.0'}</td>
                       <td className="px-6 py-3 text-right">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                           att.status === 'Present' ? 'bg-emerald-50 text-emerald-700' :
@@ -949,101 +1148,313 @@ export default function EmployeeProfileView({
         {activeTab === 'Leave' && (
           <div className="space-y-6">
             
-            {/* Balance widgets */}
-            <div>
-              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">Leave Balance Matrix</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">SICK LEAVE</span>
-                  <span className="text-lg font-bold text-slate-800 font-mono">{employee.leaveBalance.sick}</span>
+            {/* Year Selector & Top Header */}
+            <div
+              className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-4 rounded-2xl border border-green-100/80 shadow-[0_4px_16px_rgba(34,197,94,0.04)]"
+              style={{ background: 'radial-gradient(ellipse at 100% 0%, rgba(34,197,94,0.1) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #F0FDF4 60%, #DCFCE7 100%)' }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-green-600 to-emerald-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <CalendarDays className="w-3.5 h-3.5" />
                 </div>
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">CASUAL LEAVE</span>
-                  <span className="text-lg font-bold text-slate-800 font-mono">{employee.leaveBalance.casual}</span>
+                <div>
+                  <h3 className="text-xs font-extrabold text-green-900 uppercase tracking-wider">Leave Balance & Ledger Matrix</h3>
+                  <p className="text-[10px] text-green-600 mt-0.5">Authoritative real-time balance ledger and leave applications history for {employee.name}.</p>
                 </div>
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">ANNUAL LEAVE</span>
-                  <span className="text-lg font-bold text-slate-800 font-mono">{employee.leaveBalance.annual}</span>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">COMPENSATORY</span>
-                  <span className="text-lg font-bold text-slate-800 font-mono">{employee.leaveBalance.compOff}</span>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">MATERNITY</span>
-                  <span className="text-lg font-bold text-slate-800 font-mono">{employee.leaveBalance.maternity}</span>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">LWP</span>
-                  <span className="text-lg font-bold text-slate-800 font-mono">{employee.leaveBalance.lwp}</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500">Accounting Year:</span>
+                <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+                  {availableYears.map(yr => (
+                    <button
+                      key={yr}
+                      type="button"
+                      onClick={() => setLeaveYear(yr)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                        leaveYear === yr
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {yr}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
 
+            {/* Balance widgets */}
+            <div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                
+                {/* SICK LEAVE - Red/Rose gradient */}
+                <div
+                  className="p-3.5 rounded-xl border border-red-200/80 shadow-[0_6px_20px_rgba(239,68,68,0.06)] relative overflow-hidden"
+                  style={{ background: 'radial-gradient(circle at 100% 0%, rgba(239,68,68,0.15) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #FFF1F1 60%, #FFE4E6 100%)' }}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-red-700 uppercase font-extrabold tracking-wider">SICK LEAVE</span>
+                    <span className="text-[9px] px-1.5 py-0.5 bg-red-100 text-red-700 font-bold rounded-full border border-red-200">
+                      +{sickBal?.monthlyAccrual ?? (employee.monthlyLeaveAllocation?.sick ?? 0.5)}/mo
+                    </span>
+                  </div>
+                  <span className="text-2xl font-black text-slate-800 font-mono block my-1">
+                    {sickBal ? sickBal.currentBalance : (employee.leaveBalance?.sick ?? 0)}
+                  </span>
+                  <div className="text-[10px] text-slate-500 font-medium">
+                    Used: <span className="font-semibold text-slate-700">{sickBal?.consumed ?? 0}d</span> &bull; Quota: <span className="font-semibold text-slate-700">{sickBal ? (sickBal.opening + sickBal.carryForward + sickBal.accrued + sickBal.adjustments) : 0}d</span>
+                  </div>
+                  <div className="h-[3px] absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #EF4444 100%)' }} />
+                </div>
+
+                {/* CASUAL LEAVE - Blue gradient */}
+                <div
+                  className="p-3.5 rounded-xl border border-blue-200/80 shadow-[0_6px_20px_rgba(59,130,246,0.06)] relative overflow-hidden"
+                  style={{ background: 'radial-gradient(circle at 0% 0%, rgba(59,130,246,0.15) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 60%, #DBEAFE 100%)' }}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-blue-700 uppercase font-extrabold tracking-wider">CASUAL LEAVE</span>
+                    <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 font-bold rounded-full border border-blue-200">
+                      +{casualBal?.monthlyAccrual ?? (employee.monthlyLeaveAllocation?.casual ?? 0.5)}/mo
+                    </span>
+                  </div>
+                  <span className="text-2xl font-black text-slate-800 font-mono block my-1">
+                    {casualBal ? casualBal.currentBalance : (employee.leaveBalance?.casual ?? 0)}
+                  </span>
+                  <div className="text-[10px] text-slate-500 font-medium">
+                    Used: <span className="font-semibold text-slate-700">{casualBal?.consumed ?? 0}d</span> &bull; Quota: <span className="font-semibold text-slate-700">{casualBal ? (casualBal.opening + casualBal.carryForward + casualBal.accrued + casualBal.adjustments) : 0}d</span>
+                  </div>
+                  <div className="h-[3px] absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #3B82F6 100%)' }} />
+                </div>
+
+                {/* ANNUAL / EARNED LEAVE - Purple gradient */}
+                <div
+                  className="p-3.5 rounded-xl border border-purple-200/80 shadow-[0_6px_20px_rgba(139,92,246,0.06)] relative overflow-hidden"
+                  style={{ background: 'radial-gradient(circle at 100% 100%, rgba(139,92,246,0.15) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 60%, #EDE9FE 100%)' }}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-purple-700 uppercase font-extrabold tracking-wider">EARNED / ANNUAL</span>
+                    <span className="text-[9px] px-1.5 py-0.5 bg-purple-100 text-purple-700 font-bold rounded-full border border-purple-200">
+                      +{earnedBal?.monthlyAccrual ?? (employee.monthlyLeaveAllocation?.annual ?? 1.25)}/mo
+                    </span>
+                  </div>
+                  <span className="text-2xl font-black text-slate-800 font-mono block my-1">
+                    {earnedBal ? earnedBal.currentBalance : (employee.leaveBalance?.annual ?? 0)}
+                  </span>
+                  <div className="text-[10px] text-slate-500 font-medium">
+                    Used: <span className="font-semibold text-slate-700">{earnedBal?.consumed ?? 0}d</span> &bull; Quota: <span className="font-semibold text-slate-700">{earnedBal ? (earnedBal.opening + earnedBal.carryForward + earnedBal.accrued + earnedBal.adjustments) : 0}d</span>
+                  </div>
+                  <div className="h-[3px] absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #7C3AED 100%)' }} />
+                </div>
+
+                {/* COMPENSATORY OFF - Teal gradient */}
+                <div
+                  className="p-3.5 rounded-xl border border-teal-200/80 shadow-[0_6px_20px_rgba(20,184,166,0.06)] relative overflow-hidden"
+                  style={{ background: 'radial-gradient(circle at 0% 100%, rgba(20,184,166,0.15) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F0FDFA 60%, #CCFBF1 100%)' }}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-teal-700 uppercase font-extrabold tracking-wider">COMPENSATORY</span>
+                  </div>
+                  <span className="text-2xl font-black text-slate-800 font-mono block my-1">
+                    {compBal ? compBal.currentBalance : (employee.leaveBalance?.compOff ?? 0)}
+                  </span>
+                  <div className="text-[10px] text-slate-500 font-medium">
+                    Used: <span className="font-semibold text-slate-700">{compBal?.consumed ?? 0}d</span>
+                  </div>
+                  <div className="h-[3px] absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #0D9488 100%)' }} />
+                </div>
+
+                {/* MATERNITY / PATERNITY - Pink/Indigo gradient */}
+                <div
+                  className="p-3.5 rounded-xl border border-pink-200/80 shadow-[0_6px_20px_rgba(236,72,153,0.06)] relative overflow-hidden"
+                  style={{ background: 'radial-gradient(circle at 100% 0%, rgba(236,72,153,0.15) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #FDF2F8 60%, #FCE7F3 100%)' }}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-pink-700 uppercase font-extrabold tracking-wider">
+                      {employee.gender?.toLowerCase() === 'female' ? 'MATERNITY' : employee.gender?.toLowerCase() === 'male' ? 'PATERNITY' : 'MATERNITY'}
+                    </span>
+                  </div>
+                  <span className="text-2xl font-black text-slate-800 font-mono block my-1">
+                    {employee.gender?.toLowerCase() === 'female'
+                      ? (matBal ? matBal.currentBalance : (employee.leaveBalance?.maternity ?? 90))
+                      : employee.gender?.toLowerCase() === 'male'
+                        ? (patBal ? patBal.currentBalance : (employee.leaveBalance?.paternity ?? 14))
+                        : (matBal ? matBal.currentBalance : (employee.leaveBalance?.maternity ?? 0))}
+                  </span>
+                  <div className="text-[10px] text-slate-500 font-medium">
+                    Used: <span className="font-semibold text-slate-700">
+                      {employee.gender?.toLowerCase() === 'female' ? (matBal?.consumed ?? 0) : (patBal?.consumed ?? 0)}d
+                    </span>
+                  </div>
+                  <div className="h-[3px] absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #EC4899 100%)' }} />
+                </div>
+
+                {/* LOSS OF PAY - Amber gradient */}
+                <div
+                  className="p-3.5 rounded-xl border border-amber-200/80 shadow-[0_6px_20px_rgba(245,158,11,0.06)] relative overflow-hidden"
+                  style={{ background: 'radial-gradient(circle at 0% 0%, rgba(245,158,11,0.15) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 60%, #FEF3C7 100%)' }}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-amber-700 uppercase font-extrabold tracking-wider">LOSS OF PAY</span>
+                  </div>
+                  <span className="text-2xl font-black text-slate-800 font-mono block my-1">
+                    {lwpBal ? lwpBal.consumed : (employee.leaveBalance?.lwp ?? 0)}
+                  </span>
+                  <div className="text-[10px] text-slate-500 font-medium">
+                    Unpaid Days: <span className="font-semibold text-slate-700">{lwpBal?.consumed ?? 0}d</span>
+                  </div>
+                  <div className="h-[3px] absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #D97706 100%)' }} />
+                </div>
+
+              </div>
+            </div>
+
+            {/* HR Setup & Allocation Form — Requires Admin Approval */}
             {isAdminOrHR && (
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-4">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <Settings className="w-4 h-4 text-blue-600" />
-                  Leave Setup & Allocation (HR Mode)
-                </h4>
+              <div
+                className="p-5 rounded-2xl border border-orange-200/80 shadow-[0_4px_16px_rgba(234,88,12,0.05)] space-y-4 relative overflow-hidden"
+                style={{ background: 'radial-gradient(ellipse at 100% 0%, rgba(234,88,12,0.08) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #FFF7ED 60%, #FFEDD5 100%)' }}
+              >
+                {/* Header */}
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-orange-500 to-amber-400 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <Settings className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-extrabold text-orange-900 uppercase tracking-wider">Leave Setup & Allocation (HR Mode)</h4>
+                    <p className="text-[10px] text-orange-600 mt-0.5">Changes require Admin approval before taking effect on the employee's leave balance.</p>
+                  </div>
+                </div>
+
+                {/* Pending Request Status Banner */}
+                {employee._pendingLeaveAllocation && (
+                  <div className={`flex items-start gap-3 p-3 rounded-xl border text-xs font-medium ${
+                    employee._pendingLeaveAllocation.status === 'pending'
+                      ? 'bg-amber-50 border-amber-200 text-amber-800'
+                      : employee._pendingLeaveAllocation.status === 'approved'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-red-50 border-red-200 text-red-800'
+                  }`}>
+                    <span className="mt-0.5 shrink-0">
+                      {employee._pendingLeaveAllocation.status === 'pending' ? '⏳' : employee._pendingLeaveAllocation.status === 'approved' ? '✅' : '❌'}
+                    </span>
+                    <div>
+                      <span className="font-bold capitalize">{employee._pendingLeaveAllocation.status}</span>
+                      {' — '}Request submitted on {new Date(employee._pendingLeaveAllocation.requestedAt).toLocaleDateString()}.
+                      {employee._pendingLeaveAllocation.comment && (
+                        <span className="block mt-0.5 italic">Admin note: "{employee._pendingLeaveAllocation.comment}"</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Allocation Fields */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Carried Forward</label>
+                    <label className="block text-orange-700 text-[10px] uppercase font-extrabold tracking-wider mb-1">Carried Forward</label>
                     <input 
                       type="number"
                       value={carriedForwardLeaves}
                       onChange={(e) => setCarriedForwardLeaves(Number(e.target.value) || 0)}
-                      className="w-full text-xs p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white font-mono"
+                      className="w-full text-xs p-2.5 border border-orange-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white font-mono"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Monthly Sick Leave</label>
+                    <label className="block text-orange-700 text-[10px] uppercase font-extrabold tracking-wider mb-1">Monthly Sick Leave</label>
                     <input 
                       type="number"
                       step="0.1"
                       value={monthlyLeaveAllocation.sick}
                       onChange={(e) => setMonthlyLeaveAllocation({...monthlyLeaveAllocation, sick: Number(e.target.value) || 0})}
-                      className="w-full text-xs p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white font-mono"
+                      className="w-full text-xs p-2.5 border border-orange-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white font-mono"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Monthly Casual Leave</label>
+                    <label className="block text-orange-700 text-[10px] uppercase font-extrabold tracking-wider mb-1">Monthly Casual Leave</label>
                     <input 
                       type="number"
                       step="0.1"
                       value={monthlyLeaveAllocation.casual}
                       onChange={(e) => setMonthlyLeaveAllocation({...monthlyLeaveAllocation, casual: Number(e.target.value) || 0})}
-                      className="w-full text-xs p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white font-mono"
+                      className="w-full text-xs p-2.5 border border-orange-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white font-mono"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Monthly Paid/Annual</label>
+                    <label className="block text-orange-700 text-[10px] uppercase font-extrabold tracking-wider mb-1">Monthly Paid/Annual</label>
                     <input 
                       type="number"
                       step="0.1"
                       value={monthlyLeaveAllocation.annual}
                       onChange={(e) => setMonthlyLeaveAllocation({...monthlyLeaveAllocation, annual: Number(e.target.value) || 0})}
-                      className="w-full text-xs p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white font-mono"
+                      className="w-full text-xs p-2.5 border border-orange-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white font-mono"
                     />
                   </div>
                 </div>
-                <div className="flex justify-end">
+
+                {/* Reason / Justification */}
+                <div>
+                  <label className="block text-orange-700 text-[10px] uppercase font-extrabold tracking-wider mb-1">
+                    Reason / Justification <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Explain why you are requesting this leave allocation change for this employee..."
+                    value={leaveAllocationReason}
+                    onChange={(e) => setLeaveAllocationReason(e.target.value)}
+                    className="w-full text-xs p-2.5 border border-orange-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white resize-none"
+                  />
+                </div>
+
+                {/* Submit for Approval */}
+                <div className="flex justify-between items-center pt-1">
+                  <p className="text-[10px] text-orange-600 font-medium flex items-center gap-1">
+                    <Shield className="w-3 h-3" />
+                    This request will be sent to Admin for review and approval.
+                  </p>
                   <button
                     type="button"
                     onClick={async () => {
+                      if (!leaveAllocationReason.trim()) {
+                        showToast('Please provide a reason for this allocation change.', 'error');
+                        return;
+                      }
                       try {
-                        await onUpdateEmployee(employee.id, {
-                          carriedForwardLeaves,
-                          monthlyLeaveAllocation
+                        const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch(e) { return {}; } })();
+                        const targetStaffId = employee.staff_id || employee.id || employee._id;
+                        await api.post('/approvals', {
+                          type: 'leave_allocation',
+                          staffId: targetStaffId,
+                          requesterName: currentUser.name || 'HR Manager',
+                          requesterRole: currentUser.role || 'hr',
+                          comment: leaveAllocationReason.trim(),
+                          details: {
+                            staffId: targetStaffId,
+                            staffName: employee.name,
+                            changes: {
+                              carriedForwardLeaves,
+                              sick: monthlyLeaveAllocation.sick,
+                              casual: monthlyLeaveAllocation.casual,
+                              annual: monthlyLeaveAllocation.annual
+                            },
+                            currentValues: {
+                              carriedForwardLeaves: employee.carriedForwardLeaves || 0,
+                              sick: leavePolicy?.leaveTypes?.find(lt => lt.code === 'SICK')?.monthlyAccrual || 0,
+                              casual: leavePolicy?.leaveTypes?.find(lt => lt.code === 'CASUAL')?.monthlyAccrual || 0,
+                              annual: leavePolicy?.leaveTypes?.find(lt => lt.code === 'EARNED')?.monthlyAccrual || 0
+                            }
+                          }
                         });
-                        showToast('Leave configuration updated successfully!', 'success');
+                        setLeaveAllocationReason('');
+                        showToast('Allocation request sent to Admin for approval!', 'success');
                       } catch (err) {
-                        showToast('Failed to update leave configuration.', 'error');
+                        showToast(err.response?.data?.error || 'Failed to submit allocation request.', 'error');
                       }
                     }}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+                    className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
                   >
-                    Save Leave Allocations
+                    <Send className="w-3.5 h-3.5" />
+                    Submit for Admin Approval
                   </button>
                 </div>
               </div>
@@ -1051,8 +1462,14 @@ export default function EmployeeProfileView({
 
             {/* Leave requests lists */}
             <div className="space-y-3">
-              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Leave Applications Archive</h3>
-              <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Leave Applications Archive</h3>
+                <span className="text-xs text-slate-500 font-medium">
+                  {leaves.length} {leaves.length === 1 ? 'record' : 'records'} found
+                </span>
+              </div>
+
+              <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm bg-white">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -1060,26 +1477,70 @@ export default function EmployeeProfileView({
                       <th className="px-6 py-3">Start Date</th>
                       <th className="px-6 py-3">End Date</th>
                       <th className="px-6 py-3">Calendar Days</th>
-                      <th className="px-6 py-3">Reason for Leave</th>
+                      <th className="px-6 py-3">Reason / Remarks</th>
                       <th className="px-6 py-3 text-right">Approval Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {leaves.map((l) => (
-                      <tr key={l.id} className="hover:bg-slate-50/50">
+                    {leaves.map((l, idx) => (
+                      <tr key={l._id || l.id || idx} className="hover:bg-slate-50/50">
                         <td className="px-6 py-3 font-semibold text-slate-800">{l.leaveType}</td>
-                        <td className="px-6 py-3 text-slate-600">{l.startDate}</td>
-                        <td className="px-6 py-3 text-slate-600">{l.endDate}</td>
-                        <td className="px-6 py-3 font-mono text-slate-700">{l.totalDays} Days</td>
-                        <td className="px-6 py-3 text-slate-500 italic max-w-xs truncate">{l.reason}</td>
+                        <td className="px-6 py-3 text-slate-600 font-mono">{l.fromDate || l.startDate || '-'}</td>
+                        <td className="px-6 py-3 text-slate-600 font-mono">{l.toDate || l.endDate || '-'}</td>
+                        <td className="px-6 py-3 font-mono text-slate-700 font-bold">
+                          {l.days || l.totalDays || 0} {(l.days || l.totalDays) === 1 ? 'day' : 'days'}
+                        </td>
+                        <td className="px-6 py-3 text-slate-600 max-w-xs">
+                          {l.reason && <p className="italic text-slate-700">&ldquo;{l.reason}&rdquo;</p>}
+                          {l.approvedBy && (
+                            <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                              Approved by: {l.approvedBy}
+                            </p>
+                          )}
+                          {l.rejectionReason && (
+                            <p className="text-[10px] text-red-600 font-semibold mt-0.5">
+                              Rejection note: {l.rejectionReason}
+                            </p>
+                          )}
+                        </td>
                         <td className="px-6 py-3 text-right">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            l.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' :
-                            l.status === 'Pending' ? 'bg-amber-50 text-amber-700' :
-                            'bg-red-50 text-red-700'
-                          }`}>
-                            {l.status}
-                          </span>
+                          <div className="flex flex-col items-end gap-1.5">
+                            <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${
+                              l.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' :
+                              l.status === 'Pending' ? 'bg-amber-50 text-amber-700' :
+                              'bg-red-50 text-red-700'
+                            }`}>
+                              {l.status}
+                            </span>
+                            {l.status === 'Pending' && (onApproveLeave || onRejectLeave) && (
+                              <div className="flex gap-1 mt-1">
+                                {onRejectLeave && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await onRejectLeave(l._id || l.id, 'Rejected by HR');
+                                      fetchStaffLeaveData(leaveYear, employee);
+                                    }}
+                                    className="px-2 py-0.5 bg-red-50 hover:bg-red-100 text-red-700 text-[10px] font-semibold rounded transition-colors"
+                                  >
+                                    Reject
+                                  </button>
+                                )}
+                                {onApproveLeave && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await onApproveLeave(l._id || l.id, 'Approved by HR');
+                                      fetchStaffLeaveData(leaveYear, employee);
+                                    }}
+                                    className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-semibold rounded transition-colors shadow-xs"
+                                  >
+                                    Approve
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1095,6 +1556,64 @@ export default function EmployeeProfileView({
               </div>
             </div>
 
+            {/* Activity Ledger Audit Trail */}
+            {leaveLedger.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <History className="w-4 h-4 text-slate-500" />
+                    Activity Ledger ({leaveYear})
+                  </h3>
+                  <span className="text-xs text-slate-500 font-medium">
+                    {leaveLedger.length} {leaveLedger.length === 1 ? 'transaction' : 'transactions'}
+                  </span>
+                </div>
+
+                <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm bg-white">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <th className="px-6 py-3">Leave Type</th>
+                        <th className="px-6 py-3">Transaction</th>
+                        <th className="px-6 py-3">Remarks / Context</th>
+                        <th className="px-6 py-3">Recorded Date</th>
+                        <th className="px-6 py-3 text-right">Adjustment</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {leaveLedger.map((entry, idx) => {
+                        const isCredit = Number(entry.amount) > 0;
+                        return (
+                          <tr key={entry._id || idx} className="hover:bg-slate-50/50">
+                            <td className="px-6 py-3 font-semibold text-slate-800">{entry.leaveType}</td>
+                            <td className="px-6 py-3">
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                entry.transactionType === 'APPROVED_CONSUMPTION' ? 'bg-red-50 text-red-700' :
+                                entry.transactionType === 'MONTHLY_ACCRUAL' ? 'bg-emerald-50 text-emerald-700' :
+                                entry.transactionType === 'CARRY_FORWARD' ? 'bg-blue-50 text-blue-700' :
+                                'bg-purple-50 text-purple-700'
+                              }`}>
+                                {entry.transactionType?.replace(/_/g, ' ')}
+                              </span>
+                            </td>
+                            <td className="px-6 py-3 text-slate-600 max-w-xs truncate">{entry.remarks || entry.reason || '-'}</td>
+                            <td className="px-6 py-3 text-slate-500 font-mono text-[11px]">
+                              {entry.createdAt ? new Date(entry.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                            </td>
+                            <td className="px-6 py-3 text-right font-mono font-bold">
+                              <span className={isCredit ? 'text-emerald-600' : 'text-red-600'}>
+                                {isCredit ? `+${Number(entry.amount).toFixed(2)}` : Number(entry.amount).toFixed(2)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 
@@ -1104,17 +1623,25 @@ export default function EmployeeProfileView({
 
         {/* TAB 8: Verification Docs */}
         {activeTab === 'Documents' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Credential Verification Vault</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">Mandatory clinical licenses, DEA registrations, and identity sheets.</p>
+          <div className="space-y-5">
+            <div
+              className="flex justify-between items-center p-4 rounded-2xl border border-rose-100/80"
+              style={{ background: 'radial-gradient(ellipse at 100% 0%, rgba(244,63,94,0.1) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #FFF5F7 60%, #FFE4E8 100%)' }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-rose-600 to-pink-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <FileLock className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-extrabold text-rose-900 uppercase tracking-wider">Credential Verification Vault</h3>
+                  <p className="text-[10px] text-rose-600 mt-0.5">Mandatory clinical licenses, DEA registrations, and identity sheets.</p>
+                </div>
               </div>
               <button 
                 onClick={() => {
                   showToast('Scanning document vault... System is verified with State Licensing Servers.', 'success');
                 }}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-sm"
+                className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm transition-all"
               >
                 Trigger Licensure Sync
               </button>
@@ -1159,13 +1686,21 @@ export default function EmployeeProfileView({
             </div>
 
             {/* Custom shared documents section */}
-            <div className="space-y-4 border-t border-slate-100 pt-6">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Employee Document Portfolio</h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Custom uploads, contracts, and employment letters.</p>
+            <div className="space-y-4">
+              <div
+                className="flex justify-between items-center p-4 rounded-2xl border border-slate-200/80"
+                style={{ background: 'radial-gradient(ellipse at 0% 100%, rgba(99,102,241,0.08) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 60%, #F3F4F9 100%)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-indigo-600 to-blue-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <FileText className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-extrabold text-indigo-900 uppercase tracking-wider">Employee Document Portfolio</h3>
+                    <p className="text-[10px] text-indigo-600 mt-0.5">Custom uploads, contracts, and employment letters.</p>
+                  </div>
                 </div>
-                <span className="text-[10px] text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full font-medium">{employeeDocuments.length} Shared Files</span>
+                <span className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full font-bold">{employeeDocuments.length} Shared Files</span>
               </div>
 
               {/* Upload area inline if HR/Admin */}
@@ -1327,17 +1862,27 @@ export default function EmployeeProfileView({
 
 
         {activeTab === 'Slots' && (
-          <div className="space-y-6">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-blue-600" />
-              <div>
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Doctor Appointment Slots Configuration</h3>
-                <p className="text-xs text-slate-400">Configure custom daily availability intervals for patient consultation bookings. HR will set custom times by their own for each slot.</p>
+          <div className="space-y-5">
+            <div
+              className="p-4 rounded-2xl border border-blue-100/80"
+              style={{ background: 'radial-gradient(ellipse at 100% 0%, rgba(37,99,235,0.12) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 60%, #DBEAFE 100%)' }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <Clock className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-extrabold text-blue-900 uppercase tracking-wider">Doctor Appointment Slots Configuration</h3>
+                  <p className="text-[10px] text-blue-600 mt-0.5">Configure custom daily availability intervals for patient consultation bookings. HR will set custom times by their own for each slot.</p>
+                </div>
               </div>
             </div>
             
             {/* Add Custom Slot Input row */}
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-4 max-w-2xl">
+            <div
+              className="p-4 rounded-xl border border-slate-200/80 space-y-4 max-w-2xl"
+              style={{ background: 'linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)' }}
+            >
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Start Time</label>

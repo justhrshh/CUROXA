@@ -4,7 +4,7 @@ const approvalSchema = new mongoose.Schema({
   tenantId: { type: String, required: true, default: 'city_hospital', index: true },
   type: {
     type: String,
-    enum: ['staff_signup', 'password_reset', 'role_change', 'permission_request', 'receptionist_indent', 'vendor_onboarding', 'item_price_update', 'purchase_order_approval', 'vendor_medicine_addition'],
+    enum: ['staff_signup', 'password_reset', 'role_change', 'permission_request', 'receptionist_indent', 'vendor_onboarding', 'item_price_update', 'purchase_order_approval', 'vendor_medicine_addition', 'leave_allocation'],
     required: true
   },
   staffId: { type: String, required: false },

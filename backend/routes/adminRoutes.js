@@ -405,8 +405,8 @@ router.get("/subscription", isHrOrAdmin, async (req, res) => {
   }
 });
 
-// Get all recent broadcasts
-router.get("/broadcasts", isAdmin, async (req, res) => {
+// Get all recent broadcasts (accessible to all authenticated staff)
+router.get("/broadcasts", verifyToken, async (req, res) => {
   try {
     const SuperAdminBroadcast = require("../models/SuperAdminBroadcast");
     const broadcasts = await SuperAdminBroadcast.find({}).sort({ createdAt: -1 }).limit(20);

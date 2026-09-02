@@ -42,7 +42,7 @@ const leaveRequestSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    enum: ['Pending', 'Approved', 'Rejected'],
+    enum: ['Pending', 'Approved', 'Rejected', 'Cancelled'],
     default: 'Pending'
   },
   appliedDate: {
@@ -54,6 +54,10 @@ const leaveRequestSchema = new mongoose.Schema({
     default: ''
   },
   approvedDate: {
+    type: String,
+    default: ''
+  },
+  rejectionReason: {
     type: String,
     default: ''
   }

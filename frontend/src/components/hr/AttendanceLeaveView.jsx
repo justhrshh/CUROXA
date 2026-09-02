@@ -26,7 +26,7 @@ export default function AttendanceLeaveView({
   onRejectAttendance,
   onSaveAttendance
 }) {
-  const [activeSubTab, setActiveSubTab] = useState('Attendance');
+  const [activeSubTab, setActiveSubTab] = useState('Leaves');
   const [toast, setToast] = useState(null);
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -261,15 +261,6 @@ export default function AttendanceLeaveView({
 
         <div className="flex bg-slate-100 p-1 rounded-xl self-start">
           <button
-            onClick={() => setActiveSubTab('Attendance')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 ${
-              activeSubTab === 'Attendance' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Clock className="w-4 h-4" />
-            Biometric Attendance
-          </button>
-          <button
             onClick={() => setActiveSubTab('Leaves')}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 ${
               activeSubTab === 'Leaves' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'
@@ -277,6 +268,15 @@ export default function AttendanceLeaveView({
           >
             <CalendarDays className="w-4 h-4" />
             Leave Requests
+          </button>
+          <button
+            onClick={() => setActiveSubTab('Attendance')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 ${
+              activeSubTab === 'Attendance' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            Biometric Attendance
           </button>
           <button
             onClick={() => setActiveSubTab('Policies')}
@@ -818,69 +818,79 @@ export default function AttendanceLeaveView({
           </div>
 
           <div className="space-y-4">
-            {leaveRequests.map((req) => (
-              <div key={req._id || req.id} className="p-4 bg-slate-50 border border-slate-155 rounded-xl hover:border-blue-150 transition-colors">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div className="flex gap-3">
-                    <img 
-                      src={req.employeePhoto || ''} 
-                      alt={req.employeeName} 
-                      className="w-10 h-10 rounded-full object-cover border"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="font-bold text-xs text-slate-800">{req.employeeName} ({req.employeeId})</h4>
-                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[9px] font-bold">
-                          {req.department}
-                        </span>
-                      </div>
-                      
-                      <p className="text-xs text-slate-500 mt-1">
-                        Application: <span className="font-semibold text-slate-700">{req.leaveType}</span> &bull; Duration: <span className="font-semibold text-slate-700">{req.days || req.totalDays || 0} Day{(req.days || req.totalDays) > 1 ? 's' : ''}</span> ({req.fromDate || req.startDate} to {req.toDate || req.endDate})
-                      </p>
+            {(() => {
+              const sortedLeaves = [...leaveRequests].sort((a, b) => {
+                if (a.status === 'Pending' && b.status !== 'Pending') return -1;
+                if (a.status !== 'Pending' && b.status === 'Pending') return 1;
+                return new Date(b.createdAt || b.appliedDate || 0) - new Date(a.createdAt || a.appliedDate || 0);
+              });
 
-                      <p className="text-[11px] text-slate-600 italic mt-2 bg-white p-2 rounded border border-slate-100">
-                        &ldquo;{req.reason}&rdquo;
-                      </p>
+              if (sortedLeaves.length === 0) {
+                return (
+                  <div className="text-center text-slate-400 py-10">
+                    No active leave applications found in history.
+                  </div>
+                );
+              }
+
+              return sortedLeaves.map((req) => (
+                <div key={req._id || req.id} className="p-4 bg-slate-50 border border-slate-155 rounded-xl hover:border-blue-150 transition-colors">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="flex gap-3">
+                      <img 
+                        src={req.employeePhoto || ''} 
+                        alt={req.employeeName} 
+                        className="w-10 h-10 rounded-full object-cover border"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-bold text-xs text-slate-800">{req.employeeName} ({req.employeeId})</h4>
+                          <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[9px] font-bold">
+                            {req.department}
+                          </span>
+                        </div>
+                        
+                        <p className="text-xs text-slate-500 mt-1">
+                          Application: <span className="font-semibold text-slate-700">{req.leaveType}</span> &bull; Duration: <span className="font-semibold text-slate-700">{req.days || req.totalDays || 0} Day{(req.days || req.totalDays) > 1 ? 's' : ''}</span> ({req.fromDate || req.startDate} to {req.toDate || req.endDate})
+                        </p>
+
+                        <p className="text-[11px] text-slate-600 italic mt-2 bg-white p-2 rounded border border-slate-100">
+                          &ldquo;{req.reason}&rdquo;
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-3 self-end md:self-center">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        req.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' :
+                        req.status === 'Pending' ? 'bg-amber-50 text-amber-700' :
+                        'bg-red-50 text-red-700'
+                      }`}>
+                        {req.status}
+                      </span>
+
+                      {req.status === 'Pending' && (
+                        <div className="flex gap-1.5">
+                          <button 
+                            onClick={() => onRejectLeave(req._id || req.id, 'Rejected by HR')}
+                            className="px-2.5 py-1 text-[11px] border border-red-200 text-red-600 hover:bg-red-50 rounded font-semibold cursor-pointer"
+                          >
+                            Reject
+                          </button>
+                          <button 
+                            onClick={() => onApproveLeave(req._id || req.id, 'Approved by HR Manager')}
+                            className="px-2.5 py-1 text-[11px] bg-blue-600 text-white hover:bg-blue-700 rounded font-semibold shadow-xs cursor-pointer"
+                          >
+                            Approve
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
-
-                  <div className="flex flex-col items-end gap-3 self-end md:self-center">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      req.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' :
-                      req.status === 'Pending' ? 'bg-amber-50 text-amber-700' :
-                      'bg-red-50 text-red-700'
-                    }`}>
-                      {req.status}
-                    </span>
-
-                    {req.status === 'Pending' && (
-                      <div className="flex gap-1.5">
-                        <button 
-                          onClick={() => onRejectLeave(req._id || req.id, 'Rejected by HR')}
-                          className="px-2.5 py-1 text-[11px] border border-red-200 text-red-600 hover:bg-red-50 rounded font-semibold"
-                        >
-                          Reject
-                        </button>
-                        <button 
-                          onClick={() => onApproveLeave(req._id || req.id, 'Approved by HR Manager')}
-                          className="px-2.5 py-1 text-[11px] bg-blue-600 text-white hover:bg-blue-700 rounded font-semibold shadow-xs"
-                        >
-                          Approve
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 </div>
-              </div>
-            ))}
-
-            {leaveRequests.length === 0 && (
-              <div className="text-center text-slate-400 py-10">
-                No active leave applications found in history.
-              </div>
-            )}
+              ));
+            })()}
           </div>
         </div>
       )}

@@ -282,4 +282,10 @@ app.get("/api/debug-db", async (req, res) => {
 
 http.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  try {
+    const { startLeaveBackgroundScheduler } = require('./services/leaveScheduler');
+    startLeaveBackgroundScheduler();
+  } catch (e) {
+    console.warn('[LeaveScheduler] Initialization notice:', e.message);
+  }
 });
