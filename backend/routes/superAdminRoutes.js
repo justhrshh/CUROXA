@@ -714,10 +714,13 @@ router.get('/hospitals', async (req, res) => {
     const allTenants = Array.from(new Set([...userTenants, ...patientTenants]))
       .filter(t => t && String(t).trim() !== '' && String(t).toLowerCase() !== 'curoxa' && String(t).toLowerCase() !== 'platform');
 
+    // Batch-read existing hospital codes to avoid N sequential findOne queries
+    const existingHospitals = await SuperAdminHospital.find({}, { code: 1 }).lean();
+    const existingCodes = new Set(existingHospitals.map(h => h.code));
+
     for (const tCode of allTenants) {
       const codeClean = String(tCode).toLowerCase().trim();
-      const existing = await SuperAdminHospital.findOne({ code: codeClean });
-      if (!existing) {
+      if (!existingCodes.has(codeClean)) {
         let name = codeClean.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
         if (!name.toLowerCase().includes('hospital') && !name.toLowerCase().includes('clinic') && !name.toLowerCase().includes('center')) {
           name += ' Medical Center';
@@ -738,18 +741,65 @@ router.get('/hospitals', async (req, res) => {
           logo: name.charAt(0),
           limits: { doctorsUsed: 0, doctorsLimit: 25, staffUsed: 0, staffLimit: 50, storageUsed: 5.0, storageLimit: 100, patients: 0 }
         });
+        existingCodes.add(codeClean);
       }
     }
 
     const hospitals = await SuperAdminHospital.find({});
-    
-    const result = await Promise.all(hospitals.map(async (hospital) => {
-      const [doctorsCount, staffCount, adminUser] = await Promise.all([
-        User.countDocuments({ tenantId: hospital.code, role: 'doctor' }),
-        User.countDocuments({ tenantId: hospital.code, role: { $nin: ['doctor', 'patient', 'admin'] } }),
-        User.findOne({ tenantId: hospital.code, role: 'admin' })
-      ]);
-      
+
+    // Batch-compute doctor and staff counts grouped by exact tenantId
+    // Staff count preserves exact semantics: role not in ['doctor', 'patient', 'admin']
+    const userCounts = await User.aggregate([
+      {
+        $group: {
+          _id: '$tenantId',
+          doctorsCount: {
+            $sum: { $cond: [{ $eq: ['$role', 'doctor'] }, 1, 0] }
+          },
+          staffCount: {
+            $sum: {
+              $cond: [
+                { $not: { $in: ['$role', ['doctor', 'patient', 'admin']] } },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      }
+    ]);
+
+    const countsMap = new Map();
+    for (const u of userCounts) {
+      if (u._id != null) {
+        countsMap.set(u._id, {
+          doctorsCount: u.doctorsCount,
+          staffCount: u.staffCount
+        });
+      }
+    }
+
+    // Batch-fetch admin users matching findOne natural/index scan order ({ tenantId: 1, staff_id: 1 })
+    const adminUsers = await User.find(
+      { role: 'admin' },
+      { tenantId: 1, staff_id: 1, email: 1, phone: 1, name: 1 }
+    ).sort({ tenantId: 1, staff_id: 1 }).lean();
+
+    const adminMap = new Map();
+    for (const admin of adminUsers) {
+      if (admin.tenantId && !adminMap.has(admin.tenantId)) {
+        adminMap.set(admin.tenantId, admin);
+      }
+    }
+
+    const bulkOps = [];
+
+    const result = hospitals.map((hospital) => {
+      const counts = countsMap.get(hospital.code) || { doctorsCount: 0, staffCount: 0 };
+      const doctorsCount = counts.doctorsCount;
+      const staffCount = counts.staffCount;
+      const adminUser = adminMap.get(hospital.code);
+
       let limitsUpdated = false;
       if (!hospital.limits) {
         hospital.limits = { doctorsUsed: 0, doctorsLimit: 25, staffUsed: 0, staffLimit: 50, storageUsed: 5.0, storageLimit: 100, patients: 0 };
@@ -784,7 +834,17 @@ router.get('/hospitals', async (req, res) => {
       }
 
       if (limitsUpdated) {
-        await hospital.save().catch(e => console.warn('hospital save limit update err:', e.message));
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: hospital._id },
+            update: {
+              $set: {
+                limits: hospital.limits,
+                updatedAt: new Date()
+              }
+            }
+          }
+        });
       }
 
       const hospObj = hospital.toObject();
@@ -800,8 +860,12 @@ router.get('/hospitals', async (req, res) => {
         hospObj.adminName = '';
       }
       return hospObj;
-    }));
-    
+    });
+
+    if (bulkOps.length > 0) {
+      await SuperAdminHospital.bulkWrite(bulkOps).catch(e => console.warn('hospital save limit update err:', e.message));
+    }
+
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
