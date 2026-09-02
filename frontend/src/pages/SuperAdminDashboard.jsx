@@ -2456,10 +2456,13 @@ const SuperAdminDashboard = () => {
           }
         };
 
-        const results = await Promise.allSettled([
+        // Phase 1: High-priority initial request for primary hospital data
+        const hospitalsSuccess = await fetchAndSet('/api/superadmin/hospitals', setHospitals);
+
+        // Phase 2: Load remaining dashboard datasets without arbitrary delays
+        const secondaryResults = await Promise.allSettled([
           fetchAndSet('/api/superadmin/plans', setPlans),
           fetchAndSet('/api/superadmin/onboarding', setOnboardingHospitals),
-          fetchAndSet('/api/superadmin/hospitals', setHospitals),
           fetchAndSet('/api/superadmin/invoices', setInvoices),
           fetchAndSet('/api/superadmin/tickets', setTickets),
           fetchAndSet('/api/superadmin/backups', setBackups),
@@ -2472,8 +2475,13 @@ const SuperAdminDashboard = () => {
           fetchAndSet('/api/superadmin/employees', setEmployees)
         ]);
 
+        const allResults = [
+          { status: 'fulfilled', value: hospitalsSuccess },
+          ...secondaryResults
+        ];
+
         // Check if all essential fetches failed or backend is disconnected
-        const succeededCount = results.filter(r => r.status === 'fulfilled' && r.value === true).length;
+        const succeededCount = allResults.filter(r => r.status === 'fulfilled' && r.value === true).length;
         if (succeededCount === 0 && token) {
           try {
             const checkRes = await fetch('/api/superadmin/hospitals', { headers });
