@@ -33,8 +33,9 @@ const upload = multer({ storage: storage, limits: { fileSize: 50 * 1024 * 1024 }
 const writeAudit = async (req, action, details) => {
   try {
     const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const actor = req.user ? (req.user.name || req.user.staff_id || req.user.email) : 'superadmin';
     await SuperAdminAudit.create({
-      user: req.user ? req.user.staff_id : 'system',
+      user: actor,
       action,
       details,
       ip
@@ -77,6 +78,7 @@ router.post('/verify-license', async (req, res) => {
     
     const result = verifyDrugLicense(licenseNumber, hospitalName);
     if (result.success) {
+      await writeAudit(req, 'verify_license', `Verified drug license ${licenseNumber} for ${hospitalName}`);
       res.json({
         success: true,
         ...result.data
@@ -98,6 +100,7 @@ router.post('/verify-gstin', async (req, res) => {
     
     const result = verifyGSTIN(gstin, hospitalName);
     if (result.success) {
+      await writeAudit(req, 'verify_gstin', `Verified GSTIN ${gstin} for ${hospitalName}`);
       res.json({
         success: true,
         ...result.data
@@ -613,6 +616,7 @@ router.post('/upload-compliance', upload.single('document'), async (req, res) =>
       fileUrl = `/uploads/${localFileName}`;
     }
 
+    await writeAudit(req, 'upload_compliance_doc', `Uploaded compliance document: ${req.file.originalname}`);
     res.status(200).json({ url: fileUrl, filename: req.file.originalname });
   } catch (err) {
     console.error('Upload Error:', err);
@@ -1393,6 +1397,8 @@ router.post('/hospitals/:code/impersonate-login', async (req, res) => {
     const hospital = await SuperAdminHospital.findOne({ code: tenantId });
     const tenantModules = hospital ? hospital.modules : { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } };
 
+    await writeAudit(req, 'impersonate_login', `Super Admin impersonated login for tenant: ${tenantId}`);
+
     res.json({
       token,
       user: {
@@ -1761,6 +1767,8 @@ router.post('/tickets/:id/message', async (req, res) => {
         message: ticket.messages[ticket.messages.length - 1]
       });
     }
+
+    await writeAudit(req, 'ticket_reply', `Sent reply message on ticket ${ticket.id}`);
 
     res.json(ticket);
   } catch (err) {

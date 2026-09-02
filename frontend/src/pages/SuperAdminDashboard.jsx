@@ -552,28 +552,41 @@ const SuperAdminDashboard = () => {
     'Finance Manager': ['dashboard', 'finance', 'subscription-mgmt', 'reports']
   };
 
-  // SuperAdmin role or missing specialty gets full access to all sections
+  // SuperAdmin role or Platform Admin gets unrestricted master access to all sections
   const currentUserPlatformRole = currentUser.specialty || 'Platform Admin';
-  const allowedTabs = (currentUser?.role === 'superadmin' || currentUser?.role === 'super_admin' || !currentUser?.specialty)
+  const isSuperAdmin = currentUser?.role === 'superadmin' || currentUser?.role === 'super_admin' || !currentUser?.specialty || currentUserPlatformRole === 'Platform Admin';
+  
+  const allowedTabs = isSuperAdmin
     ? ROLE_ACCESS_MAP['Platform Admin']
     : (ROLE_ACCESS_MAP[currentUserPlatformRole] || ROLE_ACCESS_MAP['Platform Admin']);
 
   const filteredMenuGroups = menuGroups.map(group => ({
     ...group,
-    items: group.items.filter(item => allowedTabs.includes(item.id))
+    items: isSuperAdmin ? group.items : group.items.filter(item => allowedTabs.includes(item.id))
   })).filter(group => group.items.length > 0);
   
   // Resolve activeTab to base menu id
   const getBaseTabId = (tab) => {
-    if (tab === 'support-success') return 'customer-support';
-    if (tab === 'finance-mgmt' || tab === 'finance-revenue' || tab === 'finance-renewals') return 'finance';
-    if (tab === 'hr-mgmt' || tab === 'departments' || tab === 'task-assignments' || tab === 'platform-roles' || tab === 'platform-audits') return 'employees';
-    if (tab === 'bi-reports') return 'reports';
-    if (tab === 'platform-control') return 'settings';
+    if (tab === 'support-success' || tab === 'tickets' || tab === 'customer-support') return 'customer-support';
+    if (tab === 'finance-mgmt' || tab === 'finance-revenue' || tab === 'finance-renewals' || tab === 'invoices' || tab === 'finance') return 'finance';
+    if (tab === 'hr-mgmt' || tab === 'departments' || tab === 'task-assignments' || tab === 'platform-roles' || tab === 'platform-audits' || tab === 'employees') return 'employees';
+    if (tab === 'bi-reports' || tab === 'reports') return 'reports';
+    if (tab === 'platform-control' || tab === 'settings' || tab === 'backups') return 'settings';
+    if (tab === 'onboarding') return 'hospital-onboarding';
     return tab;
   };
   
-  const isTabAllowed = allowedTabs.includes(getBaseTabId(activeTab));
+  // Super Admin is never restricted across any module
+  const isTabAllowed = isSuperAdmin ? true : allowedTabs.includes(getBaseTabId(activeTab));
+
+  // Automatically normalize any legacy or search tab aliases
+  useEffect(() => {
+    if (activeTab === 'onboarding') setActiveTab('hospital-onboarding');
+    else if (activeTab === 'tickets') setActiveTab('support-success');
+    else if (activeTab === 'invoices') setActiveTab('finance-mgmt');
+    else if (activeTab === 'settings' || activeTab === 'backups') setActiveTab('platform-control');
+    else if (activeTab === 'reports') setActiveTab('bi-reports');
+  }, [activeTab]);
 
   // Ensure Super Admin application shell takes full 100% viewport width without 0.9 zoom shrinkage
   useEffect(() => {
@@ -2589,6 +2602,19 @@ const SuperAdminDashboard = () => {
       }));
     }
   }, [employees]);
+
+  useEffect(() => {
+    if (activeTab === 'platform-audits') {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      fetch('/api/superadmin/audits', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(res => res.ok ? res.json() : [])
+        .then(data => { if (Array.isArray(data)) setAuditLogs(data); })
+        .catch(err => console.error('Failed to fetch audit logs:', err));
+    }
+  }, [activeTab]);
 
   const fetchBroadcasts = async () => {
     try {
@@ -6242,74 +6268,90 @@ const SuperAdminDashboard = () => {
 
               {/* Profile Dropdown */}
               {isProfileOpen && (
-                <div style={{
-                  position: 'absolute', top: '100%', right: 0, marginTop: '8px',
-                  width: '220px', background: '#FFFFFF', borderRadius: '10px',
-                  border: '1px solid #E2E8F0', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
-                  zIndex: 300, overflow: 'hidden'
-                }}>
-                  <div style={{ padding: '14px 16px', borderBottom: '1px solid #F1F5F9' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>{currentUser.name}</div>
-                    <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>{currentUser.email || 'super.admin@curoxa.com'}</div>
-                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#2563EB', marginTop: '4px', textTransform: 'uppercase' }}>Platform Super Admin</div>
+                <>
+                  {/* Full-screen backdrop to close dropdown when clicking anywhere */}
+                  <div
+                    style={{
+                      position: 'fixed',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      zIndex: 299,
+                      background: 'transparent',
+                      cursor: 'default'
+                    }}
+                    onClick={() => setIsProfileOpen(false)}
+                  />
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+                    width: '220px', background: '#FFFFFF', borderRadius: '10px',
+                    border: '1px solid #E2E8F0', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
+                    zIndex: 300, overflow: 'hidden'
+                  }}>
+                    <div style={{ padding: '14px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>{currentUser.name}</div>
+                      <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>{currentUser.email || 'super.admin@curoxa.com'}</div>
+                      <div style={{ fontSize: '9px', fontWeight: 700, color: '#2563EB', marginTop: '4px', textTransform: 'uppercase' }}>Platform Super Admin</div>
+                    </div>
+                    <div style={{ padding: '6px' }}>
+                      <button
+                        onClick={() => {
+                          setProfileForm({
+                            name: currentUser.name || 'Platform Admin',
+                            email: currentUser.email || 'super.admin@curoxa.com',
+                            currentPassword: '',
+                            newPassword: '',
+                            confirmPassword: ''
+                          });
+                          setProfileError('');
+                          setIsProfileModalOpen(true);
+                          setIsProfileOpen(false);
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                          padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
+                          fontSize: '12px', color: '#2563EB', fontWeight: 700, cursor: 'pointer', textAlign: 'left'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#EFF6FF'; }}
+                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                      >
+                        <LucideIcon name="user-cog" style={{ width: '15px', height: '15px', color: '#2563EB' }} />
+                        Profile & Password Settings
+                      </button>
+                      <button
+                        onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); setIsProfileOpen(false); }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                          padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
+                          fontSize: '12px', color: '#475569', cursor: 'pointer', textAlign: 'left'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                      >
+                        <LucideIcon name="settings" style={{ width: '15px', height: '15px', color: '#64748B' }} />
+                        Platform Settings
+                      </button>
+                      <button
+                        onClick={() => {
+                          localStorage.removeItem('token');
+                          localStorage.removeItem('user');
+                          navigate('/login');
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                          padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
+                          fontSize: '12px', color: '#EF4444', fontWeight: 600, cursor: 'pointer', textAlign: 'left'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
+                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                      >
+                        <LucideIcon name="log-out" style={{ width: '15px', height: '15px', color: '#EF4444' }} />
+                        Sign Out
+                      </button>
+                    </div>
                   </div>
-                  <div style={{ padding: '6px' }}>
-                    <button
-                      onClick={() => {
-                        setProfileForm({
-                          name: currentUser.name || 'Platform Admin',
-                          email: currentUser.email || 'super.admin@curoxa.com',
-                          currentPassword: '',
-                          newPassword: '',
-                          confirmPassword: ''
-                        });
-                        setProfileError('');
-                        setIsProfileModalOpen(true);
-                        setIsProfileOpen(false);
-                      }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
-                        padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
-                        fontSize: '12px', color: '#2563EB', fontWeight: 700, cursor: 'pointer', textAlign: 'left'
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#EFF6FF'; }}
-                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                    >
-                      <LucideIcon name="user-cog" style={{ width: '15px', height: '15px', color: '#2563EB' }} />
-                      Profile & Password Settings
-                    </button>
-                    <button
-                      onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); setIsProfileOpen(false); }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
-                        padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
-                        fontSize: '12px', color: '#475569', cursor: 'pointer', textAlign: 'left'
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
-                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                    >
-                      <LucideIcon name="settings" style={{ width: '15px', height: '15px', color: '#64748B' }} />
-                      Platform Settings
-                    </button>
-                    <button
-                      onClick={() => {
-                        localStorage.removeItem('token');
-                        localStorage.removeItem('user');
-                        navigate('/login');
-                      }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
-                        padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
-                        fontSize: '12px', color: '#EF4444', fontWeight: 700, cursor: 'pointer', textAlign: 'left'
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
-                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                    >
-                      <LucideIcon name="log-out" style={{ width: '15px', height: '15px', color: '#EF4444' }} />
-                      Sign Out
-                    </button>
-                  </div>
-                </div>
+                </>
               )}
             </div>
           </div>
@@ -7649,7 +7691,11 @@ const SuperAdminDashboard = () => {
                             <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '11.5px', color: '#64748B' }}>
                               <span>Priority: <strong style={{ color: selectedOnboardingHospital.priority === 'High' ? '#EF4444' : '#64748B' }}>{selectedOnboardingHospital.priority}</strong></span>
                               <span>•</span>
-                              <span>Days Left: <strong>{selectedOnboardingHospital.daysLeft} days</strong></span>
+                              <span>Days Left: <strong>{(() => {
+                                const cDate = selectedOnboardingHospital.createdAt ? new Date(selectedOnboardingHospital.createdAt) : new Date();
+                                const elapsed = Math.floor((Date.now() - cDate.getTime()) / (1000 * 60 * 60 * 24));
+                                return Math.max(0, 14 - elapsed);
+                              })()} days</strong></span>
                             </div>
                           </div>
                           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -8697,16 +8743,37 @@ const SuperAdminDashboard = () => {
                             );
                           }
                           return activeHospitals.slice(0, 3).map((hosp, idx) => {
-                            const planLabel = hosp.plan ? hosp.plan.replace('Annual', '').trim() : 'Standard';
+                            const planStr = hosp.plan || '';
+                            const planLower = planStr.toLowerCase();
+                            const isTrial = planLower.includes('trial') || planLower.includes('custom');
+                            const isAnnual = planLower.includes('annual');
+                            const planLabel = planStr ? planStr.replace('Annual', '').trim() : 'Standard';
                             
-                            // Calculate dynamic remaining days
+                            // Calculate dynamic remaining days: Trial = 7 days, Annual = 365 days, Standard = 30 days
                             const createdDate = hosp.createdAt ? new Date(hosp.createdAt) : new Date();
-                            const isAnnual = hosp.plan && hosp.plan.toLowerCase().includes('annual');
-                            const durationMs = isAnnual ? 365 * 24 * 60 * 1000 * 60 : 30 * 24 * 60 * 60 * 1000;
+                            const durationDays = isTrial ? 7 : (isAnnual ? 365 : 30);
+                            const durationMs = durationDays * 24 * 60 * 60 * 1000;
                             const expiryDate = new Date(createdDate.getTime() + durationMs);
                             const diffMs = expiryDate.getTime() - Date.now();
-                            const daysDue = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
-                            const daysText = daysDue === 0 ? 'Today' : `In ${daysDue} days`;
+                            const daysDue = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+                            let daysText = '';
+                            let badgeColor = '#2563EB';
+
+                            if (daysDue < 0) {
+                              const daysAgo = Math.abs(daysDue);
+                              daysText = isTrial ? (daysAgo === 1 ? 'Trial Expired (1d ago)' : `Trial Expired (${daysAgo}d ago)`) : `Expired (${daysAgo}d ago)`;
+                              badgeColor = '#EF4444';
+                            } else if (daysDue === 0) {
+                              daysText = isTrial ? 'Trial Ends Today' : 'Today';
+                              badgeColor = '#F59E0B';
+                            } else if (daysDue === 1) {
+                              daysText = isTrial ? 'Trial Ends Tomorrow' : 'In 1 day';
+                              badgeColor = '#F59E0B';
+                            } else {
+                              daysText = isTrial ? `${daysDue} days left` : `In ${daysDue} days`;
+                              badgeColor = '#2563EB';
+                            }
                              
                             return (
                               <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 12px', background: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
@@ -8714,7 +8781,7 @@ const SuperAdminDashboard = () => {
                                   <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#1E293B' }}>{hosp.name}</div>
                                   <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>{planLabel} License</div>
                                 </div>
-                                <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#2563EB' }}>{daysText}</span>
+                                <span style={{ fontSize: '10.5px', fontWeight: 800, color: badgeColor }}>{daysText}</span>
                               </div>
                             );
                           });
@@ -8746,15 +8813,22 @@ const SuperAdminDashboard = () => {
                               </div>
                             );
                           }
-                          return pendingOnboarding.map((onb, idx) => (
-                            <div key={onb._id || idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 12px', background: '#FFFBEB', borderRadius: '10px', border: '1px solid #FDE68A' }}>
-                              <div>
-                                <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#92400E' }}>{onb.name}</div>
-                                <div style={{ fontSize: '10px', color: '#B45309', marginTop: '1px' }}>Stalled on: {onb.stage || 'Verification'} ({onb.progress}%)</div>
+                          return pendingOnboarding.map((onb, idx) => {
+                            const createdDate = onb.createdAt ? new Date(onb.createdAt) : new Date();
+                            const elapsedDays = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
+                            const currentDay = Math.max(1, elapsedDays + 1);
+                            const isOverdue = currentDay > 14;
+
+                            return (
+                              <div key={onb._id || idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 12px', background: isOverdue ? '#FEF2F2' : '#FFFBEB', borderRadius: '10px', border: `1px solid ${isOverdue ? '#FECACA' : '#FDE68A'}` }}>
+                                <div>
+                                  <div style={{ fontSize: '11.5px', fontWeight: 800, color: isOverdue ? '#991B1B' : '#92400E' }}>{onb.name}</div>
+                                  <div style={{ fontSize: '10px', color: isOverdue ? '#B91C1C' : '#B45309', marginTop: '1px' }}>Stalled on: {onb.stage || 'Verification'} ({onb.progress}%)</div>
+                                </div>
+                                <span style={{ fontSize: '10.5px', fontWeight: 800, color: isOverdue ? '#DC2626' : '#D97706' }}>Day {currentDay}</span>
                               </div>
-                              <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#D97706' }}>Day {Math.max(1, 14 - (onb.daysLeft || 10))}</span>
-                            </div>
-                          ));
+                            );
+                          });
                         })()}
                       </div>
                     </div>
@@ -8778,27 +8852,83 @@ const SuperAdminDashboard = () => {
                           const auditWarns = hospitals.filter(h => (h.healthScore || 100) < 90 || h.status === 'Suspended').length;
 
                           return [
-                            { label: 'Pending Documents', val: pendingDocs, isInteractive: pendingDocs > 0 },
-                            { label: 'Verification Requests', val: verifReqs, isInteractive: false },
-                            { label: 'System Tickets', val: sysTickets, isInteractive: false },
-                            { label: 'Audit Warnings', val: auditWarns, isInteractive: false }
+                            { 
+                              label: 'Pending Documents', 
+                              val: pendingDocs, 
+                              action: () => setShowPendingDocsModal(true),
+                              badgeColor: '#2563EB',
+                              badgeBg: '#EFF6FF'
+                            },
+                            { 
+                              label: 'Verification Requests', 
+                              val: verifReqs, 
+                              action: () => setActiveTab('hospital-onboarding'),
+                              badgeColor: '#D97706',
+                              badgeBg: '#FEF3C7'
+                            },
+                            { 
+                              label: 'System Tickets', 
+                              val: sysTickets, 
+                              action: () => { 
+                                setActiveTab('support-success'); 
+                                if (typeof setSupportSubTab === 'function') setSupportSubTab('support-dashboard'); 
+                              },
+                              badgeColor: '#7C3AED',
+                              badgeBg: '#F5F3FF'
+                            },
+                            { 
+                              label: 'Audit Warnings', 
+                              val: auditWarns, 
+                              action: () => { 
+                                setActiveTab('hospitals'); 
+                                setHospFilterTab('Needs Attention'); 
+                              },
+                              badgeColor: '#EF4444',
+                              badgeBg: '#FEF2F2'
+                            }
                           ].map((ins, idx) => (
                             <div
                               key={idx}
-                              onClick={() => { if (ins.isInteractive && ins.label === 'Pending Documents') setShowPendingDocsModal(true); }}
-                              className={ins.isInteractive ? "pending-docs-row-hoverable" : ""}
+                              onClick={ins.action}
                               style={{
                                 display: 'flex',
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
-                                padding: '8px 0',
+                                padding: '8px 10px',
+                                margin: '0 -4px',
+                                borderRadius: '8px',
                                 borderBottom: idx === 3 ? 'none' : '1px solid #F1F5F9',
-                                cursor: ins.isInteractive ? 'pointer' : 'default',
+                                cursor: 'pointer',
                                 transition: 'all 0.15s ease'
                               }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#F8FAFC';
+                                e.currentTarget.style.transform = 'translateX(2px)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                                e.currentTarget.style.transform = 'none';
+                              }}
                             >
-                              <span style={{ fontSize: '12px', color: ins.isInteractive ? '#2563EB' : '#475569', fontWeight: ins.isInteractive ? 700 : 550, textDecoration: ins.isInteractive ? 'underline' : 'none' }}>{ins.label}</span>
-                              <strong style={{ fontSize: '12px', color: '#0F172A' }}>{ins.val}</strong>
+                              <span style={{ 
+                                fontSize: '12px', 
+                                color: '#1E293B', 
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}>
+                                {ins.label}
+                                <LucideIcon name="chevron-right" style={{ width: '12px', height: '12px', color: '#94A3B8' }} />
+                              </span>
+                              <strong style={{ 
+                                fontSize: '11px', 
+                                color: ins.badgeColor, 
+                                background: ins.badgeBg, 
+                                padding: '2px 8px', 
+                                borderRadius: '10px',
+                                fontWeight: 800 
+                              }}>{ins.val}</strong>
                             </div>
                           ));
                         })()}
@@ -9038,19 +9168,25 @@ const SuperAdminDashboard = () => {
                         <th style={styles.tableTh}>SaaS Staff Executor</th>
                         <th style={styles.tableTh}>Action Trigger</th>
                         <th style={styles.tableTh}>Log Details Summary</th>
-                        <th style={styles.tableTh}>IP Address</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {auditLogs.map((log, idx) => (
-                        <tr key={idx} style={styles.tableRow}>
-                          <td style={styles.tableTd}><code>{new Date(log.createdAt).toLocaleString()}</code></td>
-                          <td style={styles.tableTd}><strong>{log.user}</strong></td>
-                          <td style={styles.tableTd}><span style={{ ...styles.statusBadge, background: '#EFF6FF', color: '#2563EB' }}>{log.action}</span></td>
-                          <td style={styles.tableTd}>{log.details}</td>
-                          <td style={styles.tableTd}><code>{log.ip}</code></td>
+                      {auditLogs.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} style={{ padding: '30px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
+                            No audit log records found.
+                          </td>
                         </tr>
-                      ))}
+                      ) : (
+                        auditLogs.map((log, idx) => (
+                          <tr key={idx} style={styles.tableRow}>
+                            <td style={styles.tableTd}><code>{new Date(log.createdAt).toLocaleString()}</code></td>
+                            <td style={styles.tableTd}><strong>{log.user}</strong></td>
+                            <td style={styles.tableTd}><span style={{ ...styles.statusBadge, background: '#EFF6FF', color: '#2563EB' }}>{log.action}</span></td>
+                            <td style={styles.tableTd}>{log.details}</td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -10777,6 +10913,7 @@ const SuperAdminDashboard = () => {
                           <th style={styles.tableTh}>Priority</th>
                           <th style={styles.tableTh}>Status</th>
                           <th style={styles.tableTh}>SLA status</th>
+                          <th style={styles.tableTh}>Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -10814,6 +10951,44 @@ const SuperAdminDashboard = () => {
                             <td style={styles.tableTd}>
                               <span style={{ color: t.slaStatus === 'Breached' ? '#EF4444' : '#10B981', fontWeight: 800 }}>{t.slaStatus}</span>
                             </td>
+                            <td style={styles.tableTd}>
+                              {t.status !== 'Resolved' && t.status !== 'Closed' ? (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const token = localStorage.getItem('token');
+                                    try {
+                                      const res = await fetch(`/api/superadmin/tickets/${t._id}`, {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                        body: JSON.stringify({ status: 'Resolved' })
+                                      });
+                                      if (res.ok) {
+                                        const updated = await res.json();
+                                        setTickets(prev => prev.map(item => item._id === t._id ? updated : item));
+                                      }
+                                    } catch (err) { console.error(err); }
+                                  }}
+                                  style={{
+                                    background: '#10B981',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '5px 10px',
+                                    fontSize: '10.5px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    transition: 'background 0.15s ease'
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.background = '#059669'}
+                                  onMouseLeave={e => e.currentTarget.style.background = '#10B981'}
+                                >
+                                  Resolve
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 700 }}>Resolved</span>
+                              )}
+                            </td>
                           </tr>
                         )})}
                       </tbody>
@@ -10832,7 +11007,7 @@ const SuperAdminDashboard = () => {
                           </div>
                           
                           {/* Ticket Status Action Buttons */}
-                          <div style={{ display: 'flex', gap: '6px' }}>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                             {ticket.status !== 'Resolved' && (
                               <button
                                 onClick={async () => {
@@ -10849,53 +11024,36 @@ const SuperAdminDashboard = () => {
                                     }
                                   } catch (err) { console.error(err); }
                                 }}
-                                style={{ background: '#10B981', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}
+                                style={{ background: '#10B981', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', transition: 'background 0.15s ease' }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#059669'}
+                                onMouseLeave={e => e.currentTarget.style.background = '#10B981'}
                               >
                                 Resolve
                               </button>
                             )}
-                            {ticket.status !== 'Closed' && (
-                              <button
-                                onClick={async () => {
-                                  const token = localStorage.getItem('token');
-                                  try {
-                                    const res = await fetch(`/api/superadmin/tickets/${ticket._id}`, {
-                                      method: 'PUT',
-                                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                      body: JSON.stringify({ status: 'Closed' })
-                                    });
-                                    if (res.ok) {
-                                      const updated = await res.json();
-                                      setTickets(prev => prev.map(t => t._id === ticket._id ? updated : t));
-                                    }
-                                  } catch (err) { console.error(err); }
-                                }}
-                                style={{ background: '#64748B', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}
-                              >
-                                Close
-                              </button>
-                            )}
-                            {ticket.status !== 'Open' && (
-                              <button
-                                onClick={async () => {
-                                  const token = localStorage.getItem('token');
-                                  try {
-                                    const res = await fetch(`/api/superadmin/tickets/${ticket._id}`, {
-                                      method: 'PUT',
-                                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                      body: JSON.stringify({ status: 'Open' })
-                                    });
-                                    if (res.ok) {
-                                      const updated = await res.json();
-                                      setTickets(prev => prev.map(t => t._id === ticket._id ? updated : t));
-                                    }
-                                  } catch (err) { console.error(err); }
-                                }}
-                                style={{ background: '#F59E0B', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}
-                              >
-                                Reopen
-                              </button>
-                            )}
+                            <button
+                              onClick={() => setSelectedTicketId(null)}
+                              style={{
+                                background: '#F1F5F9',
+                                color: '#475569',
+                                border: '1px solid #CBD5E1',
+                                borderRadius: '6px',
+                                padding: '4px 10px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.background = '#E2E8F0'; e.currentTarget.style.color = '#1E293B'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#475569'; }}
+                              title="Close Side Panel"
+                            >
+                              <LucideIcon name="x" style={{ width: '12px', height: '12px' }} />
+                              Close
+                            </button>
                           </div>
                         </div>
                         
@@ -11988,38 +12146,15 @@ const SuperAdminDashboard = () => {
               return (
                 <div style={styles.pageBodyScroll}>
                   {/* Page Title Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                     <div>
                       <h2 style={styles.cardHeaderTitle}>SaaS Analytics & BI Platform</h2>
-                      <p style={styles.cardHeaderSub}>Review Monthly Recurring Revenue (MRR), ARR conversion charts, plan upgrades, and scheduled email reports templates.</p>
+                      <p style={styles.cardHeaderSub}>Review Monthly Recurring Revenue (MRR), ARR conversion charts, and plan upgrades.</p>
                     </div>
                   </div>
 
-                  {/* Sub Navbar */}
-                  <div style={styles.subNavbar}>
-                    <button 
-                      onClick={() => setBiSubTab('bi-dashboard')} 
-                      style={biSubTab === 'bi-dashboard' ? styles.subNavbarBtnActive : styles.subNavbarBtn}
-                    >
-                      Overview Dashboard
-                    </button>
-                    <button 
-                      onClick={() => setBiSubTab('report-generator')} 
-                      style={biSubTab === 'report-generator' ? styles.subNavbarBtnActive : styles.subNavbarBtn}
-                    >
-                      Report Templates
-                    </button>
-                    <button 
-                      onClick={() => setBiSubTab('schedule-reports')} 
-                      style={biSubTab === 'schedule-reports' ? styles.subNavbarBtnActive : styles.subNavbarBtn}
-                    >
-                      Automated Scheduler
-                    </button>
-                  </div>
-
-                  {/* SUB-TAB 1: BI OVERVIEW DASHBOARD */}
-                  {biSubTab === 'bi-dashboard' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {/* BI OVERVIEW DASHBOARD */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                       {/* KPI Metrics Row */}
                       <div style={styles.kpiGrid}>
                         <div style={styles.kpiCard}>
@@ -12327,311 +12462,6 @@ const SuperAdminDashboard = () => {
                         </div>
                       </div>
                     </div>
-                  )}
-
-                  {/* SUB-TAB 2: CUSTOM REPORT GENERATOR */}
-                  {biSubTab === 'report-generator' && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.1fr', gap: '20px', alignItems: 'start' }}>
-                      {/* Report Builder Form */}
-                      <div style={styles.glassCard}>
-                        <h3 style={styles.cardHeaderTitle}>Custom Report Generator</h3>
-                        <span style={styles.cardHeaderSub}>Build custom data views and export schemas</span>
-                        
-                        <form onSubmit={handleCreateReport} style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '14px' }}>
-                          <div style={styles.formCol}>
-                            <label style={styles.formLabel}>REPORT TEMPLATE NAME</label>
-                            <input
-                              type="text"
-                              required
-                              placeholder="e.g. Q3 Active Enterprise Upgrade Progress"
-                              style={{ ...styles.formInput, width: '100%', boxSizing: 'border-box' }}
-                              value={customReportForm.reportName || ''}
-                              onChange={e => setCustomReportForm(prev => ({ ...prev, reportName: e.target.value }))}
-                            />
-                          </div>
-
-                          <div style={styles.formRow}>
-                            <div style={styles.formCol}>
-                              <label style={styles.formLabel}>PRIMARY DATA SOURCE</label>
-                              <select
-                                style={{ ...styles.filterSelect, height: '36px', fontSize: '12px' }}
-                                value={customReportForm.source}
-                                onChange={e => setCustomReportForm(prev => ({ ...prev, source: e.target.value }))}
-                              >
-                                <option value="Invoices">Invoices & Billings</option>
-                                <option value="Hospitals">Hospital Clients</option>
-                                <option value="Support Tickets">Support Tickets</option>
-                              </select>
-                            </div>
-
-                            <div style={styles.formCol}>
-                              <label style={styles.formLabel}>GROUP BY FIELD</label>
-                              <select
-                                style={{ ...styles.filterSelect, height: '36px', fontSize: '12px' }}
-                                value={customReportForm.groupField}
-                                onChange={e => setCustomReportForm(prev => ({ ...prev, groupField: e.target.value }))}
-                              >
-                                <option value="Hospital">Hospital Name</option>
-                                <option value="Subscription Plan">Subscription Plan</option>
-                                <option value="Status">Billing Status</option>
-                                <option value="Date Created">Date Period</option>
-                              </select>
-                            </div>
-                          </div>
-
-                          <div style={styles.formRow}>
-                            <div style={styles.formCol}>
-                              <label style={styles.formLabel}>AGGREGATION TYPE</label>
-                              <select
-                                style={{ ...styles.filterSelect, height: '36px', fontSize: '12px' }}
-                                value={customReportForm.aggType}
-                                onChange={e => setCustomReportForm(prev => ({ ...prev, aggType: e.target.value }))}
-                              >
-                                <option value="Sum">Sum of values</option>
-                                <option value="Count">Count of entries</option>
-                                <option value="Average">Average metric</option>
-                              </select>
-                            </div>
-
-                            <div style={styles.formCol}>
-                              <label style={styles.formLabel}>CALCULATION FIELD</label>
-                              <select
-                                style={{ ...styles.filterSelect, height: '36px', fontSize: '12px' }}
-                                value={customReportForm.calcField}
-                                onChange={e => setCustomReportForm(prev => ({ ...prev, calcField: e.target.value }))}
-                              >
-                                <option value="Amount">Invoiced Amount</option>
-                                <option value="Health Score">Hospital Health Score</option>
-                                <option value="Doctors Limit">Doctors Limit Allocation</option>
-                                <option value="Storage Limit">Storage Limit Allocation</option>
-                              </select>
-                            </div>
-                          </div>
-
-                          <button 
-                            type="submit" 
-                            style={{ ...styles.btnPrimary, alignSelf: 'flex-start', padding: '10px 20px', marginTop: '6px' }}
-                          >
-                            <LucideIcon name="plus" style={{ width: '15px', height: '15px' }} />
-                            Save Report Template
-                          </button>
-                        </form>
-                      </div>
-
-                      {/* Saved Templates List */}
-                      <div style={styles.glassCard}>
-                        <h3 style={styles.cardHeaderTitle}>Saved Report Generation Templates</h3>
-                        <span style={styles.cardHeaderSub}>Active reporting structures configured for BI export</span>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '14px' }}>
-                          {customReports.length === 0 ? (
-                            <div style={{ padding: '24px', textAlign: 'center', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', color: '#64748B', fontSize: '12.5px' }}>
-                              No custom templates saved. Build a template using the builder form.
-                            </div>
-                          ) : (
-                            customReports.map((rep) => (
-                              <div 
-                                key={rep._id || rep.id} 
-                                style={{
-                                  ...styles.crmFollowupRow,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '12px 16px',
-                                  background: '#FFFFFF',
-                                  border: '1px solid #E2E8F0',
-                                  borderRadius: '10px',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-                                }}
-                              >
-                                <div>
-                                  <strong style={{ fontSize: '12.5px', color: '#0F172A', display: 'block', marginBottom: '2px' }}>{rep.name}</strong>
-                                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>
-                                    <span style={{ color: '#2563EB', fontWeight: 700 }}>Source:</span> {rep.source} &nbsp;|&nbsp; 
-                                    <span style={{ color: '#0F172A', fontWeight: 700 }}> Schema:</span> {rep.field}
-                                  </div>
-                                  <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '4px' }}>Created on: {rep.date || 'Jul 11, 2026'}</div>
-                                </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                  <button 
-                                    onClick={() => showToast('Simulating report export... CSV file downloaded.', 'success')}
-                                    style={{
-                                      background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0',
-                                      borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                    }}
-                                    title="Export Data CSV"
-                                  >
-                                    <LucideIcon name="download" style={{ width: '13px', height: '13px' }} />
-                                  </button>
-                                  <button 
-                                    onClick={() => handleDeleteReport(rep._id)}
-                                    style={{
-                                      background: '#FEF2F2', color: '#DC2626', border: '1px solid #FEE2E2',
-                                      borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                    }}
-                                    title="Delete Template"
-                                  >
-                                    <LucideIcon name="trash" style={{ width: '13px', height: '13px' }} />
-                                  </button>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SUB-TAB 3: REPORT SCHEDULER */}
-                  {biSubTab === 'schedule-reports' && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.1fr', gap: '20px', alignItems: 'start' }}>
-                      {/* Scheduler Form */}
-                      <div style={styles.glassCard}>
-                        <h3 style={styles.cardHeaderTitle}>Schedule Automated Report</h3>
-                        <span style={styles.cardHeaderSub}>Configure automated background jobs for email dispatch</span>
-
-                        <form onSubmit={handleCreateSchedule} style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '14px' }}>
-                          <div style={styles.formCol}>
-                            <label style={styles.formLabel}>SELECT REPORT TYPE</label>
-                            <select
-                              style={{ ...styles.filterSelect, height: '36px', fontSize: '12px' }}
-                              value={scheduleReportForm.reportType}
-                              onChange={e => setScheduleReportForm(prev => ({ ...prev, reportType: e.target.value }))}
-                            >
-                              <option value="Weekly Revenue Summary">Weekly SaaS Revenue Summary</option>
-                              <option value="Daily Operations Log">Daily System Operations Log</option>
-                              <option value="Monthly Support Digest">Monthly Support Ticket Digest</option>
-                              <option value="Customer Health Report">Customer Health & Retention Report</option>
-                            </select>
-                          </div>
-
-                          <div style={styles.formRow}>
-                            <div style={styles.formCol}>
-                              <label style={styles.formLabel}>FREQUENCY</label>
-                              <select
-                                style={{ ...styles.filterSelect, height: '36px', fontSize: '12px' }}
-                                value={scheduleReportForm.frequency}
-                                onChange={e => setScheduleReportForm(prev => ({ ...prev, frequency: e.target.value }))}
-                              >
-                                <option value="Daily">Daily at 8:00 AM</option>
-                                <option value="Weekly">Weekly (Every Monday)</option>
-                                <option value="Monthly">Monthly (1st of Month)</option>
-                              </select>
-                            </div>
-
-                            <div style={styles.formCol}>
-                              <label style={styles.formLabel}>EXPORT FORMAT</label>
-                              <select
-                                style={{ ...styles.filterSelect, height: '36px', fontSize: '12px' }}
-                                value={scheduleReportForm.format}
-                                onChange={e => setScheduleReportForm(prev => ({ ...prev, format: e.target.value }))}
-                              >
-                                <option value="PDF">Adobe PDF (.pdf)</option>
-                                <option value="Excel">Microsoft Excel (.xlsx)</option>
-                                <option value="CSV">Comma Separated Values (.csv)</option>
-                              </select>
-                            </div>
-                          </div>
-
-                          <div style={styles.formCol}>
-                            <label style={styles.formLabel}>RECIPIENT EMAIL ADDRESS</label>
-                            <input
-                              type="email"
-                              required
-                              placeholder="e.g. board@curoxa.com"
-                              style={{ ...styles.formInput, width: '100%', boxSizing: 'border-box' }}
-                              value={scheduleReportForm.recipientEmail || ''}
-                              onChange={e => setScheduleReportForm(prev => ({ ...prev, recipientEmail: e.target.value }))}
-                            />
-                          </div>
-
-                          <button 
-                            type="submit" 
-                            style={{ ...styles.btnPrimary, alignSelf: 'flex-start', padding: '10px 20px', marginTop: '6px' }}
-                          >
-                            <LucideIcon name="clock" style={{ width: '15px', height: '15px' }} />
-                            Schedule Automated Job
-                          </button>
-                        </form>
-                      </div>
-
-                      {/* Active Schedules List */}
-                      <div style={styles.glassCard}>
-                        <h3 style={styles.cardHeaderTitle}>Active Automated Schedules</h3>
-                        <span style={styles.cardHeaderSub}>Recurring server tasks sending updates to target recipients</span>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '14px' }}>
-                          {scheduledReports.length === 0 ? (
-                            <div style={{ padding: '24px', textAlign: 'center', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', color: '#64748B', fontSize: '12.5px' }}>
-                              No active report schedules. Add a schedule job using the scheduler form.
-                            </div>
-                          ) : (
-                            scheduledReports.map((sch) => (
-                              <div 
-                                key={sch._id || sch.id} 
-                                style={{
-                                  ...styles.crmFollowupRow,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '12px 16px',
-                                  background: '#FFFFFF',
-                                  border: '1px solid #E2E8F0',
-                                  borderRadius: '10px',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-                                }}
-                              >
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{sch.name}</strong>
-                                    <span style={{
-                                      padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 800,
-                                      background: '#E6F4EA', color: '#137333', textTransform: 'uppercase'
-                                    }}>
-                                      {sch.status}
-                                    </span>
-                                  </div>
-                                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>
-                                    <span style={{ color: '#2563EB', fontWeight: 700 }}>Interval:</span> {sch.frequency} &nbsp;|&nbsp; 
-                                    <span style={{ color: '#0F172A', fontWeight: 700 }}> Format:</span> {sch.format}
-                                  </div>
-                                  <div style={{ fontSize: '11.5px', color: '#475569', fontWeight: 650, marginTop: '4px' }}>
-                                    <span style={{ color: '#64748B' }}>To:</span> {sch.recipients}
-                                  </div>
-                                </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                  <button 
-                                    onClick={() => showToast('Simulating trigger: Scheduled report email generated and dispatched.', 'success')}
-                                    style={{
-                                      background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE',
-                                      borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                    }}
-                                    title="Trigger Job Now"
-                                  >
-                                    <LucideIcon name="play" style={{ width: '12px', height: '12px' }} />
-                                  </button>
-                                  <button 
-                                    onClick={() => handleDeleteSchedule(sch._id)}
-                                    style={{
-                                      background: '#FEF2F2', color: '#DC2626', border: '1px solid #FEE2E2',
-                                      borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                    }}
-                                    title="Remove Schedule"
-                                  >
-                                    <LucideIcon name="trash" style={{ width: '13px', height: '13px' }} />
-                                  </button>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })()}
@@ -12900,13 +12730,16 @@ const SuperAdminDashboard = () => {
               
               const matchedTabs = [
                 { id: 'dashboard', name: 'Overview / Analytics Dashboard' },
-                { id: 'onboarding', name: 'Hospital Onboarding & Pipeline' },
+                { id: 'hospital-onboarding', name: 'Hospital Onboarding & Pipeline' },
                 { id: 'hospitals', name: 'Connected Corporate Hospitals' },
-                { id: 'tickets', name: 'Client Support Tickets' },
-                { id: 'invoices', name: 'Subscription Invoicing' },
-                { id: 'backups', name: 'Database Backups & Disaster Recovery' },
-                { id: 'settings', name: 'Platform Settings & API Keys' }
-              ].filter(tab => tab.name.toLowerCase().includes(query));
+                { id: 'subscription-mgmt', name: 'Subscription Management & Pricing' },
+                { id: 'support-success', name: 'Client Support Tickets & SLA Desk' },
+                { id: 'broadcast-center', name: 'Platform Broadcast Center' },
+                { id: 'finance-mgmt', name: 'Subscription Invoicing & Finance' },
+                { id: 'hr-mgmt', name: 'Employees & Team Directory' },
+                { id: 'bi-reports', name: 'Platform Reports & SaaS Analytics' },
+                { id: 'platform-control', name: 'Platform Settings & Control Center' }
+              ].filter(tab => tab.name.toLowerCase().includes(query) || tab.id.toLowerCase().includes(query));
 
               const totalResults = matchedHospitals.length + matchedOnboarding.length + matchedTickets.length + matchedTabs.length;
 
@@ -12972,7 +12805,7 @@ const SuperAdminDashboard = () => {
                               key={h._id} 
                               style={{ padding: '10px 16px', fontSize: '12.5px', color: '#1E293B', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
                               onClick={() => {
-                                setActiveTab('onboarding');
+                                setActiveTab('hospital-onboarding');
                                 setSelectedOnboardingHospital(h);
                                 setIsSearchModalOpen(false);
                                 setSearchQuery('');
@@ -12995,7 +12828,7 @@ const SuperAdminDashboard = () => {
                               key={t._id || t.id} 
                               style={{ padding: '10px 16px', fontSize: '12.5px', color: '#1E293B', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
                               onClick={() => {
-                                setActiveTab('tickets');
+                                setActiveTab('support-success');
                                 setSelectedTicketId(t._id);
                                 setIsSearchModalOpen(false);
                                 setSearchQuery('');
