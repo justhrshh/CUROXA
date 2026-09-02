@@ -4,6 +4,7 @@ import * as Icons from 'lucide-react';
 import { socket } from '../utils/socket';
 import { handleAutoLogout } from '../utils/api';
 import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import { exportHospitalValidationReportPdf } from '../utils/exportEngine';
 
 const originalFetch = window.fetch;
 const fetch = async (url, options = {}) => {
@@ -1486,7 +1487,7 @@ const SuperAdminDashboard = () => {
 
       // 4. Update UI state
       setHospitals(prev => [newHospital, ...prev]);
-      setOnboardingHospitals(prev => prev.filter(o => o._id !== hospitalToActivate?._id && o.name !== hospitalName));
+      setOnboardingHospitals(prev => prev.filter(o => o._id !== hospitalToActivate?._id));
       setSelectedOnboardingHospital(null);
       setIsOnboardingWizardOpen(false);
       setIsActivateModalOpen(false);
@@ -2841,12 +2842,30 @@ const SuperAdminDashboard = () => {
 
     const missingFieldsCount = keyFields.length - filledFields;
 
+    const handleCancelWizard = () => {
+      if (wizardHospital?._id) {
+        saveWizardDraft(false).catch(() => {});
+      }
+      setIsOnboardingWizardOpen(false);
+      setWizardHospital(null);
+      setIsExitingWizard(false);
+    };
+
     const saveWizardDraft = async (exitAfterSaving = false, customStep = null) => {
       const token = localStorage.getItem('token');
       const stepToUse = customStep !== null ? customStep : wizardStep;
       
       if (exitAfterSaving) {
         setIsExitingWizard(true);
+      }
+
+      if (!wizardHospital?._id) {
+        if (exitAfterSaving) {
+          setIsOnboardingWizardOpen(false);
+          setWizardHospital(null);
+          setIsExitingWizard(false);
+        }
+        return true;
       }
 
       const panGstVal = (wizardHospital.panNumber?.trim() && wizardHospital.gstin?.trim()) ? 'Approved' : 'Pending';
@@ -2916,6 +2935,8 @@ const SuperAdminDashboard = () => {
       } finally {
         if (exitAfterSaving) {
           setIsExitingWizard(false);
+          setIsOnboardingWizardOpen(false);
+          setWizardHospital(null);
         }
       }
     };
@@ -3185,7 +3206,7 @@ const SuperAdminDashboard = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             {/* Breadcrumb Back Link */}
             <div 
-              onClick={() => saveWizardDraft(true)}
+              onClick={handleCancelWizard}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -3193,8 +3214,7 @@ const SuperAdminDashboard = () => {
                 fontSize: '12px',
                 fontWeight: 700,
                 color: '#2563EB',
-                cursor: isExitingWizard ? 'not-allowed' : 'pointer',
-                opacity: isExitingWizard ? 0.7 : 1,
+                cursor: 'pointer',
                 width: 'fit-content'
               }}
             >
@@ -3246,8 +3266,7 @@ const SuperAdminDashboard = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               type="button"
-              onClick={() => saveWizardDraft(true)}
-              disabled={isExitingWizard}
+              onClick={handleCancelWizard}
               style={{
                 background: '#FFFFFF',
                 border: '1px solid #CBD5E1',
@@ -3256,7 +3275,7 @@ const SuperAdminDashboard = () => {
                 fontSize: '12.5px',
                 fontWeight: 700,
                 color: '#475569',
-                cursor: isExitingWizard ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 transition: 'all 0.15s ease'
               }}
             >
@@ -4583,9 +4602,27 @@ const SuperAdminDashboard = () => {
                     </div>
                     <div style={{ display: 'flex', gap: '10px' }}>
                       <button 
-                        onClick={() => showToast('Exported validation report.', 'success')}
-                        style={{ background: '#FFFFFF', border: '1.5px solid #CBD5E1', color: '#475569', borderRadius: '8px', padding: '8px 16px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}
+                        type="button"
+                        onClick={() => {
+                          try {
+                            const savedFilename = exportHospitalValidationReportPdf({
+                              hospital: wizardHospital || {},
+                              readinessPercent,
+                              compliancePassed,
+                              adminApproved,
+                              goLiveDate,
+                              missingFieldsCount,
+                              isModuleEnabled
+                            });
+                            showToast(`Validation report downloaded (${savedFilename}).`, 'success');
+                          } catch (err) {
+                            console.error('Validation report export error:', err);
+                            showToast('Failed to export report: ' + err.message, 'error');
+                          }
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FFFFFF', border: '1.5px solid #CBD5E1', color: '#334155', borderRadius: '8px', padding: '8px 16px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s' }}
                       >
+                        <LucideIcon name="file-text" style={{ width: '14px', height: '14px', color: '#2563EB' }} />
                         Export Validation Report
                       </button>
                       <button 
@@ -4844,50 +4881,6 @@ const SuperAdminDashboard = () => {
                         </div>
                       );
                     })()}
-                  </div>
-
-                  {/* Approval Timeline */}
-                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-                    <strong style={{ fontSize: '14px', color: '#0F172A', fontWeight: 805 }}>Approval Timeline</strong>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', padding: '0 20px', margin: '10px 0 20px 0' }}>
-                      {/* Connecting Line */}
-                      <div style={{ position: 'absolute', top: '15px', left: '40px', right: '40px', height: '3px', background: '#E2E8F0', zIndex: 1 }}>
-                        <div style={{ width: '50%', height: '100%', background: '#2563EB' }} />
-                      </div>
-
-                      {[
-                        { label: 'Config Completed', sub: 'Oct 10', state: 'done' },
-                        { label: 'Migration Completed', sub: 'Oct 12', state: 'done' },
-                        { label: 'Validation Running', sub: 'Now', state: 'active' },
-                        { label: 'Client Approval', sub: 'Pending', state: 'pending' },
-                        { label: 'Ready for Go-Live', sub: 'Oct 15', state: 'pending' }
-                      ].map((node, index) => (
-                        <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', zIndex: 2, position: 'relative', width: '120px', textAlign: 'center' }}>
-                          <div style={{ 
-                            width: '32px', 
-                            height: '32px', 
-                            borderRadius: '50%', 
-                            background: node.state === 'done' ? '#2563EB' : node.state === 'active' ? '#FFFFFF' : '#FFFFFF',
-                            border: node.state === 'done' ? 'none' : node.state === 'active' ? '3px solid #2563EB' : '3px solid #E2E8F0',
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center',
-                            boxShadow: node.state === 'active' ? '0 0 0 4px rgba(37, 99, 235, 0.1)' : 'none'
-                          }}>
-                            {node.state === 'done' ? (
-                              <LucideIcon name="check" style={{ width: '16px', height: '16px', color: '#FFFFFF' }} />
-                            ) : node.state === 'active' ? (
-                              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#2563EB' }} />
-                            ) : (
-                              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#E2E8F0' }} />
-                            )}
-                          </div>
-                          <span style={{ fontSize: '11.5px', fontWeight: 800, color: node.state === 'pending' ? '#94A3B8' : '#1E293B' }}>{node.label}</span>
-                          <span style={{ fontSize: '10px', fontWeight: 600, color: node.state === 'active' ? '#2563EB' : '#94A3B8' }}>{node.sub}</span>
-                        </div>
-                      ))}
-                    </div>
                   </div>
 
                   {/* Formal Approvals */}
@@ -5243,7 +5236,7 @@ const SuperAdminDashboard = () => {
           <div style={{ display: 'flex', gap: '10px' }}>
             <button 
               type="button"
-              onClick={() => saveWizardDraft(true)}
+              onClick={handleCancelWizard}
               style={{ 
                 background: '#FFFFFF', 
                 border: '1px solid #E2E8F0', 

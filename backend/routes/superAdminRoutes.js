@@ -546,32 +546,10 @@ router.delete('/plans/:id', async (req, res) => {
 // ==================== ONBOARDING ====================
 router.get('/onboarding', async (req, res) => {
   try {
-    // Auto-purge onboarding drafts for hospitals that are already live in SuperAdminHospital
-    const liveHospitals = await SuperAdminHospital.find({}, { name: 1, code: 1, phone: 1, contactPhone: 1, adminPhone: 1, email: 1, contactEmail: 1, adminEmail: 1, panNumber: 1, gst: 1 }).lean();
-    if (liveHospitals.length > 0) {
-      const liveNames = liveHospitals.map(h => h.name).filter(Boolean);
-      const liveCodes = liveHospitals.map(h => h.code).filter(Boolean);
-      const livePhones = liveHospitals.flatMap(h => [h.phone, h.contactPhone, h.adminPhone]).filter(Boolean);
-      const liveEmails = liveHospitals.flatMap(h => [h.email, h.contactEmail, h.adminEmail]).filter(Boolean);
-      const livePANs = liveHospitals.map(h => h.panNumber).filter(Boolean);
-      const liveGSTs = liveHospitals.map(h => h.gst).filter(Boolean);
-
-      await SuperAdminOnboarding.deleteMany({
-        $or: [
-          { isActivated: true },
-          { status: 'Completed' },
-          { status: 'Live' },
-          { name: { $in: liveNames } },
-          ...(liveCodes.length > 0 ? [{ code: { $in: liveCodes } }] : []),
-          ...(livePhones.length > 0 ? [{ adminPhone: { $in: livePhones } }] : []),
-          ...(liveEmails.length > 0 ? [{ adminEmail: { $in: liveEmails } }] : []),
-          ...(livePANs.length > 0 ? [{ panNumber: { $in: livePANs } }] : []),
-          ...(liveGSTs.length > 0 ? [{ gstin: { $in: liveGSTs } }] : [])
-        ]
-      });
-    }
-
-    const onboardings = await SuperAdminOnboarding.find({});
+    const onboardings = await SuperAdminOnboarding.find({
+      isActivated: { $ne: true },
+      status: { $nin: ['Live', 'Completed'] }
+    }).sort({ createdAt: -1 });
     res.json(onboardings);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -884,16 +862,11 @@ router.post('/hospitals', async (req, res) => {
     
     // Auto-delete corresponding onboarding draft from SuperAdminOnboarding
     try {
-      await SuperAdminOnboarding.deleteMany({
-        $or: [
-          ...(req.body.onboardingId ? [{ _id: req.body.onboardingId }] : []),
-          { name: hospital.name },
-          { adminPhone: adminPhone },
-          { adminEmail: adminEmail.toLowerCase().trim() },
-          ...(hospital.panNumber ? [{ panNumber: hospital.panNumber }] : []),
-          ...(hospital.gst ? [{ gstin: hospital.gst }] : [])
-        ]
-      });
+      if (req.body.onboardingId) {
+        await SuperAdminOnboarding.findByIdAndDelete(req.body.onboardingId);
+      } else if (hospital.code) {
+        await SuperAdminOnboarding.deleteMany({ code: hospital.code });
+      }
     } catch (cleanErr) {
       console.warn('Could not auto-clean onboarding draft:', cleanErr.message);
     }
