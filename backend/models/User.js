@@ -32,12 +32,20 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  otp_purpose: {
+    type: String,
+    default: null
+  },
   login_otp_code: {
     type: String,
     default: null
   },
   login_otp_expires_at: {
     type: Date,
+    default: null
+  },
+  login_otp_purpose: {
+    type: String,
     default: null
   },
   role: {

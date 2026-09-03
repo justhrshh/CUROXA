@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { socket } from '../utils/socket';
-import { handleAutoLogout } from '../utils/api';
+import { handleAutoLogout, clearPortalAuthContext, performLogout } from '../utils/api';
 import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
 import { exportHospitalValidationReportPdf } from '../utils/exportEngine';
 
@@ -523,6 +523,235 @@ const FloatingSelect = ({
   );
 };
 
+// ─── Hospital Identity & Branding Step ──────────────────────────────────────
+const HospitalIdentityStep = ({ wizardHospital, updateWizardField }) => {
+  const logoInputRef = React.useRef(null);
+  const [editingHospName, setEditingHospName] = React.useState(false);
+  const [hospNameDraft, setHospNameDraft] = React.useState(wizardHospital?.name || '');
+  const [logoDragOver, setLogoDragOver] = React.useState(false);
+  const [logoError, setLogoError] = React.useState('');
+
+  React.useEffect(() => {
+    if (!editingHospName) setHospNameDraft(wizardHospital?.name || '');
+  }, [wizardHospital?.name, editingHospName]);
+
+  const handleLogoFile = (file) => {
+    setLogoError('');
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'].includes(file.type)) {
+      setLogoError('Only PNG, JPG, or SVG files are allowed.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoError('Logo must be under 2 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => updateWizardField('logo', e.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const commitHospName = () => {
+    const trimmed = hospNameDraft.trim();
+    if (trimmed) updateWizardField('name', trimmed);
+    setEditingHospName(false);
+  };
+
+  const cardStyle = {
+    background: 'linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%)',
+    border: '1.5px solid #BFDBFE',
+    borderRadius: '16px',
+    padding: '22px 24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '18px',
+    marginBottom: '4px',
+  };
+
+  const dropzoneStyle = {
+    width: '96px',
+    height: '96px',
+    borderRadius: '14px',
+    border: logoDragOver ? '2.5px dashed #2563EB' : '2px dashed #93C5FD',
+    background: logoDragOver ? '#EFF6FF' : '#F8FAFC',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    overflow: 'hidden',
+    flexShrink: 0,
+    transition: 'border-color 0.2s, background 0.2s',
+  };
+
+  return (
+    <div style={cardStyle}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <LucideIcon name="image" size={18} color="#2563EB" />
+        <span style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>Hospital Identity &amp; Branding</span>
+        <span style={{
+          marginLeft: 'auto',
+          fontSize: '10px',
+          fontWeight: 700,
+          color: '#2563EB',
+          background: '#DBEAFE',
+          borderRadius: '999px',
+          padding: '2px 10px',
+          letterSpacing: '0.4px',
+          textTransform: 'uppercase',
+        }}>Used in Portal</span>
+      </div>
+
+      {/* Logo + Name Row */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
+        {/* Logo Dropzone */}
+        <div>
+          <div
+            style={dropzoneStyle}
+            onClick={() => logoInputRef.current && logoInputRef.current.click()}
+            onDragOver={(e) => { e.preventDefault(); setLogoDragOver(true); }}
+            onDragLeave={() => setLogoDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setLogoDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleLogoFile(f); }}
+            title="Click or drag to upload logo"
+          >
+            {wizardHospital && wizardHospital.logo ? (
+              <img
+                src={wizardHospital.logo}
+                alt="Hospital Logo"
+                style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '6px' }}
+              />
+            ) : (
+              <React.Fragment>
+                <LucideIcon name="upload-cloud" size={24} color="#93C5FD" />
+                <span style={{ fontSize: '10px', color: '#94A3B8', marginTop: '4px', textAlign: 'center', lineHeight: 1.3 }}>Upload<br/>Logo</span>
+              </React.Fragment>
+            )}
+          </div>
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+            style={{ display: 'none' }}
+            onChange={(e) => handleLogoFile(e.target.files[0])}
+          />
+          {/* Logo action buttons */}
+          <div style={{ display: 'flex', gap: '6px', marginTop: '8px', justifyContent: 'center' }}>
+            <button
+              type="button"
+              onClick={() => logoInputRef.current && logoInputRef.current.click()}
+              style={{
+                fontSize: '10px', fontWeight: 700, color: '#2563EB',
+                background: '#EFF6FF', border: '1px solid #BFDBFE',
+                borderRadius: '6px', padding: '3px 9px', cursor: 'pointer',
+              }}
+            >
+              {wizardHospital && wizardHospital.logo ? 'Change' : 'Upload'}
+            </button>
+            {wizardHospital && wizardHospital.logo && (
+              <button
+                type="button"
+                onClick={() => { updateWizardField('logo', ''); setLogoError(''); }}
+                style={{
+                  fontSize: '10px', fontWeight: 700, color: '#DC2626',
+                  background: '#FEF2F2', border: '1px solid #FECACA',
+                  borderRadius: '6px', padding: '3px 9px', cursor: 'pointer',
+                }}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          {logoError && (
+            <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#DC2626' }}>{logoError}</p>
+          )}
+          <p style={{ margin: '4px 0 0 0', fontSize: '9px', color: '#94A3B8', textAlign: 'center' }}>PNG / JPG / SVG · max 2 MB</p>
+        </div>
+
+        {/* Hospital Name Edit */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '8px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Hospital Name</span>
+          {editingHospName ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <input
+                autoFocus
+                value={hospNameDraft}
+                onChange={(e) => setHospNameDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') commitHospName(); if (e.key === 'Escape') setEditingHospName(false); }}
+                style={{
+                  width: '100%', padding: '9px 12px',
+                  fontSize: '14px', fontWeight: 600, color: '#0F172A',
+                  border: '1.5px solid #2563EB', borderRadius: '8px',
+                  outline: 'none', background: '#FFFFFF',
+                  boxSizing: 'border-box',
+                }}
+                placeholder="Enter hospital name"
+              />
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={commitHospName}
+                  style={{
+                    fontSize: '12px', fontWeight: 700, color: '#FFFFFF',
+                    background: '#2563EB', border: 'none',
+                    borderRadius: '7px', padding: '6px 16px', cursor: 'pointer',
+                  }}
+                >Save</button>
+                <button
+                  type="button"
+                  onClick={() => { setEditingHospName(false); setHospNameDraft(wizardHospital?.name || ''); }}
+                  style={{
+                    fontSize: '12px', fontWeight: 700, color: '#64748B',
+                    background: '#F1F5F9', border: 'none',
+                    borderRadius: '7px', padding: '6px 16px', cursor: 'pointer',
+                  }}
+                >Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{
+                fontSize: '15px', fontWeight: 700,
+                color: wizardHospital && wizardHospital.name ? '#0F172A' : '#94A3B8',
+              }}>
+                {wizardHospital && wizardHospital.name ? wizardHospital.name : 'Not set'}
+              </span>
+              <button
+                type="button"
+                onClick={() => { setHospNameDraft(wizardHospital?.name || ''); setEditingHospName(true); }}
+                title="Edit hospital name"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', padding: '3px',
+                  borderRadius: '6px', color: '#2563EB',
+                }}
+              >
+                <LucideIcon name="pencil" size={14} color="#2563EB" />
+              </button>
+            </div>
+          )}
+          <p style={{ margin: 0, fontSize: '11px', color: '#64748B', lineHeight: 1.5 }}>
+            The name set in Step 1. Use the pencil icon to update it here.
+          </p>
+        </div>
+      </div>
+
+      {/* Info pill */}
+      <div style={{
+        background: '#EFF6FF', border: '1px solid #BFDBFE',
+        borderRadius: '8px', padding: '9px 13px',
+        display: 'flex', alignItems: 'flex-start', gap: '8px',
+      }}>
+        <LucideIcon name="info" size={14} color="#2563EB" />
+        <span style={{ fontSize: '11px', color: '#1D4ED8', lineHeight: 1.55 }}>
+          This logo and name will appear on the hospital&apos;s staff login portal, email notifications, and patient-facing screens.
+        </span>
+      </div>
+    </div>
+  );
+};
+// ────────────────────────────────────────────────────────────────────────────
+
 const SuperAdminDashboard = () => {
   const navigate = useNavigate();
   const superAdminChatEndRef = useRef(null);
@@ -963,6 +1192,7 @@ const SuperAdminDashboard = () => {
   });
   const [plans, setPlans] = useState([]);
   const [isOnboardingWizardOpen, setIsOnboardingWizardOpen] = useState(false);
+  const [portalSuccessModal, setPortalSuccessModal] = useState(null);
   const [isActivating, setIsActivating] = useState(false);
   const [isExitingWizard, setIsExitingWizard] = useState(false);
   const [wizardHospital, setWizardHospital] = useState(null);
@@ -975,6 +1205,14 @@ const SuperAdminDashboard = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [impersonatingHospital, setImpersonatingHospital] = useState(null);
   const [isAddUserDrawerOpen, setIsAddUserDrawerOpen] = useState(false);
+  const [isLogoEditModalOpen, setIsLogoEditModalOpen] = useState(false);
+  const [logoEditHosp, setLogoEditHosp] = useState(null);
+  const [logoEditDraft, setLogoEditDraft] = useState('');
+  const [logoEditNameDraft, setLogoEditNameDraft] = useState('');
+  const [logoEditError, setLogoEditError] = useState('');
+  const [logoEditSaving, setLogoEditSaving] = useState(false);
+  const [logoEditDragOver, setLogoEditDragOver] = useState(false);
+  const logoEditInputRef = useRef(null);
   const drawerAvatarInputRef = useRef(null);
   const [drawerForm, setDrawerForm] = useState({
     firstName: '',
@@ -1007,6 +1245,72 @@ const SuperAdminDashboard = () => {
   const [showImpersonatedApptModal, setShowImpersonatedApptModal] = useState(false);
   const [showImpersonatedInvoiceModal, setShowImpersonatedInvoiceModal] = useState(false);
   const [showImpersonatedLabModal, setShowImpersonatedLabModal] = useState(false);
+
+  const handleLogoEditFile = (file) => {
+    setLogoEditError('');
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'].includes(file.type)) {
+      setLogoEditError('Only PNG, JPG, or SVG allowed.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoEditError('Logo must be under 2 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => setLogoEditDraft(e.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoEditSave = async () => {
+    if (!logoEditHosp) return;
+    setLogoEditSaving(true);
+    setLogoEditError('');
+    try {
+      const token = localStorage.getItem('token') || localStorage.getItem('superadminToken');
+      const body = { logo: logoEditDraft };
+      if (logoEditNameDraft.trim()) {
+        body.name = logoEditNameDraft.trim();
+      }
+      const res = await fetch(`/api/superadmin/hospitals/${logoEditHosp._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setHospitals(prev => prev.map(h => h._id === logoEditHosp._id ? { ...h, ...updated } : h));
+        if (logoEditHosp.hospitalId) {
+          const hospIdUpper = logoEditHosp.hospitalId.toUpperCase();
+          try {
+            sessionStorage.setItem(`curoxa_portal_${hospIdUpper}`, JSON.stringify({
+              hospitalId: hospIdUpper,
+              name: updated.name || logoEditNameDraft.trim() || logoEditHosp.name,
+              logo: updated.logo || logoEditDraft,
+              status: updated.status || logoEditHosp.status || 'Active'
+            }));
+          } catch (storageErr) {}
+          try {
+            window.dispatchEvent(new CustomEvent('curoxa_portal_branding_updated', {
+              detail: { hospitalId: hospIdUpper }
+            }));
+          } catch (eventErr) {}
+        }
+        setIsLogoEditModalOpen(false);
+        showToast('Hospital branding updated successfully!', 'success');
+      } else {
+        const err = await res.json();
+        setLogoEditError(err.error || 'Failed to save hospital branding.');
+      }
+    } catch (e) {
+      setLogoEditError('Network error. Please try again.');
+    } finally {
+      setLogoEditSaving(false);
+    }
+  };
 
   const fetchImpersonatedStats = async (hospCode) => {
     try {
@@ -1504,6 +1808,7 @@ const SuperAdminDashboard = () => {
       setSelectedOnboardingHospital(null);
       setIsOnboardingWizardOpen(false);
       setIsActivateModalOpen(false);
+      setPortalSuccessModal(newHospital);
       showToast('Hospital subscription activated and Go-Live initialized successfully!', 'success');
       refreshNotifications();
       setActiveTab('hospitals');
@@ -3864,7 +4169,13 @@ const SuperAdminDashboard = () => {
               )}
 
               {wizardStep === 2 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <HospitalIdentityStep
+                  wizardHospital={wizardHospital}
+                  updateWizardField={updateWizardField}
+                />
+              )}
+              {wizardStep === 2 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '-4px' }}>
                   <div>
                     <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Regional & Localization Configurations</h3>
                     <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>Set default times, currencies, languages, and view enabled software modules.</p>
@@ -5097,16 +5408,22 @@ const SuperAdminDashboard = () => {
                       width: '44px', 
                       height: '44px', 
                       borderRadius: '12px', 
-                      background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 100%)', 
+                      background: wizardHospital.logo ? '#FFFFFF' : 'linear-gradient(135deg, #2563EB 0%, #4F46E5 100%)', 
                       color: '#FFFFFF', 
                       display: 'flex', 
                       alignItems: 'center', 
                       justifyContent: 'center', 
                       fontWeight: 900, 
                       fontSize: '15px', 
-                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)' 
+                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
+                      overflow: 'hidden',
+                      border: wizardHospital.logo ? '1.5px solid #BFDBFE' : 'none',
                     }}>
-                      {wizardHospital.name ? wizardHospital.name.slice(0, 2).toUpperCase() : 'NT'}
+                      {wizardHospital.logo ? (
+                        <img src={wizardHospital.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }} />
+                      ) : (
+                        wizardHospital.name ? wizardHospital.name.slice(0, 2).toUpperCase() : 'NT'
+                      )}
                     </div>
                     <div>
                       <div style={{ fontSize: '14px', fontWeight: 850, color: wizardHospital.name ? '#0F172A' : '#64748B' }}>
@@ -6148,9 +6465,7 @@ const SuperAdminDashboard = () => {
         <div style={{ padding: '12px', borderTop: '1px solid #F1F5F9' }}>
           <button
             onClick={() => {
-              localStorage.removeItem('token');
-              localStorage.removeItem('user');
-              navigate('/login');
+              performLogout(navigate);
             }}
             style={{
               display: 'flex', alignItems: 'center', width: '100%', height: '36px',
@@ -6334,9 +6649,7 @@ const SuperAdminDashboard = () => {
                       </button>
                       <button
                         onClick={() => {
-                          localStorage.removeItem('token');
-                          localStorage.removeItem('user');
-                          navigate('/login');
+                          performLogout(navigate);
                         }}
                         style={{
                           display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
@@ -8014,7 +8327,8 @@ const SuperAdminDashboard = () => {
                 const matchesSearch = !term || (
                   hosp.name.toLowerCase().includes(term) ||
                   hosp.code.toLowerCase().includes(term) ||
-                  (hosp.csm && hosp.csm.toLowerCase().includes(term))
+                  (hosp.csm && hosp.csm.toLowerCase().includes(term)) ||
+                  (hosp.hospitalId && hosp.hospitalId.toLowerCase().includes(term))
                 );
 
                 if (!matchesSearch) return false;
@@ -8489,6 +8803,8 @@ const SuperAdminDashboard = () => {
                         <thead>
                           <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                             <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>HOSPITAL DETAILS</th>
+                            <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>HOSPITAL ID</th>
+                            <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PORTAL</th>
                             <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CS OWNER</th>
                             <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LIFECYCLE</th>
                             <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>HEALTH</th>
@@ -8529,14 +8845,132 @@ const SuperAdminDashboard = () => {
                                       justifyContent: 'center',
                                       fontWeight: 600,
                                       fontSize: '12px',
-                                      flexShrink: 0
+                                      flexShrink: 0,
+                                      overflow: 'hidden'
                                     }}>
-                                      {initials}
+                                      {hosp.logo && hosp.logo !== 'H' && (hosp.logo.startsWith('data:') || hosp.logo.startsWith('http://') || hosp.logo.startsWith('https://') || hosp.logo.startsWith('/uploads/')) ? (
+                                        <img src={hosp.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                                      ) : (
+                                        initials
+                                      )}
                                     </div>
                                     <div>
                                       <div style={{ fontSize: '13px', fontWeight: 600, color: '#1E293B', lineHeight: '1.3' }}>{hosp.name}</div>
                                       <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px', lineHeight: '1.3' }}>ID: {hosp.code} • {hosp.limits?.storageUsed || 0} GB used</div>
                                     </div>
+                                  </div>
+                                </td>
+                                <td style={{ ...styles.tableTd, padding: '12px 18px', verticalAlign: 'middle' }}>
+                                  {hosp.hospitalId ? (
+                                    <span style={{
+                                      fontFamily: 'monospace',
+                                      fontWeight: 700,
+                                      fontSize: '11.5px',
+                                      background: '#F1F5F9',
+                                      color: '#0F172A',
+                                      padding: '3px 8px',
+                                      borderRadius: '6px',
+                                      border: '1px solid #CBD5E1',
+                                      letterSpacing: '0.5px',
+                                      display: 'inline-block'
+                                    }}>
+                                      {hosp.hospitalId}
+                                    </span>
+                                  ) : (
+                                    <span style={{ fontSize: '11.5px', color: '#94A3B8', fontStyle: 'italic' }}>Unavailable</span>
+                                  )}
+                                </td>
+                                <td style={{ ...styles.tableTd, padding: '12px 18px', verticalAlign: 'middle' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <a
+                                      href={hosp.hospitalId ? `${window.location.origin}/portal/${hosp.hospitalId}` : '#'}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (!hosp.hospitalId) e.preventDefault();
+                                      }}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '4px 9px',
+                                        borderRadius: '6px',
+                                        fontSize: '11px',
+                                        fontWeight: 650,
+                                        textDecoration: 'none',
+                                        background: hosp.hospitalId ? '#EFF6FF' : '#F8FAFC',
+                                        color: hosp.hospitalId ? '#2563EB' : '#94A3B8',
+                                        border: `1px solid ${hosp.hospitalId ? '#BFDBFE' : '#E2E8F0'}`,
+                                        cursor: hosp.hospitalId ? 'pointer' : 'not-allowed',
+                                        transition: 'all 0.15s ease'
+                                      }}
+                                      title={hosp.hospitalId ? `Open ${window.location.origin}/portal/${hosp.hospitalId}` : 'Portal Unavailable'}
+                                    >
+                                      <LucideIcon name="external-link" style={{ width: '12px', height: '12px' }} />
+                                      <span>Open</span>
+                                    </a>
+                                    <button
+                                      type="button"
+                                      disabled={!hosp.hospitalId}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (!hosp.hospitalId) return;
+                                        const portalUrl = `${window.location.origin}/portal/${hosp.hospitalId}`;
+                                        navigator.clipboard.writeText(portalUrl).then(() => {
+                                          showToast(`Copied portal URL: ${portalUrl}`, 'success');
+                                        }).catch(() => {
+                                          showToast('Failed to copy to clipboard', 'error');
+                                        });
+                                      }}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '4px 9px',
+                                        borderRadius: '6px',
+                                        fontSize: '11px',
+                                        fontWeight: 650,
+                                        background: '#FFFFFF',
+                                        color: hosp.hospitalId ? '#334155' : '#94A3B8',
+                                        border: `1px solid ${hosp.hospitalId ? '#CBD5E1' : '#E2E8F0'}`,
+                                        cursor: hosp.hospitalId ? 'pointer' : 'not-allowed',
+                                        transition: 'all 0.15s ease'
+                                      }}
+                                      title={hosp.hospitalId ? `Copy ${window.location.origin}/portal/${hosp.hospitalId}` : 'Portal Unavailable'}
+                                    >
+                                      <LucideIcon name="copy" style={{ width: '12px', height: '12px' }} />
+                                      <span>Copy</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setLogoEditHosp(hosp);
+                                        setLogoEditDraft(hosp.logo && hosp.logo !== 'H' ? hosp.logo : '');
+                                        setLogoEditNameDraft(hosp.name || '');
+                                        setLogoEditError('');
+                                        setIsLogoEditModalOpen(true);
+                                      }}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '4px 9px',
+                                        borderRadius: '6px',
+                                        fontSize: '11px',
+                                        fontWeight: 650,
+                                        background: '#F0FDF4',
+                                        color: '#16A34A',
+                                        border: '1px solid #BBF7D0',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease'
+                                      }}
+                                      title="Edit hospital logo & name"
+                                    >
+                                      <LucideIcon name="pencil" style={{ width: '12px', height: '12px' }} />
+                                      <span>Edit</span>
+                                    </button>
                                   </div>
                                 </td>
                                 <td style={{ ...styles.tableTd, padding: '12px 18px', verticalAlign: 'middle' }}>
@@ -9236,6 +9670,109 @@ const SuperAdminDashboard = () => {
 
                     {/* Body */}
                     <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      {/* Hospital Portal Identity & Access */}
+                      <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <strong style={{ fontSize: '10px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>HOSPITAL PORTAL ACCESS</strong>
+                          {hosp.hospitalId ? (
+                            <span style={{ fontFamily: 'monospace', fontWeight: 750, fontSize: '11px', background: '#DBEAFE', color: '#1E40AF', padding: '2px 8px', borderRadius: '4px', border: '1px solid #BFDBFE' }}>
+                              {hosp.hospitalId}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>Unavailable</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#334155', fontFamily: 'monospace', background: '#FFFFFF', padding: '8px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', wordBreak: 'break-all' }}>
+                          {hosp.hospitalId ? `${window.location.origin}/portal/${hosp.hospitalId}` : 'Portal URL Unavailable'}
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <a
+                            href={hosp.hospitalId ? `${window.location.origin}/portal/${hosp.hospitalId}` : '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => { if (!hosp.hospitalId) e.preventDefault(); }}
+                            style={{
+                              flex: 1,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              padding: '7px 12px',
+                              borderRadius: '6px',
+                              fontSize: '11.5px',
+                              fontWeight: 650,
+                              textDecoration: 'none',
+                              background: hosp.hospitalId ? '#2563EB' : '#94A3B8',
+                              color: '#FFFFFF',
+                              cursor: hosp.hospitalId ? 'pointer' : 'not-allowed',
+                              boxShadow: hosp.hospitalId ? '0 2px 6px rgba(37, 99, 235, 0.2)' : 'none'
+                            }}
+                          >
+                            <LucideIcon name="external-link" style={{ width: '13px', height: '13px' }} />
+                            <span>Open Portal</span>
+                          </a>
+                          <button
+                            type="button"
+                            disabled={!hosp.hospitalId}
+                            onClick={() => {
+                              if (!hosp.hospitalId) return;
+                              const portalUrl = `${window.location.origin}/portal/${hosp.hospitalId}`;
+                              navigator.clipboard.writeText(portalUrl).then(() => {
+                                showToast(`Copied portal URL: ${portalUrl}`, 'success');
+                              }).catch(() => {
+                                showToast('Failed to copy portal URL', 'error');
+                              });
+                            }}
+                            style={{
+                              flex: 1,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              padding: '7px 12px',
+                              borderRadius: '6px',
+                              fontSize: '11.5px',
+                              fontWeight: 650,
+                              background: '#FFFFFF',
+                              color: hosp.hospitalId ? '#334155' : '#94A3B8',
+                              border: '1px solid #CBD5E1',
+                              cursor: hosp.hospitalId ? 'pointer' : 'not-allowed'
+                            }}
+                          >
+                            <LucideIcon name="copy" style={{ width: '13px', height: '13px' }} />
+                            <span>Copy Link</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLogoEditHosp(hosp);
+                              setLogoEditDraft(hosp.logo && hosp.logo !== 'H' ? hosp.logo : '');
+                              setLogoEditNameDraft(hosp.name || '');
+                              setLogoEditError('');
+                              setIsLogoEditModalOpen(true);
+                            }}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              padding: '7px 14px',
+                              borderRadius: '6px',
+                              fontSize: '11.5px',
+                              fontWeight: 650,
+                              background: '#F0FDF4',
+                              color: '#16A34A',
+                              border: '1px solid #BBF7D0',
+                              cursor: 'pointer'
+                            }}
+                            title="Edit hospital branding & logo"
+                          >
+                            <LucideIcon name="pencil" style={{ width: '13px', height: '13px' }} />
+                            <span>Edit Branding</span>
+                          </button>
+                        </div>
+                      </div>
+
                       {/* Module access flags */}
                       <div>
                         <strong style={{ fontSize: '10px', color: '#64748B', display: 'block', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>SOFTWARE MODULE ACCESS FLAGS</strong>
@@ -12905,6 +13442,232 @@ const SuperAdminDashboard = () => {
         </div>
       )}
 
+      {/* EDIT HOSPITAL BRANDING & LOGO MODAL */}
+      {isLogoEditModalOpen && logoEditHosp && (
+        <div 
+          style={{ 
+            position: 'fixed', 
+            inset: 0, 
+            background: 'rgba(15,23,42,0.6)', 
+            backdropFilter: 'blur(4px)',
+            zIndex: 99999, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            padding: '20px'
+          }}
+          onClick={() => !logoEditSaving && setIsLogoEditModalOpen(false)}
+        >
+          <div 
+            style={{ 
+              background: '#FFFFFF', 
+              borderRadius: '20px', 
+              padding: '28px', 
+              width: '460px', 
+              maxWidth: '100%', 
+              boxShadow: '0 25px 60px -15px rgba(0,0,0,0.3)',
+              border: '1px solid #E2E8F0',
+              position: 'relative'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <LucideIcon name="image" style={{ width: '20px', height: '20px' }} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Edit Hospital Branding</h3>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+                    {logoEditHosp.hospitalId ? `Portal ID: ${logoEditHosp.hospitalId}` : `Code: ${logoEditHosp.code}`}
+                  </div>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => !logoEditSaving && setIsLogoEditModalOpen(false)} 
+                style={{ background: '#F1F5F9', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <LucideIcon name="x" style={{ width: '16px', height: '16px', color: '#64748B' }} />
+              </button>
+            </div>
+
+            {/* Hospital Name field */}
+            <div style={{ marginBottom: '18px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                Hospital Name
+              </label>
+              <input
+                type="text"
+                value={logoEditNameDraft}
+                onChange={e => setLogoEditNameDraft(e.target.value)}
+                placeholder="Enter hospital name"
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1.5px solid #CBD5E1',
+                  fontSize: '13px',
+                  color: '#0F172A',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Logo Dropzone & Controls */}
+            <div style={{ marginBottom: '18px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                Hospital Logo
+              </label>
+              
+              <div
+                style={{
+                  width: '100%',
+                  height: '140px',
+                  borderRadius: '12px',
+                  border: logoEditDragOver ? '2px dashed #2563EB' : '2px dashed #CBD5E1',
+                  background: logoEditDragOver ? '#EFF6FF' : '#F8FAFC',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  overflow: 'hidden',
+                  transition: 'all 0.15s ease',
+                  position: 'relative'
+                }}
+                onClick={() => logoEditInputRef.current && logoEditInputRef.current.click()}
+                onDragOver={e => { e.preventDefault(); setLogoEditDragOver(true); }}
+                onDragLeave={() => setLogoEditDragOver(false)}
+                onDrop={e => {
+                  e.preventDefault();
+                  setLogoEditDragOver(false);
+                  const f = e.dataTransfer.files?.[0];
+                  if (f) handleLogoEditFile(f);
+                }}
+              >
+                {logoEditDraft && logoEditDraft !== 'H' ? (
+                  <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px' }}>
+                    <img 
+                      src={logoEditDraft} 
+                      alt="Logo Preview" 
+                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                    />
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: '#64748B' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <LucideIcon name="upload-cloud" style={{ width: '20px', height: '20px' }} />
+                    </div>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#1E293B' }}>Click or drag & drop logo here</span>
+                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>PNG, JPG, or SVG (max 2 MB)</span>
+                  </div>
+                )}
+              </div>
+
+              <input
+                ref={logoEditInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                style={{ display: 'none' }}
+                onChange={e => {
+                  if (e.target.files?.[0]) handleLogoEditFile(e.target.files[0]);
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '10px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => logoEditInputRef.current && logoEditInputRef.current.click()}
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#2563EB',
+                    background: '#EFF6FF',
+                    border: '1px solid #BFDBFE',
+                    borderRadius: '6px',
+                    padding: '5px 12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {logoEditDraft && logoEditDraft !== 'H' ? 'Change Image' : 'Upload Image'}
+                </button>
+                {logoEditDraft && logoEditDraft !== 'H' && (
+                  <button
+                    type="button"
+                    onClick={() => setLogoEditDraft('')}
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#DC2626',
+                      background: '#FEF2F2',
+                      border: '1px solid #FECACA',
+                      borderRadius: '6px',
+                      padding: '5px 12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Remove Logo
+                  </button>
+                )}
+                <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#94A3B8' }}>Max 2MB</span>
+              </div>
+            </div>
+
+            {logoEditError && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', marginBottom: '16px' }}>
+                {logoEditError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+              <button
+                type="button"
+                disabled={logoEditSaving}
+                onClick={() => setIsLogoEditModalOpen(false)}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  borderRadius: '10px',
+                  border: '1px solid #CBD5E1',
+                  background: '#FFFFFF',
+                  color: '#475569',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: logoEditSaving ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={logoEditSaving}
+                onClick={handleLogoEditSave}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: logoEditSaving ? '#93C5FD' : '#2563EB',
+                  color: '#FFFFFF',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: logoEditSaving ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                {logoEditSaving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* EDIT SUBSCRIPTION PLAN MODAL */}
       {isEditingPlanModalOpen && editingPlan && (
         <div style={styles.modalOverlay} onClick={() => setIsEditingPlanModalOpen(false)}>
@@ -13315,6 +14078,142 @@ const SuperAdminDashboard = () => {
                 <button type="submit" style={{ ...styles.btnPrimary, background: '#10B981' }}>Activate Plan & Provision Account</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* HOSPITAL CREATED PORTAL SUCCESS MODAL */}
+      {portalSuccessModal && (
+        <div style={styles.modalOverlay} onClick={() => setPortalSuccessModal(null)}>
+          <div style={{ ...styles.searchModalContainer, width: '520px', padding: '0', overflow: 'hidden', borderRadius: '16px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ background: 'linear-gradient(135deg, #1E40AF 0%, #2563EB 100%)', padding: '24px', color: '#FFFFFF', position: 'relative' }}>
+              <button 
+                style={{ position: 'absolute', top: '16px', right: '16px', background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer' }}
+                onClick={() => setPortalSuccessModal(null)}
+              >
+                <LucideIcon name="x" style={{ width: '16px', height: '16px' }} />
+              </button>
+              <div style={{ display: 'inline-flex', padding: '8px', background: 'rgba(255,255,255,0.15)', borderRadius: '12px', marginBottom: '12px' }}>
+                <LucideIcon name="check-circle" style={{ width: '28px', height: '28px', color: '#6EE7B7' }} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800 }}>Hospital Created Successfully!</h3>
+              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#DBEAFE' }}>
+                {portalSuccessModal.name} has been activated and is ready for live access.
+              </p>
+            </div>
+
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', background: '#FFFFFF' }}>
+              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>Public Hospital ID</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '14px', background: '#EFF6FF', color: '#1E40AF', padding: '4px 10px', borderRadius: '6px', border: '1px solid #BFDBFE', letterSpacing: '0.5px' }}>
+                    {portalSuccessModal.hospitalId || 'Unavailable'}
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+                    Hospital Portal URL
+                  </label>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    background: '#FFFFFF',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    fontSize: '12.5px',
+                    fontFamily: 'monospace',
+                    color: '#0F172A',
+                    wordBreak: 'break-all'
+                  }}>
+                    {portalSuccessModal.hospitalId ? `${window.location.origin}/portal/${portalSuccessModal.hospitalId}` : 'Unavailable'}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  type="button"
+                  disabled={!portalSuccessModal.hospitalId}
+                  onClick={() => {
+                    if (!portalSuccessModal.hospitalId) return;
+                    const url = `${window.location.origin}/portal/${portalSuccessModal.hospitalId}`;
+                    navigator.clipboard.writeText(url).then(() => {
+                      showToast(`Copied portal URL: ${url}`, 'success');
+                    }).catch(() => {
+                      showToast('Failed to copy portal URL', 'error');
+                    });
+                  }}
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    padding: '10px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    background: '#FFFFFF',
+                    color: '#1E293B',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: portalSuccessModal.hospitalId ? 'pointer' : 'not-allowed',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <LucideIcon name="copy" style={{ width: '15px', height: '15px' }} />
+                  <span>Copy Link</span>
+                </button>
+
+                <a
+                  href={portalSuccessModal.hospitalId ? `${window.location.origin}/portal/${portalSuccessModal.hospitalId}` : '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => {
+                    if (!portalSuccessModal.hospitalId) e.preventDefault();
+                  }}
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    padding: '10px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: portalSuccessModal.hospitalId ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#94A3B8',
+                    color: '#FFFFFF',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    textDecoration: 'none',
+                    cursor: portalSuccessModal.hospitalId ? 'pointer' : 'not-allowed',
+                    boxShadow: portalSuccessModal.hospitalId ? '0 4px 12px rgba(37, 99, 235, 0.25)' : 'none'
+                  }}
+                >
+                  <LucideIcon name="external-link" style={{ width: '15px', height: '15px' }} />
+                  <span>Open Portal</span>
+                </a>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPortalSuccessModal(null)}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    border: '1px solid #E2E8F0',
+                    background: '#F8FAFC',
+                    color: '#475569',
+                    fontSize: '12.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Go to Hospitals
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../utils/api';
+import api, { clearPortalAuthContext, performLogout } from '../utils/api';
 import HRPayroll from './HRPayroll';
+import { HospitalBrandLogo, getActivePortalBranding, restoreActivePortalDocumentMetadata } from '../context/PortalBrandingContext';
 
 const permissionNames = {
   'dr-consult': 'Patient consultation notes',
@@ -709,10 +710,12 @@ const LabDashboard = () => {
   }, [activeTab, labRequests, labInventory, selectedRequestDetails, showProfileMenu, showLabInventoryModal, showDatePicker, currentPage, statusFilter, dateFilter, appliedRepFilters, repCurrentPage]);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/login');
+    performLogout(navigate);
   };
+
+  useEffect(() => {
+    restoreActivePortalDocumentMetadata();
+  }, []);
 
   // Dynamic Avatar Initials and Palette Generator
   const getAvatarStyle = (name) => {
@@ -1841,10 +1844,21 @@ const LabDashboard = () => {
       {activeTab !== 'hr-payroll' && (
         <div className={"sidebar " + (isSidebarCollapsed ? "collapsed " : "") + (mobileSidebarOpen ? "mobile-open" : "")} data-lenis-prevent>
         <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative', width: '100%' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary)', color: '#FFFFFF', fontWeight: 900, fontSize: '16px', boxShadow: '0 0 15px rgba(59, 113, 254, 0.15)', flexShrink: 0 }}>
-            C
-          </div>
-          <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 900, color: '#2563EB', letterSpacing: '-0.02em' }}>Curoxa</span>
+          {getActivePortalBranding() ? (
+            <HospitalBrandLogo 
+              hospital={getActivePortalBranding()} 
+              size={32} 
+              borderRadius={8} 
+              fontSize={14} 
+            />
+          ) : (
+            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary)', color: '#FFFFFF', fontWeight: 900, fontSize: '16px', boxShadow: '0 0 15px rgba(59, 113, 254, 0.15)', flexShrink: 0 }}>
+              C
+            </div>
+          )}
+          <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 900, color: '#2563EB', letterSpacing: '-0.02em' }}>
+            {getActivePortalBranding()?.name || 'Curoxa'}
+          </span>
           <button 
             className="sidebar-collapse-toggle desktop-only-flex"
             onClick={(e) => {

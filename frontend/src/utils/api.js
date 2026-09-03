@@ -55,18 +55,70 @@ api.interceptors.request.use(
   }
 );
 
-export const handleAutoLogout = (reason = 'session_expired') => {
-  if (window.location.pathname === '/login') return;
-  console.warn('[AUTH] Disconnected from backend or session invalid. Automatically logging out...');
-  localStorage.setItem('logout_reason', reason);
+/**
+ * Clears authentication state on logout.
+ * If preservePortal is true (when returning to /portal/:hospitalId), retains the active portal ID
+ * and does not overwrite dynamic document title/favicon with generic defaults.
+ * If preservePortal is false (default/generic logout), removes active portal pointer and resets title/favicon.
+ */
+export const clearPortalAuthContext = ({ preservePortal = false } = {}) => {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
   localStorage.removeItem('tenantId');
   localStorage.removeItem('tenantModules');
   localStorage.removeItem('plan');
+  localStorage.removeItem('doctorClinicalMode');
   localStorage.removeItem('curoxa_superadmin_session');
-  window.dispatchEvent(new CustomEvent('curoxa_logout'));
-  window.location.href = '/login';
+  try {
+    sessionStorage.removeItem('curoxa_return_portal');
+  } catch (e) {}
+
+  if (!preservePortal) {
+    localStorage.removeItem('curoxa_active_portal_id');
+    // Restore document title and favicon to standard Curoxa platform defaults
+    try {
+      document.title = 'Curoxa - Healthcare Dashboard';
+      const faviconEl = document.getElementById('curoxa-dynamic-favicon') || document.querySelector("link[rel*='icon']");
+      if (faviconEl) {
+        faviconEl.setAttribute('href', '/curoxa_icon_logo.png');
+      }
+    } catch (e) {}
+  }
+};
+
+/**
+ * Centralized portal-aware logout workflow:
+ * 1. Captures active portal ID before clearing auth state.
+ * 2. Clears all authenticated credentials and session data.
+ * 3. If active portal ID exists, returns to `/portal/${portalId}` (retaining hospital branding & login context).
+ * 4. Otherwise returns to generic `/login` (with global Curoxa branding).
+ */
+export const performLogout = (navigate) => {
+  const portalId = localStorage.getItem('curoxa_active_portal_id');
+  if (portalId) {
+    clearPortalAuthContext({ preservePortal: true });
+    window.dispatchEvent(new CustomEvent('curoxa_logout'));
+    if (typeof navigate === 'function') {
+      navigate(`/portal/${portalId}`);
+    } else {
+      window.location.href = `/portal/${portalId}`;
+    }
+  } else {
+    clearPortalAuthContext({ preservePortal: false });
+    window.dispatchEvent(new CustomEvent('curoxa_logout'));
+    if (typeof navigate === 'function') {
+      navigate('/login');
+    } else {
+      window.location.href = '/login';
+    }
+  }
+};
+
+export const handleAutoLogout = (reason = 'session_expired') => {
+  if (window.location.pathname === '/login') return;
+  console.warn('[AUTH] Disconnected from backend or session invalid. Automatically logging out...');
+  localStorage.setItem('logout_reason', reason);
+  performLogout();
 };
 
 // Response interceptor to handle token expiration/unauthorized errors (401 / 403) and backend disconnection
@@ -93,7 +145,8 @@ api.interceptors.response.use(
 
       const isPatientAuthRoute = window.location.pathname.startsWith('/patient-register') || 
                                  window.location.pathname.startsWith('/patient/login') ||
-                                 window.location.pathname === '/login';
+                                 window.location.pathname === '/login' ||
+                                 window.location.pathname.startsWith('/portal/');
 
       // Only force redirect and logout if not on auth request/login page and not a subscription limit error
       if (!isAuthRequest && !isPatientAuthRoute && !isSubscriptionError) {

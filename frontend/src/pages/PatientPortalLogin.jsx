@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import api from '../utils/api';
 import { ArrowRight, UserPlus, FileText, User, Lock, Mail, KeyRound, AlertCircle, CheckCircle, Shield, ChevronRight } from 'lucide-react';
 import { OTPField, OTPFieldInput } from '../components/ui/otp-field';
@@ -17,6 +17,27 @@ const PatientPortalLogin = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+
+  useEffect(() => {
+    const portalId = searchParams.get('portal');
+    if (portalId && /^HSP-[A-Z0-9]{6}$/i.test(portalId.trim())) {
+      sessionStorage.setItem('curoxa_return_portal', portalId.trim().toUpperCase());
+    }
+  }, [searchParams]);
+
+  const handleStaffLoginNavigation = () => {
+    const portalId = searchParams.get('portal') || 
+                     location.state?.fromPortal || 
+                     sessionStorage.getItem('curoxa_return_portal');
+    
+    if (portalId && /^HSP-[A-Z0-9]{6}$/i.test(portalId.trim())) {
+      navigate(`/portal/${portalId.trim().toUpperCase()}`);
+    } else {
+      navigate('/login');
+    }
+  };
 
   const handleSendOtp = async (e) => {
     e.preventDefault();
@@ -110,7 +131,7 @@ const PatientPortalLogin = () => {
 
         <button 
           type="button"
-          onClick={() => navigate('/login')} 
+          onClick={handleStaffLoginNavigation} 
           className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl bg-white/90 hover:bg-white border border-slate-200 text-slate-700 hover:text-blue-600 font-semibold text-xs sm:text-sm shadow-sm hover:shadow transition active:scale-[0.98]"
         >
           <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" />

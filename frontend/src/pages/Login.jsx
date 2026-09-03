@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../utils/api';
 import { Eye, EyeOff, AlertCircle, CheckCircle, User, Lock, ArrowRight, ShieldCheck, Activity, Share2, Mail, KeyRound } from 'lucide-react';
 import { OTPField, OTPFieldInput } from '../components/ui/otp-field';
 import loginBg from '../assets/curoxa_bg_enhanced.png';
 import curoxaLogo from '../assets/curoxa_logo_transparent.png';
+import { usePortalBranding, HospitalBrandLogo } from '../context/PortalBrandingContext';
 
 const OTP_LENGTH = 6;
 const OTP_SLOT_KEYS = Array.from({ length: OTP_LENGTH }, (_, i) => `otp-slot-${i}`);
 
 const Login = () => {
+  const portalBranding = usePortalBranding();
+  const hospital = portalBranding?.hospital;
+
   // Mode toggling (SignUp disabled)
   const isSignUp = false;
 
@@ -45,9 +49,42 @@ const Login = () => {
   const [showServerSplash, setShowServerSplash] = useState(false);
   const [showPasswordChangedModal, setShowPasswordChangedModal] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const portalQuery = searchParams.get('portal');
+  useEffect(() => {
+    if (portalQuery && /^HSP-[A-Z0-9]{6}$/i.test(portalQuery.trim())) {
+      navigate(`/portal/${portalQuery.trim().toUpperCase()}`, { replace: true });
+    }
+  }, [portalQuery, navigate]);
+
+  const handlePatientPortalNavigation = () => {
+    const activeHospitalId = hospital?.hospitalId;
+    if (activeHospitalId && /^HSP-[A-Z0-9]{6}$/i.test(activeHospitalId)) {
+      sessionStorage.setItem('curoxa_return_portal', activeHospitalId.toUpperCase());
+      navigate(`/patient/login?portal=${encodeURIComponent(activeHospitalId.toUpperCase())}`);
+    } else {
+      sessionStorage.removeItem('curoxa_return_portal');
+      navigate('/patient/login');
+    }
+  };
 
   useEffect(() => {
     localStorage.removeItem('curoxa_superadmin_session');
+
+    // If on standard platform /login (not wrapped in hospital portal), clear active portal pointer
+    if (!hospital) {
+      localStorage.removeItem('curoxa_active_portal_id');
+      try {
+        sessionStorage.removeItem('curoxa_return_portal');
+      } catch (e) {}
+      document.title = 'Curoxa - Healthcare Dashboard';
+      const faviconEl = document.getElementById('curoxa-dynamic-favicon') || document.querySelector("link[rel*='icon']");
+      if (faviconEl) {
+        faviconEl.setAttribute('href', '/curoxa_icon_logo.png');
+      }
+    }
+
     const reason = localStorage.getItem('logout_reason');
     if (reason === 'password_changed') {
       setShowPasswordChangedModal(true);
@@ -55,7 +92,7 @@ const Login = () => {
     } else if (reason === 'session_expired' || reason === 'backend_disconnected') {
       localStorage.removeItem('logout_reason');
     }
-  }, []);
+  }, [hospital]);
 
   // Forgot Password states
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -95,7 +132,10 @@ const Login = () => {
 
   // Pre-warm: fetch medicines + doctors in the background so the
   // first dashboard load (especially doctor's Rx) is instant.
+  // Skip on portal routes — these requests require auth and would 401
+  // for unauthenticated portal visitors.
   useEffect(() => {
+    if (window.location.pathname.startsWith('/portal/')) return;
     const prewarm = async () => {
       try {
         const [meds, docs] = await Promise.allSettled([
@@ -310,7 +350,8 @@ const Login = () => {
     setLoading(true);
     try {
       const response = await api.post('/auth/forgot-password', {
-        email: forgotEmail
+        email: forgotEmail,
+        tenantId: hospital?.code || undefined
       });
       setForgotSuccess(response.data.message ? `${response.data.message} (Please check your Spam/Junk folder if not received.)` : 'OTP sent successfully! Please check your inbox.');
       setForgotStep(2);
@@ -336,7 +377,8 @@ const Login = () => {
       const response = await api.post('/auth/verify-otp', {
         email: forgotEmail,
         otp: forgotOtp,
-        newPassword: forgotNewPassword
+        newPassword: forgotNewPassword,
+        tenantId: hospital?.code || undefined
       });
       setForgotSuccess(response.data.message || 'Password reset successfully!');
       setTimeout(() => {
@@ -370,7 +412,7 @@ const Login = () => {
         />
         <button
           type="button"
-          onClick={() => navigate('/patient/login')}
+          onClick={handlePatientPortalNavigation}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white border border-slate-200 text-slate-700 hover:text-blue-600 font-semibold text-xs shadow-sm transition active:scale-[0.98]"
         >
           <User className="w-3.5 h-3.5 text-blue-600" />
@@ -381,31 +423,49 @@ const Login = () => {
       {/* LEFT SIDE: Brand & Promotional Area (Desktop only: hidden on mobile/tablet) */}
       <div className="hidden lg:flex relative w-full lg:w-[55%] min-h-screen flex-col justify-between p-10 lg:p-12 xl:p-16 lg:pl-16 xl:pl-24 2xl:pl-28 bg-transparent">
         
-        {/* Top Header / Curoxa Logo */}
+        {/* Top Header / Brand Logo */}
         <div className="relative z-10 lg:ml-4 xl:ml-6">
-          <img 
-            src={curoxaLogo} 
-            alt="Curoxa Healthcare" 
-            className="h-16 sm:h-20 lg:h-20 xl:h-24 w-auto object-contain drop-shadow-sm" 
-            onError={(e) => {
-              e.target.src = '/curoxa_logo_transparent.png';
-            }}
-          />
+          {hospital ? (
+            <div className="flex items-center gap-3.5">
+              <HospitalBrandLogo hospital={hospital} size={54} borderRadius={16} fontSize={20} />
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
+                  {hospital.name}
+                </h2>
+                <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100 uppercase tracking-wider">
+                  Hospital Portal • {hospital.hospitalId}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <img 
+              src={curoxaLogo} 
+              alt="Curoxa Healthcare" 
+              className="h-16 sm:h-20 lg:h-20 xl:h-24 w-auto object-contain drop-shadow-sm" 
+              onError={(e) => {
+                e.target.src = '/curoxa_logo_transparent.png';
+              }}
+            />
+          )}
         </div>
 
         {/* Main Promotional Copy */}
         <div className="relative z-10 mt-2 lg:mt-3 mb-auto max-w-lg lg:ml-4 xl:ml-6">
           <div className="space-y-0.5 sm:space-y-1">
             <h1 className="text-3xl lg:text-[40px] xl:text-[44px] font-black tracking-tight text-slate-900 leading-[1.15]">
-              Smarter Care.
+              {hospital ? 'Clinical Workspace.' : 'Smarter Care.'}
             </h1>
             <h1 className="text-3xl lg:text-[40px] xl:text-[44px] font-black tracking-tight bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 bg-clip-text text-transparent leading-[1.15]">
-              Better Outcomes.
+              {hospital ? 'Connected Care.' : 'Better Outcomes.'}
             </h1>
           </div>
 
           <p className="mt-2 sm:mt-2.5 text-xs sm:text-sm lg:text-[15px] text-slate-600 font-normal leading-relaxed max-w-md">
-            Track, manage, and optimize every clinical moment with <span className="font-semibold text-slate-800">Curoxa</span> — your complete hospital management solution.
+            {hospital ? (
+              <>Sign in to access your authorized clinical workspace at <span className="font-semibold text-slate-800">{hospital.name}</span>. Powered by Curoxa EMR platform.</>
+            ) : (
+              <>Track, manage, and optimize every clinical moment with <span className="font-semibold text-slate-800">Curoxa</span> — your complete hospital management solution.</>
+            )}
           </p>
         </div>
       </div>
@@ -473,19 +533,34 @@ const Login = () => {
           
           {/* Card Top Branding & Header */}
           <div className="text-center mb-6">
-            <img 
-              src={curoxaLogo} 
-              alt="Curoxa" 
-              className="h-12 sm:h-14 lg:h-16 w-auto mx-auto object-contain mb-3 sm:mb-4 drop-shadow-sm" 
-              onError={(e) => {
-                e.target.src = '/curoxa_logo_transparent.png';
-              }}
-            />
+            {hospital ? (
+              <div className="flex flex-col items-center mb-3">
+                <HospitalBrandLogo hospital={hospital} size={56} borderRadius={16} fontSize={22} className="mb-2.5 shadow-md" />
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight text-center leading-tight">
+                  {hospital.name}
+                </h2>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-[11px] font-bold text-slate-500 font-mono uppercase tracking-wider">
+                    {hospital.hospitalId}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <img 
+                src={curoxaLogo} 
+                alt="Curoxa" 
+                className="h-12 sm:h-14 lg:h-16 w-auto mx-auto object-contain mb-3 sm:mb-4 drop-shadow-sm" 
+                onError={(e) => {
+                  e.target.src = '/curoxa_logo_transparent.png';
+                }}
+              />
+            )}
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Welcome back
+              {hospital ? 'Staff & Clinical Sign In' : 'Welcome back'}
             </h2>
             <p className="text-sm sm:text-base text-slate-500 font-normal mt-1.5">
-              Sign in to continue to Curoxa
+              {hospital ? 'Enter your credentials to access this hospital portal' : 'Sign in to continue to Curoxa'}
             </p>
           </div>
 
@@ -603,7 +678,7 @@ const Login = () => {
               {/* Patient Portal Option (Subtle Green Tint) */}
               <button
                 type="button"
-                onClick={() => navigate('/patient/login')}
+                onClick={handlePatientPortalNavigation}
                 className="w-full h-12 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200 text-emerald-800 font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition duration-150 shadow-sm"
               >
                 <User className="w-5 h-5 text-emerald-600" />
@@ -731,7 +806,7 @@ const Login = () => {
               {/* Patient Portal Option */}
               <button
                 type="button"
-                onClick={() => navigate('/patient/login')}
+                onClick={handlePatientPortalNavigation}
                 className="w-full h-12 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200 text-emerald-800 font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition duration-150 shadow-sm"
               >
                 <User className="w-5 h-5 text-emerald-600" />
@@ -857,13 +932,13 @@ const Login = () => {
             {forgotStep === 1 ? (
               <form onSubmit={handleRequestOtp} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address or Staff ID</label>
                   <input
-                    type="email"
+                    type="text"
                     required
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
-                    placeholder="name@example.com"
+                    placeholder="name@example.com or staff ID"
                     className="w-full h-11 px-3.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
                   />
                 </div>

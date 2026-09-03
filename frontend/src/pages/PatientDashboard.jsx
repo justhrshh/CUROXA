@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../utils/api';
+import api, { clearPortalAuthContext } from '../utils/api';
 import { joinTenantRoom } from '../utils/socket';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import curoxaHero3D from '../assets/curoxa_hero_3d.png';
@@ -994,12 +994,7 @@ const PatientDashboard = () => {
     try {
       setShowProfileMenu(false);
       const isPatient = !currentUser.role || currentUser.role === 'patient';
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('tenantId');
-      localStorage.removeItem('tenantModules');
-      localStorage.removeItem('plan');
-      localStorage.removeItem('curoxa_superadmin_session');
+      clearPortalAuthContext();
       window.dispatchEvent(new CustomEvent('curoxa_logout'));
       window.location.href = isPatient ? '/patient/login' : '/login';
     } catch (e) {

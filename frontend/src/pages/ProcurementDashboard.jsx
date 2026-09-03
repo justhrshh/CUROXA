@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../utils/api';
+import api, { clearPortalAuthContext, performLogout } from '../utils/api';
 import { printPO, printGRN } from '../utils/printDocHelper';
 import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
 import ExportModal from '../components/export/ExportModal';
@@ -222,10 +222,7 @@ const ProcurementDashboard = () => {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.dispatchEvent(new CustomEvent('curoxa_logout'));
-    navigate('/login');
+    performLogout(navigate);
   };
 
   const handleExitProcurement = () => {

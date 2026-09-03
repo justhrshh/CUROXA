@@ -190,87 +190,73 @@ router.get('/:id', async (req, res) => {
       }
     } catch(e) {}
 
-    // 2. If not found, search by _id without tenant restriction (patient self-lookup across platform)
-    if (!patient) {
-      try {
-        patient = await Patient.findById(req.params.id);
-      } catch(e) {}
-    }
+    // 2. If requesting user is a patient, allow looking up own patient record
+    if (!patient && req.user && req.user.role === 'patient') {
+      const isSelf = (req.user.id === req.params.id || req.params.id === 'me' || req.user.staff_id === req.params.id);
+      if (isSelf) {
+        try {
+          const reqUserPhone = req.user.phone || (req.user.staff_id ? req.user.staff_id.split('_')[0] : '');
+          patient = await Patient.findOne({ contact: reqUserPhone, tenantId: req.tenantId }) || 
+                    await Patient.findOne({ contact: req.user.staff_id, tenantId: req.tenantId }) ||
+                    await Patient.findOne({ _id: req.user.id, tenantId: req.tenantId });
+        } catch(e) {}
 
-    // 3. If still not found, check User model for matching patient
-    if (!patient) {
-      try {
-        const user = await User.findById(req.params.id) || 
-                     (req.tenantId ? await User.findOne({ _id: req.params.id, tenantId: req.tenantId }) : null);
-        if (user && user.role === 'patient') {
-          const cleanPhone = user.phone || (user.staff_id ? user.staff_id.split('_')[0] : '');
-          patient = await Patient.findOne({ contact: cleanPhone }) || 
-                    await Patient.findOne({ contact: user.staff_id });
+        // Auto-provision patient record if user exists and is completing onboarding
+        if (!patient) {
+          const userObj = await User.findById(req.user.id) ||
+                          (req.user?.staff_id ? await User.findOne({ staff_id: req.user.staff_id, tenantId: req.tenantId }) : null);
+          if (userObj) {
+            const effectiveTenant = req.tenantId || userObj.tenantId || 'city_hospital';
+            const count = await Patient.countDocuments({ tenantId: effectiveTenant });
+            let nextSeq = count + 1;
+            let formattedId = `pat-${String(nextSeq).padStart(2, '0')}`;
+            let exists = await Patient.exists({ tenantId: effectiveTenant, patientId: formattedId });
+            while (exists) {
+              nextSeq++;
+              formattedId = `pat-${String(nextSeq).padStart(2, '0')}`;
+              exists = await Patient.exists({ tenantId: effectiveTenant, patientId: formattedId });
+            }
+
+            patient = new Patient({
+              patientId: formattedId,
+              name: userObj.name || 'Patient',
+              age: userObj.age || 0,
+              ageMonths: 0,
+              ageDays: 0,
+              gender: userObj.gender || 'Male',
+              contact: userObj.phone || userObj.staff_id || req.user?.staff_id || '9999999999',
+              email: userObj.email || '',
+              address: userObj.address || '',
+              bloodGroup: userObj.bloodGroup || 'O+',
+              allergies: userObj.allergies || '',
+              currentMedications: '',
+              medicalHistory: [],
+              avatar: userObj.avatar || '',
+              tenantId: effectiveTenant
+            });
+            await patient.save();
+
+            userObj.staff_id = patient.contact;
+            userObj.name = patient.name;
+            userObj.isSetupComplete = true;
+            await userObj.save();
+
+            const io = req.app.get("io");
+            if (io && effectiveTenant) {
+              io.to(effectiveTenant).emit("data_changed", { type: "patients" });
+            }
+
+            const isComplete = isPatientProfileComplete(patient);
+            return res.json({
+              ...patient.toObject(),
+              isSetupComplete: isComplete
+            });
+          }
         }
-      } catch(e) {}
-    }
-
-    // 4. If still not found, check by req.user info
-    if (!patient && req.user) {
-      try {
-        const reqUserPhone = req.user.phone || (req.user.staff_id ? req.user.staff_id.split('_')[0] : '');
-        patient = await Patient.findOne({ contact: reqUserPhone }) || 
-                  await Patient.findOne({ contact: req.user.staff_id });
-      } catch(e) {}
-    }
-
-    if (!patient) {
-      // Auto-provision patient record if user exists and is completing onboarding
-      const userObj = await User.findById(req.params.id) ||
-                      (req.user?.id ? await User.findById(req.user.id) : null) ||
-                      (req.user?.staff_id ? await User.findOne({ staff_id: req.user.staff_id }) : null);
-      if (userObj) {
-        const effectiveTenant = req.tenantId || userObj.tenantId || 'city_hospital';
-        const count = await Patient.countDocuments({ tenantId: effectiveTenant });
-        let nextSeq = count + 1;
-        let formattedId = `pat-${String(nextSeq).padStart(2, '0')}`;
-        let exists = await Patient.exists({ tenantId: effectiveTenant, patientId: formattedId });
-        while (exists) {
-          nextSeq++;
-          formattedId = `pat-${String(nextSeq).padStart(2, '0')}`;
-          exists = await Patient.exists({ tenantId: effectiveTenant, patientId: formattedId });
-        }
-
-        patient = new Patient({
-          patientId: formattedId,
-          name: userObj.name || 'Patient',
-          age: userObj.age || 0,
-          ageMonths: 0,
-          ageDays: 0,
-          gender: userObj.gender || 'Male',
-          contact: userObj.phone || userObj.staff_id || req.user?.staff_id || '9999999999',
-          email: userObj.email || '',
-          address: userObj.address || '',
-          bloodGroup: userObj.bloodGroup || 'O+',
-          allergies: userObj.allergies || '',
-          currentMedications: '',
-          medicalHistory: [],
-          avatar: userObj.avatar || '',
-          tenantId: effectiveTenant
-        });
-        await patient.save();
-
-        userObj.staff_id = patient.contact;
-        userObj.name = patient.name;
-        userObj.isSetupComplete = true;
-        await userObj.save();
-
-        const io = req.app.get("io");
-        if (io && effectiveTenant) {
-          io.to(effectiveTenant).emit("data_changed", { type: "patients" });
-        }
-
-        const isComplete = isPatientProfileComplete(patient);
-        return res.json({
-          ...patient.toObject(),
-          isSetupComplete: isComplete
-        });
       }
+    }
+
+    if (!patient) {
       return res.status(404).json({ error: 'Patient not found' });
     }
 

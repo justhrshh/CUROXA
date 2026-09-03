@@ -12,9 +12,11 @@ import PharmacyDashboard from './pages/PharmacyDashboard';
 import HRPayroll from './pages/HRPayroll';
 import ProcurementDashboard from './pages/ProcurementDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import HospitalPortal from './pages/HospitalPortal';
+import { PortalBrandingProvider } from './context/PortalBrandingContext';
 import WakeUpOverlay from './components/WakeUpOverlay';
 import GlobalSupportWidget from './components/GlobalSupportWidget';
-import api from './utils/api';
+import api, { clearPortalAuthContext, performLogout } from './utils/api';
 
 import { socket, joinTenantRoom } from './utils/socket';
 
@@ -179,7 +181,6 @@ function App() {
 
     const handleLogoutEvent = () => {
       console.log('[SOCKET] Logout event caught, disconnecting socket...');
-      localStorage.removeItem('curoxa_superadmin_session');
       socket.disconnect();
     };
 
@@ -199,14 +200,7 @@ function App() {
         if (currentUser && data && (data.userId === currentUser.id || data.userId === currentUser._id || data.staffId === currentUser.staff_id)) {
           console.warn('[SOCKET] Current user session revoked (password changed). Logging out...');
           localStorage.setItem('logout_reason', 'password_changed');
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          localStorage.removeItem('tenantId');
-          localStorage.removeItem('tenantModules');
-          localStorage.removeItem('doctorClinicalMode');
-          localStorage.removeItem('curoxa_superadmin_session');
-          window.dispatchEvent(new CustomEvent('curoxa_logout'));
-          window.location.href = '/login';
+          performLogout();
         }
       } catch (err) {
         console.error('Error handling session revocation socket event:', err);
@@ -327,6 +321,18 @@ function App() {
           <ProtectedRoute targetRole="superadmin">
             <SuperAdminDashboard />
           </ProtectedRoute>
+        } />
+
+        {/* Hospital Portal Branded Routes */}
+        <Route path="/portal/:hospitalId" element={
+          <PortalBrandingProvider>
+            <HospitalPortal />
+          </PortalBrandingProvider>
+        } />
+        <Route path="/portal/:hospitalId/*" element={
+          <PortalBrandingProvider>
+            <HospitalPortal />
+          </PortalBrandingProvider>
         } />
 
         <Route path="/" element={<Navigate to="/login" replace />} />

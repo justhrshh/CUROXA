@@ -222,6 +222,9 @@ app.use("/api/pharmacy-tickets", pharmacyTicketRoutes);
 app.use("/api/pharmacy-sales", checkModule("pharmacy"), pharmacySaleRoutes);
 app.use("/api/inventory-expiry", checkModule(["pharmacy", "inventory"]), inventoryExpiryRoutes);
 
+const portalRoutes = require("./routes/portalRoutes");
+app.use("/api/public/portal", portalRoutes);
+
 // Create HTTP server and initialize socket.io
 const http = require("http").createServer(app);
 const io = require("socket.io")(http, {

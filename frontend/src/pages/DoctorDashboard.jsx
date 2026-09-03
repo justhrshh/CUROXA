@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api, { setEmergencyBypass, isEmergencyBypassActive } from '../utils/api';
+import api, { setEmergencyBypass, isEmergencyBypassActive, clearPortalAuthContext, performLogout } from '../utils/api';
 import PrescriptionMakerTab from './PrescriptionMakerTab';
 import HRPayroll from './HRPayroll';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import ExportModal from '../components/export/ExportModal';
 import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import { HospitalBrandLogo, getActivePortalBranding, restoreActivePortalDocumentMetadata } from '../context/PortalBrandingContext';
 import {
   appointmentExportColumns,
   labReportExportColumns,
@@ -4165,10 +4166,12 @@ I have scanned the medical reference databases, but couldn't find a direct match
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/login');
+    performLogout(navigate);
   };
+
+  useEffect(() => {
+    restoreActivePortalDocumentMetadata();
+  }, []);
 
   useEffect(() => {
     try {
@@ -5214,23 +5217,32 @@ I have scanned the medical reference databases, but couldn't find a direct match
             </svg>
 
             <div className="sidebar-brand">
-              <img 
-                src={curoxaSidebarLogo} 
-                alt="CUROXA" 
-                style={{
-                  width: '44px',
-                  height: '44px',
-                  objectFit: 'contain',
-                  flexShrink: 0,
-                  filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.08))'
-                }}
-              />
+              {getActivePortalBranding() ? (
+                <HospitalBrandLogo 
+                  hospital={getActivePortalBranding()} 
+                  size={44} 
+                  borderRadius={10} 
+                  fontSize={16} 
+                />
+              ) : (
+                <img 
+                  src={curoxaSidebarLogo} 
+                  alt="CUROXA" 
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    objectFit: 'contain',
+                    flexShrink: 0,
+                    filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.08))'
+                  }}
+                />
+              )}
               <div className="sidebar-brand-text-group" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                <span className="sidebar-brand-text" style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif", fontWeight: 900, fontSize: '18px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1 }}>
-                  CUROXA
+                <span className="sidebar-brand-text" style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif", fontWeight: 900, fontSize: '18px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isSidebarCollapsed ? '0px' : '160px' }}>
+                  {getActivePortalBranding()?.name || 'CUROXA'}
                 </span>
                 <span className="sidebar-brand-subtitle" style={{ fontSize: '11px', color: '#64748B', fontWeight: 500, letterSpacing: '-0.01em', marginTop: '3px', lineHeight: 1 }}>
-                  Health Management
+                  {getActivePortalBranding() ? `${getActivePortalBranding()?.hospitalId} • Doctor` : 'Health Management'}
                 </span>
               </div>
               <button 

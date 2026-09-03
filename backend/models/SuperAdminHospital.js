@@ -3,6 +3,14 @@ const mongoose = require('mongoose');
 const superAdminHospitalSchema = new mongoose.Schema({
   name: { type: String, required: true },
   code: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  hospitalId: {
+    type: String,
+    unique: true,
+    sparse: true,
+    uppercase: true,
+    trim: true,
+    match: [/^HSP-[A-Z0-9]{6}$/, 'hospitalId must match format HSP-XXXXXX with 6 uppercase alphanumeric characters']
+  },
   logo: { type: String, default: 'H' },
   letterheadUrl: { type: String, default: '' },
   plan: { type: String, default: 'Standard Basic' },
@@ -77,5 +85,12 @@ const superAdminHospitalSchema = new mongoose.Schema({
     isStandard: { type: Boolean, default: false }
   }]
 }, { timestamps: true });
+
+superAdminHospitalSchema.pre('validate', async function() {
+  if (!this.hospitalId) {
+    const { generateUniqueHospitalId } = require('../utils/generateHospitalId');
+    this.hospitalId = await generateUniqueHospitalId(this.constructor);
+  }
+});
 
 module.exports = mongoose.model('SuperAdminHospital', superAdminHospitalSchema);

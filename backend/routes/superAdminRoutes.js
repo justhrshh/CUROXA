@@ -27,7 +27,15 @@ const r2 = require('../config/r2');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB limit
 
-
+// Helper to resolve frontend base URL dynamically (Render / Production / Staging / Localhost)
+const getFrontendBaseUrl = () => {
+  const rawUrl = process.env.FRONTEND_URL || 
+                 process.env.CLIENT_URL || 
+                 process.env.APP_URL || 
+                 (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',')[0].trim() : null) || 
+                 (process.env.NODE_ENV === 'production' ? 'https://curoxa.onrender.com' : 'http://localhost:3000');
+  return rawUrl.replace(/\/+$/, '');
+};
 
 // Helper to write audit logs
 const writeAudit = async (req, action, details) => {
@@ -907,6 +915,11 @@ router.post('/hospitals', async (req, res) => {
       hospitalData.doctorClinicalMode = 'ONLINE';
     }
 
+    const { generateUniqueHospitalId } = require('../utils/generateHospitalId');
+    if (!hospitalData.hospitalId) {
+      hospitalData.hospitalId = await generateUniqueHospitalId(SuperAdminHospital);
+    }
+
     const hospital = await SuperAdminHospital.create(hospitalData);
     
     const bcrypt = require('bcrypt');
@@ -943,6 +956,9 @@ router.post('/hospitals', async (req, res) => {
     try {
       const { sendEmail } = require('../utils/emailService');
 
+      const frontendBaseUrl = getFrontendBaseUrl();
+      const portalUrl = hospital.hospitalId ? `${frontendBaseUrl}/portal/${hospital.hospitalId}` : `${frontendBaseUrl}/login`;
+
       // Email to Hospital Admin
       const adminMailHtml = `
         <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; background: #FFFFFF;">
@@ -955,6 +971,8 @@ router.post('/hospitals', async (req, res) => {
             <p style="margin: 4px 0; font-size: 13px; color: #475569;"><strong>Name:</strong> ${hospital.name}</p>
             <p style="margin: 4px 0; font-size: 13px; color: #475569;"><strong>Plan/Tier:</strong> ${hospital.plan.toUpperCase()}</p>
             <p style="margin: 4px 0; font-size: 13px; color: #475569;"><strong>Tenant ID:</strong> ${hospital.code}</p>
+            ${hospital.hospitalId ? `<p style="margin: 4px 0; font-size: 13px; color: #475569;"><strong>Portal ID:</strong> ${hospital.hospitalId}</p>` : ''}
+            <p style="margin: 4px 0; font-size: 13px; color: #475569;"><strong>Portal Link:</strong> <a href="${portalUrl}" style="color: #4F46E5; font-weight: 600;">${portalUrl}</a></p>
           </div>
           <div style="background: #EEF2FF; border-radius: 8px; padding: 16px; margin-bottom: 24px; border: 1px solid #E0E7FF;">
             <h3 style="margin-top: 0; font-size: 15px; color: #4F46E5; font-weight: 700;">Your Admin Login Credentials</h3>
@@ -963,7 +981,7 @@ router.post('/hospitals', async (req, res) => {
             <p style="margin: 12px 0 0 0; font-size: 12px; color: #6366F1;">Please log in and update your password immediately for safety.</p>
           </div>
           <div style="text-align: center;">
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Dashboard</a>
+            <a href="${portalUrl}" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Hospital Portal</a>
           </div>
         </div>
       `;
@@ -973,7 +991,7 @@ router.post('/hospitals', async (req, res) => {
       sendEmail({
         to: adminEmail,
         subject: `Welcome to Curoxa! Your Hospital Onboarding is Approved`,
-        text: `Your Curoxa Hospital Admin Account is ready.\nTenant: ${hospital.name} (${hospital.code})\nUsername: ${adminPhone}\nPassword: ${adminPassword}`,
+        text: `Your Curoxa Hospital Admin Account is ready.\nTenant: ${hospital.name} (${hospital.code})\nPortal URL: ${portalUrl}\nUsername: ${adminPhone}\nPassword: ${adminPassword}`,
         html: adminMailHtml
       }).catch(err => console.error("Error sending onboarding admin email:", err));
     } catch (emailErr) {
@@ -996,6 +1014,11 @@ router.put('/hospitals/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const mongoose = require('mongoose');
+
+    // Protect stable identity fields from accidental or malicious mutation
+    delete req.body.hospitalId;
+    delete req.body.code;
+    delete req.body._id;
 
     if (req.body.doctorClinicalMode !== undefined) {
       if (!['ONLINE', 'OFFLINE'].includes(req.body.doctorClinicalMode)) {
@@ -1101,6 +1124,9 @@ router.put('/hospitals/:id/admin', async (req, res) => {
     try {
       const { sendEmail } = require('../utils/emailService');
 
+      const frontendBaseUrl = getFrontendBaseUrl();
+      const portalUrl = hospital.hospitalId ? `${frontendBaseUrl}/portal/${hospital.hospitalId}` : `${frontendBaseUrl}/login`;
+
       // Email to Hospital Admin
       const credentialsMailHtml = `
         <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; background: #FFFFFF;">
@@ -1111,11 +1137,13 @@ router.put('/hospitals/:id/admin', async (req, res) => {
           <div style="background: #FEF3C7; border-radius: 8px; padding: 16px; margin-bottom: 24px; border: 1px solid #FCD34D;">
             <h3 style="margin-top: 0; font-size: 15px; color: #B45309; font-weight: 700;">Your Updated Login Credentials</h3>
             <p style="margin: 4px 0; font-size: 13px; color: #78350F;"><strong>Tenant ID:</strong> ${hospital.code}</p>
+            ${hospital.hospitalId ? `<p style="margin: 4px 0; font-size: 13px; color: #78350F;"><strong>Portal ID:</strong> ${hospital.hospitalId}</p>` : ''}
+            <p style="margin: 4px 0; font-size: 13px; color: #78350F;"><strong>Portal Link:</strong> <a href="${portalUrl}" style="color: #B45309; font-weight: 600;">${portalUrl}</a></p>
             <p style="margin: 4px 0; font-size: 13px; color: #78350F;"><strong>Username (Login ID):</strong> ${adminUser.staff_id}</p>
             ${adminPassword ? `<p style="margin: 4px 0; font-size: 13px; color: #78350F;"><strong>New Password:</strong> ${adminPassword}</p>` : `<p style="margin: 4px 0; font-size: 13px; color: #78350F;"><em>Password was not modified</em></p>`}
           </div>
           <div style="text-align: center;">
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Dashboard</a>
+            <a href="${portalUrl}" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Hospital Portal</a>
           </div>
         </div>
       `;
@@ -1125,7 +1153,7 @@ router.put('/hospitals/:id/admin', async (req, res) => {
       sendEmail({
         to: adminUser.email,
         subject: `Your Curoxa Admin Credentials Have Been Updated`,
-        text: `Your Curoxa Admin login credentials were updated.\nUsername: ${adminUser.staff_id}\nPassword Status: ${adminPassword ? 'Updated' : 'Unchanged'}`,
+        text: `Your Curoxa Admin login credentials were updated.\nUsername: ${adminUser.staff_id}\nPortal URL: ${portalUrl}\nPassword Status: ${adminPassword ? 'Updated' : 'Unchanged'}`,
         html: credentialsMailHtml
       }).catch(err => console.error("Error sending admin update email:", err));
     } catch (emailErr) {
@@ -2167,7 +2195,7 @@ router.post('/employees', async (req, res) => {
             <p style="margin: 12px 0 0 0; font-size: 12px; color: #6366F1;">Please log in and update your password immediately for safety.</p>
           </div>
           <div style="text-align: center;">
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Dashboard</a>
+            <a href="${getFrontendBaseUrl()}/login" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Dashboard</a>
           </div>
         </div>
       `;
@@ -2255,7 +2283,7 @@ router.put('/employees/:id', async (req, res) => {
                 <p style="margin: 4px 0; font-size: 13px; color: #78350F;"><strong>New Password:</strong> ${req.body.password.trim()}</p>
               </div>
               <div style="text-align: center;">
-                <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Dashboard</a>
+                <a href="${getFrontendBaseUrl()}/login" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Dashboard</a>
               </div>
             </div>
           `;

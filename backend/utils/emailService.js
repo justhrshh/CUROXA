@@ -10,9 +10,13 @@ const https = require("https");
  * @param {string} [options.html] - HTML email content
  * @returns {Promise<{ success: boolean, results: Array<{ recipient: string, success: boolean, provider?: string, error?: string }> }>}
  */
-async function sendEmail({ to, subject, text, html }) {
+async function sendEmail({ to, subject, text, html, senderName }) {
   const recipients = Array.isArray(to) ? to : [to];
   const results = [];
+  const displayName = (senderName && senderName.trim()) ? senderName.trim() : "Curoxa Healthcare";
+
+  const cleanHtml = (html && typeof html === 'object' && html.html) ? html.html : (typeof html === 'string' ? html : (html ? String(html) : ''));
+  const cleanText = (text && typeof text === 'string') ? text : (html && typeof html === 'object' && html.text ? html.text : '');
 
   for (const recipient of recipients) {
     let emailSent = false;
@@ -22,9 +26,9 @@ async function sendEmail({ to, subject, text, html }) {
     // 1. Try direct authenticated SMTP first (Gmail / Custom SMTP) - ensures valid SPF/DKIM without 3rd-party spoofing blocks
     if (process.env.SMTP_USER && process.env.SMTP_PASS) {
       try {
-        const plainText = (text && text.trim())
-          ? text.trim()
-          : (html ? html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : (subject || "Curoxa Notification"));
+        const plainText = (cleanText && cleanText.trim())
+          ? cleanText.trim()
+          : (cleanHtml ? cleanHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : (subject || "Curoxa Notification"));
 
         const smtpConfig = {
           host: process.env.SMTP_HOST || "smtp.gmail.com",
@@ -40,12 +44,12 @@ async function sendEmail({ to, subject, text, html }) {
         };
         const transporter = nodemailer.createTransport(smtpConfig);
         await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Curoxa Healthcare" <${process.env.SMTP_USER}>`,
+          from: process.env.SMTP_FROM || `"${displayName}" <${process.env.SMTP_USER}>`,
           to: recipient,
-          replyTo: `"Curoxa Healthcare" <${process.env.SMTP_USER}>`,
+          replyTo: `"${displayName}" <${process.env.SMTP_USER}>`,
           subject,
           text: plainText,
-          html: html || text || ""
+          html: cleanHtml || cleanText || ""
         });
         emailSent = true;
         usedProvider = "SMTP";
@@ -59,21 +63,20 @@ async function sendEmail({ to, subject, text, html }) {
     // 2. Fallback to Brevo HTTP API
     if (!emailSent && process.env.BREVO_API_KEY) {
       try {
-        const plainText = (text && text.trim())
-          ? text.trim()
-          : (html ? html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : (subject || "Curoxa Notification"));
+        const plainText = (cleanText && cleanText.trim())
+          ? cleanText.trim()
+          : (cleanHtml ? cleanHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : (subject || "Curoxa Notification"));
 
         const senderEmail = process.env.SMTP_USER || "curoxatechnology@gmail.com";
-        const senderName = "Curoxa Healthcare";
 
         const payload = JSON.stringify({
           sender: { 
-            name: senderName, 
+            name: displayName, 
             email: senderEmail 
           },
           to: [{ email: recipient }],
           replyTo: {
-            name: senderName,
+            name: displayName,
             email: senderEmail
           },
           headers: {
@@ -81,7 +84,7 @@ async function sendEmail({ to, subject, text, html }) {
           },
           subject,
           textContent: plainText,
-          htmlContent: html || `<p>${plainText}</p>`
+          htmlContent: cleanHtml || `<p>${plainText}</p>`
         });
         const options = {
           hostname: 'api.brevo.com',
@@ -126,8 +129,8 @@ async function sendEmail({ to, subject, text, html }) {
           from: fromAddress,
           to: [recipient],
           subject,
-          text: text || undefined,
-          html: html || text || ""
+          text: cleanText || undefined,
+          html: cleanHtml || cleanText || ""
         });
         const options = {
           hostname: 'api.resend.com',

@@ -11,6 +11,8 @@ const AuditLog = require("../models/AuditLog");
 const { getJwtSecret } = require("../config/env");
 const { verifyToken, isAdmin } = require("../middleware/authMiddleware");
 const { isPatientProfileComplete } = require("../utils/patientProfileHelper");
+const { resolveTrustedHospitalBranding, buildBrandedOtpEmail } = require("../utils/hospitalBrandingHelper");
+const { sendEmail } = require("../utils/emailService");
 const router = express.Router();
 
 // Generate a unique, non-guessable placeholder hash for OAuth-created users.
@@ -419,9 +421,12 @@ router.post("/google-login", tenantMiddleware, async (req, res) => {
         if (!name.toLowerCase().includes('hospital') && !name.toLowerCase().includes('clinic') && !name.toLowerCase().includes('center')) {
           name += ' Medical Center';
         }
+        const { generateUniqueHospitalId } = require("../utils/generateHospitalId");
+        const autoHospitalId = await generateUniqueHospitalId(SuperAdminHospital);
         hospital = await SuperAdminHospital.create({
           name: name,
           code: targetTenant.toLowerCase().trim(),
+          hospitalId: autoHospitalId,
           plan: 'Standard Basic',
           status: 'Active',
           logo: name.charAt(0),
@@ -760,33 +765,76 @@ router.put("/profile/:id", tenantMiddleware, verifyToken, async (req, res) => {
 // POST /api/auth/forgot-password - Send an OTP to the user's email
 router.post("/forgot-password", tenantMiddleware, async (req, res) => {
   const { email } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: "Please provide an email address" });
+  if (!email || !String(email).trim()) {
+    return res.status(400).json({ error: "Please provide an email address or Staff ID" });
   }
 
   try {
-    const searchEmail = email.toLowerCase().trim();
-    // 1. Search for user by email across any tenant
-    let user = await User.findOne({
-      email: searchEmail
-    });
+    const searchInput = String(email).trim();
+    const searchEmail = searchInput.toLowerCase();
+    const isEmailFormat = searchEmail.includes('@');
 
-    // Fallback 1: Check if staff_id is the email across any tenant
+    // Helper to mask email for safe user feedback (e.g. j***h@gmail.com)
+    const maskEmail = (raw) => {
+      if (!raw || !raw.includes('@')) return 'your registered email';
+      const [name, domain] = raw.split('@');
+      const visibleStart = name.slice(0, 1);
+      const visibleEnd = name.length > 2 ? name.slice(-1) : '';
+      return `${visibleStart}***${visibleEnd}@${domain}`;
+    };
+
+    let user = null;
+
+    // 1. If tenantId was specified or resolved, check within that tenant first
+    if (req.tenantId && req.tenantId !== 'city_hospital') {
+      if (isEmailFormat) {
+        user = await User.findOne({ email: searchEmail, tenantId: req.tenantId });
+      } else {
+        user = await User.findOne({
+          tenantId: req.tenantId,
+          $or: [
+            { staff_id: searchInput },
+            { staff_id: searchEmail },
+            { phone: searchInput }
+          ]
+        });
+      }
+    }
+
+    // 2. Search across any tenant
+    if (!user) {
+      if (isEmailFormat) {
+        user = await User.findOne({ email: searchEmail });
+      } else {
+        user = await User.findOne({
+          $or: [
+            { staff_id: searchInput },
+            { staff_id: searchEmail },
+            { phone: searchInput }
+          ]
+        });
+      }
+    }
+
+    // Fallback 1: Check if staff_id matches input across any tenant
     if (!user) {
       const safeSearchStr = searchEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       user = await User.findOne({
         staff_id: { $regex: new RegExp(`^${safeSearchStr}$`, 'i') }
       });
-      if (user && !user.email) {
+      if (user && !user.email && isEmailFormat) {
         user.email = searchEmail;
         await user.save();
       }
     }
 
-    // Fallback 2: Check Patient collection by email across any tenant, then look up auth User by patient.contact
+    // Fallback 2: Check Patient collection by email or contact
     if (!user) {
       const patient = await Patient.findOne({
-        email: searchEmail
+        $or: [
+          { email: searchEmail },
+          { contact: searchInput }
+        ]
       });
       if (patient) {
         user = await User.findOne({
@@ -794,7 +842,6 @@ router.post("/forgot-password", tenantMiddleware, async (req, res) => {
           tenantId: patient.tenantId
         });
         if (!user) {
-          // Create matching User model for authentication on the fly
           const salt = await bcrypt.genSalt(10);
           const password_hash = await bcrypt.hash(randomOAuthPassword(), salt);
           user = await User.create({
@@ -803,258 +850,74 @@ router.post("/forgot-password", tenantMiddleware, async (req, res) => {
             password_hash,
             role: "patient",
             name: patient.name,
-            email: searchEmail,
+            email: patient.email || (isEmailFormat ? searchEmail : ''),
             hasSetPassword: false,
             isSetupComplete: true,
           });
-        } else if (!user.email) {
-          // Self-heal: Save email on the User auth record for future lookups
-          user.email = searchEmail;
+        } else if (!user.email && (patient.email || isEmailFormat)) {
+          user.email = patient.email || searchEmail;
           await user.save();
         }
       }
     }
 
     if (!user) {
-      return res.status(404).json({ error: "No account found with this email address" });
+      return res.status(404).json({ error: "No account found with this email or staff identifier" });
     }
 
-    // Generate a secure 6-digit numeric OTP
+    // Ensure user has a valid email to receive OTP
+    const destinationEmail = (user.email && user.email.trim()) || (isEmailFormat ? searchEmail : null);
+    if (!destinationEmail) {
+      return res.status(400).json({ 
+        error: "No email address is associated with this staff account. Please contact your hospital administrator to update your email." 
+      });
+    }
+
+    // Generate a secure 6-digit numeric OTP with purpose FORGOT_PASSWORD
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.otp_code = otp;
     user.otp_expires_at = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes validity
+    user.otp_purpose = "FORGOT_PASSWORD";
+    if (!user.email && destinationEmail) {
+      user.email = destinationEmail;
+    }
     await user.save();
 
-    const emailHtmlBody = `
-      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 40px 20px; text-align: center;">
-        <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; text-align: left;">
-          <!-- Header -->
-          <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 30px; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em;">Curoxa Security</h1>
-          </div>
-          
-          <!-- Body -->
-          <div style="padding: 40px 30px; text-align: center;">
-            <h2 style="color: #0f172a; margin-top: 0; margin-bottom: 12px; font-size: 20px; font-weight: 600;">Verify Your Identity</h2>
-            <p style="color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 30px; margin-top: 0;">
-              You requested a password reset for your Curoxa account. Use the verification code below to complete the process. This code is valid for <strong>15 minutes</strong>.
-            </p>
-            
-            <!-- OTP Box -->
-            <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px 24px; margin-bottom: 30px; display: inline-block;">
-              <span style="font-size: 32px; font-weight: 700; color: #1e3a8a; letter-spacing: 6px; font-family: 'Courier New', Courier, monospace;">${otp}</span>
-            </div>
-            
-            <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin: 0;">
-              If you did not make this request, please ignore this email. Your password will remain unchanged.
-            </p>
-          </div>
-          
-          <!-- Footer -->
-          <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px; text-align: center;">
-            <p style="color: #94a3b8; font-size: 11px; margin: 0;">
-              &copy; 2026 Curoxa EMR. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </div>
-    `;
+    const hospital = await resolveTrustedHospitalBranding(user.tenantId);
+    const emailContent = buildBrandedOtpEmail({
+      otp,
+      title: "Verify Your Identity",
+      message: `You requested a password reset for your ${hospital.name} account. Use the verification code below to complete the process. This code is valid for <strong>15 minutes</strong>.`,
+      hospital,
+      expiryMinutes: 15
+    });
 
-    let emailSent = false;
+    const emailResult = await sendEmail({
+      to: destinationEmail,
+      subject: emailContent.subject,
+      text: emailContent.text,
+      html: emailContent.html,
+      senderName: hospital.name
+    });
+    const emailSent = emailResult.success;
 
-    if (process.env.BREVO_API_KEY) {
-      try {
-        const https = require("https");
-        const payload = JSON.stringify({
-          sender: { 
-            name: "Curoxa Security", 
-            email: process.env.SMTP_USER || "curoxatechnology@gmail.com" 
-          },
-          to: [{ email: user.email }],
-          subject: "Curoxa Verification Code: " + otp,
-          htmlContent: emailHtmlBody
+    console.log(`[SECURITY] Password-reset OTP generated for ${destinationEmail} (Tenant: ${user.tenantId}, Hospital: ${hospital.name}, Purpose: FORGOT_PASSWORD, Sent: ${emailSent})`);
+
+    if (!emailSent) {
+      console.error(`[SECURITY] Failed to deliver password-reset OTP email to ${destinationEmail}`);
+      if (process.env.NODE_ENV !== "production") {
+        return res.json({
+          message: `OTP generated (email delivery failed via configured SMTP). Verification code: ${otp}`,
+          dev_otp: otp
         });
-
-        const options = {
-          hostname: 'api.brevo.com',
-          port: 443,
-          path: '/v3/smtp/email',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'api-key': process.env.BREVO_API_KEY.trim(),
-            'Content-Length': Buffer.byteLength(payload)
-          }
-        };
-
-        await new Promise((resolve, reject) => {
-          const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => { data += chunk; });
-            res.on('end', () => {
-              if (res.statusCode >= 200 && res.statusCode < 300) {
-                try {
-                  resolve(data ? JSON.parse(data) : {});
-                } catch (_) {
-                  resolve({});
-                }
-              } else {
-                reject(new Error(`Brevo API returned status ${res.statusCode}: ${data}`));
-              }
-            });
-          });
-
-          req.on('error', (e) => { reject(e); });
-          req.write(payload);
-          req.end();
-        });
-
-        emailSent = true;
-        console.log(`[SECURITY] OTP email successfully sent via Brevo HTTP API to ${user.email}`);
-      } catch (brevoError) {
-        console.error("Failed to send OTP email via Brevo API:", brevoError);
       }
-    } else if (process.env.SENDGRID_API_KEY) {
-      try {
-        const https = require("https");
-        const payload = JSON.stringify({
-          personalizations: [{ to: [{ email: user.email }] }],
-          from: { 
-            email: process.env.SMTP_USER || "curoxatechnology@gmail.com", 
-            name: "Curoxa Security" 
-          },
-          subject: "Curoxa Verification Code: " + otp,
-          content: [{ type: "text/html", value: emailHtmlBody }]
-        });
-
-        const options = {
-          hostname: 'api.sendgrid.com',
-          port: 443,
-          path: '/v3/mail/send',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.SENDGRID_API_KEY.trim()}`,
-            'Content-Length': Buffer.byteLength(payload)
-          }
-        };
-
-        await new Promise((resolve, reject) => {
-          const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => { data += chunk; });
-            res.on('end', () => {
-              if (res.statusCode >= 200 && res.statusCode < 300) {
-                try {
-                  resolve(data ? JSON.parse(data) : {});
-                } catch (_) {
-                  resolve({});
-                }
-              } else {
-                reject(new Error(`SendGrid API returned status ${res.statusCode}: ${data}`));
-              }
-            });
-          });
-
-          req.on('error', (e) => { reject(e); });
-          req.write(payload);
-          req.end();
-        });
-
-        emailSent = true;
-        console.log(`[SECURITY] OTP email successfully sent via SendGrid HTTP API to ${user.email}`);
-      } catch (sendgridError) {
-        console.error("Failed to send OTP email via SendGrid API:", sendgridError);
-      }
-    } else if (process.env.RESEND_API_KEY) {
-      try {
-        const https = require("https");
-        const payload = JSON.stringify({
-          from: process.env.SMTP_FROM || "onboarding@resend.dev",
-          to: user.email,
-          subject: "Curoxa Verification Code: " + otp,
-          html: emailHtmlBody
-        });
-
-        const options = {
-          hostname: 'api.resend.com',
-          port: 443,
-          path: '/emails',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.RESEND_API_KEY.trim()}`,
-            'Content-Length': Buffer.byteLength(payload)
-          }
-        };
-
-        await new Promise((resolve, reject) => {
-          const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => { data += chunk; });
-            res.on('end', () => {
-              if (res.statusCode >= 200 && res.statusCode < 300) {
-                try {
-                  resolve(data ? JSON.parse(data) : {});
-                } catch (_) {
-                  resolve({});
-                }
-              } else {
-                reject(new Error(`Resend API returned status ${res.statusCode}: ${data}`));
-              }
-            });
-          });
-
-          req.on('error', (e) => { reject(e); });
-          req.write(payload);
-          req.end();
-        });
-
-        emailSent = true;
-        console.log(`[SECURITY] OTP email successfully sent via Resend HTTP API to ${user.email}`);
-      } catch (resendError) {
-        console.error("Failed to send OTP email via Resend API:", resendError);
-      }
-    } else if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-      try {
-        // Setup nodemailer
-        const nodemailer = require("nodemailer");
-        
-        const smtpConfig = {
-          host: process.env.SMTP_HOST || "smtp.mailtrap.io",
-          port: parseInt(process.env.SMTP_PORT, 10) || 2525,
-          secure: process.env.SMTP_SECURE === "true" || parseInt(process.env.SMTP_PORT, 10) === 465,
-          auth: {
-            user: process.env.SMTP_USER || "",
-            pass: process.env.SMTP_PASS || ""
-          },
-          connectionTimeout: 10000, // 10 seconds timeout to prevent hanging in production if ports are blocked
-          greetingTimeout: 10000,
-          socketTimeout: 10000
-        };
-
-        const transporter = nodemailer.createTransport(smtpConfig);
-        await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Curoxa Security" <${process.env.SMTP_USER}>`,
-          to: user.email,
-          subject: "Curoxa Verification Code: " + otp,
-          text: `Your Curoxa verification code is: ${otp}. It is valid for 15 minutes.`,
-          html: emailHtmlBody
-        });
-        emailSent = true;
-        console.log(`[SECURITY] OTP email successfully sent via SMTP to ${user.email}`);
-      } catch (mailError) {
-        console.error("Failed to send OTP email via SMTP:", mailError);
-      }
+      return res.status(500).json({
+        error: "Failed to deliver verification email. Please contact your system administrator or check mail server settings."
+      });
     }
 
-    // Always log OTP to server console in development for simple verification
-    console.log(`[SECURITY] OTP generated for ${user.email} (Tenant: ${user.tenantId}): ${otp}`);
-
     res.json({
-      message: "If an account with that email exists, an OTP has been sent.",
-      // In development mode (not production) and when email fails, we return it to aid developer validation
-      ...(process.env.NODE_ENV !== "production" && !emailSent ? { dev_otp: otp } : {})
+      message: `A verification code has been sent to ${maskEmail(destinationEmail)}. Please check your inbox and spam folder.`
     });
   } catch (error) {
     console.error("Forgot password error:", error);
@@ -1062,24 +925,33 @@ router.post("/forgot-password", tenantMiddleware, async (req, res) => {
   }
 });
 
-// POST /api/auth/verify-otp - Verify OTP and reset the user's password
+// POST /api/auth/verify-otp - Verify OTP and reset the user's password (Flow A)
 router.post("/verify-otp", tenantMiddleware, async (req, res) => {
   const { email, otp, newPassword } = req.body;
   if (!email || !otp || !newPassword) {
-    return res.status(400).json({ error: "Email, OTP, and new password are required" });
+    return res.status(400).json({ error: "Email/Identifier, OTP, and new password are required" });
   }
 
   try {
-    const user = await User.findOne({
-      email: email.toLowerCase().trim()
+    const searchInput = String(email).trim();
+    const searchEmail = searchInput.toLowerCase();
+
+    // Find user by email, staff_id, or phone
+    let user = await User.findOne({
+      $or: [
+        { email: searchEmail },
+        { staff_id: searchInput },
+        { staff_id: searchEmail },
+        { phone: searchInput }
+      ]
     }).select("+password_hash");
 
     if (!user) {
       return res.status(400).json({ error: "Invalid email or OTP" });
     }
 
-    // Verify OTP matches and has not expired
-    if (!user.otp_code || user.otp_code !== otp || !user.otp_expires_at || user.otp_expires_at < new Date()) {
+    // Verify OTP matches, purpose is FORGOT_PASSWORD, and has not expired
+    if (!user.otp_code || user.otp_code !== String(otp).trim() || !user.otp_expires_at || user.otp_expires_at < new Date() || user.otp_purpose !== "FORGOT_PASSWORD") {
       return res.status(400).json({ error: "Invalid or expired OTP" });
     }
 
@@ -1089,9 +961,10 @@ router.post("/verify-otp", tenantMiddleware, async (req, res) => {
     user.password_version = (user.password_version || 0) + 1;
     user.hasSetPassword = true;
 
-    // Clear the OTP fields
+    // Clear the OTP fields and purpose
     user.otp_code = null;
     user.otp_expires_at = null;
+    user.otp_purpose = null;
     await user.save();
 
     // Broadcast session revocation event via socket
@@ -1102,15 +975,16 @@ router.post("/verify-otp", tenantMiddleware, async (req, res) => {
 
     // Fire-and-forget audit log
     AuditLog.create({
-      tenantId: req.tenantId,
+      tenantId: req.tenantId || user.tenantId,
       actor: user.staff_id,
       actorName: user.name,
       actorRole: user.role,
       action: "password_reset_via_otp",
       target: user._id.toString(),
-      metadata: { method: "otp" },
+      metadata: { method: "otp", purpose: "FORGOT_PASSWORD" },
     }).catch(() => {});
 
+    // Strictly returns message ONLY — Flow A does NOT issue a JWT or create a session
     res.json({ message: "Password reset successful. You can now log in with your new password." });
   } catch (error) {
     console.error("Verify OTP error:", error);
@@ -1226,6 +1100,20 @@ router.post("/send-registration-otp", tenantMiddleware, async (req, res) => {
   try {
     const searchEmail = email.toLowerCase().trim();
     
+    // Check if hospital is suspended or inactive
+    const SuperAdminHospital = require("../models/SuperAdminHospital");
+    const hospital = await SuperAdminHospital.findOne({
+      $or: [
+        { code: req.tenantId },
+        { hospitalId: String(req.tenantId || '').toUpperCase() }
+      ]
+    });
+    if (hospital && hospital.status !== 'Active') {
+      return res.status(403).json({
+        error: `Access denied. The subscription for hospital '${hospital.name}' is currently ${hospital.status}.`
+      });
+    }
+
     // Check if patient with this email already exists in target tenant
     const existingPatient = await Patient.findOne({
       email: searchEmail,
@@ -1245,48 +1133,24 @@ router.post("/send-registration-otp", tenantMiddleware, async (req, res) => {
       { upsert: true, returnDocument: 'after' }
     );
 
-    const emailHtmlBody = `
-      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 40px 20px; text-align: center;">
-        <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; text-align: left;">
-          <!-- Header -->
-          <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 30px; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em;">Curoxa Registration</h1>
-          </div>
-          
-          <!-- Body -->
-          <div style="padding: 40px 30px; text-align: center;">
-            <h2 style="color: #0f172a; margin-top: 0; margin-bottom: 12px; font-size: 20px; font-weight: 600;">Confirm Your Email</h2>
-            <p style="color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 30px; margin-top: 0;">
-              Use the registration verification code below to verify your email address. This code is valid for <strong>15 minutes</strong>.
-            </p>
-            
-            <!-- OTP Box -->
-            <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px 24px; margin-bottom: 30px; display: inline-block;">
-              <span style="font-size: 32px; font-weight: 700; color: #1e3a8a; letter-spacing: 6px; font-family: 'Courier New', Courier, monospace;">${otp}</span>
-            </div>
-            
-            <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin: 0;">
-              If you did not initiate this registration, please ignore this email.
-            </p>
-          </div>
-          
-          <!-- Footer -->
-          <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px; text-align: center;">
-            <p style="color: #94a3b8; font-size: 11px; margin: 0;">
-              &copy; 2026 Curoxa EMR. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </div>
-    `;
+    // Resolve trusted hospital branding from req.tenantId (NEVER from client body)
+    const hospitalBranding = await resolveTrustedHospitalBranding(req.tenantId);
+
+    const emailHtmlBody = buildBrandedOtpEmail({
+      otp,
+      title: `${hospitalBranding.name} Verification Code`,
+      message: `Use the registration verification code below to verify your email address. This code is valid for <strong>15 minutes</strong>.`,
+      hospital: hospitalBranding,
+      expiryMinutes: 15
+    });
 
     let emailSent = false;
 
-    const { sendEmail } = require('../utils/emailService');
     const emailResult = await sendEmail({
       to: searchEmail,
-      subject: "Curoxa Registration Verification Code: " + otp,
-      html: emailHtmlBody
+      subject: `${hospitalBranding.name} Registration Verification Code: ${otp}`,
+      html: emailHtmlBody,
+      senderName: hospitalBranding.name
     });
     emailSent = emailResult.success;
 
@@ -1378,6 +1242,7 @@ router.post("/send-login-otp", tenantMiddleware, async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.login_otp_code = otp;
     user.login_otp_expires_at = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+    user.login_otp_purpose = "LOGIN";
     await user.save();
 
     // 5. Send email (if email is configured)
@@ -1385,23 +1250,22 @@ router.post("/send-login-otp", tenantMiddleware, async (req, res) => {
     const isEmail = input.includes('@');
     const targetEmail = isEmail ? input.toLowerCase().trim() : (user.email ? user.email.toLowerCase().trim() : null);
     if (targetEmail) {
-      const emailHtmlBody = `
-        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-          <h2 style="color: #2563eb; text-align: center;">Curoxa Secure OTP</h2>
-          <p>Hello ${user.name || 'User'},</p>
-          <p>You requested a One-Time Password (OTP) to log into your Curoxa account.</p>
-          <div style="background: #f1f5f9; padding: 15px; border-radius: 6px; text-align: center; font-size: 24px; font-weight: 800; letter-spacing: 5px; color: #1e293b; margin: 20px 0;">
-            ${otp}
-          </div>
-          <p style="font-size: 12px; color: #64748b;">This OTP is valid for 10 minutes. Please do not share this code with anyone.</p>
-        </div>
-      `;
+      // Resolve trusted hospital branding from user.tenantId (NEVER from client body)
+      const hospitalBranding = await resolveTrustedHospitalBranding(user.tenantId);
 
-      const { sendEmail } = require('../utils/emailService');
+      const emailHtmlBody = buildBrandedOtpEmail({
+        otp,
+        title: `${hospitalBranding.name} Login Code`,
+        message: `Hello ${user.name || 'User'},<br/>You requested a One-Time Password (OTP) to log into your account. This code is valid for <strong>10 minutes</strong>.`,
+        hospital: hospitalBranding,
+        expiryMinutes: 10
+      });
+
       const emailResult = await sendEmail({
         to: targetEmail,
-        subject: `Curoxa Login Verification Code: ${otp}`,
-        html: emailHtmlBody
+        subject: `${hospitalBranding.name} Login Verification Code: ${otp}`,
+        html: emailHtmlBody,
+        senderName: hospitalBranding.name
       });
       emailSent = emailResult.success;
     }
@@ -1463,13 +1327,14 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
     }
 
     // 3. Verify OTP
-    if (!user.login_otp_code || user.login_otp_code !== targetOtp || user.login_otp_expires_at < new Date()) {
+    if (!user.login_otp_code || user.login_otp_code !== targetOtp || user.login_otp_expires_at < new Date() || user.login_otp_purpose !== "LOGIN") {
       return res.status(401).json({ error: "Invalid or expired OTP" });
     }
 
     // Clear OTP
     user.login_otp_code = null;
     user.login_otp_expires_at = null;
+    user.login_otp_purpose = null;
     user.lastLogin = new Date();
     await user.save();
 
@@ -1693,39 +1558,26 @@ router.get("/users/all", verifyToken, async (req, res) => {
 // PATIENT PORTAL ROUTES
 // ==========================================
 
-// Production-tested email dispatcher across Brevo, SendGrid, Resend, and SMTP
-async function sendPortalOtpEmail(targetEmail, otp) {
-  const emailHtmlBody = `
-    <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 40px 20px; text-align: center;">
-      <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; text-align: left;">
-        <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 26px; text-align: center;">
-          <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700;">Curoxa Patient Portal</h1>
-        </div>
-        <div style="padding: 32px 24px; text-align: center;">
-          <h2 style="color: #0f172a; margin-top: 0; margin-bottom: 8px; font-size: 18px; font-weight: 700;">Your Verification Code</h2>
-          <p style="color: #475569; font-size: 14px; line-height: 1.5; margin-bottom: 24px;">
-            Use the 6-digit One-Time Password (OTP) below to access your medical records and appointments. This code is valid for <strong>10 minutes</strong>.
-          </p>
-          <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 14px 24px; margin-bottom: 24px; display: inline-block;">
-            <span style="font-size: 32px; font-weight: 800; color: #1e3a8a; letter-spacing: 6px; font-family: monospace;">${otp}</span>
-          </div>
-          <p style="color: #94a3b8; font-size: 12px; margin: 0;">
-            If you did not request this OTP, you can safely ignore this email.
-          </p>
-        </div>
-        <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 14px; text-align: center;">
-          <p style="color: #94a3b8; font-size: 11px; margin: 0;">&copy; 2026 Curoxa Healthcare Systems. Confidential.</p>
-        </div>
-      </div>
-    </div>
-  `;
+// Production-tested email dispatcher across Brevo, SendGrid, Resend, and SMTP with white-label branding
+async function sendPortalOtpEmail(targetEmail, otp, tenantId) {
+  // Resolve trusted hospital branding from tenantId (NEVER from client body)
+  const hospitalBranding = await resolveTrustedHospitalBranding(tenantId);
+
+  const emailHtmlBody = buildBrandedOtpEmail({
+    otp,
+    title: `${hospitalBranding.name} Patient Portal`,
+    message: `Use the 6-digit verification code below to access your medical records and appointments. This code is valid for <strong>10 minutes</strong>.`,
+    hospital: hospitalBranding,
+    expiryMinutes: 10
+  });
 
   const { sendEmail } = require('../utils/emailService');
   const result = await sendEmail({
     to: targetEmail,
-    subject: `${otp} is your Curoxa verification code`,
-    text: `Your Curoxa verification code is: ${otp}. This code is valid for 10 minutes.`,
-    html: emailHtmlBody
+    subject: `${otp} is your ${hospitalBranding.name} verification code`,
+    text: `Your ${hospitalBranding.name} verification code is: ${otp}. This code is valid for 10 minutes.`,
+    html: emailHtmlBody,
+    senderName: hospitalBranding.name
   });
 
   return result.success;
@@ -1773,6 +1625,7 @@ router.post('/patient-portal/send-otp', async (req, res) => {
     if (user) {
       user.login_otp_code = otp;
       user.login_otp_expires_at = expiresAt;
+      user.login_otp_purpose = "PATIENT_PORTAL_LOGIN";
       await user.save();
     }
 
@@ -1796,7 +1649,8 @@ router.post('/patient-portal/send-otp', async (req, res) => {
 
     // Send email to target email address
     if (targetEmail) {
-      await sendPortalOtpEmail(targetEmail, otp);
+      const derivedTenantId = patient?.tenantId || user?.tenantId || req.tenantId || req.headers['x-tenant-id'];
+      await sendPortalOtpEmail(targetEmail, otp, derivedTenantId);
     }
 
     const isRegistered = Boolean(patient || user);
@@ -1842,7 +1696,7 @@ router.post('/patient-portal/verify-otp', async (req, res) => {
 
     // 3. Verify OTP code
     let otpValid = false;
-    if (user && user.login_otp_code === targetOtp && user.login_otp_expires_at >= new Date()) {
+    if (user && user.login_otp_code === targetOtp && user.login_otp_expires_at >= new Date() && (!user.login_otp_purpose || user.login_otp_purpose === "PATIENT_PORTAL_LOGIN")) {
       otpValid = true;
     }
 
@@ -1888,6 +1742,7 @@ router.post('/patient-portal/verify-otp', async (req, res) => {
       } else if (user) {
         user.login_otp_code = null;
         user.login_otp_expires_at = null;
+        user.login_otp_purpose = null;
         user.lastLogin = new Date();
         if (user.isSetupComplete !== isComplete) {
           user.isSetupComplete = isComplete;

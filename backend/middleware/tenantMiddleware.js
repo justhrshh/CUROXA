@@ -10,7 +10,7 @@ const tenantMiddleware = (req, res, next) => {
   }
 
   // 2. Otherwise, check request headers, body, or query string parameters (for login/signup)
-  let tenantId = req.headers['x-tenant-id'] || req.body.tenantId || req.query.tenantId;
+  let tenantId = req.headers['x-tenant-id'] || req.body.tenantId || req.body.hospitalId || req.query.tenantId;
 
   // 3. Normalize tenant ID (trim whitespace, lowercase)
   if (tenantId && typeof tenantId === 'string') {

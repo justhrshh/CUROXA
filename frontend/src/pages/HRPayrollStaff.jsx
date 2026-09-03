@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../utils/api';
+import api, { clearPortalAuthContext, performLogout } from '../utils/api';
 import SearchableDropdown from '../components/SearchableDropdown';
 import { socket, joinTenantRoom } from '../utils/socket';
 
@@ -990,11 +990,7 @@ export default function HRPayrollStaff({ onExit }) {
       else if (currentUser.role === 'lab') navigate('/lab');
       else if (currentUser.role === 'pharmacy') navigate('/pharmacy');
       else {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('tenantId');
-        window.dispatchEvent(new CustomEvent('curoxa_logout'));
-        navigate('/login');
+        performLogout(navigate);
       }
     }
   };
