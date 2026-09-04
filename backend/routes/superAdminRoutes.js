@@ -920,6 +920,11 @@ router.post('/hospitals', async (req, res) => {
       hospitalData.hospitalId = await generateUniqueHospitalId(SuperAdminHospital);
     }
 
+    const { isTrialPlan } = require('../utils/subscriptionHelper');
+    if (isTrialPlan(hospitalData)) {
+      hospitalData.trialUsed = true;
+    }
+
     const hospital = await SuperAdminHospital.create(hospitalData);
     
     const bcrypt = require('bcrypt');

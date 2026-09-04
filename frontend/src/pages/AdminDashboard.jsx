@@ -869,6 +869,18 @@ const AdminDashboard = () => {
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [superAdminPlans, setSuperAdminPlans] = useState([]);
   const [billingCycle, setBillingCycle] = useState('monthly');
+  const [renewingSubscription, setRenewingSubscription] = useState(false);
+
+  const isSubscriptionRestricted = localStorage.getItem('subscriptionRestricted') === 'true' ||
+    subscription?.subscriptionRestricted === true ||
+    subscription?.status === 'EXPIRED' ||
+    subscription?.isExpired === true;
+
+  useEffect(() => {
+    if (isSubscriptionRestricted && activeTab !== 'subscription') {
+      setActiveTab('subscription');
+    }
+  }, [isSubscriptionRestricted, activeTab]);
   
   const sidebarRef = useRef(null);
   const sidebarNavRef = useRef(null);
@@ -1232,6 +1244,21 @@ const AdminDashboard = () => {
     };
   }, []);
 
+  // Cross-tab subscription sync: when one Hospital Admin tab renews the subscription,
+  // other open tabs of the same portal auto-refresh without needing a manual reload.
+  useEffect(() => {
+    const handleStorageSync = (e) => {
+      if (e.key === 'subscriptionRestricted' || e.key === 'subscriptionStatus') {
+        console.log('[STORAGE] AdminDashboard cross-tab subscription sync triggered, key:', e.key);
+        fetchSubscription();
+      }
+    };
+    window.addEventListener('storage', handleStorageSync);
+    return () => {
+      window.removeEventListener('storage', handleStorageSync);
+    };
+  }, []);
+
   const handleManualSyncAll = async () => {
     if (isGlobalSyncing) return;
     setIsGlobalSyncing(true);
@@ -1423,13 +1450,31 @@ const AdminDashboard = () => {
       const lastSeenKey = `curoxa_notifications_last_seen_${userKey}`;
       const lastSeen = Number(localStorage.getItem(lastSeenKey) || 0);
 
-      const [broadcastRes, leavesRes] = await Promise.allSettled([
+      const [broadcastRes, leavesRes, tenantNotifsRes] = await Promise.allSettled([
         api.get('/admin/broadcasts'),
-        api.get('/hr/leaves')
+        api.get('/hr/leaves'),
+        api.get('/admin/notifications')
       ]);
 
       const broadcasts = broadcastRes.status === 'fulfilled' && Array.isArray(broadcastRes.value?.data) ? broadcastRes.value.data : [];
       const leaves = leavesRes.status === 'fulfilled' && Array.isArray(leavesRes.value?.data) ? leavesRes.value.data : [];
+      const tenantNotifs = tenantNotifsRes.status === 'fulfilled' && Array.isArray(tenantNotifsRes.value?.data) ? tenantNotifsRes.value.data : [];
+
+      const expiryNotifs = tenantNotifs
+        .filter(n => !clearedIds.includes(`tenant-notif-${n._id}`))
+        .map(n => {
+          const date = new Date(n.createdAt || Date.now());
+          const timeMs = date.getTime();
+          return {
+            id: `tenant-notif-${n._id}`,
+            title: `⚠️ ${n.title || 'Subscription Notice'}`,
+            message: n.message,
+            time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' · ' + date.toLocaleDateString(),
+            isNew: !isNaN(timeMs) && timeMs > lastSeen,
+            targetTab: 'subscription',
+            createdAt: !isNaN(timeMs) ? timeMs : 0
+          };
+        });
 
       const broadcastNotifs = broadcasts
         .filter(b => !clearedIds.includes(`broadcast-${b._id}`))
@@ -1463,7 +1508,7 @@ const AdminDashboard = () => {
           };
         });
 
-      const allNotifs = [...leaveNotifs, ...broadcastNotifs].sort((a, b) => b.createdAt - a.createdAt);
+      const allNotifs = [...expiryNotifs, ...leaveNotifs, ...broadcastNotifs].sort((a, b) => b.createdAt - a.createdAt);
       setNotifications(allNotifs);
       setSystemBroadcasts(broadcasts);
 
@@ -1974,23 +2019,28 @@ const AdminDashboard = () => {
     );
   };
 
-  const handleUpgradeRequest = async (planName, billingCycleType) => {
+  const handleRenewOrUpgrade = async (planName, billingCycleType) => {
+    setRenewingSubscription(true);
     try {
-      showToast(`Submitting upgrade request for ${planName}...`, "info");
-      const desc = `Hospital Admin requested to upgrade/switch the subscription plan to ${planName} (${billingCycleType} billing). Please review and process the upgrade.`;
-      
-      await api.post('/auth/support/tickets', {
-        department: 'Billing & Subscriptions',
-        priority: 'High',
-        category: 'Subscription Upgrade',
-        description: desc
+      showToast(`Processing renewal / plan change for ${planName || 'subscription'}...`, "info");
+      const res = await api.post('/admin/renew-subscription', {
+        planTier: planName || subscription?.plan || 'Professional Plan',
+        billingCycle: billingCycleType === 'Annual' ? 'annual' : 'monthly'
       });
-      
-      showFeedback(`Request to upgrade/switch to ${planName} (${billingCycleType}) submitted successfully to Superadmin.`, "success");
+      showFeedback(`Subscription successfully renewed on ${res.data.hospital?.plan || planName}! Restricted mode lifted.`, "success");
+      localStorage.setItem('subscriptionRestricted', 'false');
+      localStorage.setItem('subscriptionStatus', 'ACTIVE');
+      await fetchSubscription();
     } catch (err) {
       console.error(err);
-      showFeedback("Failed to submit upgrade request. Please try again.", "error");
+      showFeedback(err.response?.data?.error || "Failed to renew subscription. Please try again.", "error");
+    } finally {
+      setRenewingSubscription(false);
     }
+  };
+
+  const handleUpgradeRequest = async (planName, billingCycleType) => {
+    await handleRenewOrUpgrade(planName, billingCycleType);
   };
 
   const fetchApprovals = async () => {
@@ -11777,6 +11827,65 @@ const AdminDashboard = () => {
           </div>
         )}
 
+        {/* Prominent Restricted Mode Warning Banner */}
+        {isSubscriptionRestricted && (
+          <div style={{ padding: '0 40px', marginTop: '20px' }}>
+            <div style={{
+              padding: '16px 20px',
+              backgroundColor: '#FEF2F2',
+              border: '1.5px solid #F87171',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.08)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <span style={{ fontSize: '26px' }}>⚠️</span>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#991B1B' }}>
+                    {subscription?.isTrial || subscription?.trialUsed
+                      ? "Your trial has ended. Choose a paid plan to continue using CUROXA."
+                      : "Hospital Subscription Expired — Restricted Mode Active"}
+                  </h4>
+                  <p style={{ margin: '3px 0 0 0', fontSize: '13px', color: '#B91C1C', fontWeight: 500 }}>
+                    Clinical and operational modules (Patients, Appointments, Pharmacy, Lab, Staff) are temporarily locked. Choose a paid plan to restore immediate hospital access.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (activeTab !== 'subscription') {
+                    setActiveTab('subscription');
+                  }
+                  setTimeout(() => {
+                    const el = document.getElementById('pricing-plans-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}
+                disabled={renewingSubscription}
+                style={{
+                  backgroundColor: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 20px',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#B91C1C'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#DC2626'}
+              >
+                {subscription?.isTrial || subscription?.trialUsed ? 'CHOOSE PAID PLAN' : (renewingSubscription ? 'Renewing...' : 'Renew Subscription')}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Banners for actions feedback */}
         {activeTab !== 'hr-payroll' && (success || error) && (
           <div style={{ padding: '0 40px', marginTop: '24px' }}>
@@ -19707,15 +19816,15 @@ const AdminDashboard = () => {
                   </div>
 
                   {/* Alert Banner for Subscription Due */}
-                  {daysLeft <= 30 && (
+                  {(daysLeft <= 30 || subscription?.isTrial || subscription?.trialUsed) && (
                     <div className="subscription-alert-banner" style={{ marginBottom: '24px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                         <div style={{
                           width: '40px',
                           height: '40px',
                           borderRadius: '12px',
-                          background: '#DBEAFE',
-                          color: '#2563EB',
+                          background: (subscription?.isTrial || subscription?.trialUsed) ? '#FEF2F2' : '#DBEAFE',
+                          color: (subscription?.isTrial || subscription?.trialUsed) ? '#DC2626' : '#2563EB',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -19724,16 +19833,34 @@ const AdminDashboard = () => {
                           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
                         </div>
                         <div>
-                          <h4 style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: 800, color: '#1E3A8A' }}>Subscription renewal due in {daysLeft} days</h4>
-                          <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#1E40AF' }}>Renew before {renewalDateString} to avoid service disruption. Contact your MediFlow admin.</p>
+                          <h4 style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: 800, color: (subscription?.isTrial || subscription?.trialUsed) ? '#991B1B' : '#1E3A8A' }}>
+                            {(subscription?.isTrial || subscription?.trialUsed)
+                              ? (subscription?.isExpired || daysLeft === 0
+                                  ? "Your trial has ended. Choose a paid plan to continue using CUROXA."
+                                  : `Trial expires in ${daysLeft} days. Choose a paid plan to continue using CUROXA.`)
+                              : `Subscription renewal due in ${daysLeft} days`}
+                          </h4>
+                          <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: (subscription?.isTrial || subscription?.trialUsed) ? '#B91C1C' : '#1E40AF' }}>
+                            {(subscription?.isTrial || subscription?.trialUsed)
+                              ? "Trial plans are one-time only. Select a monthly or annual plan below to activate full hospital access."
+                              : `Renew before ${renewalDateString} to avoid service disruption. Contact your MediFlow admin.`}
+                          </p>
                         </div>
                       </div>
                       <button 
-                        onClick={() => showFeedback("Renewal request submitted successfully to MediFlow support.", "success")}
+                        onClick={() => {
+                          if (subscription?.isTrial || subscription?.trialUsed) {
+                            const el = document.getElementById('pricing-plans-section');
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          } else {
+                            handleRenewOrUpgrade(subscription?.plan, 'Annual');
+                          }
+                        }}
+                        disabled={renewingSubscription}
                         style={{
-                          border: '1.5px solid #2563EB',
-                          background: '#FFFFFF',
-                          color: '#2563EB',
+                          border: 'none',
+                          background: (subscription?.isTrial || subscription?.trialUsed) ? '#DC2626' : '#2563EB',
+                          color: '#FFFFFF',
                           padding: '10px 20px',
                           borderRadius: '8px',
                           fontWeight: 800,
@@ -19743,10 +19870,12 @@ const AdminDashboard = () => {
                           transition: 'all 0.2s',
                           flexShrink: 0
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = '#EFF6FF'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = '#FFFFFF'; }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = (subscription?.isTrial || subscription?.trialUsed) ? '#B91C1C' : '#1D4ED8'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = (subscription?.isTrial || subscription?.trialUsed) ? '#DC2626' : '#2563EB'; }}
                       >
-                        REQUEST RENEWAL
+                        {(subscription?.isTrial || subscription?.trialUsed)
+                          ? 'CHOOSE A PAID PLAN'
+                          : (renewingSubscription ? 'RENEWING...' : 'RENEW NOW')}
                       </button>
                     </div>
                   )}
@@ -19838,7 +19967,7 @@ const AdminDashboard = () => {
                   </div>
 
                   {/* Plan Upgrade Comparison Section with 3D Flip Cards */}
-                  <div className="subscription-plans-section">
+                  <div id="pricing-plans-section" className="subscription-plans-section">
                     <div style={{ textAlign: 'center', marginBottom: '32px' }}>
                       <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', marginBottom: '8px', fontFamily: "'Outfit', sans-serif" }}>
                         Choose the Perfect Scale for Your Hospital

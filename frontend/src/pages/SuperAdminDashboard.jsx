@@ -2879,6 +2879,35 @@ const SuperAdminDashboard = () => {
     };
   }, []);
 
+  // Real-time subscription sync: when Hospital Admin renews, update Super Admin hospitals state immediately
+  useEffect(() => {
+    const handleHospitalSubUpdated = (data) => {
+      console.log('[SOCKET] SuperAdmin received hospital_subscription_updated:', data);
+      if (!data || !data.hospitalCode) return;
+      setHospitals((prev) =>
+        prev.map((h) => {
+          if ((h.code || '').toLowerCase() === data.hospitalCode.toLowerCase()) {
+            return {
+              ...h,
+              plan: data.plan ?? h.plan,
+              status: data.status ?? h.status,
+              subscriptionStatus: data.subscriptionStatus ?? h.subscriptionStatus,
+              subscriptionExpiryDate: data.subscriptionExpiryDate ?? h.subscriptionExpiryDate,
+              revenue: data.revenue ?? h.revenue,
+              trialUsed: data.trialUsed ?? h.trialUsed,
+            };
+          }
+          return h;
+        })
+      );
+    };
+
+    socket.on('hospital_subscription_updated', handleHospitalSubUpdated);
+    return () => {
+      socket.off('hospital_subscription_updated', handleHospitalSubUpdated);
+    };
+  }, []);
+
   useEffect(() => {
     if (superAdminChatEndRef.current) {
       superAdminChatEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -9183,11 +9212,16 @@ const SuperAdminDashboard = () => {
                             const isAnnual = planLower.includes('annual');
                             const planLabel = planStr ? planStr.replace('Annual', '').trim() : 'Standard';
                             
-                            // Calculate dynamic remaining days: Trial = 7 days, Annual = 365 days, Standard = 30 days
-                            const createdDate = hosp.createdAt ? new Date(hosp.createdAt) : new Date();
-                            const durationDays = isTrial ? 7 : (isAnnual ? 365 : 30);
-                            const durationMs = durationDays * 24 * 60 * 60 * 1000;
-                            const expiryDate = new Date(createdDate.getTime() + durationMs);
+                            // Use actual subscriptionExpiryDate from DB (canonical). Only fall back to
+                            // createdAt+duration if subscriptionExpiryDate is missing (legacy records).
+                            let expiryDate;
+                            if (hosp.subscriptionExpiryDate) {
+                              expiryDate = new Date(hosp.subscriptionExpiryDate);
+                            } else {
+                              const createdDate = hosp.createdAt ? new Date(hosp.createdAt) : new Date();
+                              const durationDays = isTrial ? 7 : (isAnnual ? 365 : 30);
+                              expiryDate = new Date(createdDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
+                            }
                             const diffMs = expiryDate.getTime() - Date.now();
                             const daysDue = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 

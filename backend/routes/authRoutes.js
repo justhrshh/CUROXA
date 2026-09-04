@@ -12,6 +12,7 @@ const { getJwtSecret } = require("../config/env");
 const { verifyToken, isAdmin } = require("../middleware/authMiddleware");
 const { isPatientProfileComplete } = require("../utils/patientProfileHelper");
 const { resolveTrustedHospitalBranding, buildBrandedOtpEmail, validateHospitalLoginAccess } = require("../utils/hospitalBrandingHelper");
+const { getHospitalSubscriptionStatus, checkAndDispatchExpiryNotifications } = require("../utils/subscriptionHelper");
 const { sendEmail } = require("../utils/emailService");
 const router = express.Router();
 
@@ -202,6 +203,25 @@ router.post("/login", tenantMiddleware, async (req, res) => {
       });
     }
 
+    // Subscription enforcement check for hospital users
+    let subStatus = null;
+    const SuperAdminHospital = require("../models/SuperAdminHospital");
+    const hospital = user.tenantId ? await SuperAdminHospital.findOne({ code: String(user.tenantId).toLowerCase().trim() }) : null;
+    if (user.role !== 'superadmin' && user.role !== 'super_admin' && hospital) {
+      subStatus = getHospitalSubscriptionStatus(hospital);
+      if (subStatus.isExpired) {
+        if (user.role !== 'admin') {
+          console.log(`[LOGIN BLOCKED] Staff user "${user.staff_id}" blocked: hospital "${hospital.name}" subscription expired`);
+          return res.status(403).json({
+            error: "Your subscription has expired. Please contact your hospital administrator to renew your plan."
+          });
+        }
+        console.log(`[LOGIN RESTRICTED] Admin "${user.staff_id}" logged in under restricted subscription-only mode for hospital "${hospital.name}"`);
+      } else if (subStatus.status === 'EXPIRING') {
+        await checkAndDispatchExpiryNotifications(hospital).catch(err => console.error("[Subscription] Warning dispatch error:", err));
+      }
+    }
+
     // Update lastLogin time
     user.lastLogin = new Date();
     await user.save();
@@ -249,8 +269,6 @@ router.post("/login", tenantMiddleware, async (req, res) => {
       metadata: { method: "password" },
     }).catch(() => {});
 
-    const SuperAdminHospital = require("../models/SuperAdminHospital");
-    const hospital = await SuperAdminHospital.findOne({ code: user.tenantId });
     const tenantModules = (user.role === 'superadmin' || user.role === 'super_admin')
       ? { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } }
       : (hospital ? hospital.modules : { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } });
@@ -273,7 +291,11 @@ router.post("/login", tenantMiddleware, async (req, res) => {
       },
       tenantModules,
       doctorClinicalMode: hospital?.doctorClinicalMode || 'ONLINE',
-      plan: hospital ? hospital.plan : null
+      plan: hospital ? hospital.plan : null,
+      subscriptionRestricted: subStatus ? subStatus.subscriptionRestricted : false,
+      subscriptionStatus: subStatus ? subStatus.status : 'ACTIVE',
+      subscriptionDaysRemaining: subStatus ? subStatus.daysRemaining : null,
+      isTrial: subStatus ? subStatus.isTrial : false
     });
   } catch (err) {
     console.error("[auth] Login error:", err);
@@ -423,24 +445,6 @@ router.post("/google-login", tenantMiddleware, async (req, res) => {
       }
 
       targetTenant = user.tenantId;
-      user.lastLogin = new Date();
-      await user.save();
-
-      const tokenPayload = {
-        id: user._id,
-        staff_id: user.staff_id,
-        role: user.role,
-        name: user.name,
-        tenantId: targetTenant,
-        passwordHash: user.password_hash,
-        password_version: user.password_version || 0,
-      };
-
-      const token = jwt.sign(
-        tokenPayload,
-        getJwtSecret(),
-        { expiresIn: "24h" },
-      );
 
       const SuperAdminHospital = require("../models/SuperAdminHospital");
       let hospital = await SuperAdminHospital.findOne({ code: targetTenant.toLowerCase().trim() });
@@ -461,6 +465,39 @@ router.post("/google-login", tenantMiddleware, async (req, res) => {
           limits: { doctorsUsed: 1, doctorsLimit: 25, staffUsed: 1, staffLimit: 50, storageUsed: 5.0, storageLimit: 100, patients: 0 }
         });
       }
+
+      let subStatus = null;
+      if (user.role !== 'superadmin' && user.role !== 'super_admin' && hospital) {
+        subStatus = getHospitalSubscriptionStatus(hospital);
+        if (subStatus.isExpired) {
+          if (user.role !== 'admin') {
+            return res.status(403).json({
+              error: "Your subscription has expired. Please contact your hospital administrator to renew your plan."
+            });
+          }
+        } else if (subStatus.status === 'EXPIRING') {
+          await checkAndDispatchExpiryNotifications(hospital).catch(err => console.error("[Subscription] Warning dispatch error:", err));
+        }
+      }
+
+      user.lastLogin = new Date();
+      await user.save();
+
+      const tokenPayload = {
+        id: user._id,
+        staff_id: user.staff_id,
+        role: user.role,
+        name: user.name,
+        tenantId: targetTenant,
+        passwordHash: user.password_hash,
+        password_version: user.password_version || 0,
+      };
+
+      const token = jwt.sign(
+        tokenPayload,
+        getJwtSecret(),
+        { expiresIn: "24h" },
+      );
 
       const tenantModules = (user.role === 'superadmin' || user.role === 'super_admin')
         ? { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } }
@@ -484,7 +521,11 @@ router.post("/google-login", tenantMiddleware, async (req, res) => {
         },
         tenantModules,
         doctorClinicalMode: hospital?.doctorClinicalMode || 'ONLINE',
-        plan: hospital ? hospital.plan : null
+        plan: hospital ? hospital.plan : null,
+        subscriptionRestricted: subStatus ? subStatus.subscriptionRestricted : false,
+        subscriptionStatus: subStatus ? subStatus.status : 'ACTIVE',
+        subscriptionDaysRemaining: subStatus ? subStatus.daysRemaining : null,
+        isTrial: subStatus ? subStatus.isTrial : false
       });
     }
 
@@ -567,7 +608,15 @@ router.post("/google-login", tenantMiddleware, async (req, res) => {
       );
 
       const SuperAdminHospital = require("../models/SuperAdminHospital");
-      const hospital = await SuperAdminHospital.findOne({ code: targetTenant });
+      const hospital = await SuperAdminHospital.findOne({ code: String(targetTenant).toLowerCase().trim() });
+      if (hospital) {
+        const subStatus = getHospitalSubscriptionStatus(hospital);
+        if (subStatus.isExpired) {
+          return res.status(403).json({
+            error: "Your subscription has expired. Please contact your hospital administrator to renew your plan."
+          });
+        }
+      }
       const tenantModules = { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } };
 
       const isComplete = Boolean(isPatientProfileComplete(patient) || user.isSetupComplete);
@@ -1267,13 +1316,22 @@ router.post("/send-login-otp", tenantMiddleware, async (req, res) => {
       }
     }
 
-    // 3. Check suspension status of hospital using user.tenantId
+    // 3. Check suspension and subscription status of hospital using user.tenantId
     const SuperAdminHospital = require("../models/SuperAdminHospital");
-    const hospital = await SuperAdminHospital.findOne({ code: user.tenantId });
-    if (hospital && hospital.status !== 'Active') {
-      return res.status(403).json({
-        error: `Access denied. The subscription for hospital '${hospital.name}' is currently ${hospital.status}.`
-      });
+    const hospital = user.tenantId ? await SuperAdminHospital.findOne({ code: String(user.tenantId).toLowerCase().trim() }) : null;
+    if (hospital && (user.role !== 'superadmin' && user.role !== 'super_admin')) {
+      const subStatus = getHospitalSubscriptionStatus(hospital);
+      if (subStatus.isExpired) {
+        if (user.role !== 'admin') {
+          return res.status(403).json({
+            error: "Your subscription has expired. Please contact your hospital administrator to renew your plan."
+          });
+        }
+      } else if (hospital.status === 'Suspended') {
+        return res.status(403).json({
+          error: `Access denied. The subscription for hospital '${hospital.name}' is currently Suspended.`
+        });
+      }
     }
 
     // 4. Generate 6-digit OTP
@@ -1386,6 +1444,23 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
+    // Subscription status check for hospital tenants
+    let subStatus = null;
+    const SuperAdminHospital = require("../models/SuperAdminHospital");
+    const hospital = user.tenantId ? await SuperAdminHospital.findOne({ code: String(user.tenantId).toLowerCase().trim() }) : null;
+    if (user.role !== 'superadmin' && user.role !== 'super_admin' && hospital) {
+      subStatus = getHospitalSubscriptionStatus(hospital);
+      if (subStatus.isExpired) {
+        if (user.role !== 'admin') {
+          return res.status(403).json({
+            error: "Your subscription has expired. Please contact your hospital administrator to renew your plan."
+          });
+        }
+      } else if (subStatus.status === 'EXPIRING') {
+        await checkAndDispatchExpiryNotifications(hospital).catch(err => console.error("[Subscription] Warning dispatch error:", err));
+      }
+    }
+
     // 4. Generate token payload using user.tenantId
     let tokenPayload = {
       id: user._id,
@@ -1430,8 +1505,6 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
     }).catch(() => {});
 
     // Get tenant modules
-    const SuperAdminHospital = require("../models/SuperAdminHospital");
-    const hospital = await SuperAdminHospital.findOne({ code: user.tenantId });
     const tenantModules = (user.role === 'superadmin' || user.role === 'super_admin')
       ? { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } }
       : (hospital ? hospital.modules : { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } });
@@ -1453,7 +1526,11 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
         createdAt: user.createdAt,
       },
       tenantModules,
-      plan: hospital ? hospital.plan : null
+      plan: hospital ? hospital.plan : null,
+      subscriptionRestricted: subStatus ? subStatus.subscriptionRestricted : false,
+      subscriptionStatus: subStatus ? subStatus.status : 'ACTIVE',
+      subscriptionDaysRemaining: subStatus ? subStatus.daysRemaining : null,
+      isTrial: subStatus ? subStatus.isTrial : false
     });
   } catch (error) {
     console.error("Login with OTP error:", error);

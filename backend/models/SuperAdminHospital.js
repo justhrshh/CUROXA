@@ -14,6 +14,17 @@ const superAdminHospitalSchema = new mongoose.Schema({
   logo: { type: String, default: 'H' },
   letterheadUrl: { type: String, default: '' },
   plan: { type: String, default: 'Standard Basic' },
+  subscriptionPlan: { type: String, default: '' },
+  subscriptionStatus: {
+    type: String,
+    enum: ['ACTIVE', 'EXPIRING', 'EXPIRED', 'SUSPENDED'],
+    default: 'ACTIVE'
+  },
+  subscriptionStartDate: { type: Date },
+  subscriptionExpiryDate: { type: Date },
+  trialDays: { type: Number, default: 7 },
+  trialUsed: { type: Boolean, default: false },
+  contractDurationYears: { type: Number, default: 1 },
   status: { type: String, default: 'Active' },
   csm: { type: String, default: '' },
   onboardingLead: { type: String, default: '' },

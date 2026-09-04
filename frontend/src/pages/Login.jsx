@@ -170,7 +170,7 @@ const Login = () => {
         credential: response.credential,
         ...(portalHospitalId ? { hospitalId: portalHospitalId } : {})
       });
-      const { token, user, tenantModules, doctorClinicalMode, plan } = res.data;
+      const { token, user, tenantModules, doctorClinicalMode, plan, subscriptionRestricted, subscriptionStatus, subscriptionDaysRemaining } = res.data;
       
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
@@ -178,6 +178,11 @@ const Login = () => {
       localStorage.setItem('tenantModules', JSON.stringify(tenantModules || {}));
       localStorage.setItem('doctorClinicalMode', doctorClinicalMode || 'ONLINE');
       localStorage.setItem('plan', plan || '');
+      localStorage.setItem('subscriptionRestricted', subscriptionRestricted ? 'true' : 'false');
+      localStorage.setItem('subscriptionStatus', subscriptionStatus || 'ACTIVE');
+      if (subscriptionDaysRemaining !== undefined && subscriptionDaysRemaining !== null) {
+        localStorage.setItem('subscriptionDaysRemaining', String(subscriptionDaysRemaining));
+      }
 
       window.dispatchEvent(new CustomEvent('curoxa_login_success'));
       setSuccess('Logged in via Google successfully!');
@@ -250,7 +255,7 @@ const Login = () => {
         ...(portalHospitalId ? { hospitalId: portalHospitalId } : {})
       });
 
-      const { token, user, tenantModules, doctorClinicalMode, plan } = response.data;
+      const { token, user, tenantModules, doctorClinicalMode, plan, subscriptionRestricted, subscriptionStatus, subscriptionDaysRemaining } = response.data;
       
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
@@ -258,6 +263,11 @@ const Login = () => {
       localStorage.setItem('tenantModules', JSON.stringify(tenantModules || {}));
       localStorage.setItem('doctorClinicalMode', doctorClinicalMode || 'ONLINE');
       localStorage.setItem('plan', plan || '');
+      localStorage.setItem('subscriptionRestricted', subscriptionRestricted ? 'true' : 'false');
+      localStorage.setItem('subscriptionStatus', subscriptionStatus || 'ACTIVE');
+      if (subscriptionDaysRemaining !== undefined && subscriptionDaysRemaining !== null) {
+        localStorage.setItem('subscriptionDaysRemaining', String(subscriptionDaysRemaining));
+      }
 
       window.dispatchEvent(new CustomEvent('curoxa_login_success'));
 
@@ -314,7 +324,7 @@ const Login = () => {
         ...(portalHospitalId ? { hospitalId: portalHospitalId } : {})
       });
 
-      const { token, user, tenantModules, doctorClinicalMode, plan } = response.data;
+      const { token, user, tenantModules, doctorClinicalMode, plan, subscriptionRestricted, subscriptionStatus, subscriptionDaysRemaining } = response.data;
       
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
@@ -322,6 +332,11 @@ const Login = () => {
       localStorage.setItem('tenantModules', JSON.stringify(tenantModules || {}));
       localStorage.setItem('doctorClinicalMode', doctorClinicalMode || 'ONLINE');
       localStorage.setItem('plan', plan || '');
+      localStorage.setItem('subscriptionRestricted', subscriptionRestricted ? 'true' : 'false');
+      localStorage.setItem('subscriptionStatus', subscriptionStatus || 'ACTIVE');
+      if (subscriptionDaysRemaining !== undefined && subscriptionDaysRemaining !== null) {
+        localStorage.setItem('subscriptionDaysRemaining', String(subscriptionDaysRemaining));
+      }
 
       window.dispatchEvent(new CustomEvent('curoxa_login_success'));
 
@@ -1084,13 +1099,18 @@ const Login = () => {
                           const res = await api.post('/auth/google-login', {
                             credential: `simulated_token_${account.email}`
                           });
-                          const { token, user, tenantModules, doctorClinicalMode, plan } = res.data;
+                          const { token, user, tenantModules, doctorClinicalMode, plan, subscriptionRestricted, subscriptionStatus, subscriptionDaysRemaining } = res.data;
                           localStorage.setItem('token', token);
                           localStorage.setItem('user', JSON.stringify(user));
                           localStorage.setItem('tenantId', user.tenantId || 'city_hospital');
                           localStorage.setItem('tenantModules', JSON.stringify(tenantModules || {}));
                           localStorage.setItem('doctorClinicalMode', doctorClinicalMode || 'ONLINE');
                           localStorage.setItem('plan', plan || '');
+                          localStorage.setItem('subscriptionRestricted', subscriptionRestricted ? 'true' : 'false');
+                          localStorage.setItem('subscriptionStatus', subscriptionStatus || 'ACTIVE');
+                          if (subscriptionDaysRemaining !== undefined && subscriptionDaysRemaining !== null) {
+                            localStorage.setItem('subscriptionDaysRemaining', String(subscriptionDaysRemaining));
+                          }
                           window.dispatchEvent(new CustomEvent('curoxa_login_success'));
                           setSuccess('Logged in via simulated Google Sign-In!');
                           setTimeout(() => {

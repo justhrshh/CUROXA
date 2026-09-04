@@ -3,6 +3,8 @@ const bcrypt = require("bcrypt");
 const User = require("../models/User");
 const AuditLog = require("../models/AuditLog");
 const { verifyToken, isAdmin, isHrOrAdmin } = require("../middleware/authMiddleware");
+const { requireActiveSubscription } = require("../middleware/subscriptionMiddleware");
+const { getHospitalSubscriptionStatus, getHospitalSubscriptionDates, isTrialPlan, hasHospitalUsedTrial } = require("../utils/subscriptionHelper");
 const router = express.Router();
 
 // Helper: fire-and-forget audit log
@@ -64,7 +66,7 @@ router.get("/users", isHrOrAdmin, async (req, res) => {
 });
 
 // Create a new staff user (scoped to tenant)
-router.post("/users", isHrOrAdmin, async (req, res) => {
+router.post("/users", isHrOrAdmin, requireActiveSubscription, async (req, res) => {
   const { staff_id, password, role, name, max_slots, email } = req.body;
 
   if (!staff_id || !password || !role || !name) {
@@ -162,7 +164,7 @@ router.post("/users", isHrOrAdmin, async (req, res) => {
 });
 
 // Update a staff user (scoped to tenant)
-router.put("/users/:id", isHrOrAdmin, async (req, res) => {
+router.put("/users/:id", isHrOrAdmin, requireActiveSubscription, async (req, res) => {
   const id = req.params.id;
   const { password } = req.body;
   console.log(`[UPDATE USER] ID: ${id}, Body:`, JSON.stringify(req.body));
@@ -230,7 +232,7 @@ router.put("/users/:id", isHrOrAdmin, async (req, res) => {
 });
 
 // Delete a staff user (scoped to tenant)
-router.delete("/users/:id", isHrOrAdmin, async (req, res) => {
+router.delete("/users/:id", isHrOrAdmin, requireActiveSubscription, async (req, res) => {
   const id = req.params.id;
   const fs = require('fs');
   const path = require('path');
@@ -278,7 +280,7 @@ router.delete("/users/:id", isHrOrAdmin, async (req, res) => {
 });
 
 // Get all low-stock inventory alerts from both Pharmacy (Medicine) and Laboratory (LabInventory) (scoped to tenant)
-router.get("/inventory-alerts", isAdmin, async (req, res) => {
+router.get("/inventory-alerts", isAdmin, requireActiveSubscription, async (req, res) => {
   try {
     const Medicine = require("../models/Medicine");
     const LabInventory = require("../models/LabInventory");
@@ -357,20 +359,7 @@ router.get("/subscription", isHrOrAdmin, async (req, res) => {
       status: 'Completed' 
     });
 
-    // Parse goLiveDate / createdAt to calculate renewal
-    let renewalDate = null;
-    if (hospital.goLiveDate) {
-      const baseDate = new Date(hospital.goLiveDate);
-      if (!isNaN(baseDate.getTime())) {
-        renewalDate = new Date(baseDate);
-        renewalDate.setFullYear(renewalDate.getFullYear() + 1); // 1 year renewal cycle
-      }
-    }
-    if (!renewalDate) {
-      const baseDate = new Date(hospital.createdAt || Date.now());
-      renewalDate = new Date(baseDate);
-      renewalDate.setFullYear(renewalDate.getFullYear() + 1);
-    }
+    const subStatus = getHospitalSubscriptionStatus(hospital);
 
     const SuperAdminInvoice = require('../models/SuperAdminInvoice');
     const invoices = await SuperAdminInvoice.find({ hospital: hospital.name }).sort({ createdAt: -1 });
@@ -378,7 +367,15 @@ router.get("/subscription", isHrOrAdmin, async (req, res) => {
     res.json({
       name: hospital.name,
       plan: hospital.plan,
-      status: hospital.status,
+      status: subStatus.status,
+      isTrial: subStatus.isTrial,
+      daysRemaining: subStatus.daysRemaining,
+      subscriptionStartDate: subStatus.startDate,
+      subscriptionExpiryDate: subStatus.expiryDate,
+      subscriptionRestricted: subStatus.subscriptionRestricted,
+      isExpired: subStatus.isExpired,
+      trialUsed: subStatus.trialUsed,
+      canUseTrial: subStatus.canUseTrial,
       limits: hospital.limits || {
         doctorsLimit: 25,
         staffLimit: 50,
@@ -390,7 +387,7 @@ router.get("/subscription", isHrOrAdmin, async (req, res) => {
       gstVerificationDetails: hospital.gstVerificationDetails || {},
       isLicenseVerified: hospital.isLicenseVerified || false,
       licenseVerificationDetails: hospital.licenseVerificationDetails || {},
-      renewalDate: renewalDate.toISOString(),
+      renewalDate: subStatus.expiryDate.toISOString(),
       usage: {
         patientCount,
         staffCount,
@@ -402,6 +399,150 @@ router.get("/subscription", isHrOrAdmin, async (req, res) => {
   } catch (error) {
     console.error("Fetch subscription details error:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Renew or upgrade subscription for the current hospital tenant
+router.post("/renew-subscription", isHrOrAdmin, async (req, res) => {
+  try {
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+    const SuperAdminInvoice = require('../models/SuperAdminInvoice');
+    const hospital = await SuperAdminHospital.findOne({ code: String(req.tenantId).toLowerCase().trim() });
+    if (!hospital) {
+      return res.status(404).json({ error: "Hospital subscription records not found." });
+    }
+
+    const { planTier, billingCycle } = req.body;
+
+    const hospitalHadTrial = hasHospitalUsedTrial(hospital);
+    const requestedTrial = planTier ? (planTier.toLowerCase().includes('trial') || planTier.toLowerCase() === 'custom') : false;
+
+    // Rule 1: A Trial Plan can only ever be used ONCE per hospital.
+    // If hospital already used/has a trial and tries to request another trial plan -> Reject
+    if (requestedTrial && hospitalHadTrial) {
+      return res.status(400).json({
+        error: "Trial plan is one-time only and has already been used by this hospital. Please select a paid plan to continue."
+      });
+    }
+
+    // Rule 2: If hospital is currently on a trial (or expired trial) and calls renew without selecting a paid plan -> Reject
+    if (!planTier && isTrialPlan(hospital)) {
+      return res.status(400).json({
+        error: "Your trial has ended. Please select a paid plan to continue using CUROXA."
+      });
+    }
+
+    if (planTier) {
+      hospital.plan = planTier;
+      if (planTier.toLowerCase().includes('trial')) {
+        hospital.subscriptionPlan = 'trial';
+        hospital.trialUsed = true;
+      } else {
+        hospital.subscriptionPlan = 'paid';
+        hospital.trialUsed = true;
+      }
+    } else {
+      // Defaulting renewal of existing paid plan
+      hospital.subscriptionPlan = 'paid';
+      hospital.trialUsed = true;
+    }
+
+    const isTrial = isTrialPlan(hospital);
+    const now = new Date();
+
+    // Determine base date for extension:
+    // If current expiry is in future, extend from current expiry; otherwise extend from now
+    let baseDate = now;
+    if (hospital.subscriptionExpiryDate) {
+      const currentExpiry = new Date(hospital.subscriptionExpiryDate);
+      if (!isNaN(currentExpiry.getTime()) && currentExpiry.getTime() > now.getTime()) {
+        baseDate = currentExpiry;
+      }
+    }
+
+    let newExpiryDate;
+    if (isTrial) {
+      const trialDays = Number(hospital.trialDays) || 7;
+      newExpiryDate = new Date(baseDate.getTime() + trialDays * 24 * 60 * 60 * 1000);
+    } else {
+      if (billingCycle === 'monthly') {
+        newExpiryDate = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+      } else {
+        newExpiryDate = new Date(baseDate);
+        newExpiryDate.setFullYear(newExpiryDate.getFullYear() + 1);
+      }
+    }
+
+    hospital.subscriptionStartDate = now;
+    hospital.subscriptionExpiryDate = newExpiryDate;
+    hospital.subscriptionStatus = 'ACTIVE';
+    hospital.status = 'Active';
+
+    // Update revenue field so Super Admin subscription table stays accurate
+    if (!isTrial) {
+      const monthlyPrice = billingCycle === 'annual' ? 49999 : 4999;
+      hospital.revenue = `₹${monthlyPrice.toLocaleString('en-IN')}/${billingCycle === 'annual' ? 'yr' : 'mo'}`;
+    } else {
+      hospital.revenue = '₹0 (Trial)';
+    }
+
+    await hospital.save();
+
+    // Notify Super Admin portal in real-time so it can refresh stale hospital data
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('hospital_subscription_updated', {
+          hospitalCode: hospital.code,
+          plan: hospital.plan,
+          status: hospital.status,
+          subscriptionStatus: hospital.subscriptionStatus,
+          subscriptionExpiryDate: hospital.subscriptionExpiryDate,
+          revenue: hospital.revenue,
+          trialUsed: hospital.trialUsed
+        });
+      }
+    } catch (socketErr) {
+      console.error('Socket emit error (non-critical):', socketErr.message);
+    }
+
+    // Record invoice
+    const invCount = await SuperAdminInvoice.countDocuments();
+    const invoiceNum = `INV-${new Date().getFullYear()}-${String(invCount + 1).padStart(4, '0')}`;
+    const amount = isTrial ? 0 : (billingCycle === 'monthly' ? 4999 : 49999);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dueStr = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    await SuperAdminInvoice.create({
+      invoiceNum,
+      hospital: hospital.name,
+      subscription: hospital.plan || 'Standard Basic',
+      amount,
+      gst: Math.round(amount * 0.18),
+      status: 'Paid',
+      billingCycle: billingCycle === 'monthly' ? 'Monthly' : 'Annual',
+      invoiceDate: todayStr,
+      dueDate: dueStr
+    }).catch(err => console.error("Error creating renewal invoice:", err.message));
+
+    writeAudit(req, "renew_subscription", hospital._id, {
+      plan: hospital.plan,
+      expiryDate: newExpiryDate
+    });
+
+    const subStatus = getHospitalSubscriptionStatus(hospital);
+
+    return res.json({
+      message: "Subscription renewed successfully",
+      hospital: {
+        name: hospital.name,
+        plan: hospital.plan,
+        status: hospital.status
+      },
+      subscription: subStatus
+    });
+  } catch (error) {
+    console.error("Renew subscription error:", error);
+    res.status(500).json({ error: "Failed to renew subscription: " + error.message });
   }
 });
 
@@ -425,6 +566,21 @@ router.get("/plans", isHrOrAdmin, async (req, res) => {
     res.json(plans);
   } catch (error) {
     console.error("Fetch plans error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Get notifications scoped to the current hospital tenant
+router.get("/notifications", verifyToken, async (req, res) => {
+  try {
+    const SuperAdminNotification = require("../models/SuperAdminNotification");
+    const tenantId = String(req.tenantId || '').toLowerCase().trim();
+    const notifs = await SuperAdminNotification.find({
+      'metadata.tenantId': tenantId
+    }).sort({ createdAt: -1 }).limit(20);
+    res.json(notifs);
+  } catch (error) {
+    console.error("Fetch hospital notifications error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -458,7 +614,7 @@ router.get("/letterhead", async (req, res) => {
 });
 
 // Upload hospital letterhead
-router.post("/letterhead", isAdmin, uploadLetterhead.single('letterhead'), async (req, res) => {
+router.post("/letterhead", isAdmin, requireActiveSubscription, uploadLetterhead.single('letterhead'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded." });
@@ -487,7 +643,7 @@ router.post("/letterhead", isAdmin, uploadLetterhead.single('letterhead'), async
 });
 
 // Clear hospital letterhead
-router.post("/letterhead-clear", isAdmin, async (req, res) => {
+router.post("/letterhead-clear", isAdmin, requireActiveSubscription, async (req, res) => {
   try {
     const hospital = await SuperAdminHospital.findOneAndUpdate(
       { code: req.tenantId },
@@ -506,7 +662,7 @@ router.post("/letterhead-clear", isAdmin, async (req, res) => {
 });
 
 // Save or update prescription template
-router.post("/prescription-templates", isAdmin, async (req, res) => {
+router.post("/prescription-templates", isAdmin, requireActiveSubscription, async (req, res) => {
   try {
     const { id, name, xLeft, xRight, yTop, yBottom, isStandard } = req.body;
     if (!name) {
@@ -565,7 +721,7 @@ router.post("/prescription-templates", isAdmin, async (req, res) => {
 });
 
 // Set template as standard (active)
-router.post("/prescription-templates/set-standard", isAdmin, async (req, res) => {
+router.post("/prescription-templates/set-standard", isAdmin, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.body;
     const hospital = await SuperAdminHospital.findOne({ code: req.tenantId });
@@ -596,7 +752,7 @@ router.post("/prescription-templates/set-standard", isAdmin, async (req, res) =>
 });
 
 // Delete prescription template
-router.delete("/prescription-templates/:id", isAdmin, async (req, res) => {
+router.delete("/prescription-templates/:id", isAdmin, requireActiveSubscription, async (req, res) => {
   try {
     const hospital = await SuperAdminHospital.findOne({ code: req.tenantId });
     if (!hospital) {

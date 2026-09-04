@@ -1,44 +1,51 @@
 const SuperAdminHospital = require('../models/SuperAdminHospital');
 const User = require('../models/User');
+const { getHospitalSubscriptionStatus } = require('../utils/subscriptionHelper');
 
 const checkModule = (moduleName) => {
   return async (req, res, next) => {
     try {
-      // 1. Super Admin has unrestricted global access
-      if (req.user && (req.user.role === 'superadmin' || req.user.role === 'super_admin')) {
-        return next();
+      // Fallback decode if checkModule precedes route-level verifyToken
+      if (!req.user && req.headers && req.headers.authorization) {
+        try {
+          const jwt = require('jsonwebtoken');
+          const { getJwtSecret } = require('../config/env');
+          const token = req.headers.authorization.split(' ')[1];
+          const decoded = jwt.verify(token, getJwtSecret());
+          if (decoded) req.user = decoded;
+        } catch (e) {}
       }
 
-      // 2. Patients accessing their own records bypass subscription checks
-      if (req.user && req.user.role === 'patient') {
+      // 1. Super Admin has unrestricted global access
+      if (req.user && ['superadmin', 'super_admin', 'platform_admin'].includes(String(req.user.role || '').toLowerCase())) {
         return next();
       }
 
       const tenantId = req.tenantId || 'city_hospital';
 
       // 2. Fetch hospital plan settings
-      const hospital = await SuperAdminHospital.findOne({ code: tenantId });
+      const hospital = await SuperAdminHospital.findOne({
+        $or: [
+          { code: String(tenantId).toLowerCase() },
+          { hospitalId: String(tenantId).toUpperCase() }
+        ]
+      });
       if (!hospital) {
         // Backwards compatibility for dev/seeding or if no hospital profile exists yet
         return next();
       }
 
-      // 3. Check suspension status
-      if (hospital.status !== 'Active') {
+      // 3. Strict subscription expiry & suspension enforcement
+      const subStatus = getHospitalSubscriptionStatus(hospital);
+      if (subStatus.isExpired) {
         return res.status(403).json({
-          error: `Access denied. The subscription for hospital '${hospital.name}' is currently ${hospital.status}. Please contact support.`
+          error: "Your subscription has expired. Please contact your hospital administrator to renew your plan."
         });
       }
 
-      // Check Trial Plan (custom) automatic 1-week expiration
-      if (hospital.subscriptionPlan === 'custom') {
-        const registrationDate = new Date(hospital.createdAt);
-        const daysElapsed = (Date.now() - registrationDate.getTime()) / (1000 * 60 * 60 * 24);
-        if (daysElapsed > 7) {
-          return res.status(403).json({
-            error: `Access denied. Your 1-week Trial subscription has expired. Please contact sales to upgrade your plan.`
-          });
-        }
+      // 4. Patients accessing their own records bypass specific module capability checks
+      if (req.user && req.user.role === 'patient') {
+        return next();
       }
 
       // 4. Validate module access
@@ -82,7 +89,46 @@ const checkDoctorClinicalMode = async (req, res, next) => {
   }
 };
 
+const requireActiveSubscription = async (req, res, next) => {
+  try {
+    if (!req.user && req.headers && req.headers.authorization) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const { getJwtSecret } = require('../config/env');
+        const token = req.headers.authorization.split(' ')[1];
+        const decoded = jwt.verify(token, getJwtSecret());
+        if (decoded) req.user = decoded;
+      } catch (e) {}
+    }
+
+    if (req.user && ['superadmin', 'super_admin', 'platform_admin'].includes(String(req.user.role || '').toLowerCase())) {
+      return next();
+    }
+    const tenantId = req.tenantId || (req.user && req.user.tenantId) || 'city_hospital';
+    const hospital = await SuperAdminHospital.findOne({
+      $or: [
+        { code: String(tenantId).toLowerCase() },
+        { hospitalId: String(tenantId).toUpperCase() }
+      ]
+    });
+    if (!hospital) return next();
+
+    const subStatus = getHospitalSubscriptionStatus(hospital);
+    if (subStatus.isExpired) {
+      return res.status(403).json({
+        error: "Your subscription has expired. Please contact your hospital administrator to renew your plan."
+      });
+    }
+    next();
+  } catch (err) {
+    console.error('requireActiveSubscription error:', err);
+    res.status(500).json({ error: 'Internal server error checking subscription' });
+  }
+};
+
 module.exports = {
   checkModule,
-  checkDoctorClinicalMode
+  checkDoctorClinicalMode,
+  requireActiveSubscription
 };
+
