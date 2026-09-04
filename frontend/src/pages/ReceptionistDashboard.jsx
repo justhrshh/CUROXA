@@ -1927,9 +1927,9 @@ const ReceptionistDashboard = () => {
         api.get('/appointments'),
         api.get('/auth/doctors'),
         api.get('/auth/users/all').catch(() => ({ data: [] })),
-        api.get('/indents'),
-        api.get('/medicines'),
-        api.get('/billing')
+        api.get('/indents').catch(() => ({ data: [] })),
+        api.get('/medicines').catch(() => ({ data: [] })),
+        api.get('/billing').catch(() => ({ data: [] }))
       ]);
 
       const sortedApps = (appsRes.data || []).sort((a, b) => {
@@ -2357,7 +2357,9 @@ const ReceptionistDashboard = () => {
       const sortedIndents = (res.data || []).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       setIndents(sortedIndents);
     } catch (err) {
-      console.error("Failed to fetch indents:", err);
+      if (err?.response?.status !== 403) {
+        console.error("Failed to fetch indents:", err);
+      }
     }
   };
 

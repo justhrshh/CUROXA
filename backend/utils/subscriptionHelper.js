@@ -385,6 +385,15 @@ async function getHospitalEffectiveModules(hospital) {
     }
   }
 
+  // Supply inventory is inherently linked with Pharmacy & Reception operations
+  if (!effective.inventory) {
+    effective.inventory = {
+      enabled: Boolean(effective.pharmacy?.enabled || effective.reception?.enabled || true),
+      planIncluded: true,
+      hospitalConfigured: true
+    };
+  }
+
   return effective;
 }
 
