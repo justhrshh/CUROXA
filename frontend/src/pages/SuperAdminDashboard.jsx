@@ -4,7 +4,7 @@ import * as Icons from 'lucide-react';
 import { socket } from '../utils/socket';
 import { handleAutoLogout, clearPortalAuthContext, performLogout } from '../utils/api';
 import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
-import { exportHospitalValidationReportPdf } from '../utils/exportEngine';
+import { exportHospitalValidationReportPdf, generateExcelFile, generateCsvFile, generatePdfFile } from '../utils/exportEngine';
 
 const originalFetch = window.fetch;
 const fetch = async (url, options = {}) => {
@@ -1073,6 +1073,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
   // Finance & Billing sub-view state (Step 8)
   const [finSubTab, setFinSubTab] = useState('finance-dashboard'); 
   const [selectedInvoiceId, setSelectedInvoiceId] = useState('INV-2026-001');
+  const [financeSearchQuery, setFinanceSearchQuery] = useState('');
+  const [financeStatusFilter, setFinanceStatusFilter] = useState('ALL');
+  const [financeSortBy, setFinanceSortBy] = useState('newest');
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
+  const [activeInvoiceModal, setActiveInvoiceModal] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Business Intelligence & Reports sub-view state (Step 9)
   const [biSubTab, setBiSubTab] = useState('bi-dashboard'); 
@@ -6359,6 +6365,21 @@ const SuperAdminDashboard = ({ initialTab }) => {
           max-width: 100% !important;
         }
         * { box-sizing: border-box; }
+        ::-webkit-scrollbar {
+          width: 7px;
+          height: 7px;
+        }
+        ::-webkit-scrollbar-track {
+          background: #F1F5F9;
+          border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: #CBD5E1;
+          border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: #94A3B8;
+        }
         @keyframes toastSlideUp {
           from { transform: translateY(24px); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
@@ -6789,9 +6810,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
         </header>
 
         {/* WORKSPACE CENTRAL CANVAS & RIGHT SIDEBAR PANEL */}
-        <div style={{ display: 'flex', flex: 1, width: '100%', minWidth: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flex: 1, width: '100%', minWidth: 0, minHeight: 0, height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
           {/* CENTRAL APP PORT */}
-          <main style={styles.mainCanvas}>
+          <main style={{ ...styles.mainCanvas, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
 
             {/* Restricted Access Fallback */}
             {!isTabAllowed && (
@@ -8448,6 +8469,26 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             {/* HOSPITALS TAB */}
             {isTabAllowed && activeTab === 'hospitals' && (() => {
+              const isHospPlanExpired = (hosp) => {
+                if (hosp.subscriptionStatus?.toLowerCase() === 'expired' || hosp.status?.toLowerCase() === 'expired') return true;
+                let expiryDate;
+                if (hosp.subscriptionExpiryDate) {
+                  expiryDate = new Date(hosp.subscriptionExpiryDate);
+                } else if (hosp.planExpiryDate) {
+                  expiryDate = new Date(hosp.planExpiryDate);
+                } else {
+                  const planLower = (hosp.plan || '').toLowerCase();
+                  const isTrial = planLower.includes('trial') || planLower.includes('custom');
+                  const isAnnual = planLower.includes('annual');
+                  const createdDate = hosp.createdAt ? new Date(hosp.createdAt) : new Date();
+                  const durationDays = isTrial ? 7 : (isAnnual ? 365 : 30);
+                  expiryDate = new Date(createdDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
+                }
+                return expiryDate.getTime() < Date.now();
+              };
+
+              const expiredHospitalsCount = hospitals.filter(isHospPlanExpired).length;
+
               const filteredHospitals = hospitals.filter(hosp => {
                 const term = hospitalSearch.toLowerCase().trim();
                 const matchesSearch = !term || (
@@ -8461,6 +8502,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                 if (hospFilterTab === 'Active') return hosp.status === 'Active';
                 if (hospFilterTab === 'Suspended') return hosp.status === 'Suspended';
+                if (hospFilterTab === 'Plan Expired' || hospFilterTab === 'Expired') return isHospPlanExpired(hosp);
                 if (hospFilterTab === 'High Health') return hosp.healthScore >= 90;
                 if (hospFilterTab === 'Needs Attention') return hosp.healthScore < 90;
                 return true;
@@ -8763,23 +8805,29 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         <div style={{ height: '3px', position: 'absolute', bottom: 0, right: 0, width: '60%', background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)' }} />
                       </div>
 
-                      {/* Card 5: AVG HEALTH SCORE (Cyan / Ocean Gradient) */}
+                      {/* Card 5: EXPIRED PLANS (Rose / Red Alert Gradient with Sparkline) */}
                       <div
+                        onClick={() => {
+                          setHospFilterTab(prev => prev === 'Plan Expired' ? 'All' : 'Plan Expired');
+                          setHospCurrentPage(1);
+                        }}
                         style={{
                           padding: '16px 18px',
                           borderRadius: '18px',
-                          border: '1px solid rgba(165, 243, 252, 0.95)',
-                          boxShadow: '0 10px 25px rgba(6, 182, 212, 0.08)',
-                          background: 'radial-gradient(circle at 100% 100%, rgba(6, 182, 212, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFEFF 50%, #CFFAFE 100%)',
+                          border: hospFilterTab === 'Plan Expired' ? '2px solid #EF4444' : '1px solid rgba(254, 202, 202, 0.95)',
+                          boxShadow: '0 10px 25px rgba(239, 68, 68, 0.08)',
+                          background: 'radial-gradient(circle at 100% 100%, rgba(239, 68, 68, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FEF2F2 50%, #FEE2E2 100%)',
                           display: 'flex',
                           flexDirection: 'column',
                           justifyContent: 'space-between',
                           position: 'relative',
                           overflow: 'hidden',
+                          cursor: 'pointer',
                           transition: 'all 0.2s ease-in-out'
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 30px rgba(6, 182, 212, 0.15)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(6, 182, 212, 0.08)'; }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 30px rgba(239, 68, 68, 0.15)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(239, 68, 68, 0.08)'; }}
+                        title="Click to filter hospitals with expired plans"
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -8787,50 +8835,50 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               width: '28px',
                               height: '28px',
                               borderRadius: '8px',
-                              background: 'linear-gradient(135deg, #0E7490 0%, #06B6D4 100%)',
+                              background: 'linear-gradient(135deg, #DC2626 0%, #EF4444 100%)',
                               color: '#FFFFFF',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               flexShrink: 0,
-                              boxShadow: '0 3px 8px rgba(6, 182, 212, 0.3)'
+                              boxShadow: '0 3px 8px rgba(239, 68, 68, 0.3)'
                             }}>
-                              <LucideIcon name="heart-pulse" style={{ width: '15px', height: '15px' }} />
+                              <LucideIcon name="alert-triangle" style={{ width: '15px', height: '15px' }} />
                             </div>
-                            <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#155E75', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                              AVG HEALTH SCORE
+                            <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#991B1B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              EXPIRED PLANS
                             </span>
                           </div>
-                          <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#0E7490', background: 'rgba(207, 250, 254, 0.8)', border: '1px solid #A5F3FC', padding: '2px 7px', borderRadius: '12px' }}>
-                            Optimal
+                          <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#DC2626', background: 'rgba(254, 226, 226, 0.9)', border: '1px solid #FECACA', padding: '2px 7px', borderRadius: '12px' }}>
+                            Action Req
                           </span>
                         </div>
 
                         <div style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
                           <div>
                             <div style={{ fontSize: '26px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.8px', lineHeight: 1 }}>
-                              {Math.round(hospitals.reduce((acc, h) => acc + (h.healthScore || 0), 0) / (hospitals.length || 1))}%
+                              {expiredHospitalsCount}
                             </div>
-                            <div style={{ fontSize: '10.5px', color: '#0E7490', fontWeight: 700, marginTop: '5px', whiteSpace: 'nowrap' }}>
-                              Platform compliance metric
+                            <div style={{ fontSize: '10.5px', color: '#DC2626', fontWeight: 700, marginTop: '5px', whiteSpace: 'nowrap' }}>
+                              {expiredHospitalsCount === 1 ? '1 license overdue' : `${expiredHospitalsCount} licenses overdue`}
                             </div>
                           </div>
 
                           <div style={{ width: '48px', height: '26px', flexShrink: 0 }}>
                             <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 48 26">
                               <defs>
-                                <linearGradient id="kpiHospCyan" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="#06B6D4" stopOpacity="0.4"/>
-                                  <stop offset="100%" stopColor="#06B6D4" stopOpacity="0.05"/>
+                                <linearGradient id="kpiHospRed" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#EF4444" stopOpacity="0.4"/>
+                                  <stop offset="100%" stopColor="#EF4444" stopOpacity="0.05"/>
                                 </linearGradient>
                               </defs>
-                              <path d="M 0 14 Q 10 20, 20 8 T 34 10 T 48 2 L 48 26 L 0 26 Z" fill="url(#kpiHospCyan)" />
-                              <path d="M 0 14 Q 10 20, 20 8 T 34 10 T 48 2" fill="none" stroke="#06B6D4" strokeWidth="2.2" strokeLinecap="round" />
+                              <path d="M 0 8 Q 14 12, 22 18 T 34 10 T 48 24 L 48 26 L 0 26 Z" fill="url(#kpiHospRed)" />
+                              <path d="M 0 8 Q 14 12, 22 18 T 34 10 T 48 24" fill="none" stroke="#EF4444" strokeWidth="2.2" strokeLinecap="round" />
                             </svg>
                           </div>
                         </div>
 
-                        <div style={{ height: '3px', position: 'absolute', bottom: 0, right: 0, width: '60%', background: 'linear-gradient(90deg, transparent 0%, #06B6D4 100%)' }} />
+                        <div style={{ height: '3px', position: 'absolute', bottom: 0, right: 0, width: '60%', background: 'linear-gradient(90deg, transparent 0%, #EF4444 100%)' }} />
                       </div>
                     </div>
 
@@ -8888,7 +8936,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                       {/* Filter Pills */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        {['All', 'Active', 'Suspended', 'High Health', 'Needs Attention'].map(tab => {
+                        {['All', 'Active', 'Suspended', 'Plan Expired', 'High Health', 'Needs Attention'].map(tab => {
                           const isActive = hospFilterTab === tab;
                           return (
                             <button
@@ -9104,8 +9152,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px', lineHeight: '1.3' }}>Customer Success</div>
                                 </td>
                                 <td style={{ ...styles.tableTd, padding: '12px 18px', verticalAlign: 'middle' }}>
-                                  <div style={{ fontWeight: 500, fontSize: '12px', color: '#334155', lineHeight: '1.3' }}>
-                                    {hosp.plan 
+                                  {(() => {
+                                    const isPlanExpired = isHospPlanExpired(hosp);
+                                    const isSuspended = hosp.status === 'Suspended';
+                                    const planDisplay = hosp.plan 
                                       ? (() => {
                                           const pStr = hosp.plan.toLowerCase();
                                           const matchedPlan = plans.find(p => pStr.includes(p.tier.toLowerCase()) || pStr.includes(p.matchKey.toLowerCase()));
@@ -9115,10 +9165,58 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                           }
                                           return hosp.plan.replace('$', '₹');
                                         })()
-                                      : 'No Plan'
-                                    }
-                                  </div>
-                                  <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px', lineHeight: '1.3' }}>Status: {hosp.status}</div>
+                                      : 'No Plan';
+
+                                    return (
+                                      <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                          <span style={{ fontWeight: 550, fontSize: '12px', color: isPlanExpired ? '#B91C1C' : '#334155', lineHeight: '1.3' }}>
+                                            {planDisplay}
+                                          </span>
+                                          {isPlanExpired && (
+                                            <span style={{
+                                              fontSize: '9.5px',
+                                              fontWeight: 800,
+                                              background: '#FEE2E2',
+                                              color: '#DC2626',
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                              border: '1px solid #FECACA',
+                                              letterSpacing: '0.4px',
+                                              textTransform: 'uppercase',
+                                              lineHeight: '1.2'
+                                            }}>
+                                              Expired
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div style={{ 
+                                          fontSize: '11px', 
+                                          color: isSuspended ? '#EF4444' : isPlanExpired ? '#DC2626' : '#16A34A', 
+                                          marginTop: '3px', 
+                                          lineHeight: '1.3',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          fontWeight: isPlanExpired ? 600 : 500
+                                        }}>
+                                          <span style={{ 
+                                            width: '6px', 
+                                            height: '6px', 
+                                            borderRadius: '50%', 
+                                            background: isSuspended ? '#EF4444' : isPlanExpired ? '#DC2626' : '#22C55E',
+                                            flexShrink: 0
+                                          }} />
+                                          {isSuspended 
+                                            ? 'Status: Suspended' 
+                                            : isPlanExpired 
+                                              ? 'Status: Plan Expired' 
+                                              : `Status: ${hosp.status || 'Active'}`
+                                          }
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                                 <td style={{ ...styles.tableTd, padding: '12px 18px', verticalAlign: 'middle' }}>
                                   <span style={{ 
@@ -12010,111 +12108,1360 @@ const SuperAdminDashboard = ({ initialTab }) => {
             )}
 
             {/* FINANCE & BILLING TAB */}
-            {isTabAllowed && activeTab === 'finance-mgmt' && (
-              <div style={styles.pageBodyScroll}>
-                <div>
-                  <h2 style={styles.cardHeaderTitle}>SaaS Billings & Subscription Collections</h2>
-                  <p style={styles.cardHeaderSub}>Monitor MRR/ARR conversion pipelines, review client invoices history, and verify tax compliance records.</p>
-                </div>
+            {isTabAllowed && activeTab === 'finance-mgmt' && (() => {
+              // Financial KPI calculations
+              const totalCount = invoices.length;
+              const paidList = invoices.filter(i => (i.status || '').toLowerCase() === 'paid');
+              const pendingList = invoices.filter(i => (i.status || '').toLowerCase() !== 'paid');
 
-                <div style={{ display: 'flex', gap: '20px', marginTop: '14px' }}>
-                  <div style={{ flex: 2, background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px' }}>
-                    <table style={styles.dataTable}>
-                      <thead>
-                        <tr>
-                          <th style={styles.tableTh}>Invoice #</th>
-                          <th style={styles.tableTh}>Hospital Account</th>
-                          <th style={styles.tableTh}>Plan Tier</th>
-                          <th style={styles.tableTh}>Billing Date</th>
-                          <th style={styles.tableTh}>Net Amount</th>
-                          <th style={styles.tableTh}>GST (18%)</th>
-                          <th style={styles.tableTh}>Status</th>
-                          <th style={styles.tableTh}>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {invoices.map(inv => (
-                          <tr 
-                            key={inv._id || inv.invoiceNum} 
-                            style={{ ...styles.tableRow, cursor: 'pointer', background: selectedInvoiceId === inv._id ? '#F1F5F9' : 'transparent' }}
-                            onClick={() => setSelectedInvoiceId(inv._id)}
-                          >
-                            <td style={styles.tableTd}><code>{inv.invoiceNum}</code></td>
-                            <td style={styles.tableTd}><strong>{inv.hospital}</strong></td>
-                            <td style={styles.tableTd}>
-                              {inv.subscription}
-                            </td>
-                            <td style={styles.tableTd}>{inv.invoiceDate}</td>
-                            <td style={styles.tableTd}><strong>₹{inv.amount}</strong></td>
-                            <td style={styles.tableTd}>₹{inv.gst}</td>
-                            <td style={styles.tableTd}>
-                              <span style={{ ...styles.statusBadge, background: inv.status === 'Paid' ? '#D1FAE5' : '#FEE2E2', color: inv.status === 'Paid' ? '#10B981' : '#EF4444' }}>
-                                {inv.status}
-                              </span>
-                            </td>
-                            <td style={styles.tableTd}>
-                              {inv.status !== 'Paid' ? (
-                                <button 
-                                  style={styles.btnActionSmall}
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    const token = localStorage.getItem('token');
-                                    try {
-                                      const res = await fetch(`/api/superadmin/invoices/${inv._id}`, {
-                                        method: 'PUT',
-                                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                        body: JSON.stringify({ status: 'Paid' })
-                                      });
-                                      if (res.ok) {
-                                        const updated = await res.json();
-                                        setInvoices(prev => prev.map(i => i._id === inv._id ? updated : i));
-                                        showToast('Invoice marked as Paid!', 'success');
-                                      }
-                                    } catch (err) { console.error(err); }
-                                  }}
-                                >
-                                  Mark Paid
-                                </button>
-                              ) : 'N/A'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+              const totalNetBilled = invoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+              const totalGstBilled = invoices.reduce((sum, i) => sum + (Number(i.gst) || 0), 0);
+              const totalGrossBilled = totalNetBilled + totalGstBilled;
+
+              const totalNetPaid = paidList.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+              const totalGstPaid = paidList.reduce((sum, i) => sum + (Number(i.gst) || 0), 0);
+              const totalGrossPaid = totalNetPaid + totalGstPaid;
+
+              const totalNetPending = pendingList.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+              const totalGstPending = pendingList.reduce((sum, i) => sum + (Number(i.gst) || 0), 0);
+              const totalGrossPending = totalNetPending + totalGstPending;
+
+              const collectionRate = totalGrossBilled > 0 ? Math.round((totalGrossPaid / totalGrossBilled) * 100) : 0;
+
+              // Filtered & Sorted Invoices
+              const filteredInvoices = invoices.filter(inv => {
+                if (financeSearchQuery.trim()) {
+                  const q = financeSearchQuery.toLowerCase().trim();
+                  const matchNum = (inv.invoiceNum || '').toLowerCase().includes(q);
+                  const matchHosp = (inv.hospital || '').toLowerCase().includes(q);
+                  const matchSub = (inv.subscription || '').toLowerCase().includes(q);
+                  const matchGst = (inv.gstin || '').toLowerCase().includes(q);
+                  if (!matchNum && !matchHosp && !matchSub && !matchGst) return false;
+                }
+                if (financeStatusFilter === 'PAID') {
+                  if ((inv.status || '').toLowerCase() !== 'paid') return false;
+                } else if (financeStatusFilter === 'PENDING') {
+                  if ((inv.status || '').toLowerCase() === 'paid') return false;
+                }
+                return true;
+              }).sort((a, b) => {
+                if (financeSortBy === 'amount_desc') {
+                  return (Number(b.amount || 0) + Number(b.gst || 0)) - (Number(a.amount || 0) + Number(a.gst || 0));
+                }
+                if (financeSortBy === 'amount_asc') {
+                  return (Number(a.amount || 0) + Number(a.gst || 0)) - (Number(b.amount || 0) + Number(b.gst || 0));
+                }
+                if (financeSortBy === 'oldest') {
+                  return new Date(a.invoiceDate || a.createdAt || 0) - new Date(b.invoiceDate || b.createdAt || 0);
+                }
+                if (financeSortBy === 'plan_asc') {
+                  return (a.subscription || '').localeCompare(b.subscription || '');
+                }
+                if (financeSortBy === 'plan_desc') {
+                  return (b.subscription || '').localeCompare(a.subscription || '');
+                }
+                if (financeSortBy === 'plan_tier') {
+                  const getTierRank = (sub = '') => {
+                    const s = sub.toLowerCase();
+                    if (s.includes('trial')) return 1;
+                    if (s.includes('basic') || s.includes('standard')) return 2;
+                    if (s.includes('pro')) return 3;
+                    if (s.includes('enterprise') || s.includes('elite')) return 4;
+                    return 5;
+                  };
+                  return getTierRank(a.subscription) - getTierRank(b.subscription);
+                }
+                return new Date(b.invoiceDate || b.createdAt || 0) - new Date(a.invoiceDate || a.createdAt || 0);
+              });
+
+              // Export Column Definition & Row Builder
+              const invoiceExportColumns = [
+                { header: 'Sr. No', key: 'srNo' },
+                { header: 'Invoice #', key: 'invoiceNum' },
+                { header: 'Hospital Account', key: 'hospital' },
+                { header: 'Plan Tier', key: 'subscription' },
+                { header: 'Billing Date', key: 'invoiceDate' },
+                { header: 'Due Date', key: 'dueDate' },
+                { header: 'Net Amount (INR)', key: 'amount' },
+                { header: 'GST 18% (INR)', key: 'gst' },
+                { header: 'Total Amount (INR)', key: 'total' },
+                { header: 'Status', key: 'status' },
+                { header: 'Billing Period', key: 'billingPeriod' },
+                { header: 'GSTIN', key: 'gstin' }
+              ];
+
+              const getExportRows = () => filteredInvoices.map((inv, idx) => ({
+                'Sr. No': idx + 1,
+                'Invoice #': inv.invoiceNum || '',
+                'Hospital Account': inv.hospital || '',
+                'Plan Tier': inv.subscription || '',
+                'Billing Date': inv.invoiceDate || '',
+                'Due Date': inv.dueDate || '',
+                'Net Amount (INR)': Number(inv.amount || 0),
+                'GST 18% (INR)': Number(inv.gst || 0),
+                'Total Amount (INR)': Number(inv.amount || 0) + Number(inv.gst || 0),
+                'Status': inv.status || 'Pending',
+                'Billing Period': inv.billingPeriod || '',
+                'GSTIN': inv.gstin || 'N/A'
+              }));
+
+              const handleExportExcel = async () => {
+                if (filteredInvoices.length === 0) {
+                  showToast('No invoices found to export.', 'info');
+                  return;
+                }
+                setIsExporting(true);
+                try {
+                  const timestamp = new Date().toISOString().split('T')[0];
+                  await generateExcelFile({
+                    dataset: 'SaaS Invoices',
+                    rows: getExportRows(),
+                    columns: invoiceExportColumns,
+                    dateRangeText: 'All Financial Records',
+                    fileName: `Curoxa_SaaS_Invoices_${timestamp}.xlsx`
+                  });
+                  showToast(`Successfully exported ${filteredInvoices.length} invoices to Excel!`, 'success');
+                } catch (err) {
+                  console.error('Export Excel failed:', err);
+                  showToast('Failed to export Excel file: ' + err.message, 'error');
+                } finally {
+                  setIsExporting(false);
+                  setIsExportDropdownOpen(false);
+                }
+              };
+
+              const handleExportCsv = async () => {
+                if (filteredInvoices.length === 0) {
+                  showToast('No invoices found to export.', 'info');
+                  return;
+                }
+                setIsExporting(true);
+                try {
+                  const timestamp = new Date().toISOString().split('T')[0];
+                  await generateCsvFile({
+                    dataset: 'SaaS Invoices',
+                    rows: getExportRows(),
+                    columns: invoiceExportColumns,
+                    fileName: `Curoxa_SaaS_Invoices_${timestamp}.csv`
+                  });
+                  showToast(`Successfully exported ${filteredInvoices.length} invoices to CSV!`, 'success');
+                } catch (err) {
+                  console.error('Export CSV failed:', err);
+                  showToast('Failed to export CSV file: ' + err.message, 'error');
+                } finally {
+                  setIsExporting(false);
+                  setIsExportDropdownOpen(false);
+                }
+              };
+
+              const handleExportPdf = async () => {
+                if (filteredInvoices.length === 0) {
+                  showToast('No invoices found to export.', 'info');
+                  return;
+                }
+                setIsExporting(true);
+                try {
+                  const timestamp = new Date().toISOString().split('T')[0];
+                  const pdfColumns = [
+                    { header: 'Sr. No', key: 'srNo' },
+                    { header: 'Invoice #', key: 'invoiceNum' },
+                    { header: 'Hospital', key: 'hospital' },
+                    { header: 'Plan Tier', key: 'subscription' },
+                    { header: 'Date', key: 'invoiceDate' },
+                    { header: 'Net (Rs)', key: 'amount' },
+                    { header: 'GST (Rs)', key: 'gst' },
+                    { header: 'Total (Rs)', key: 'total' },
+                    { header: 'Status', key: 'status' }
+                  ];
+                  const pdfRows = filteredInvoices.map((inv, idx) => ({
+                    'Sr. No': idx + 1,
+                    'Invoice #': inv.invoiceNum || '',
+                    'Hospital': inv.hospital || '',
+                    'Plan Tier': inv.subscription || '',
+                    'Date': inv.invoiceDate || '',
+                    'Net (Rs)': (inv.amount || 0).toLocaleString('en-IN'),
+                    'GST (Rs)': (inv.gst || 0).toLocaleString('en-IN'),
+                    'Total (Rs)': ((inv.amount || 0) + (inv.gst || 0)).toLocaleString('en-IN'),
+                    'Status': inv.status || 'Pending'
+                  }));
+                  await generatePdfFile({
+                    dataset: 'SaaS Billings & Collections',
+                    rows: pdfRows,
+                    columns: pdfColumns,
+                    dateRangeText: 'Active Financial Overview',
+                    clinicName: 'CUROXA ENTERPRISE SAAS PLATFORM',
+                    fileName: `Curoxa_Billing_Report_${timestamp}.pdf`
+                  });
+                  showToast(`Official PDF report generated for ${filteredInvoices.length} invoices!`, 'success');
+                } catch (err) {
+                  console.error('Export PDF failed:', err);
+                  showToast('Failed to generate PDF report: ' + err.message, 'error');
+                } finally {
+                  setIsExporting(false);
+                  setIsExportDropdownOpen(false);
+                }
+              };
+
+              const handleMarkAsPaid = async (inv) => {
+                const token = localStorage.getItem('token');
+                try {
+                  const res = await fetch(`/api/superadmin/invoices/${inv._id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ status: 'Paid' })
+                  });
+                  if (res.ok) {
+                    const updated = await res.json();
+                    setInvoices(prev => prev.map(i => i._id === inv._id ? updated : i));
+                    if (activeInvoiceModal && activeInvoiceModal._id === inv._id) {
+                      setActiveInvoiceModal(updated);
+                    }
+                    showToast(`Invoice ${inv.invoiceNum} marked as Paid!`, 'success');
+                  } else {
+                    showToast('Failed to update invoice status.', 'error');
+                  }
+                } catch (err) {
+                  console.error(err);
+                  showToast('Network error updating invoice.', 'error');
+                }
+              };
+
+              return (
+                <div style={{ width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '80px' }}>
+                  {/* Page Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                        <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.4px' }}>
+                          SaaS Billings & Subscription Collections
+                        </h2>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#16A34A', background: '#DCFCE7', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16A34A' }} />
+                          GST COMPLIANT
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
+                        Monitor MRR/ARR conversion pipelines, review client invoices history, and download tax compliance records.
+                      </p>
+                    </div>
+
+                    {/* Quick Stats Summary Pill */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#FFFFFF', padding: '6px 14px', borderRadius: '10px', border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+                      <LucideIcon name="building-2" style={{ width: '16px', height: '16px', color: '#2563EB' }} />
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>
+                        Active Client Accounts: <strong style={{ color: '#0F172A' }}>{new Set(invoices.map(i => i.hospital)).size}</strong>
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Invoice details card */}
-                  {invoices.find(i => i._id === selectedInvoiceId) && (() => {
-                    const inv = invoices.find(i => i._id === selectedInvoiceId);
+                  {/* 4 Financial KPI Cards — Hospital Admin Inspired Gradient Design */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+                    {/* Card 1: Total Invoiced (Blue Gradient with Sparkline) */}
+                    <div 
+                      style={{
+                        padding: '20px',
+                        borderRadius: '16px',
+                        border: '1px solid rgba(191, 219, 254, 0.9)',
+                        boxShadow: '0 12px 28px rgba(37, 99, 235, 0.08)',
+                        background: 'radial-gradient(circle at 100% 0%, rgba(37, 99, 235, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        cursor: 'default',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '10px',
+                          background: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%)',
+                          color: '#FFFFFF',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          boxShadow: '0 4px 10px rgba(37, 99, 235, 0.3)'
+                        }}>
+                          <LucideIcon name="wallet" style={{ width: '16px', height: '16px', color: '#FFFFFF' }} />
+                        </div>
+                        <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                          Total Invoiced (Gross)
+                        </span>
+                      </div>
+
+                      <div style={{ marginTop: '16px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.6px', lineHeight: 1 }}>
+                            ₹{totalGrossBilled.toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#1D4ED8', fontWeight: 700, marginTop: '8px' }}>
+                            {totalCount} total invoices <span style={{ fontWeight: 500, color: '#64748B' }}>across all plans</span>
+                          </div>
+                        </div>
+
+                        {/* Blue Mini Sparkline */}
+                        <div style={{ width: '68px', height: '34px', flexShrink: 0, position: 'relative' }}>
+                          <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                            <defs>
+                              <linearGradient id="kpiBlueGradFinance" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
+                                <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
+                              </linearGradient>
+                            </defs>
+                            <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiBlueGradFinance)" />
+                            <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      {/* Half Gradient Accent Line Beneath Card */}
+                      <div 
+                        style={{
+                          height: '4px',
+                          borderBottomRightRadius: '16px',
+                          position: 'absolute',
+                          bottom: 0,
+                          right: 0,
+                          width: '60%',
+                          pointerEvents: 'none',
+                          background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)'
+                        }}
+                      />
+                    </div>
+
+                    {/* Card 2: Realized Collections (Emerald Gradient with Sparkline) */}
+                    <div 
+                      style={{
+                        padding: '20px',
+                        borderRadius: '16px',
+                        border: '1px solid rgba(167, 243, 208, 0.9)',
+                        boxShadow: '0 12px 28px rgba(16, 185, 129, 0.08)',
+                        background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        cursor: 'default',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '10px',
+                          background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+                          color: '#FFFFFF',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          boxShadow: '0 4px 10px rgba(16, 185, 129, 0.3)'
+                        }}>
+                          <span style={{ fontSize: '15px', fontWeight: 900, lineHeight: 1 }}>₹</span>
+                        </div>
+                        <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                          Realized Collections
+                        </span>
+                      </div>
+
+                      <div style={{ marginTop: '16px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.6px', lineHeight: 1 }}>
+                            ₹{totalGrossPaid.toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#047857', fontWeight: 700, marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span>{collectionRate}% Cleared</span>
+                            <span style={{ fontWeight: 500, color: '#64748B' }}>({paidList.length} paid invoices)</span>
+                          </div>
+                        </div>
+
+                        {/* Green Mini Sparkline */}
+                        <div style={{ width: '68px', height: '34px', flexShrink: 0, position: 'relative' }}>
+                          <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                            <defs>
+                              <linearGradient id="kpiGreenGradFinance" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#10B981" stopOpacity="0.45"/>
+                                <stop offset="100%" stopColor="#10B981" stopOpacity="0.05"/>
+                              </linearGradient>
+                            </defs>
+                            <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#kpiGreenGradFinance)" />
+                            <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#10B981" strokeWidth="2.4" strokeLinecap="round" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      {/* Half Gradient Accent Line Beneath Card */}
+                      <div 
+                        style={{
+                          height: '4px',
+                          borderBottomRightRadius: '16px',
+                          position: 'absolute',
+                          bottom: 0,
+                          right: 0,
+                          width: '60%',
+                          pointerEvents: 'none',
+                          background: 'linear-gradient(90deg, transparent 0%, #10B981 100%)'
+                        }}
+                      />
+                    </div>
+
+                    {/* Card 3: Pending Receivables (Amber Gradient with Sparkline) */}
+                    <div 
+                      style={{
+                        padding: '20px',
+                        borderRadius: '16px',
+                        border: '1px solid rgba(253, 230, 138, 0.9)',
+                        boxShadow: '0 12px 28px rgba(245, 158, 11, 0.08)',
+                        background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        cursor: 'default',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '10px',
+                          background: 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
+                          color: '#FFFFFF',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          boxShadow: '0 4px 10px rgba(245, 158, 11, 0.3)'
+                        }}>
+                          <LucideIcon name="clock" style={{ width: '16px', height: '16px', color: '#FFFFFF' }} />
+                        </div>
+                        <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#78350F', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                          Pending Receivables
+                        </span>
+                      </div>
+
+                      <div style={{ marginTop: '16px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ fontSize: '28px', fontWeight: 900, color: totalGrossPending > 0 ? '#B45309' : '#0F172A', letterSpacing: '-0.6px', lineHeight: 1 }}>
+                            ₹{totalGrossPending.toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#B45309', fontWeight: 700, marginTop: '8px' }}>
+                            {pendingList.length} pending <span style={{ fontWeight: 500, color: '#64748B' }}>actionable invoices</span>
+                          </div>
+                        </div>
+
+                        {/* Amber Mini Sparkline */}
+                        <div style={{ width: '68px', height: '34px', flexShrink: 0, position: 'relative' }}>
+                          <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                            <defs>
+                              <linearGradient id="kpiAmberGradFinance" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.45"/>
+                                <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.05"/>
+                              </linearGradient>
+                            </defs>
+                            <path d="M 0 28 Q 18 28, 28 22 T 44 14 T 54 8 T 64 6 L 64 32 L 0 32 Z" fill="url(#kpiAmberGradFinance)" />
+                            <path d="M 0 28 Q 18 28, 28 22 T 44 14 T 54 8 T 64 6" fill="none" stroke="#F59E0B" strokeWidth="2.4" strokeLinecap="round" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      {/* Half Gradient Accent Line Beneath Card */}
+                      <div 
+                        style={{
+                          height: '4px',
+                          borderBottomRightRadius: '16px',
+                          position: 'absolute',
+                          bottom: 0,
+                          right: 0,
+                          width: '60%',
+                          pointerEvents: 'none',
+                          background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)'
+                        }}
+                      />
+                    </div>
+
+                    {/* Card 4: GST Accrued (Purple Gradient with Sparkline) */}
+                    <div 
+                      style={{
+                        padding: '20px',
+                        borderRadius: '16px',
+                        border: '1px solid rgba(221, 214, 254, 0.9)',
+                        boxShadow: '0 12px 28px rgba(139, 92, 246, 0.08)',
+                        background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        cursor: 'default',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '10px',
+                          background: 'linear-gradient(135deg, #6D28D9 0%, #8B5CF6 100%)',
+                          color: '#FFFFFF',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          boxShadow: '0 4px 10px rgba(139, 92, 246, 0.3)'
+                        }}>
+                          <LucideIcon name="receipt" style={{ width: '16px', height: '16px', color: '#FFFFFF' }} />
+                        </div>
+                        <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#4C1D95', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                          GST Accrued (18%)
+                        </span>
+                      </div>
+
+                      <div style={{ marginTop: '16px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.6px', lineHeight: 1 }}>
+                            ₹{totalGstBilled.toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#6D28D9', fontWeight: 700, marginTop: '8px' }}>
+                            CGST: ₹{(totalGstBilled / 2).toLocaleString('en-IN')} <span style={{ fontWeight: 500, color: '#64748B' }}>• SGST: ₹{(totalGstBilled / 2).toLocaleString('en-IN')}</span>
+                          </div>
+                        </div>
+
+                        {/* Purple Mini Sparkline */}
+                        <div style={{ width: '68px', height: '34px', flexShrink: 0, position: 'relative' }}>
+                          <svg style={{ width: '100%', height: '100%', overflow: 'visible' }} viewBox="0 0 64 32">
+                            <defs>
+                              <linearGradient id="kpiPurpleGradFinance" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.45"/>
+                                <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.05"/>
+                              </linearGradient>
+                            </defs>
+                            <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiPurpleGradFinance)" />
+                            <path d="M 0 26 Q 16 26, 24 16 T 42 16 T 54 8 T 64 12" fill="none" stroke="#8B5CF6" strokeWidth="2.4" strokeLinecap="round" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      {/* Half Gradient Accent Line Beneath Card */}
+                      <div 
+                        style={{
+                          height: '4px',
+                          borderBottomRightRadius: '16px',
+                          position: 'absolute',
+                          bottom: 0,
+                          right: 0,
+                          width: '60%',
+                          pointerEvents: 'none',
+                          background: 'linear-gradient(90deg, transparent 0%, #8B5CF6 100%)'
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Interactive Toolbar & Controls */}
+                  <div style={{ background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                    {/* Left: Search & Filter Pills */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', flex: 1, minWidth: '300px' }}>
+                      {/* Search input */}
+                      <div style={{ position: 'relative', minWidth: '260px', flex: '1 1 260px', maxWidth: '380px' }}>
+                        <LucideIcon name="search" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: '15px', height: '15px', color: '#94A3B8' }} />
+                        <input
+                          type="text"
+                          placeholder="Search invoice #, hospital, plan..."
+                          value={financeSearchQuery}
+                          onChange={(e) => setFinanceSearchQuery(e.target.value)}
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '8px 32px 8px 36px',
+                            fontSize: '12.5px',
+                            borderRadius: '8px',
+                            border: '1px solid #E2E8F0',
+                            background: '#F8FAFC',
+                            color: '#0F172A',
+                            outline: 'none',
+                            transition: 'all 0.2s'
+                          }}
+                          onFocus={(e) => { e.currentTarget.style.borderColor = '#2563EB'; e.currentTarget.style.background = '#FFFFFF'; }}
+                          onBlur={(e) => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#F8FAFC'; }}
+                        />
+                        {financeSearchQuery && (
+                          <button
+                            onClick={() => setFinanceSearchQuery('')}
+                            style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#94A3B8' }}
+                          >
+                            <LucideIcon name="x" style={{ width: '14px', height: '14px' }} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Status Filter Pills */}
+                      <div style={{ display: 'flex', background: '#F1F5F9', padding: '3px', borderRadius: '8px', gap: '2px' }}>
+                        {[
+                          { key: 'ALL', label: 'All Invoices', count: totalCount },
+                          { key: 'PAID', label: 'Paid', count: paidList.length, color: '#16A34A' },
+                          { key: 'PENDING', label: 'Pending', count: pendingList.length, color: '#D97706' }
+                        ].map(tab => {
+                          const isActive = financeStatusFilter === tab.key;
+                          return (
+                            <button
+                              key={tab.key}
+                              onClick={() => setFinanceStatusFilter(tab.key)}
+                              style={{
+                                border: 'none',
+                                background: isActive ? '#FFFFFF' : 'transparent',
+                                color: isActive ? '#0F172A' : '#64748B',
+                                fontWeight: isActive ? 700 : 500,
+                                fontSize: '12px',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                boxShadow: isActive ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                                transition: 'all 0.15s'
+                              }}
+                            >
+                              {tab.color && (
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: tab.color }} />
+                              )}
+                              {tab.label}
+                              <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '10px', background: isActive ? '#EFF6FF' : '#E2E8F0', color: isActive ? '#2563EB' : '#64748B', fontWeight: 700 }}>
+                                {tab.count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Right: Sort & Export System */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {/* Sort Dropdown */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Sort:</span>
+                        <select
+                          value={financeSortBy}
+                          onChange={(e) => setFinanceSortBy(e.target.value)}
+                          style={{
+                            padding: '7px 10px',
+                            fontSize: '12px',
+                            borderRadius: '8px',
+                            border: '1px solid #E2E8F0',
+                            background: '#FFFFFF',
+                            color: '#0F172A',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            outline: 'none'
+                          }}
+                        >
+                          <option value="newest">Newest First</option>
+                          <option value="oldest">Oldest First</option>
+                          <option value="plan_asc">Plan: A to Z</option>
+                          <option value="plan_desc">Plan: Z to A</option>
+                          <option value="plan_tier">Plan Tier (Trial → Elite)</option>
+                          <option value="amount_desc">Amount: High to Low</option>
+                          <option value="amount_asc">Amount: Low to High</option>
+                        </select>
+                      </div>
+
+                      {/* Export Dropdown Trigger */}
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                          disabled={isExporting}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            background: '#2563EB',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            fontSize: '12.5px',
+                            fontWeight: 700,
+                            cursor: isExporting ? 'not-allowed' : 'pointer',
+                            boxShadow: '0 2px 4px rgba(37,99,235,0.2)',
+                            transition: 'background 0.2s',
+                            opacity: isExporting ? 0.7 : 1
+                          }}
+                          onMouseEnter={e => { if (!isExporting) e.currentTarget.style.background = '#1D4ED8'; }}
+                          onMouseLeave={e => { if (!isExporting) e.currentTarget.style.background = '#2563EB'; }}
+                        >
+                          <LucideIcon name="download" style={{ width: '15px', height: '15px' }} />
+                          {isExporting ? 'Exporting...' : 'Export Records'}
+                          <LucideIcon name="chevron-down" style={{ width: '13px', height: '13px', marginLeft: '2px' }} />
+                        </button>
+
+                        {/* Export Menu Popover */}
+                        {isExportDropdownOpen && (
+                          <>
+                            <div
+                              style={{ position: 'fixed', inset: 0, zIndex: 120 }}
+                              onClick={() => setIsExportDropdownOpen(false)}
+                            />
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: '100%',
+                                right: 0,
+                                marginTop: '8px',
+                                width: '250px',
+                                background: '#FFFFFF',
+                                borderRadius: '12px',
+                                border: '1px solid #E2E8F0',
+                                boxShadow: '0 10px 25px -5px rgba(0,0,0,0.12), 0 8px 10px -6px rgba(0,0,0,0.05)',
+                                padding: '6px',
+                                zIndex: 121,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '2px'
+                              }}
+                            >
+                              <div style={{ padding: '8px 12px 6px 12px', borderBottom: '1px solid #F1F5F9', marginBottom: '4px' }}>
+                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                  Export Invoices ({filteredInvoices.length})
+                                </div>
+                              </div>
+
+                              {/* Option 1: Excel */}
+                              <button
+                                onClick={handleExportExcel}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '10px',
+                                  width: '100%',
+                                  padding: '10px 12px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  textAlign: 'left',
+                                  transition: 'background 0.15s'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <LucideIcon name="file-spreadsheet" style={{ width: '16px', height: '16px' }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#0F172A' }}>Excel Spreadsheet (.xlsx)</span>
+                                  <span style={{ fontSize: '10.5px', color: '#64748B' }}>Complete formatted billing sheet</span>
+                                </div>
+                              </button>
+
+                              {/* Option 2: CSV */}
+                              <button
+                                onClick={handleExportCsv}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '10px',
+                                  width: '100%',
+                                  padding: '10px 12px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  textAlign: 'left',
+                                  transition: 'background 0.15s'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <LucideIcon name="file-text" style={{ width: '16px', height: '16px' }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#0F172A' }}>CSV Data File (.csv)</span>
+                                  <span style={{ fontSize: '10.5px', color: '#64748B' }}>Accounting software compatible</span>
+                                </div>
+                              </button>
+
+                              {/* Option 3: PDF */}
+                              <button
+                                onClick={handleExportPdf}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '10px',
+                                  width: '100%',
+                                  padding: '10px 12px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  textAlign: 'left',
+                                  transition: 'background 0.15s'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: '#FEF2F2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <LucideIcon name="file-text" style={{ width: '16px', height: '16px' }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#0F172A' }}>Executive PDF Report</span>
+                                  <span style={{ fontSize: '10.5px', color: '#64748B' }}>Print-ready branded document</span>
+                                </div>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Modern Invoices Data Table Card */}
+                  <div style={{ background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                    <div style={{ overflowX: 'hidden', width: '100%' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'auto' }}>
+                        <thead>
+                          <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                            <th style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', width: '42px', whiteSpace: 'nowrap' }}>#</th>
+                            <th style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Invoice #</th>
+                            <th style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Hospital Account</th>
+                            <th 
+                              onClick={() => setFinanceSortBy(prev => prev === 'plan_asc' ? 'plan_desc' : 'plan_asc')}
+                              style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: financeSortBy.startsWith('plan') ? '#2563EB' : '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                              title="Click to sort by Plan Tier"
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span>Plan</span>
+                                {financeSortBy === 'plan_asc' ? (
+                                  <LucideIcon name="arrow-up" style={{ width: '11px', height: '11px', color: '#2563EB' }} />
+                                ) : financeSortBy === 'plan_desc' ? (
+                                  <LucideIcon name="arrow-down" style={{ width: '11px', height: '11px', color: '#2563EB' }} />
+                                ) : (
+                                  <LucideIcon name="arrow-up-down" style={{ width: '11px', height: '11px', color: '#94A3B8' }} />
+                                )}
+                              </div>
+                            </th>
+                            <th 
+                              onClick={() => setFinanceSortBy(prev => prev === 'newest' ? 'oldest' : 'newest')}
+                              style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: (financeSortBy === 'newest' || financeSortBy === 'oldest') ? '#2563EB' : '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                              title="Click to sort by Date"
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span>Billing Date</span>
+                                {financeSortBy === 'newest' ? (
+                                  <LucideIcon name="arrow-down" style={{ width: '11px', height: '11px', color: '#2563EB' }} />
+                                ) : financeSortBy === 'oldest' ? (
+                                  <LucideIcon name="arrow-up" style={{ width: '11px', height: '11px', color: '#2563EB' }} />
+                                ) : (
+                                  <LucideIcon name="arrow-up-down" style={{ width: '11px', height: '11px', color: '#94A3B8' }} />
+                                )}
+                              </div>
+                            </th>
+                            <th style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Net Amt</th>
+                            <th style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>GST (18%)</th>
+                            <th 
+                              onClick={() => setFinanceSortBy(prev => prev === 'amount_desc' ? 'amount_asc' : 'amount_desc')}
+                              style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: financeSortBy.startsWith('amount') ? '#2563EB' : '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                              title="Click to sort by Amount"
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span>Total Amt</span>
+                                {financeSortBy === 'amount_desc' ? (
+                                  <LucideIcon name="arrow-down" style={{ width: '11px', height: '11px', color: '#2563EB' }} />
+                                ) : financeSortBy === 'amount_asc' ? (
+                                  <LucideIcon name="arrow-up" style={{ width: '11px', height: '11px', color: '#2563EB' }} />
+                                ) : (
+                                  <LucideIcon name="arrow-up-down" style={{ width: '11px', height: '11px', color: '#94A3B8' }} />
+                                )}
+                              </div>
+                            </th>
+                            <th style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
+                            <th style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredInvoices.length === 0 ? (
+                            <tr>
+                              <td colSpan={10} style={{ padding: '48px 20px', textAlign: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                                  <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#F1F5F9', color: '#94A3B8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <LucideIcon name="search" style={{ width: '20px', height: '20px' }} />
+                                  </div>
+                                  <span style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>No matching invoices found</span>
+                                  <span style={{ fontSize: '12px', color: '#64748B' }}>Try clearing your search query or adjusting the status filter.</span>
+                                  {(financeSearchQuery || financeStatusFilter !== 'ALL') && (
+                                    <button
+                                      onClick={() => { setFinanceSearchQuery(''); setFinanceStatusFilter('ALL'); }}
+                                      style={{ marginTop: '6px', background: '#EFF6FF', color: '#2563EB', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      Reset Filters
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredInvoices.map((inv, idx) => {
+                              const isPaid = (inv.status || '').toLowerCase() === 'paid';
+                              const totalAmt = (Number(inv.amount) || 0) + (Number(inv.gst) || 0);
+                              return (
+                                <tr
+                                  key={inv._id || inv.invoiceNum}
+                                  style={{
+                                    borderBottom: '1px solid #F1F5F9',
+                                    transition: 'background 0.15s',
+                                    cursor: 'pointer',
+                                    background: selectedInvoiceId === inv._id ? '#F8FAFC' : 'transparent'
+                                  }}
+                                  onClick={() => setSelectedInvoiceId(inv._id)}
+                                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                                  onMouseLeave={e => {
+                                    if (selectedInvoiceId !== inv._id) e.currentTarget.style.backgroundColor = 'transparent';
+                                  }}
+                                >
+                                  {/* Sr. No */}
+                                  <td style={{ padding: '11px 6px', verticalAlign: 'middle', textAlign: 'center', fontSize: '11.5px', fontWeight: 600, color: '#64748B', whiteSpace: 'nowrap' }}>
+                                    {idx + 1}
+                                  </td>
+
+                                  {/* Invoice Number Badge */}
+                                  <td style={{ padding: '11px 8px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '11.5px', color: '#2563EB', background: '#EFF6FF', padding: '2px 7px', borderRadius: '5px', border: '1px solid #DBEAFE', whiteSpace: 'nowrap', display: 'inline-block' }}>
+                                      {inv.invoiceNum}
+                                    </span>
+                                  </td>
+
+                                  {/* Hospital Account */}
+                                  <td style={{ padding: '11px 8px', verticalAlign: 'middle' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                      <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: '#F1F5F9', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <LucideIcon name="building-2" style={{ width: '12px', height: '12px' }} />
+                                      </div>
+                                      <div style={{ minWidth: 0 }}>
+                                        <div style={{ fontWeight: 700, fontSize: '12.5px', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '150px' }} title={inv.hospital}>{inv.hospital}</div>
+                                        {inv.gstin && (
+                                          <div style={{ fontSize: '9.5px', color: '#94A3B8', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>GST: {inv.gstin}</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Plan Tier */}
+                                  <td style={{ padding: '11px 8px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                    <span style={{
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      padding: '2px 7px',
+                                      borderRadius: '5px',
+                                      background: (inv.subscription || '').includes('Enterprise') ? '#F5F3FF' : (inv.subscription || '').includes('Basic') ? '#EFF6FF' : '#F1F5F9',
+                                      color: (inv.subscription || '').includes('Enterprise') ? '#7C3AED' : (inv.subscription || '').includes('Basic') ? '#2563EB' : '#475569',
+                                      display: 'inline-block',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {inv.subscription || 'Standard Plan'}
+                                    </span>
+                                  </td>
+
+                                  {/* Billing Date */}
+                                  <td style={{ padding: '11px 8px', verticalAlign: 'middle', fontSize: '11.5px', color: '#475569', whiteSpace: 'nowrap' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <LucideIcon name="calendar" style={{ width: '12px', height: '12px', color: '#94A3B8' }} />
+                                      <span>{inv.invoiceDate || 'N/A'}</span>
+                                    </div>
+                                  </td>
+
+                                  {/* Net Amount */}
+                                  <td style={{ padding: '11px 8px', verticalAlign: 'middle', fontSize: '12.5px', fontWeight: 600, color: '#0F172A', whiteSpace: 'nowrap' }}>
+                                    ₹{(inv.amount || 0).toLocaleString('en-IN')}
+                                  </td>
+
+                                  {/* GST 18% */}
+                                  <td style={{ padding: '11px 8px', verticalAlign: 'middle', fontSize: '11.5px', color: '#64748B', whiteSpace: 'nowrap' }}>
+                                    ₹{(inv.gst || 0).toLocaleString('en-IN')}
+                                  </td>
+
+                                  {/* Total Amount */}
+                                  <td style={{ padding: '11px 8px', verticalAlign: 'middle', fontSize: '12.5px', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap' }}>
+                                    ₹{totalAmt.toLocaleString('en-IN')}
+                                  </td>
+
+                                  {/* Status */}
+                                  <td style={{ padding: '11px 8px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      fontSize: '10.5px',
+                                      fontWeight: 700,
+                                      padding: '2px 7px',
+                                      borderRadius: '5px',
+                                      background: isPaid ? '#DCFCE7' : '#FEF3C7',
+                                      color: isPaid ? '#15803D' : '#B45309',
+                                      border: isPaid ? '1px solid #BBF7D0' : '1px solid #FDE68A',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      <LucideIcon name={isPaid ? "check" : "clock"} style={{ width: '10px', height: '10px' }} />
+                                      {inv.status || 'Pending'}
+                                    </span>
+                                  </td>
+
+                                  {/* Actions */}
+                                  <td style={{ padding: '11px 8px', verticalAlign: 'middle', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                                      {/* View Invoice Button */}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setActiveInvoiceModal(inv);
+                                        }}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '3px',
+                                          background: '#F1F5F9',
+                                          color: '#334155',
+                                          border: '1px solid #E2E8F0',
+                                          borderRadius: '5px',
+                                          padding: '4px 8px',
+                                          fontSize: '11px',
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s',
+                                          whiteSpace: 'nowrap'
+                                        }}
+                                        onMouseEnter={e => { e.currentTarget.style.background = '#E2E8F0'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background = '#F1F5F9'; }}
+                                        title="View official Tax Invoice"
+                                      >
+                                        <LucideIcon name="file-text" style={{ width: '11px', height: '11px', color: '#2563EB' }} />
+                                        Invoice
+                                      </button>
+
+                                      {/* Mark as Paid Button */}
+                                      {!isPaid && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleMarkAsPaid(inv);
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '3px',
+                                            background: '#DCFCE7',
+                                            color: '#15803D',
+                                            border: '1px solid #86EFAC',
+                                            borderRadius: '5px',
+                                            padding: '4px 8px',
+                                            fontSize: '11px',
+                                            fontWeight: 700,
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                          onMouseEnter={e => { e.currentTarget.style.background = '#BBF7D0'; }}
+                                          onMouseLeave={e => { e.currentTarget.style.background = '#DCFCE7'; }}
+                                          title="Mark this invoice as Paid"
+                                        >
+                                          <LucideIcon name="check" style={{ width: '11px', height: '11px' }} />
+                                          Mark Paid
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Table Footer / Summary Bar */}
+                    <div style={{ padding: '14px 20px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                      <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>
+                        Showing <strong style={{ color: '#0F172A' }}>{filteredInvoices.length}</strong> of <strong style={{ color: '#0F172A' }}>{totalCount}</strong> invoices
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px' }}>
+                        <span style={{ color: '#64748B' }}>
+                          Filtered Net: <strong style={{ color: '#0F172A' }}>₹{filteredInvoices.reduce((s, i) => s + (Number(i.amount) || 0), 0).toLocaleString('en-IN')}</strong>
+                        </span>
+                        <span style={{ color: '#64748B' }}>
+                          Filtered GST: <strong style={{ color: '#0F172A' }}>₹{filteredInvoices.reduce((s, i) => s + (Number(i.gst) || 0), 0).toLocaleString('en-IN')}</strong>
+                        </span>
+                        <span style={{ color: '#2563EB', fontWeight: 800, background: '#EFF6FF', padding: '4px 10px', borderRadius: '6px' }}>
+                          Total: ₹{filteredInvoices.reduce((s, i) => s + (Number(i.amount) || 0) + (Number(i.gst) || 0), 0).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dedicated GST Tax Invoice Modal */}
+                  {activeInvoiceModal && (() => {
+                    const inv = activeInvoiceModal;
+                    const isPaid = (inv.status || '').toLowerCase() === 'paid';
+                    const totalAmt = (Number(inv.amount) || 0) + (Number(inv.gst) || 0);
+
                     return (
-                      <div style={{ flex: 1, background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800 }}>Invoice Details</h3>
-                        <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '8px', color: '#475569' }}>
-                          <div>Invoice Number: <strong>{inv.invoiceNum}</strong></div>
-                          <div>Client Hospital: <strong>{inv.hospital}</strong></div>
-                          <div>Billing Period: <strong>{inv.billingPeriod}</strong></div>
-                          <div>Address: {inv.address}</div>
-                          <div>GSTIN: <code>{inv.gstin}</code></div>
-                          <div style={{ height: '1px', background: '#E2E8F0', margin: '8px 0' }}></div>
-                          <div style={{ display: 'flex', justifyWindow: 'space-between', justifyContent: 'space-between', fontSize: '13px' }}>
-                            <span>Subscription Amount:</span>
-                            <strong>₹{inv.amount}</strong>
+                      <div
+                        style={{
+                          position: 'fixed',
+                          inset: 0,
+                          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                          backdropFilter: 'blur(4px)',
+                          zIndex: 200,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '20px'
+                        }}
+                        onClick={() => setActiveInvoiceModal(null)}
+                      >
+                        <div
+                          style={{
+                            background: '#FFFFFF',
+                            width: '100%',
+                            maxWidth: '740px',
+                            maxHeight: '90vh',
+                            borderRadius: '16px',
+                            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            overflow: 'hidden',
+                            border: '1px solid #E2E8F0'
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {/* Modal Header */}
+                          <div style={{ padding: '16px 24px', background: '#0F172A', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <LucideIcon name="receipt" style={{ width: '18px', height: '18px', color: '#FFFFFF' }} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '14px', fontWeight: 800, letterSpacing: '0.2px' }}>OFFICIAL TAX INVOICE</div>
+                                <div style={{ fontSize: '11px', color: '#94A3B8' }}>Curoxa Global Healthcare SaaS Gateway</div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setActiveInvoiceModal(null)}
+                              style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}
+                              onMouseEnter={e => e.currentTarget.style.color = '#FFFFFF'}
+                              onMouseLeave={e => e.currentTarget.style.color = '#94A3B8'}
+                            >
+                              <LucideIcon name="x" style={{ width: '20px', height: '20px' }} />
+                            </button>
                           </div>
-                          <div style={{ display: 'flex', justifyWindow: 'space-between', justifyContent: 'space-between', fontSize: '13px' }}>
-                            <span>Integrated GST (18%):</span>
-                            <strong>₹{inv.gst}</strong>
+
+                          {/* Printable Invoice Document Body */}
+                          <div id="curoxa-printable-invoice" style={{ padding: '28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '22px' }}>
+                            {/* Invoice Meta Bar */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #F1F5F9', paddingBottom: '20px' }}>
+                              <div>
+                                <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '1px' }}>INVOICE NUMBER</span>
+                                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', fontFamily: 'monospace', marginTop: '2px' }}>
+                                  {inv.invoiceNum}
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
+                                  Issue Date: <strong style={{ color: '#0F172A' }}>{inv.invoiceDate || 'N/A'}</strong>
+                                  {inv.dueDate && ` • Due Date: ${inv.dueDate}`}
+                                </div>
+                              </div>
+
+                              <div style={{ textAlign: 'right' }}>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  fontSize: '12px',
+                                  fontWeight: 800,
+                                  padding: '6px 14px',
+                                  borderRadius: '20px',
+                                  background: isPaid ? '#DCFCE7' : '#FEF3C7',
+                                  color: isPaid ? '#15803D' : '#B45309',
+                                  border: isPaid ? '1px solid #86EFAC' : '1px solid #FDE68A'
+                                }}>
+                                  <LucideIcon name={isPaid ? "check-circle-2" : "clock"} style={{ width: '14px', height: '14px' }} />
+                                  {isPaid ? 'PAYMENT RECEIVED' : 'PAYMENT PENDING'}
+                                </span>
+                                <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '6px' }}>
+                                  Billing Cycle: {inv.billingPeriod || 'Monthly Standard Cycle'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Two-Column Bill From & Bill To */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                              {/* Bill From (Curoxa) */}
+                              <div style={{ background: '#F8FAFC', padding: '14px 16px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                                  BILLED BY (PROVIDER)
+                                </div>
+                                <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>
+                                  CUROXA HEALTHCARE TECHNOLOGIES PVT. LTD.
+                                </div>
+                                <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '4px', lineHeight: '1.4' }}>
+                                  Enterprise Command Center, Connaught Place<br />
+                                  New Delhi - 110001, India<br />
+                                  <strong>GSTIN:</strong> 07AABCC1234D1Z5<br />
+                                  <strong>CIN:</strong> U72900DL2024PTC123456
+                                </div>
+                              </div>
+
+                              {/* Bill To (Client Hospital) */}
+                              <div style={{ background: '#F8FAFC', padding: '14px 16px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                                  BILLED TO (CLIENT HOSPITAL)
+                                </div>
+                                <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>
+                                  {inv.hospital}
+                                </div>
+                                <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '4px', lineHeight: '1.4' }}>
+                                  {inv.address || 'Registered Hospital Premises / Medical Center'}<br />
+                                  <strong>GSTIN:</strong> {inv.gstin || 'Unregistered / B2C Hospital Client'}<br />
+                                  <strong>Service Type:</strong> SaaS Hospital Management Software
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Itemized Line Items Table */}
+                            <div style={{ borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                                <thead>
+                                  <tr style={{ background: '#F1F5F9', borderBottom: '1px solid #E2E8F0' }}>
+                                    <th style={{ padding: '10px 14px', fontSize: '11px', fontWeight: 700, color: '#475569' }}>SERVICE DESCRIPTION</th>
+                                    <th style={{ padding: '10px 14px', fontSize: '11px', fontWeight: 700, color: '#475569' }}>SAC CODE</th>
+                                    <th style={{ padding: '10px 14px', fontSize: '11px', fontWeight: 700, color: '#475569', textAlign: 'right' }}>TAXABLE VALUE</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                    <td style={{ padding: '12px 14px' }}>
+                                      <div style={{ fontWeight: 700, fontSize: '13px', color: '#0F172A' }}>
+                                        Curoxa Hospital Management Platform — {inv.subscription}
+                                      </div>
+                                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                                        Software-as-a-Service monthly subscription license & multi-tenant cloud operations
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569', fontFamily: 'monospace' }}>
+                                      998313
+                                    </td>
+                                    <td style={{ padding: '12px 14px', fontSize: '13px', fontWeight: 700, color: '#0F172A', textAlign: 'right' }}>
+                                      ₹{(inv.amount || 0).toLocaleString('en-IN')}
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+
+                              {/* Totals Breakdown */}
+                              <div style={{ background: '#F8FAFC', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748B' }}>
+                                  <span>Taxable Net Amount:</span>
+                                  <strong style={{ color: '#0F172A' }}>₹{(inv.amount || 0).toLocaleString('en-IN')}</strong>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748B' }}>
+                                  <span>Central GST (CGST @ 9%):</span>
+                                  <strong style={{ color: '#0F172A' }}>₹{((inv.gst || 0) / 2).toLocaleString('en-IN')}</strong>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748B' }}>
+                                  <span>State GST (SGST @ 9%):</span>
+                                  <strong style={{ color: '#0F172A' }}>₹{((inv.gst || 0) / 2).toLocaleString('en-IN')}</strong>
+                                </div>
+                                <div style={{ height: '1px', background: '#E2E8F0', margin: '4px 0' }} />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 800, color: '#2563EB' }}>
+                                  <span>Grand Total (INR):</span>
+                                  <span>₹{totalAmt.toLocaleString('en-IN')}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Compliance & Remittance Note */}
+                            <div style={{ padding: '10px 14px', background: '#EFF6FF', borderRadius: '8px', border: '1px solid #DBEAFE', fontSize: '11px', color: '#1E40AF', lineHeight: '1.4' }}>
+                              <strong>Remittance Note:</strong> This is a digitally generated electronic tax invoice issued under Rule 46 of the CGST Rules, 2017. No physical signature is required. All payments should be remitted to the official Curoxa corporate bank account.
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', justifyWindow: 'space-between', justifyContent: 'space-between', fontSize: '14px', color: '#2563EB', fontWeight: 800 }}>
-                            <span>Grand Total (INR):</span>
-                            <strong>₹{inv.amount + inv.gst}</strong>
+
+                          {/* Modal Actions Footer */}
+                          <div style={{ padding: '16px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              {!isPaid && (
+                                <button
+                                  onClick={() => handleMarkAsPaid(inv)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    background: '#10B981',
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    padding: '8px 16px',
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <LucideIcon name="check" style={{ width: '14px', height: '14px' }} />
+                                  Mark as Paid
+                                </button>
+                              )}
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <button
+                                onClick={() => {
+                                  window.print();
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  background: '#2563EB',
+                                  color: '#FFFFFF',
+                                  border: 'none',
+                                  borderRadius: '8px',
+                                  padding: '8px 18px',
+                                  fontSize: '12px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <LucideIcon name="printer" style={{ width: '14px', height: '14px' }} />
+                                Print Tax Invoice
+                              </button>
+                              <button
+                                onClick={() => setActiveInvoiceModal(null)}
+                                style={{
+                                  background: '#FFFFFF',
+                                  color: '#475569',
+                                  border: '1px solid #CBD5E1',
+                                  borderRadius: '8px',
+                                  padding: '8px 16px',
+                                  fontSize: '12px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Close
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
                     );
                   })()}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* EMPLOYEES & WORKLOAD TAB */}
             {isTabAllowed && activeTab === 'hr-mgmt' && (() => {
@@ -14887,8 +16234,8 @@ const styles = {
   menuItemBtn: { display: 'flex', alignItems: 'center', height: '38px', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s' },
   menuItemLabel: { fontSize: '12.5px', fontWeight: 700 },
   menuDivider: { height: '1px', background: '#F1F5F9', margin: '8px 0' },
-  mainCanvas: { flex: 1, width: '100%', minWidth: 0, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '24px', boxSizing: 'border-box' },
-  pageBodyScroll: { flex: 1, width: '100%', minWidth: 0, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '24px', boxSizing: 'border-box' },
+  mainCanvas: { flex: 1, width: '100%', minWidth: 0, minHeight: 0, height: '100%', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', padding: '24px', boxSizing: 'border-box' },
+  pageBodyScroll: { flex: 1, width: '100%', minWidth: 0, minHeight: 0, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '24px', boxSizing: 'border-box' },
   subNavbar: { display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexShrink: 0 },
   subNavbarBtn: { border: 'none', background: 'none', fontSize: '12.5px', fontWeight: 650, color: '#64748B', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' },
   subNavbarBtnActive: { border: 'none', background: '#EFF6FF', fontSize: '12.5px', fontWeight: 800, color: '#2563EB', padding: '6px 12px', borderRadius: '6px', cursor: 'default' },
