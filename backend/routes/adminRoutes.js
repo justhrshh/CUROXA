@@ -360,6 +360,8 @@ router.get("/subscription", isHrOrAdmin, async (req, res) => {
     });
 
     const subStatus = getHospitalSubscriptionStatus(hospital);
+    const { getHospitalEffectiveModules } = require('../utils/subscriptionHelper');
+    const effectiveModules = await getHospitalEffectiveModules(hospital);
 
     const SuperAdminInvoice = require('../models/SuperAdminInvoice');
     const invoices = await SuperAdminInvoice.find({ hospital: hospital.name }).sort({ createdAt: -1 });
@@ -382,7 +384,9 @@ router.get("/subscription", isHrOrAdmin, async (req, res) => {
         patients: 5000,
         storageQuotaGb: 250
       },
-      modules: hospital.modules || {},
+      modules: effectiveModules,
+      configuredModules: hospital.modules || {},
+
       isGstVerified: hospital.isGstVerified || false,
       gstVerificationDetails: hospital.gstVerificationDetails || {},
       isLicenseVerified: hospital.isLicenseVerified || false,
@@ -488,7 +492,10 @@ router.post("/renew-subscription", isHrOrAdmin, async (req, res) => {
 
     await hospital.save();
 
-    // Notify Super Admin portal in real-time so it can refresh stale hospital data
+    // Notify Super Admin portal and hospital tenant in real-time so they can refresh stale subscription & module data
+    const { getHospitalEffectiveModules } = require('../utils/subscriptionHelper');
+    const effectiveModules = await getHospitalEffectiveModules(hospital);
+
     try {
       const io = req.app.get('io');
       if (io) {
@@ -499,12 +506,17 @@ router.post("/renew-subscription", isHrOrAdmin, async (req, res) => {
           subscriptionStatus: hospital.subscriptionStatus,
           subscriptionExpiryDate: hospital.subscriptionExpiryDate,
           revenue: hospital.revenue,
-          trialUsed: hospital.trialUsed
+          trialUsed: hospital.trialUsed,
+          modules: effectiveModules
         });
+        if (hospital.code) {
+          io.to(hospital.code).emit('data_changed', { type: 'subscription', modules: effectiveModules });
+        }
       }
     } catch (socketErr) {
       console.error('Socket emit error (non-critical):', socketErr.message);
     }
+
 
     // Record invoice
     const invCount = await SuperAdminInvoice.countDocuments();
@@ -538,8 +550,13 @@ router.post("/renew-subscription", isHrOrAdmin, async (req, res) => {
         plan: hospital.plan,
         status: hospital.status
       },
-      subscription: subStatus
+      subscription: {
+        ...subStatus,
+        modules: effectiveModules
+      },
+      modules: effectiveModules
     });
+
   } catch (error) {
     console.error("Renew subscription error:", error);
     res.status(500).json({ error: "Failed to renew subscription: " + error.message });

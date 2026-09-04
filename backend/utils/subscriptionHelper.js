@@ -266,10 +266,136 @@ async function checkAndDispatchExpiryNotifications(hospital) {
   }
 }
 
+const FOUR_CORE_MODULES = ['reception', 'doctor', 'pharmacy', 'laboratory'];
+
+const DEFAULT_PLAN_MODULES = {
+  basic: ['reception', 'doctor'],
+  professional: ['reception', 'doctor', 'pharmacy', 'laboratory'],
+  enterprise: ['reception', 'doctor', 'pharmacy', 'laboratory'],
+  custom: ['reception', 'doctor', 'pharmacy', 'laboratory'],
+  trial: ['reception', 'doctor', 'pharmacy', 'laboratory']
+};
+
+/**
+ * Resolves the plan-level module entitlements for a given hospital.
+ * Inspects SuperAdminPlan collection, with fallback to standard defaults.
+ *
+ * @param {Object} hospital - SuperAdminHospital document or plain object
+ * @returns {Promise<string[]>} List of lowercase module keys included in the plan
+ */
+async function getPlanModuleEntitlements(hospital) {
+  if (!hospital) return FOUR_CORE_MODULES;
+
+  const planStr = String(hospital.plan || '').toLowerCase().trim();
+  const subPlan = String(hospital.subscriptionPlan || '').toLowerCase().trim();
+
+  let planDoc = null;
+  try {
+    const mongoose = require('mongoose');
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+      const SuperAdminPlan = require('../models/SuperAdminPlan');
+      if (subPlan === 'trial' || subPlan === 'custom' || planStr.includes('trial')) {
+        planDoc = await SuperAdminPlan.findOne({ matchKey: 'custom' });
+      } else if (planStr.includes('enterprise')) {
+        planDoc = await SuperAdminPlan.findOne({ matchKey: 'enterprise' });
+      } else if (planStr.includes('professional')) {
+        planDoc = await SuperAdminPlan.findOne({ matchKey: 'professional' });
+      } else if (planStr.includes('basic') || planStr.includes('standard')) {
+        planDoc = await SuperAdminPlan.findOne({ matchKey: 'basic' });
+      } else {
+        planDoc = await SuperAdminPlan.findOne({
+          $or: [
+            { tier: new RegExp(`^${hospital.plan}$`, 'i') },
+            { matchKey: planStr }
+          ]
+        });
+      }
+    }
+  } catch (e) {
+    // Gracefully handle model resolution or db error in test/dev
+  }
+
+
+  if (planDoc && Array.isArray(planDoc.modules) && planDoc.modules.length > 0) {
+    return planDoc.modules.map(m => String(m).toLowerCase().trim());
+  }
+
+  // Fallback defaults
+  if (subPlan === 'trial' || subPlan === 'custom' || planStr.includes('trial')) {
+    return DEFAULT_PLAN_MODULES.trial;
+  } else if (planStr.includes('enterprise')) {
+    return DEFAULT_PLAN_MODULES.enterprise;
+  } else if (planStr.includes('professional')) {
+    return DEFAULT_PLAN_MODULES.professional;
+  } else if (planStr.includes('basic') || planStr.includes('standard')) {
+    return DEFAULT_PLAN_MODULES.basic;
+  }
+
+  return FOUR_CORE_MODULES;
+}
+
+/**
+ * Computes effective module access for a hospital:
+ * Effective Module Access = Plan Allows Module AND Hospital Module Setting Allows Module.
+ *
+ * Only authoritative for the 4 core modules:
+ * - 'reception'
+ * - 'doctor'
+ * - 'pharmacy'
+ * - 'laboratory'
+ *
+ * Other non-core modules (e.g. inventory, dpdp) pass through from hospital.modules.
+ *
+ * @param {Object} hospital - SuperAdminHospital document or plain object
+ * @returns {Promise<Object>} Effective modules map
+ */
+async function getHospitalEffectiveModules(hospital) {
+  if (!hospital) {
+    return {
+      reception: { enabled: true, planIncluded: true, hospitalConfigured: true },
+      doctor: { enabled: true, planIncluded: true, hospitalConfigured: true },
+      pharmacy: { enabled: true, planIncluded: true, hospitalConfigured: true },
+      laboratory: { enabled: true, planIncluded: true, hospitalConfigured: true }
+    };
+  }
+
+  const planModules = await getPlanModuleEntitlements(hospital);
+  const effective = {};
+
+  for (const mod of FOUR_CORE_MODULES) {
+    const planAllows = planModules.includes(mod);
+    const hospitalSetting = hospital.modules && hospital.modules[mod] && hospital.modules[mod].enabled !== undefined
+      ? hospital.modules[mod].enabled !== false
+      : true;
+
+    effective[mod] = {
+      enabled: Boolean(planAllows && hospitalSetting),
+      planIncluded: planAllows,
+      hospitalConfigured: hospitalSetting,
+      lastMod: hospital.modules?.[mod]?.lastMod || null
+    };
+  }
+
+  // Preserve non-core modules if any exist in hospital.modules (e.g. inventory, dpdp)
+  if (hospital.modules) {
+    for (const [key, val] of Object.entries(hospital.modules)) {
+      if (!FOUR_CORE_MODULES.includes(key) && !effective[key]) {
+        effective[key] = val;
+      }
+    }
+  }
+
+  return effective;
+}
+
 module.exports = {
   isTrialPlan,
   hasHospitalUsedTrial,
   getHospitalSubscriptionDates,
   getHospitalSubscriptionStatus,
-  checkAndDispatchExpiryNotifications
+  checkAndDispatchExpiryNotifications,
+  getPlanModuleEntitlements,
+  getHospitalEffectiveModules,
+  FOUR_CORE_MODULES
 };
+

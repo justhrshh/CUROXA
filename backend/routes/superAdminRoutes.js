@@ -70,14 +70,76 @@ const createNotification = async (title, message, type = 'info', category = 'sys
 
 // Removed mock onboarding details generator
 
-const { verifyGSTIN, verifyDrugLicense, verifyPAN, verifyCIN, verifyCertificate } = require('../utils/indianValidators');
+const { verifyGSTIN, verifyDrugLicense, verifyPAN, verifyCIN, verifyCertificate, verifyEmail } = require('../utils/indianValidators');
 
 // Apply security token verification to all Super Admin endpoints
 router.use(verifyToken);
 router.use(isSuperAdmin);
 
+// RBAC Middleware for Super Admin internal employee roles
+const requireRole = (...allowedRoles) => {
+  return async (req, res, next) => {
+    try {
+      // 1. Root master superadmin is always unrestricted
+      const staffId = (req.user?.staff_id || '').toLowerCase().trim();
+      const email = (req.user?.email || '').toLowerCase().trim();
+      if (staffId === 'superadmin' || email === 'super.admin@curoxa.com' || req.user?.isRootAdmin) {
+        return next();
+      }
+
+      // 2. Resolve platform role from token or DB
+      let role = req.user?.platformRole || req.user?.specialty;
+      if (!role) {
+        const dbUser = await User.findById(req.user?.id || req.user?.userId).select('specialty platformRole email staff_id');
+        role = dbUser?.platformRole || dbUser?.specialty;
+        if (!role && (dbUser?.staff_id === 'superadmin' || dbUser?.email === 'super.admin@curoxa.com')) {
+          return next();
+        }
+      }
+
+      if (!role) {
+        const emp = await SuperAdminEmployee.findOne({
+          email: { $regex: new RegExp(`^${(email || staffId).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+        });
+        if (emp && emp.platformRole) {
+          role = emp.platformRole;
+        }
+      }
+
+      // 3. Normalize legacy support roles
+      if (role === 'Request Handler' || role === 'Technical Support') {
+        role = 'Ticket Manager';
+      }
+
+      // 4. Super Admin platform role is unrestricted
+      if (role === 'Super Admin') {
+        return next();
+      }
+
+      // 5. If no roles specified, it's a Super Admin ONLY endpoint
+      if (allowedRoles.length === 0) {
+        return res.status(403).json({
+          error: `Access Denied: The '${role || 'Restricted User'}' role does not have permission to access platform administration controls. Super Admin only.`
+        });
+      }
+
+      // 6. Check if user's role is permitted
+      if (allowedRoles.includes(role)) {
+        return next();
+      }
+
+      return res.status(403).json({
+        error: `Access Denied: The '${role || 'Restricted User'}' role is not permitted to access this module. Requires: ${allowedRoles.join(' or ')}.`
+      });
+    } catch (err) {
+      console.error('[RBAC] Error validating platform role:', err);
+      return res.status(500).json({ error: 'Internal authorization error' });
+    }
+  };
+};
+
 // ==================== LICENSE & GSTIN VERIFICATION ====================
-router.post('/verify-license', async (req, res) => {
+router.post('/verify-license', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { licenseNumber, hospitalName } = req.body;
     
@@ -99,7 +161,7 @@ router.post('/verify-license', async (req, res) => {
   }
 });
 
-router.post('/verify-gstin', async (req, res) => {
+router.post('/verify-gstin', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { gstin, hospitalName } = req.body;
     
@@ -122,7 +184,7 @@ router.post('/verify-gstin', async (req, res) => {
 });
 
 // Seed initial mock data if databases are empty
-router.post('/seed', async (req, res) => {
+router.post('/seed', requireRole(), async (req, res) => {
   try {
     const leadCount = await SuperAdminLead.countDocuments();
     if (leadCount === 0) {
@@ -381,7 +443,7 @@ router.post('/seed', async (req, res) => {
 });
 
 // ==================== CRM LEADS ====================
-router.get('/crm', async (req, res) => {
+router.get('/crm', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const leads = await SuperAdminLead.find({});
     res.json(leads);
@@ -390,7 +452,7 @@ router.get('/crm', async (req, res) => {
   }
 });
 
-router.post('/crm', async (req, res) => {
+router.post('/crm', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const lead = await SuperAdminLead.create(req.body);
     await writeAudit(req, 'create_lead', `Created lead ${lead.name}`);
@@ -401,7 +463,7 @@ router.post('/crm', async (req, res) => {
   }
 });
 
-router.put('/crm/:id', async (req, res) => {
+router.put('/crm/:id', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const lead = await SuperAdminLead.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
     await writeAudit(req, 'update_lead', `Updated lead ${lead.name} to stage ${lead.stage}`);
@@ -412,7 +474,7 @@ router.put('/crm/:id', async (req, res) => {
   }
 });
 
-router.delete('/crm/:id', async (req, res) => {
+router.delete('/crm/:id', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     await SuperAdminLead.findByIdAndDelete(req.params.id);
     await writeAudit(req, 'delete_lead', `Deleted CRM lead: ${req.params.id}`);
@@ -510,11 +572,11 @@ const seedPlansIfNeeded = async () => {
   }
 };
 
-router.get('/plans', async (req, res) => {
+router.get('/plans', requireRole('Finance Manager'), async (req, res) => {
   try {
     await seedPlansIfNeeded();
     // Self-healing migration: update any old Custom Plan document name to Trial Plan
-    await SuperAdminPlan.updateMany({ matchKey: 'custom', tier: 'Custom Plan' }, { $set: { tier: 'Trial Plan' } });
+    await SuperAdminPlan.updateMany({ matchKey: 'custom', tier: 'Trial Plan' }, { $set: { tier: 'Trial Plan' } });
     const plans = await SuperAdminPlan.find({});
     res.json(plans);
   } catch (err) {
@@ -522,7 +584,7 @@ router.get('/plans', async (req, res) => {
   }
 });
 
-router.post('/plans', async (req, res) => {
+router.post('/plans', requireRole('Finance Manager'), async (req, res) => {
   try {
     const plan = await SuperAdminPlan.create(req.body);
     await writeAudit(req, 'create_plan', `Created subscription plan ${plan.tier}`);
@@ -532,17 +594,22 @@ router.post('/plans', async (req, res) => {
   }
 });
 
-router.put('/plans/:id', async (req, res) => {
+router.put('/plans/:id', requireRole('Finance Manager'), async (req, res) => {
   try {
     const plan = await SuperAdminPlan.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
     await writeAudit(req, 'update_plan', `Updated subscription plan ${plan.tier}`);
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("plan_updated", { planId: plan._id, tier: plan.tier, modules: plan.modules });
+    }
     res.json(plan);
+
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-router.delete('/plans/:id', async (req, res) => {
+router.delete('/plans/:id', requireRole('Finance Manager'), async (req, res) => {
   try {
     const plan = await SuperAdminPlan.findByIdAndDelete(req.params.id);
     if (plan) {
@@ -555,7 +622,7 @@ router.delete('/plans/:id', async (req, res) => {
 });
 
 // ==================== ONBOARDING ====================
-router.get('/onboarding', async (req, res) => {
+router.get('/onboarding', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const onboardings = await SuperAdminOnboarding.find({
       isActivated: { $ne: true },
@@ -567,7 +634,7 @@ router.get('/onboarding', async (req, res) => {
   }
 });
 
-router.post('/onboarding', async (req, res) => {
+router.post('/onboarding', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const cleanBody = {};
     for (const key in req.body) {
@@ -578,6 +645,14 @@ router.post('/onboarding', async (req, res) => {
     if (!cleanBody.name) {
       cleanBody.name = (req.body && req.body.name && req.body.name.trim()) ? req.body.name.trim() : 'New Hospital Onboarding';
     }
+    if (cleanBody.contactEmail) {
+      const emailVal = verifyEmail(cleanBody.contactEmail);
+      if (!emailVal.success) return res.status(400).json({ error: "Contact Email: " + emailVal.error });
+    }
+    if (cleanBody.adminEmail) {
+      const emailVal = verifyEmail(cleanBody.adminEmail);
+      if (!emailVal.success) return res.status(400).json({ error: "Admin Email: " + emailVal.error });
+    }
     const onboarding = await SuperAdminOnboarding.create(cleanBody);
     await writeAudit(req, 'create_onboarding', `Created onboarding setup for ${onboarding.name}`);
     await createNotification('New Onboarding Setup', `Onboarding process initialized for '${onboarding.name}'`, 'info', 'onboarding');
@@ -587,7 +662,7 @@ router.post('/onboarding', async (req, res) => {
   }
 });
 
-router.post('/upload-compliance', upload.single('document'), async (req, res) => {
+router.post('/upload-compliance', requireRole('Onboarding Manager'), upload.single('document'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded.' });
@@ -632,11 +707,20 @@ router.post('/upload-compliance', upload.single('document'), async (req, res) =>
   }
 });
 
-router.put('/onboarding/:id', async (req, res) => {
+router.put('/onboarding/:id', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const onboardingExist = await SuperAdminOnboarding.findById(req.params.id);
     if (!onboardingExist) {
       return res.status(404).json({ error: 'Onboarding record not found' });
+    }
+
+    if (req.body.contactEmail) {
+      const emailVal = verifyEmail(req.body.contactEmail);
+      if (!emailVal.success) return res.status(400).json({ error: "Contact Email: " + emailVal.error });
+    }
+    if (req.body.adminEmail) {
+      const emailVal = verifyEmail(req.body.adminEmail);
+      if (!emailVal.success) return res.status(400).json({ error: "Admin Email: " + emailVal.error });
     }
 
     if (req.body.panNumber) {
@@ -703,7 +787,7 @@ router.put('/onboarding/:id', async (req, res) => {
   }
 });
 
-router.delete('/onboarding/:id', async (req, res) => {
+router.delete('/onboarding/:id', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const onboarding = await SuperAdminOnboarding.findByIdAndDelete(req.params.id);
     if (onboarding) {
@@ -717,7 +801,7 @@ router.delete('/onboarding/:id', async (req, res) => {
 });
 
 // ==================== HOSPITALS ====================
-router.get('/hospitals', async (req, res) => {
+router.get('/hospitals', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     // Auto-Sync: Ensure every tenantId existing in User/Patient models (excluding superadmin role) is registered in SuperAdminHospital
     const userTenants = await User.distinct('tenantId', { role: { $nin: ['superadmin', 'super_admin'] } });
@@ -884,12 +968,24 @@ router.get('/hospitals', async (req, res) => {
   }
 });
 
-router.post('/hospitals', async (req, res) => {
+router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { adminName, adminEmail, adminPhone, adminPassword, ...hospitalData } = req.body;
     
     if (!adminName || !adminEmail || !adminPhone || !adminPassword) {
       return res.status(400).json({ error: "Admin credentials (adminName, adminEmail, adminPhone, adminPassword) are required to activate the hospital." });
+    }
+
+    const adminEmailVal = verifyEmail(adminEmail);
+    if (!adminEmailVal.success) {
+      return res.status(400).json({ error: "Admin Email: " + adminEmailVal.error });
+    }
+
+    if (hospitalData.contactEmail) {
+      const contactEmailVal = verifyEmail(hospitalData.contactEmail);
+      if (!contactEmailVal.success) {
+        return res.status(400).json({ error: "Contact Email: " + contactEmailVal.error });
+      }
     }
     
     const codeExists = await SuperAdminHospital.findOne({ code: hospitalData.code });
@@ -1015,7 +1111,7 @@ router.post('/hospitals', async (req, res) => {
   }
 });
 
-router.put('/hospitals/:id', async (req, res) => {
+router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { id } = req.params;
     const mongoose = require('mongoose');
@@ -1064,18 +1160,33 @@ router.put('/hospitals/:id', async (req, res) => {
       hospObj.adminName = '';
     }
     
+    const { getHospitalEffectiveModules } = require('../utils/subscriptionHelper');
+    const effectiveModules = await getHospitalEffectiveModules(hospital);
+    hospObj.effectiveModules = effectiveModules;
+
     const io = req.app.get("io");
     if (io && hospital.code) {
-      io.to(hospital.code).emit("data_changed", { type: "subscription" });
+      io.to(hospital.code).emit("data_changed", { type: "subscription", modules: effectiveModules });
+      io.emit("hospital_subscription_updated", {
+        hospitalCode: hospital.code,
+        plan: hospital.plan,
+        status: hospital.status,
+        subscriptionStatus: hospital.subscriptionStatus,
+        subscriptionExpiryDate: hospital.subscriptionExpiryDate,
+        revenue: hospital.revenue,
+        trialUsed: hospital.trialUsed,
+        modules: effectiveModules
+      });
     }
     res.json(hospObj);
+
   } catch (err) {
     console.error('Update hospital error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-router.put('/hospitals/:id/admin', async (req, res) => {
+router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { adminUsername, adminPassword } = req.body;
     if (!adminUsername && !adminPassword) {
@@ -1171,7 +1282,7 @@ router.put('/hospitals/:id/admin', async (req, res) => {
   }
 });
 
-router.delete('/hospitals/:id', async (req, res) => {
+router.delete('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { id } = req.params;
     const mongoose = require('mongoose');
@@ -1237,7 +1348,7 @@ router.delete('/hospitals/:id', async (req, res) => {
 });
 
 // ==================== TENANT IMPERSONATION APIS ====================
-router.get('/hospitals/:code/dashboard-stats', async (req, res) => {
+router.get('/hospitals/:code/dashboard-stats', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const tenantId = req.params.code.toLowerCase().trim();
     
@@ -1385,7 +1496,7 @@ router.get('/hospitals/:code/dashboard-stats', async (req, res) => {
   }
 });
 
-router.post('/hospitals/:code/impersonate-login', async (req, res) => {
+router.post('/hospitals/:code/impersonate-login', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const tenantId = req.params.code.toLowerCase().trim();
     let adminUser = await User.findOne({ tenantId, role: 'admin' });
@@ -1454,7 +1565,7 @@ router.post('/hospitals/:code/impersonate-login', async (req, res) => {
   }
 });
 
-router.get('/hospitals/:code/patients', async (req, res) => {
+router.get('/hospitals/:code/patients', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const Patient = require('../models/Patient');
     const patients = await Patient.find({ tenantId: req.params.code.toLowerCase() }).sort({ name: 1 });
@@ -1464,7 +1575,7 @@ router.get('/hospitals/:code/patients', async (req, res) => {
   }
 });
 
-router.post('/hospitals/:code/patients', async (req, res) => {
+router.post('/hospitals/:code/patients', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const Patient = require('../models/Patient');
     const { name, age, gender, contact, email } = req.body;
@@ -1527,7 +1638,7 @@ router.post('/hospitals/:code/patients', async (req, res) => {
   }
 });
 
-router.get('/hospitals/:code/doctors', async (req, res) => {
+router.get('/hospitals/:code/doctors', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const User = require('../models/User');
     const doctors = await User.find({ tenantId: req.params.code.toLowerCase(), role: 'doctor' }).sort({ name: 1 });
@@ -1537,7 +1648,7 @@ router.get('/hospitals/:code/doctors', async (req, res) => {
   }
 });
 
-router.post('/hospitals/:code/appointments', async (req, res) => {
+router.post('/hospitals/:code/appointments', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const Appointment = require('../models/Appointment');
     const { patientId, doctorId, date, time, reason } = req.body;
@@ -1555,7 +1666,7 @@ router.post('/hospitals/:code/appointments', async (req, res) => {
   }
 });
 
-router.post('/hospitals/:code/billing', async (req, res) => {
+router.post('/hospitals/:code/billing', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const Billing = require('../models/Billing');
     const { patientId, items, totalAmount, status } = req.body;
@@ -1572,7 +1683,7 @@ router.post('/hospitals/:code/billing', async (req, res) => {
   }
 });
 
-router.post('/hospitals/:code/labs', async (req, res) => {
+router.post('/hospitals/:code/labs', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const LabRequest = require('../models/LabRequest');
     const { patientId, doctorId, testName } = req.body;
@@ -1590,7 +1701,7 @@ router.post('/hospitals/:code/labs', async (req, res) => {
 });
 
 // ==================== HOSPITAL STAFF IMPERSONATION & MANAGEMENT ====================
-router.get('/hospitals/:code/staff', async (req, res) => {
+router.get('/hospitals/:code/staff', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const staff = await User.find({ tenantId: req.params.code.toLowerCase() });
     res.json(staff);
@@ -1599,7 +1710,7 @@ router.get('/hospitals/:code/staff', async (req, res) => {
   }
 });
 
-router.post('/hospitals/:code/staff', async (req, res) => {
+router.post('/hospitals/:code/staff', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { staff_id, name, email, role, department, designation, password } = req.body;
     const existing = await User.findOne({ staff_id: staff_id.toLowerCase() });
@@ -1643,7 +1754,7 @@ router.post('/hospitals/:code/staff', async (req, res) => {
   }
 });
 
-router.put('/hospitals/:code/staff/:id', async (req, res) => {
+router.put('/hospitals/:code/staff/:id', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { name, email, role, department, designation, password } = req.body;
     const user = await User.findById(req.params.id);
@@ -1685,7 +1796,7 @@ router.put('/hospitals/:code/staff/:id', async (req, res) => {
   }
 });
 
-router.delete('/hospitals/:code/staff/:id', async (req, res) => {
+router.delete('/hospitals/:code/staff/:id', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found.' });
@@ -1708,7 +1819,7 @@ router.delete('/hospitals/:code/staff/:id', async (req, res) => {
 });
 
 // ==================== INVOICES ====================
-router.get('/invoices', async (req, res) => {
+router.get('/invoices', requireRole('Finance Manager'), async (req, res) => {
   try {
     const invoices = await SuperAdminInvoice.find({});
     res.json(invoices);
@@ -1717,7 +1828,7 @@ router.get('/invoices', async (req, res) => {
   }
 });
 
-router.post('/invoices', async (req, res) => {
+router.post('/invoices', requireRole('Finance Manager'), async (req, res) => {
   try {
     const invoice = await SuperAdminInvoice.create(req.body);
     await writeAudit(req, 'create_invoice', `Generated billing invoice ${invoice.invoiceNum} for ${invoice.hospital}`);
@@ -1728,7 +1839,7 @@ router.post('/invoices', async (req, res) => {
   }
 });
 
-router.put('/invoices/:id', async (req, res) => {
+router.put('/invoices/:id', requireRole('Finance Manager'), async (req, res) => {
   try {
     const invoice = await SuperAdminInvoice.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
     await writeAudit(req, 'update_invoice', `Updated status of invoice ${invoice.invoiceNum} to ${invoice.status}`);
@@ -1740,7 +1851,7 @@ router.put('/invoices/:id', async (req, res) => {
 });
 
 // ==================== SUPPORT TICKETS ====================
-router.get('/tickets', async (req, res) => {
+router.get('/tickets', requireRole('Ticket Manager'), async (req, res) => {
   try {
     const tickets = await SuperAdminSupport.find({});
     res.json(tickets);
@@ -1749,7 +1860,7 @@ router.get('/tickets', async (req, res) => {
   }
 });
 
-router.post('/tickets', async (req, res) => {
+router.post('/tickets', requireRole('Ticket Manager'), async (req, res) => {
   try {
     const ticket = await SuperAdminSupport.create(req.body);
     await writeAudit(req, 'create_ticket', `Logged support ticket ${ticket.id} for ${ticket.hospital}`);
@@ -1766,7 +1877,7 @@ router.post('/tickets', async (req, res) => {
   }
 });
 
-router.put('/tickets/:id', async (req, res) => {
+router.put('/tickets/:id', requireRole('Ticket Manager'), async (req, res) => {
   try {
     const ticket = await SuperAdminSupport.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
     await writeAudit(req, 'update_ticket', `Updated support ticket ${ticket.id} to ${ticket.status}`);
@@ -1786,7 +1897,7 @@ router.put('/tickets/:id', async (req, res) => {
   }
 });
 
-router.post('/tickets/:id/message', async (req, res) => {
+router.post('/tickets/:id/message', requireRole('Ticket Manager'), async (req, res) => {
   try {
     const ticket = await SuperAdminSupport.findById(req.params.id);
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
@@ -1810,7 +1921,7 @@ router.post('/tickets/:id/message', async (req, res) => {
 });
 
 // ==================== BACKUPS ====================
-router.get('/backups', async (req, res) => {
+router.get('/backups', requireRole(), async (req, res) => {
   try {
     const backups = await SuperAdminBackup.find({}).sort({ createdAt: -1 });
     res.json(backups);
@@ -1819,7 +1930,7 @@ router.get('/backups', async (req, res) => {
   }
 });
 
-router.post('/backups/trigger', async (req, res) => {
+router.post('/backups/trigger', requireRole(), async (req, res) => {
   try {
     const id = `BKP-00${(await SuperAdminBackup.countDocuments()) + 1}`;
     const backup = await SuperAdminBackup.create({
@@ -1838,7 +1949,7 @@ router.post('/backups/trigger', async (req, res) => {
 });
 
 // ==================== AUDIT LOGS ====================
-router.get('/audits', async (req, res) => {
+router.get('/audits', requireRole(), async (req, res) => {
   try {
     const audits = await SuperAdminAudit.find({}).sort({ createdAt: -1 });
     res.json(audits);
@@ -1848,7 +1959,7 @@ router.get('/audits', async (req, res) => {
 });
 
 // ==================== REPORTS ====================
-router.get('/reports', async (req, res) => {
+router.get('/reports', requireRole('Finance Manager'), async (req, res) => {
   try {
     const reports = await SuperAdminReport.find({});
     res.json(reports);
@@ -1857,7 +1968,7 @@ router.get('/reports', async (req, res) => {
   }
 });
 
-router.post('/reports', async (req, res) => {
+router.post('/reports', requireRole('Finance Manager'), async (req, res) => {
   try {
     const report = await SuperAdminReport.create(req.body);
     await writeAudit(req, 'create_report', `Created custom BI report: ${report.name}`);
@@ -1868,7 +1979,7 @@ router.post('/reports', async (req, res) => {
   }
 });
 
-router.delete('/reports/:id', async (req, res) => {
+router.delete('/reports/:id', requireRole('Finance Manager'), async (req, res) => {
   try {
     const report = await SuperAdminReport.findByIdAndDelete(req.params.id);
     if (report) {
@@ -1882,7 +1993,7 @@ router.delete('/reports/:id', async (req, res) => {
 });
 
 // ==================== SCHEDULES ====================
-router.get('/schedules', async (req, res) => {
+router.get('/schedules', requireRole(), async (req, res) => {
   try {
     const schedules = await SuperAdminSchedule.find({});
     res.json(schedules);
@@ -1891,7 +2002,7 @@ router.get('/schedules', async (req, res) => {
   }
 });
 
-router.post('/schedules', async (req, res) => {
+router.post('/schedules', requireRole(), async (req, res) => {
   try {
     const schedule = await SuperAdminSchedule.create(req.body);
     await writeAudit(req, 'create_schedule', `Created automated report schedule: ${schedule.name}`);
@@ -1902,7 +2013,7 @@ router.post('/schedules', async (req, res) => {
   }
 });
 
-router.delete('/schedules/:id', async (req, res) => {
+router.delete('/schedules/:id', requireRole(), async (req, res) => {
   try {
     const schedule = await SuperAdminSchedule.findByIdAndDelete(req.params.id);
     if (schedule) {
@@ -1985,7 +2096,7 @@ router.delete('/meetings/:id', async (req, res) => {
 });
 
 // ==================== SYSTEM BROADCASTS ENDPOINTS ====================
-router.post('/broadcast', async (req, res) => {
+router.post('/broadcast', requireRole('Ticket Manager'), async (req, res) => {
   const { subject, message, audience } = req.body;
   if (!subject || !message) {
     return res.status(400).json({ error: 'Subject and message are required' });
@@ -2024,7 +2135,7 @@ router.post('/broadcast', async (req, res) => {
   }
 });
 
-router.get('/broadcasts', async (req, res) => {
+router.get('/broadcasts', requireRole('Ticket Manager'), async (req, res) => {
   try {
     const SuperAdminBroadcast = require('../models/SuperAdminBroadcast');
     const broadcasts = await SuperAdminBroadcast.find({}).sort({ createdAt: -1 }).limit(20);
@@ -2035,7 +2146,7 @@ router.get('/broadcasts', async (req, res) => {
 });
 
 // ==================== PURGE DATABASE ====================
-router.post('/purge', async (req, res) => {
+router.post('/purge', requireRole(), async (req, res) => {
   try {
     const Appointment = require('../models/Appointment');
     const Approval = require('../models/Approval');
@@ -2125,8 +2236,22 @@ router.post('/purge', async (req, res) => {
 });
 
 // ==================== EMPLOYEES / TEAM ====================
-router.get('/employees', async (req, res) => {
+router.get('/employees', requireRole(), async (req, res) => {
   try {
+    // Auto-heal legacy roles to Ticket Manager
+    await SuperAdminEmployee.updateMany(
+      { platformRole: { $in: ['Request Handler', 'Technical Support'] } },
+      { $set: { platformRole: 'Ticket Manager' } }
+    );
+    await User.updateMany(
+      { tenantId: 'curoxa', specialty: { $in: ['Request Handler', 'Technical Support'] } },
+      { $set: { specialty: 'Ticket Manager', platformRole: 'Ticket Manager' } }
+    );
+    await User.updateMany(
+      { tenantId: 'curoxa', platformRole: { $in: ['Request Handler', 'Technical Support'] } },
+      { $set: { platformRole: 'Ticket Manager' } }
+    );
+
     const employees = await SuperAdminEmployee.find({}).sort({ createdAt: -1 });
     res.json(employees);
   } catch (err) {
@@ -2134,11 +2259,16 @@ router.get('/employees', async (req, res) => {
   }
 });
 
-router.post('/employees', async (req, res) => {
+router.post('/employees', requireRole(), async (req, res) => {
   try {
     const email = req.body.email ? req.body.email.toLowerCase().trim() : '';
     if (!email) {
       return res.status(400).json({ error: "Email is required." });
+    }
+
+    const VALID_ROLES = ['Onboarding Manager', 'Ticket Manager', 'Finance Manager'];
+    if (!VALID_ROLES.includes(req.body.platformRole)) {
+      return res.status(400).json({ error: `Invalid platform role. Must be one of: ${VALID_ROLES.join(', ')}` });
     }
 
     // Check if employee with same email already exists
@@ -2176,6 +2306,7 @@ router.post('/employees', async (req, res) => {
       department: employee.department,
       designation: employee.designation,
       specialty: employee.platformRole,
+      platformRole: employee.platformRole,
       hasSetPassword: true,
       isSetupComplete: true
     });
@@ -2221,10 +2352,17 @@ router.post('/employees', async (req, res) => {
   }
 });
 
-router.put('/employees/:id', async (req, res) => {
+router.put('/employees/:id', requireRole(), async (req, res) => {
   try {
     const originalEmployee = await SuperAdminEmployee.findById(req.params.id);
     if (!originalEmployee) return res.status(404).json({ error: 'Employee not found' });
+
+    if (req.body.platformRole) {
+      const VALID_ROLES = ['Onboarding Manager', 'Ticket Manager', 'Finance Manager'];
+      if (!VALID_ROLES.includes(req.body.platformRole)) {
+        return res.status(400).json({ error: `Invalid platform role. Must be one of: ${VALID_ROLES.join(', ')}` });
+      }
+    }
 
     const newEmail = req.body.email ? req.body.email.toLowerCase().trim() : '';
     if (newEmail && newEmail !== originalEmployee.email.toLowerCase().trim()) {
@@ -2267,6 +2405,7 @@ router.put('/employees/:id', async (req, res) => {
       user.department = employee.department;
       user.designation = employee.designation;
       user.specialty = employee.platformRole;
+      user.platformRole = employee.platformRole;
 
       if (req.body.password && req.body.password.trim() !== '') {
         const bcrypt = require('bcrypt');
@@ -2318,7 +2457,7 @@ router.put('/employees/:id', async (req, res) => {
   }
 });
 
-router.delete('/employees/:id', async (req, res) => {
+router.delete('/employees/:id', requireRole(), async (req, res) => {
   try {
     const employee = await SuperAdminEmployee.findByIdAndDelete(req.params.id);
     if (employee) {

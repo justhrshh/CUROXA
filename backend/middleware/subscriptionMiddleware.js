@@ -1,6 +1,6 @@
 const SuperAdminHospital = require('../models/SuperAdminHospital');
 const User = require('../models/User');
-const { getHospitalSubscriptionStatus } = require('../utils/subscriptionHelper');
+const { getHospitalSubscriptionStatus, getHospitalEffectiveModules } = require('../utils/subscriptionHelper');
 
 const checkModule = (moduleName) => {
   return async (req, res, next) => {
@@ -12,7 +12,12 @@ const checkModule = (moduleName) => {
           const { getJwtSecret } = require('../config/env');
           const token = req.headers.authorization.split(' ')[1];
           const decoded = jwt.verify(token, getJwtSecret());
-          if (decoded) req.user = decoded;
+          if (decoded) {
+            req.user = decoded;
+            if (decoded.tenantId && !req.tenantId) {
+              req.tenantId = decoded.tenantId;
+            }
+          }
         } catch (e) {}
       }
 
@@ -21,21 +26,30 @@ const checkModule = (moduleName) => {
         return next();
       }
 
-      const tenantId = req.tenantId || 'city_hospital';
+      // 2. Patients accessing their own records bypass specific module capability checks
+      if (req.user && req.user.role === 'patient') {
+        return next();
+      }
 
-      // 2. Fetch hospital plan settings
-      const hospital = await SuperAdminHospital.findOne({
-        $or: [
-          { code: String(tenantId).toLowerCase() },
-          { hospitalId: String(tenantId).toUpperCase() }
-        ]
-      });
+      const tenantId = req.tenantId || (req.user && req.user.tenantId) || req.headers['x-tenant-id'] || 'city_hospital';
+
+      // 3. Fetch hospital plan settings
+      let hospital = null;
+      const mongoose = require('mongoose');
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        hospital = await SuperAdminHospital.findOne({
+          $or: [
+            { code: String(tenantId).toLowerCase() },
+            { hospitalId: String(tenantId).toUpperCase() }
+          ]
+        });
+      }
       if (!hospital) {
         // Backwards compatibility for dev/seeding or if no hospital profile exists yet
         return next();
       }
 
-      // 3. Strict subscription expiry & suspension enforcement
+      // 4. Strict subscription expiry & suspension enforcement
       const subStatus = getHospitalSubscriptionStatus(hospital);
       if (subStatus.isExpired) {
         return res.status(403).json({
@@ -43,17 +57,18 @@ const checkModule = (moduleName) => {
         });
       }
 
-      // 4. Patients accessing their own records bypass specific module capability checks
-      if (req.user && req.user.role === 'patient') {
-        return next();
-      }
 
-      // 4. Validate module access
+      // 5. Validate effective module access (respects both Plan entitlement AND Hospital-level setting)
       const modulesToCheck = Array.isArray(moduleName) ? moduleName : [moduleName];
-      const hasAccess = modulesToCheck.some(mod => hospital.modules && hospital.modules[mod] && hospital.modules[mod].enabled);
+      const effectiveModules = await getHospitalEffectiveModules(hospital);
+      const hasAccess = modulesToCheck.some(mod => effectiveModules[mod] && effectiveModules[mod].enabled);
       if (!hasAccess) {
+        const modName = modulesToCheck[0] || 'requested';
+        const formattedMod = modName.charAt(0).toUpperCase() + modName.slice(1);
         return res.status(403).json({
-          error: `Access Denied. None of the required modules (${modulesToCheck.join(', ').toUpperCase()}) are enabled for your hospital's subscription plan.`
+          error: "MODULE_UNAVAILABLE",
+          message: `The ${formattedMod} module has been disabled for your hospital by the application administrator. Please contact your hospital administrator for assistance.`,
+          module: modName
         });
       }
 
@@ -64,6 +79,7 @@ const checkModule = (moduleName) => {
     }
   };
 };
+
 
 const checkDoctorClinicalMode = async (req, res, next) => {
   try {

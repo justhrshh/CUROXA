@@ -327,11 +327,15 @@ const AdminDashboard = () => {
 
   const tenantModules = (() => {
     try {
+      if (subscription?.modules && typeof subscription.modules === 'object' && Object.keys(subscription.modules).length > 0) {
+        return subscription.modules;
+      }
       return JSON.parse(localStorage.getItem('tenantModules') || '{}');
     } catch (e) {
       return {};
     }
   })();
+
 
   const getAvailableRoles = () => {
     const allRoles = [
@@ -540,6 +544,103 @@ const AdminDashboard = () => {
   
   // Interactive approvals state matching the new mockup layout exactly
   const [pendingApprovals, setPendingApprovals] = useState([]);
+
+  // Support Tickets & Attention Center state
+  const [supportTickets, setSupportTickets] = useState([]);
+  const [selectedTicketModal, setSelectedTicketModal] = useState(null);
+  const [ticketReplyText, setTicketReplyText] = useState('');
+  const [ticketReplySubmitting, setTicketReplySubmitting] = useState(false);
+  const [ticketMarkingRead, setTicketMarkingRead] = useState(false);
+  const [readTicketIds, setReadTicketIds] = useState(() => {
+    try {
+      const tenantId = localStorage.getItem('tenantId') || 'default';
+      return JSON.parse(localStorage.getItem(`curoxa_read_tickets_${tenantId}`) || '[]');
+    } catch {
+      return [];
+    }
+  });
+
+  // Attention Center items: strictly pending items ONLY (pending approvals + open/in-progress tickets)
+  const attentionPendingItems = React.useMemo(() => {
+    const pendingApps = (pendingApprovals || []).filter(item => {
+      const st = (item.status || '').toLowerCase();
+      return st === 'pending';
+    });
+
+    const pendingTickets = (supportTickets || []).filter(ticket => {
+      const st = (ticket.status || '').toLowerCase();
+      return st === 'open' || st === 'in progress' || st === 'pending';
+    }).map(ticket => {
+      const ticketKey = ticket._id || ticket.id;
+      const isRead = !!ticket.readByTenant || readTicketIds.includes(ticket._id) || readTicketIds.includes(ticket.id);
+      return {
+        id: `ticket-${ticketKey}`,
+        ticketId: ticket.id || `#TKT-${String(ticketKey).slice(-4)}`,
+        category: 'ticket',
+        title: `System Ticket: ${ticket.category || 'Support'} (${ticket.id || 'Ticket'})`,
+        raisedBy: `${ticket.contact || ticket.hospital || 'Hospital Staff'} • ${ticket.department || 'General'}`,
+        status: ticket.status || 'Open',
+        details: ticket.description || 'No description provided.',
+        rawTicket: ticket,
+        isTicket: true,
+        unread: !isRead,
+        createdAt: ticket.createdAt || ticket.createdOn
+      };
+    });
+
+    return [...pendingTickets, ...pendingApps].sort((a, b) => {
+      const timeA = new Date(a.rawTicket?.createdAt || a.rawTicket?.createdOn || a.raw?.requestedAt || a.raw?.createdAt || 0).getTime();
+      const timeB = new Date(b.rawTicket?.createdAt || b.rawTicket?.createdOn || b.raw?.requestedAt || b.raw?.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
+  }, [pendingApprovals, supportTickets, readTicketIds]);
+
+  const handleMarkTicketAsRead = async (ticket) => {
+    if (!ticket) return;
+    const ticketId = ticket._id || ticket.id;
+    setTicketMarkingRead(true);
+
+    try {
+      const tenantId = localStorage.getItem('tenantId') || 'default';
+      const storageKey = `curoxa_read_tickets_${tenantId}`;
+      const current = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      if (!current.includes(ticketId)) {
+        current.push(ticketId);
+        localStorage.setItem(storageKey, JSON.stringify(current));
+      }
+      setReadTicketIds(prev => Array.from(new Set([...prev, ticketId])));
+    } catch (err) {
+      console.warn('Failed to save read state to localStorage', err);
+    }
+
+    setSupportTickets(prev => prev.map(t => (t._id === ticketId || t.id === ticketId) ? { ...t, readByTenant: true, readAt: new Date().toISOString() } : t));
+    setSelectedTicketModal(prev => prev ? { ...prev, readByTenant: true, readAt: new Date().toISOString() } : null);
+
+    try {
+      await api.patch(`/auth/support/tickets/${ticketId}/read`);
+    } catch (backendErr) {
+      console.warn('Backend mark-as-read call failed (cached locally):', backendErr);
+    } finally {
+      setTicketMarkingRead(false);
+    }
+  };
+
+  const handleSendTicketReply = async (ticketId) => {
+    if (!ticketReplyText.trim() || ticketReplySubmitting) return;
+    setTicketReplySubmitting(true);
+    try {
+      const res = await api.post(`/auth/support/tickets/${ticketId}/message`, { text: ticketReplyText.trim() });
+      if (res.data) {
+        setSelectedTicketModal(res.data);
+        setSupportTickets(prev => prev.map(t => (t._id === ticketId || t.id === ticketId) ? res.data : t));
+      }
+      setTicketReplyText('');
+    } catch (err) {
+      console.error('Failed to send ticket reply:', err);
+    } finally {
+      setTicketReplySubmitting(false);
+    }
+  };
 
   const [approvalsSubTab, setApprovalsSubTab] = useState('all');
   const [approvedTodayCount, setApprovedTodayCount] = useState(0);
@@ -1228,6 +1329,13 @@ const AdminDashboard = () => {
     };
     socket.on('data_changed', onDirectSocketData);
 
+    const onTicketSocketEvent = () => {
+      fetchApprovals();
+    };
+    socket.on('ticket_created', onTicketSocketEvent);
+    socket.on('ticket_message', onTicketSocketEvent);
+    socket.on('ticket_status_changed', onTicketSocketEvent);
+
     const onAdminWindowFocus = () => {
       fetchApprovals();
       fetchNotifications();
@@ -1240,6 +1348,9 @@ const AdminDashboard = () => {
     return () => {
       window.removeEventListener('curoxa_sync', handleSync);
       socket.off('data_changed', onDirectSocketData);
+      socket.off('ticket_created', onTicketSocketEvent);
+      socket.off('ticket_message', onTicketSocketEvent);
+      socket.off('ticket_status_changed', onTicketSocketEvent);
       window.removeEventListener('focus', onAdminWindowFocus);
     };
   }, []);
@@ -1430,6 +1541,9 @@ const AdminDashboard = () => {
     try {
       const response = await api.get('/admin/subscription');
       setSubscription(response.data);
+      if (response.data && response.data.modules) {
+        localStorage.setItem('tenantModules', JSON.stringify(response.data.modules));
+      }
       
       const plansRes = await api.get('/admin/plans');
       if (plansRes.data) {
@@ -1441,6 +1555,7 @@ const AdminDashboard = () => {
       setSubscriptionLoading(false);
     }
   };
+
 
   const fetchNotifications = async () => {
     try {
@@ -2046,13 +2161,16 @@ const AdminDashboard = () => {
   const fetchApprovals = async () => {
     setDomainLoading('attention', true);
     try {
-      const [approvalsRes, leavesRes] = await Promise.allSettled([
+      const [approvalsRes, leavesRes, ticketsRes] = await Promise.allSettled([
         api.get('/approvals'),
-        api.get('/hr/leaves')
+        api.get('/hr/leaves'),
+        api.get('/auth/support/tickets')
       ]);
 
       const approvalsData = approvalsRes.status === 'fulfilled' && Array.isArray(approvalsRes.value?.data) ? approvalsRes.value.data : [];
       const leavesData = leavesRes.status === 'fulfilled' && Array.isArray(leavesRes.value?.data) ? leavesRes.value.data : [];
+      const ticketsData = ticketsRes.status === 'fulfilled' && Array.isArray(ticketsRes.value?.data) ? ticketsRes.value.data : [];
+      setSupportTickets(ticketsData);
 
       const dbApprovals = approvalsData.map(appItem => {
         let category = 'reorder';
@@ -11151,23 +11269,26 @@ const AdminDashboard = () => {
                         Pricing & Procedures
                       </span>
                     </div>
-                    <div 
-                      className={`sidebar-link ${activeTab === 'lab-catalog' ? 'active' : ''}`}
-                      onClick={() => setActiveTab('lab-catalog')}
-                    >
-                      {activeTab === 'lab-catalog' && (
-                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
-                      )}
-                      <div className="sidebar-link-icon" style={{
-                        background: activeTab === 'lab-catalog' ? '#0F172A' : '#F1F5F9',
-                        color: activeTab === 'lab-catalog' ? '#FFFFFF' : '#64748B'
-                      }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    {tenantModules.laboratory?.enabled !== false && (
+                      <div 
+                        className={`sidebar-link ${activeTab === 'lab-catalog' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('lab-catalog')}
+                      >
+                        {activeTab === 'lab-catalog' && (
+                          <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
+                        )}
+                        <div className="sidebar-link-icon" style={{
+                          background: activeTab === 'lab-catalog' ? '#0F172A' : '#F1F5F9',
+                          color: activeTab === 'lab-catalog' ? '#FFFFFF' : '#64748B'
+                        }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                        </div>
+                        <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'lab-catalog' ? 700 : 600, color: activeTab === 'lab-catalog' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
+                          Lab Tests Catalog
+                        </span>
                       </div>
-                      <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'lab-catalog' ? 700 : 600, color: activeTab === 'lab-catalog' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
-                        Lab Tests Catalog
-                      </span>
-                    </div>
+                    )}
+
                     <div 
                       className={`sidebar-link ${activeTab === 'subscription' ? 'active' : ''}`}
                       onClick={() => setActiveTab('subscription')}
@@ -12509,7 +12630,7 @@ const AdminDashboard = () => {
                       onClick={() => setAttentionCenterTab('approvals')}
                     >
                       <span>Approvals & Tasks</span>
-                      <span className="attention-toggle-badge">{pendingApprovals.length}</span>
+                      <span className="attention-toggle-badge">{attentionPendingItems.length}</span>
                     </button>
                     <button
                       className={`attention-toggle-btn ${attentionCenterTab === 'alerts' ? 'active' : ''}`}
@@ -12524,21 +12645,23 @@ const AdminDashboard = () => {
                 {/* Tab 1: Approvals & Tasks */}
                 {attentionCenterTab === 'approvals' && (
                   <div className="attention-items-list">
-                    {pendingApprovals.length === 0 ? (
+                    {attentionPendingItems.length === 0 ? (
                       <div style={{ padding: '36px 16px', textAlign: 'center', color: '#64748B', fontWeight: 600, fontSize: '13px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                           <polyline points="22 4 12 14.01 9 11.01"/>
                         </svg>
-                        <span>No pending approvals awaiting decision. All clear!</span>
+                        <span>No pending items awaiting decision. All clear!</span>
                       </div>
                     ) : (
-                      pendingApprovals.slice(0, 4).map((item) => (
+                      attentionPendingItems.slice(0, 5).map((item) => (
                         <div
                           key={item.id}
                           className="attention-item-row"
                           onClick={() => {
-                            if (item.targetTab === 'hr-payroll' || item.category === 'leave') {
+                            if (item.isTicket) {
+                              setSelectedTicketModal(item.rawTicket || item);
+                            } else if (item.targetTab === 'hr-payroll' || item.category === 'leave') {
                               setHrInitialTab(item.hrTab || 'Attendance');
                               setHrInitialAdding(false);
                               setActiveTab('hr-payroll');
@@ -12550,6 +12673,7 @@ const AdminDashboard = () => {
                               setActiveTab('approvals');
                             }
                           }}
+                          style={{ cursor: 'pointer' }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
                             <div style={{
@@ -12560,20 +12684,55 @@ const AdminDashboard = () => {
                               alignItems: 'center',
                               justifyContent: 'center',
                               flexShrink: 0,
-                              background: item.category === 'receptionist_indent' || item.category === 'vendor_onboarding' ? '#FFF7ED' : '#EFF6FF',
-                              color: item.category === 'receptionist_indent' || item.category === 'vendor_onboarding' ? '#EA580C' : '#2563EB'
+                              background: item.isTicket ? '#F5F3FF' : (item.category === 'receptionist_indent' || item.category === 'vendor_onboarding' ? '#FFF7ED' : '#EFF6FF'),
+                              color: item.isTicket ? '#7C3AED' : (item.category === 'receptionist_indent' || item.category === 'vendor_onboarding' ? '#EA580C' : '#2563EB'),
+                              position: 'relative'
                             }}>
-                              {item.category === 'receptionist_indent' ? (
+                              {item.isTicket ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/>
+                                  <path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/>
+                                </svg>
+                              ) : item.category === 'receptionist_indent' ? (
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
                               ) : (
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
                               )}
+                              {item.isTicket && item.unread && (
+                                <span style={{
+                                  position: 'absolute',
+                                  top: '-2px',
+                                  right: '-2px',
+                                  width: '8px',
+                                  height: '8px',
+                                  borderRadius: '50%',
+                                  background: '#2563EB',
+                                  border: '2px solid white'
+                                }} title="Unread ticket" />
+                              )}
                             </div>
                             <div style={{ minWidth: 0, flex: 1 }}>
-                              <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {item.title}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <div style={{ fontSize: '13px', fontWeight: item.unread ? 800 : 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {item.title}
+                                </div>
+                                {item.isTicket && item.unread && (
+                                  <span style={{
+                                    fontSize: '9.5px',
+                                    fontWeight: 800,
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    background: '#EFF6FF',
+                                    color: '#2563EB',
+                                    border: '1px solid #BFDBFE',
+                                    lineHeight: 1.2,
+                                    flexShrink: 0
+                                  }}>
+                                    UNREAD
+                                  </span>
+                                )}
                               </div>
-                              <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
+                              <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {item.type || item.raisedBy || 'Administrative Request'}
                               </div>
                             </div>
@@ -12584,13 +12743,13 @@ const AdminDashboard = () => {
                               fontWeight: 800,
                               padding: '2px 8px',
                               borderRadius: '6px',
-                              background: item.status?.toLowerCase() === 'approved' ? '#ECFDF5' : item.status?.toLowerCase() === 'review' ? '#EFF6FF' : '#FFF7ED',
-                              color: item.status?.toLowerCase() === 'approved' ? '#059669' : item.status?.toLowerCase() === 'review' ? '#2563EB' : '#C2410C'
+                              background: '#FFF7ED',
+                              color: '#C2410C'
                             }}>
                               {item.status || 'Pending'}
                             </span>
                             <span style={{ fontSize: '10.5px', color: '#94A3B8', fontWeight: 600 }}>
-                              {item.raw?.createdAt ? new Date(item.raw.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today'}
+                              {item.raw?.createdAt || item.rawTicket?.createdAt ? new Date(item.raw?.createdAt || item.rawTicket?.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today'}
                             </span>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                           </div>
@@ -27676,6 +27835,354 @@ const AdminDashboard = () => {
                   Review &amp; Approve Vendor →
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* System Ticket Details Modal */}
+      {selectedTicketModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            width: '100%',
+            maxWidth: '680px',
+            maxHeight: '88vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            position: 'relative',
+            textAlign: 'left'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #E2E8F0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: '#F8FAFC'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  background: '#F5F3FF',
+                  color: '#7C3AED',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/>
+                    <path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/>
+                  </svg>
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                      {selectedTicketModal.id ? `#${selectedTicketModal.id}` : '#TKT-SYSTEM'}
+                    </h3>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      background: selectedTicketModal.status?.toLowerCase() === 'resolved' ? '#ECFDF5' : selectedTicketModal.status?.toLowerCase() === 'in progress' ? '#EFF6FF' : '#FFF7ED',
+                      color: selectedTicketModal.status?.toLowerCase() === 'resolved' ? '#059669' : selectedTicketModal.status?.toLowerCase() === 'in progress' ? '#2563EB' : '#C2410C',
+                      border: `1px solid ${selectedTicketModal.status?.toLowerCase() === 'resolved' ? '#A7F3D0' : selectedTicketModal.status?.toLowerCase() === 'in progress' ? '#BFDBFE' : '#FED7AA'}`
+                    }}>
+                      {selectedTicketModal.status || 'Open'}
+                    </span>
+                    {selectedTicketModal.priority && (
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: selectedTicketModal.priority === 'Critical' ? '#FEF2F2' : selectedTicketModal.priority === 'High' ? '#FFF7ED' : '#F1F5F9',
+                        color: selectedTicketModal.priority === 'Critical' ? '#DC2626' : selectedTicketModal.priority === 'High' ? '#EA580C' : '#475569'
+                      }}>
+                        {selectedTicketModal.priority} Priority
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>
+                    {selectedTicketModal.category || 'Technical Support Request'}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedTicketModal(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#94A3B8',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title="Close dialog"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {/* Metadata Grid */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                gap: '12px',
+                background: '#F8FAFC',
+                padding: '14px 16px',
+                borderRadius: '10px',
+                border: '1px solid #E2E8F0'
+              }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Department</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
+                    {selectedTicketModal.department || 'General'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Requester</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
+                    {selectedTicketModal.contact || selectedTicketModal.hospital || 'Hospital Staff'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Created On</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
+                    {selectedTicketModal.createdAt || selectedTicketModal.createdOn ? new Date(selectedTicketModal.createdAt || selectedTicketModal.createdOn).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Read Status</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: (selectedTicketModal.readByTenant || readTicketIds.includes(selectedTicketModal._id) || readTicketIds.includes(selectedTicketModal.id)) ? '#16A34A' : '#2563EB' }}>
+                    {(selectedTicketModal.readByTenant || readTicketIds.includes(selectedTicketModal._id) || readTicketIds.includes(selectedTicketModal.id)) ? '✓ Read' : '● Unread'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.03em' }}>
+                  Description / Issue Summary
+                </div>
+                <div style={{
+                  background: '#FFFFFF',
+                  padding: '14px 16px',
+                  borderRadius: '10px',
+                  border: '1px solid #E2E8F0',
+                  fontSize: '13.5px',
+                  lineHeight: '1.55',
+                  color: '#1E293B',
+                  whiteSpace: 'pre-wrap'
+                }}>
+                  {selectedTicketModal.description || 'No description provided.'}
+                </div>
+              </div>
+
+              {/* Conversation / Messages Thread */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    Conversation History ({Array.isArray(selectedTicketModal.messages) ? selectedTicketModal.messages.length : 0})
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>Real-time verified thread</span>
+                </div>
+
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  maxHeight: '220px',
+                  overflowY: 'auto',
+                  background: '#F8FAFC',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid #E2E8F0'
+                }}>
+                  {Array.isArray(selectedTicketModal.messages) && selectedTicketModal.messages.length > 0 ? (
+                    selectedTicketModal.messages.map((msg, idx) => {
+                      const isSupportTeam = msg.sender?.toLowerCase().includes('support') || msg.sender?.toLowerCase().includes('super') || msg.sender?.toLowerCase().includes('helpdesk');
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            background: isSupportTeam ? '#EFF6FF' : '#FFFFFF',
+                            border: `1px solid ${isSupportTeam ? '#DBEAFE' : '#E2E8F0'}`,
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 800, color: isSupportTeam ? '#1D4ED8' : '#0F172A' }}>
+                              {msg.sender || 'Staff'} {isSupportTeam ? '• Support Team' : ''}
+                            </span>
+                            <span style={{ fontSize: '10.5px', color: '#94A3B8', fontWeight: 600 }}>
+                              {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '13px', color: '#334155', whiteSpace: 'pre-wrap', lineHeight: '1.45' }}>
+                            {msg.text}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '16px', color: '#94A3B8', fontSize: '12.5px', fontWeight: 600 }}>
+                      No additional conversation messages logged for this ticket yet.
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Reply Input */}
+                <div style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={ticketReplyText}
+                    onChange={(e) => setTicketReplyText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendTicketReply(selectedTicketModal._id || selectedTicketModal.id);
+                      }
+                    }}
+                    placeholder="Type a reply or update for support team..."
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      fontSize: '13px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      outline: 'none'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSendTicketReply(selectedTicketModal._id || selectedTicketModal.id)}
+                    disabled={ticketReplySubmitting || !ticketReplyText.trim()}
+                    style={{
+                      background: '#2563EB',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '8px 14px',
+                      fontSize: '12.5px',
+                      fontWeight: 700,
+                      cursor: (ticketReplySubmitting || !ticketReplyText.trim()) ? 'not-allowed' : 'pointer',
+                      opacity: (ticketReplySubmitting || !ticketReplyText.trim()) ? 0.6 : 1
+                    }}
+                  >
+                    {ticketReplySubmitting ? 'Sending...' : 'Reply'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '14px 24px',
+              borderTop: '1px solid #E2E8F0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: '#F8FAFC'
+            }}>
+              <div>
+                {(selectedTicketModal.readByTenant || readTicketIds.includes(selectedTicketModal._id) || readTicketIds.includes(selectedTicketModal.id)) ? (
+                  <button
+                    type="button"
+                    disabled
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: '#F1F5F9',
+                      color: '#475569',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '8px',
+                      padding: '8px 16px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'default'
+                    }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    Marked as Read
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleMarkTicketAsRead(selectedTicketModal)}
+                    disabled={ticketMarkingRead}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: '#2563EB',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '8px 16px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: ticketMarkingRead ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 2px 4px rgba(37, 99, 235, 0.25)',
+                      opacity: ticketMarkingRead ? 0.7 : 1
+                    }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    {ticketMarkingRead ? 'Saving...' : 'Mark as Read'}
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTicketModal(null)}
+                  style={{
+                    background: '#F1F5F9',
+                    color: '#475569',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '8px',
+                    padding: '8px 18px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

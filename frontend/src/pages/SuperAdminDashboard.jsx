@@ -55,6 +55,12 @@ const validateCertificateFormat = (cert) => {
   return certRegex.test(cert.trim());
 };
 
+const validateEmailFormat = (email) => {
+  if (!email || typeof email !== 'string') return false;
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  return emailRegex.test(email.trim());
+};
+
 const ToggleSwitch = ({ checked, onChange, disabled }) => {
   return (
     <label style={{ ...styles.switchContainer, opacity: disabled ? 0.6 : 1, pointerEvents: disabled ? 'none' : 'auto' }}>
@@ -752,7 +758,7 @@ const HospitalIdentityStep = ({ wizardHospital, updateWizardField }) => {
 };
 // ────────────────────────────────────────────────────────────────────────────
 
-const SuperAdminDashboard = () => {
+const SuperAdminDashboard = ({ initialTab }) => {
   const navigate = useNavigate();
   const superAdminChatEndRef = useRef(null);
   const moduleUpdateTimeouts = useRef({});
@@ -762,32 +768,66 @@ const SuperAdminDashboard = () => {
   // Current user details
   const [currentUser, setCurrentUser] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('user')) || { name: 'Platform Admin', email: 'super.admin@curoxa.com', role: 'superadmin' };
+      return JSON.parse(localStorage.getItem('user')) || { name: 'Super Admin', email: 'super.admin@curoxa.com', role: 'superadmin' };
     } catch (_) {
-      return { name: 'Platform Admin', email: 'super.admin@curoxa.com', role: 'superadmin' };
+      return { name: 'Super Admin', email: 'super.admin@curoxa.com', role: 'superadmin' };
     }
   });
 
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(true);
-  const [activeTab, setActiveTab] = useState('dashboard');
-
-  // RBAC Configuration
-  const ROLE_ACCESS_MAP = {
-    'Platform Admin': ['dashboard', 'hospital-onboarding', 'hospitals', 'subscription-mgmt', 'customer-support', 'broadcast-center', 'finance', 'employees', 'reports', 'settings'],
-    'Onboarding Manager': ['dashboard', 'hospital-onboarding', 'hospitals', 'subscription-mgmt'],
-    'Request Handler': ['dashboard', 'customer-support', 'hospitals'],
-    'Technical Support': ['dashboard', 'customer-support', 'hospitals', 'settings'],
-    'Finance Manager': ['dashboard', 'finance', 'subscription-mgmt', 'reports']
+  // Resolve platform role: only root master superadmin is 'Super Admin', internal team members have 1 of 3 operational roles
+  const resolvePlatformRole = (user) => {
+    if (!user) return 'Onboarding Manager';
+    const staffId = (user.staff_id || '').toLowerCase().trim();
+    const email = (user.email || '').toLowerCase().trim();
+    if (staffId === 'superadmin' || email === 'super.admin@curoxa.com' || user.isRootAdmin) {
+      return 'Super Admin';
+    }
+    let role = user.platformRole || user.specialty || '';
+    if (role === 'Request Handler' || role === 'Technical Support') {
+      return 'Ticket Manager';
+    }
+    if (role === 'Onboarding Manager' || role === 'Ticket Manager' || role === 'Finance Manager') {
+      return role;
+    }
+    if (role === 'Super Admin' || role === 'Platform Admin') {
+      return 'Super Admin';
+    }
+    return 'Onboarding Manager';
   };
 
-  // SuperAdmin role or Platform Admin gets unrestricted master access to all sections
-  const currentUserPlatformRole = currentUser.specialty || 'Platform Admin';
-  const isSuperAdmin = currentUser?.role === 'superadmin' || currentUser?.role === 'super_admin' || !currentUser?.specialty || currentUserPlatformRole === 'Platform Admin';
-  
+  const currentUserPlatformRole = resolvePlatformRole(currentUser);
+  const isSuperAdmin = currentUserPlatformRole === 'Super Admin';
+
+  // RBAC Configuration: exactly 3 internal manager roles + root master Super Admin
+  const ROLE_ACCESS_MAP = {
+    'Super Admin': ['dashboard', 'hospital-onboarding', 'hospitals', 'subscription-mgmt', 'customer-support', 'broadcast-center', 'finance', 'employees', 'reports', 'settings'],
+    'Onboarding Manager': ['hospital-onboarding', 'hospitals'],
+    'Ticket Manager': ['customer-support', 'broadcast-center'],
+    'Finance Manager': ['subscription-mgmt', 'finance', 'reports']
+  };
+
+  const DEFAULT_TAB_MAP = {
+    'Super Admin': 'dashboard',
+    'Onboarding Manager': 'hospital-onboarding',
+    'Ticket Manager': 'customer-support',
+    'Finance Manager': 'subscription-mgmt'
+  };
+
   const allowedTabs = isSuperAdmin
-    ? ROLE_ACCESS_MAP['Platform Admin']
-    : (ROLE_ACCESS_MAP[currentUserPlatformRole] || ROLE_ACCESS_MAP['Platform Admin']);
+    ? ROLE_ACCESS_MAP['Super Admin']
+    : (ROLE_ACCESS_MAP[currentUserPlatformRole] || ROLE_ACCESS_MAP['Onboarding Manager']);
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(true);
+  const [activeTab, setActiveTab] = useState(() => {
+    return initialTab || DEFAULT_TAB_MAP[currentUserPlatformRole] || 'dashboard';
+  });
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   const filteredMenuGroups = menuGroups.map(group => ({
     ...group,
@@ -811,8 +851,9 @@ const SuperAdminDashboard = () => {
   // Automatically normalize any legacy or search tab aliases
   useEffect(() => {
     if (activeTab === 'onboarding') setActiveTab('hospital-onboarding');
-    else if (activeTab === 'tickets') setActiveTab('support-success');
-    else if (activeTab === 'invoices') setActiveTab('finance-mgmt');
+    else if (activeTab === 'tickets' || activeTab === 'customer-support') setActiveTab('support-success');
+    else if (activeTab === 'invoices' || activeTab === 'finance') setActiveTab('finance-mgmt');
+    else if (activeTab === 'employees') setActiveTab('hr-mgmt');
     else if (activeTab === 'settings' || activeTab === 'backups') setActiveTab('platform-control');
     else if (activeTab === 'reports') setActiveTab('bi-reports');
   }, [activeTab]);
@@ -1526,7 +1567,7 @@ const SuperAdminDashboard = () => {
     password: '',
     department: '',
     designation: '',
-    platformRole: 'admin',
+    platformRole: 'Onboarding Manager',
     status: 'Active'
   };
   const [employeeForm, setEmployeeForm] = useState(emptyEmployeeForm);
@@ -2754,9 +2795,16 @@ const SuperAdminDashboard = () => {
             const res = await fetch(url, { headers, signal: controller.signal });
             clearTimeout(timeoutId);
 
-            if (res.status === 401 || res.status === 403) {
-              console.warn(`[AUTH] Response ${res.status} for ${url}. Logging out...`);
+            // 401 means unauthenticated / expired JWT token -> auto logout
+            if (res.status === 401) {
+              console.warn(`[AUTH] Response 401 Unauthorized for ${url}. Logging out...`);
               handleAutoLogout('session_expired');
+              return false;
+            }
+
+            // 403 means Forbidden by RBAC for this role -> normal access control, DO NOT log out
+            if (res.status === 403) {
+              console.warn(`[AUTH] Response 403 Forbidden for ${url} (Role: ${currentUserPlatformRole}). Skipping module.`);
               return false;
             }
 
@@ -2774,36 +2822,55 @@ const SuperAdminDashboard = () => {
           }
         };
 
-        // Phase 1: High-priority initial request for primary hospital data
-        const hospitalsSuccess = await fetchAndSet('/api/superadmin/hospitals', setHospitals);
-
-        // Phase 2: Load remaining dashboard datasets without arbitrary delays
-        const secondaryResults = await Promise.allSettled([
-          fetchAndSet('/api/superadmin/plans', setPlans),
-          fetchAndSet('/api/superadmin/onboarding', setOnboardingHospitals),
-          fetchAndSet('/api/superadmin/invoices', setInvoices),
-          fetchAndSet('/api/superadmin/tickets', setTickets),
-          fetchAndSet('/api/superadmin/backups', setBackups),
-          fetchAndSet('/api/superadmin/audits', setAuditLogs),
-          fetchAndSet('/api/superadmin/reports', setCustomReports),
-          fetchAndSet('/api/superadmin/schedules', setScheduledReports),
+        // Role-aware dataset fetching: only fetch collections authorized for currentUserPlatformRole
+        const fetchPromises = [
           fetchAndSet('/api/superadmin/notifications', setNotifications),
-          fetchAndSet('/api/superadmin/meetings', setMeetings),
-          fetchAndSet('/api/superadmin/broadcasts', setPastBroadcasts),
-          fetchAndSet('/api/superadmin/employees', setEmployees)
-        ]);
-
-        const allResults = [
-          { status: 'fulfilled', value: hospitalsSuccess },
-          ...secondaryResults
+          fetchAndSet('/api/superadmin/meetings', setMeetings)
         ];
 
-        // Check if all essential fetches failed or backend is disconnected
+        if (isSuperAdmin) {
+          fetchPromises.push(
+            fetchAndSet('/api/superadmin/hospitals', setHospitals),
+            fetchAndSet('/api/superadmin/plans', setPlans),
+            fetchAndSet('/api/superadmin/onboarding', setOnboardingHospitals),
+            fetchAndSet('/api/superadmin/invoices', setInvoices),
+            fetchAndSet('/api/superadmin/tickets', setTickets),
+            fetchAndSet('/api/superadmin/backups', setBackups),
+            fetchAndSet('/api/superadmin/audits', setAuditLogs),
+            fetchAndSet('/api/superadmin/reports', setCustomReports),
+            fetchAndSet('/api/superadmin/schedules', setScheduledReports),
+            fetchAndSet('/api/superadmin/broadcasts', setPastBroadcasts),
+            fetchAndSet('/api/superadmin/employees', setEmployees)
+          );
+        } else if (currentUserPlatformRole === 'Onboarding Manager') {
+          fetchPromises.push(
+            fetchAndSet('/api/superadmin/hospitals', setHospitals),
+            fetchAndSet('/api/superadmin/onboarding', setOnboardingHospitals)
+          );
+        } else if (currentUserPlatformRole === 'Ticket Manager') {
+          fetchPromises.push(
+            fetchAndSet('/api/superadmin/tickets', setTickets),
+            fetchAndSet('/api/superadmin/broadcasts', setPastBroadcasts)
+          );
+        } else if (currentUserPlatformRole === 'Finance Manager') {
+          fetchPromises.push(
+            fetchAndSet('/api/superadmin/plans', setPlans),
+            fetchAndSet('/api/superadmin/invoices', setInvoices),
+            fetchAndSet('/api/superadmin/reports', setCustomReports)
+          );
+        }
+
+        const allResults = await Promise.allSettled(fetchPromises);
+
+        // Check if all essential fetches failed or backend is completely disconnected
         const succeededCount = allResults.filter(r => r.status === 'fulfilled' && r.value === true).length;
         if (succeededCount === 0 && token) {
           try {
-            const checkRes = await fetch('/api/superadmin/hospitals', { headers });
-            if (checkRes.status === 401 || checkRes.status === 403 || !checkRes.ok) {
+            // Check universal endpoint accessible to all internal superadmin roles
+            const checkRes = await fetch('/api/superadmin/notifications', { headers });
+            if (checkRes.status === 401) {
+              handleAutoLogout('session_expired');
+            } else if (!checkRes.ok && checkRes.status !== 403) {
               handleAutoLogout('backend_disconnected');
             }
           } catch (e) {
@@ -2895,9 +2962,11 @@ const SuperAdminDashboard = () => {
               subscriptionExpiryDate: data.subscriptionExpiryDate ?? h.subscriptionExpiryDate,
               revenue: data.revenue ?? h.revenue,
               trialUsed: data.trialUsed ?? h.trialUsed,
+              modules: data.modules ?? h.modules
             };
           }
           return h;
+
         })
       );
     };
@@ -3413,7 +3482,11 @@ const SuperAdminDashboard = () => {
       if (step === 1) {
         if (!wizardHospital.name?.trim()) missing.push('Hospital Name');
         if (!wizardHospital.contactName?.trim()) missing.push('Primary Contact Person');
-        if (!wizardHospital.contactEmail?.trim()) missing.push('Contact Email');
+        if (!wizardHospital.contactEmail?.trim()) {
+          missing.push('Contact Email');
+        } else if (!validateEmailFormat(wizardHospital.contactEmail)) {
+          missing.push('Contact Email in valid format (e.g. name@hospital.com)');
+        }
         if (!wizardHospital.city?.trim()) missing.push('City');
         if (!wizardHospital.address?.trim()) missing.push('Street Address');
       } else if (step === 2) {
@@ -3455,7 +3528,11 @@ const SuperAdminDashboard = () => {
         if (!wizardHospital.subscriptionPlan) missing.push('Subscription Plan');
       } else if (step === 5) {
         if (!wizardHospital.adminName?.trim()) missing.push('Admin Full Name');
-        if (!wizardHospital.adminEmail?.trim()) missing.push('Admin Work Email');
+        if (!wizardHospital.adminEmail?.trim()) {
+          missing.push('Admin Work Email');
+        } else if (!validateEmailFormat(wizardHospital.adminEmail)) {
+          missing.push('Admin Work Email in valid format (e.g. admin@hospital.com)');
+        }
         if (!wizardHospital.adminPhone?.trim() || wizardHospital.adminPhone.length !== 10) missing.push('Admin Telephone (10 digits)');
         if (!wizardHospital.adminPassword?.trim()) missing.push('Security Password');
       }
@@ -4120,8 +4197,12 @@ const SuperAdminDashboard = () => {
                           type="email"
                           value={wizardHospital.contactEmail || ''}
                           onChange={e => updateWizardField('contactEmail', e.target.value)}
-                          isValid={!!wizardHospital.contactEmail?.trim()}
+                          error={wizardHospital.contactEmail && !validateEmailFormat(wizardHospital.contactEmail)}
+                          isValid={wizardHospital.contactEmail && validateEmailFormat(wizardHospital.contactEmail)}
                         />
+                        {wizardHospital.contactEmail && !validateEmailFormat(wizardHospital.contactEmail) && (
+                          <span style={{ fontSize: '10.5px', color: '#EF4444', marginTop: '4px', fontWeight: 600 }}>⚠️ Please enter a valid email address (e.g. contact@hospital.com).</span>
+                        )}
                       </div>
                       <div style={styles.formCol}>
                         <FloatingInput
@@ -4889,10 +4970,14 @@ const SuperAdminDashboard = () => {
                             label="Admin Work Email"
                             required
                             type="email"
-                            isValid={!!wizardHospital.adminEmail?.trim()}
+                            error={wizardHospital.adminEmail && !validateEmailFormat(wizardHospital.adminEmail)}
+                            isValid={wizardHospital.adminEmail && validateEmailFormat(wizardHospital.adminEmail)}
                             value={wizardHospital.adminEmail || ''} 
                             onChange={e => updateWizardField('adminEmail', e.target.value)} 
                           />
+                          {wizardHospital.adminEmail && !validateEmailFormat(wizardHospital.adminEmail) && (
+                            <span style={{ fontSize: '10.5px', color: '#EF4444', marginTop: '4px', fontWeight: 600 }}>⚠️ Please enter a valid email address (e.g. admin@hospital.com).</span>
+                          )}
                         </div>
                         <div style={styles.formCol}>
                           <FloatingInput
@@ -6595,9 +6680,11 @@ const SuperAdminDashboard = () => {
               <LucideIcon name="help-circle" style={{ width: '18px', height: '18px', color: '#64748B' }} />
             </button>
 
-            <button style={styles.iconButtonBadge} onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }}>
-              <LucideIcon name="layout-grid" style={{ width: '18px', height: '18px', color: '#64748B' }} />
-            </button>
+            {isSuperAdmin && (
+              <button style={styles.iconButtonBadge} onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }}>
+                <LucideIcon name="layout-grid" style={{ width: '18px', height: '18px', color: '#64748B' }} />
+              </button>
+            )}
 
             <div style={{ position: 'relative' }}>
               <button style={{ ...styles.profileTrigger, border: 'none', background: 'none', padding: 0, cursor: 'pointer' }} onClick={() => setIsProfileOpen(!isProfileOpen)}>
@@ -6606,7 +6693,7 @@ const SuperAdminDashboard = () => {
                   background: '#2563EB', color: '#FFFFFF', display: 'flex',
                   alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800
                 }}>
-                  SU
+                  {currentUser.name ? currentUser.name.slice(0, 2).toUpperCase() : 'SU'}
                 </div>
               </button>
 
@@ -6636,13 +6723,13 @@ const SuperAdminDashboard = () => {
                     <div style={{ padding: '14px 16px', borderBottom: '1px solid #F1F5F9' }}>
                       <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>{currentUser.name}</div>
                       <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>{currentUser.email || 'super.admin@curoxa.com'}</div>
-                      <div style={{ fontSize: '9px', fontWeight: 700, color: '#2563EB', marginTop: '4px', textTransform: 'uppercase' }}>Platform Super Admin</div>
+                      <div style={{ fontSize: '9px', fontWeight: 700, color: '#2563EB', marginTop: '4px', textTransform: 'uppercase' }}>{currentUserPlatformRole}</div>
                     </div>
                     <div style={{ padding: '6px' }}>
                       <button
                         onClick={() => {
                           setProfileForm({
-                            name: currentUser.name || 'Platform Admin',
+                            name: currentUser.name || 'Super Admin',
                             email: currentUser.email || 'super.admin@curoxa.com',
                             currentPassword: '',
                             newPassword: '',
@@ -6663,19 +6750,21 @@ const SuperAdminDashboard = () => {
                         <LucideIcon name="user-cog" style={{ width: '15px', height: '15px', color: '#2563EB' }} />
                         Profile & Password Settings
                       </button>
-                      <button
-                        onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); setIsProfileOpen(false); }}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
-                          padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
-                          fontSize: '12px', color: '#475569', cursor: 'pointer', textAlign: 'left'
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
-                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                      >
-                        <LucideIcon name="settings" style={{ width: '15px', height: '15px', color: '#64748B' }} />
-                        Platform Settings
-                      </button>
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); setIsProfileOpen(false); }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                            padding: '9px 12px', border: 'none', background: 'none', borderRadius: '6px',
+                            fontSize: '12px', color: '#475569', cursor: 'pointer', textAlign: 'left'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                        >
+                          <LucideIcon name="settings" style={{ width: '15px', height: '15px', color: '#64748B' }} />
+                          Platform Settings
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           performLogout(navigate);
@@ -6714,8 +6803,16 @@ const SuperAdminDashboard = () => {
                   <h2 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>Access Restricted</h2>
                   <p style={{ margin: 0, fontSize: '14px', color: '#64748B' }}>Your current role <strong style={{ color: '#0F172A' }}>({currentUserPlatformRole})</strong> does not have permission to view this module.</p>
                 </div>
-                <button onClick={() => setActiveTab('dashboard')} style={{ marginTop: '16px', background: '#2563EB', color: '#FFFFFF', border: 'none', padding: '10px 24px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#1D4ED8'} onMouseLeave={e => e.currentTarget.style.background = '#2563EB'}>
-                  Return to Dashboard
+                <button
+                  onClick={() => {
+                    const homeTab = DEFAULT_TAB_MAP[currentUserPlatformRole] || 'hospital-onboarding';
+                    setActiveTab(homeTab);
+                  }}
+                  style={{ marginTop: '16px', background: '#2563EB', color: '#FFFFFF', border: 'none', padding: '10px 24px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', transition: 'background 0.2s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#1D4ED8'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#2563EB'}
+                >
+                  Return to Authorized Panel
                 </button>
               </div>
             )}
@@ -12022,15 +12119,13 @@ const SuperAdminDashboard = () => {
             {/* EMPLOYEES & WORKLOAD TAB */}
             {isTabAllowed && activeTab === 'hr-mgmt' && (() => {
               const platformRoles = [
-                { key: 'Onboarding Manager', icon: 'user-plus', color: '#2563EB', bg: '#EFF6FF', desc: 'Handles new hospital onboarding' },
-                { key: 'Request Handler', icon: 'inbox', color: '#F59E0B', bg: '#FFFBEB', desc: 'Triages inbound requests' },
-                { key: 'Technical Support', icon: 'wrench', color: '#8B5CF6', bg: '#F5F3FF', desc: 'Resolves technical issues' },
-                { key: 'Finance Manager', icon: 'wallet', color: '#10B981', bg: '#ECFDF5', desc: 'Manages billing & invoices' },
-                { key: 'Platform Admin', icon: 'shield', color: '#EF4444', bg: '#FEF2F2', desc: 'Full system access' }
+                { key: 'Onboarding Manager', icon: 'user-plus', color: '#2563EB', bg: '#EFF6FF', desc: 'Handles hospital onboarding and hospital management' },
+                { key: 'Ticket Manager', icon: 'headset', color: '#8B5CF6', bg: '#F5F3FF', desc: 'Manages customer support tickets and platform announcements' },
+                { key: 'Finance Manager', icon: 'wallet', color: '#10B981', bg: '#ECFDF5', desc: 'Manages subscriptions, finance, and platform financial reports' }
               ];
 
               const getRoleBadge = (role) => {
-                const r = platformRoles.find(p => p.key === role) || platformRoles[1];
+                const r = platformRoles.find(p => p.key === role) || platformRoles[0];
                 return { color: r.color, bg: r.bg };
               };
 
@@ -12112,7 +12207,7 @@ const SuperAdminDashboard = () => {
                   mobile: emp.mobile || '',
                   department: emp.department || 'General',
                   designation: emp.designation || '',
-                  platformRole: emp.platformRole || 'Request Handler',
+                  platformRole: emp.platformRole || 'Onboarding Manager',
                   status: emp.status || 'Active',
                   joiningDate: emp.joiningDate || ''
                 });
@@ -12142,7 +12237,7 @@ const SuperAdminDashboard = () => {
                 </div>
 
                 {/* Stats Row */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '14px', marginTop: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginTop: '16px' }}>
                   {platformRoles.map(role => {
                     const count = employees.filter(e => e.platformRole === role.key).length;
                     return (

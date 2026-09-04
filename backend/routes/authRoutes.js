@@ -32,17 +32,20 @@ router.get("/ping", (req, res) => {
 router.get("/tenant-mode", verifyToken, async (req, res) => {
   try {
     const SuperAdminHospital = require("../models/SuperAdminHospital");
+    const { getHospitalEffectiveModules } = require("../utils/subscriptionHelper");
     const tenantId = req.tenantId || (req.user && req.user.tenantId) || 'city_hospital';
     const hospital = await SuperAdminHospital.findOne({ code: tenantId });
+    const effectiveModules = await getHospitalEffectiveModules(hospital);
     res.json({
       tenantId,
       doctorClinicalMode: hospital?.doctorClinicalMode || 'ONLINE',
-      modules: hospital?.modules || {}
+      modules: effectiveModules
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // Secure diagnostic endpoint for database connection and basic user stats
 router.get("/diagnostic", async (req, res) => {
@@ -226,6 +229,27 @@ router.post("/login", tenantMiddleware, async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
+    // Resolve platform role for Super Admin / SaaS team member accounts
+    let platformRole = user.platformRole || user.specialty || '';
+    if (user.role === 'superadmin' || user.role === 'super_admin') {
+      if (user.staff_id === 'superadmin' || user.email === 'super.admin@curoxa.com') {
+        platformRole = 'Super Admin';
+      } else {
+        if (!platformRole) {
+          const SuperAdminEmployee = require('../models/SuperAdminEmployee');
+          const emp = await SuperAdminEmployee.findOne({ email: user.email ? user.email.toLowerCase().trim() : '' });
+          if (emp && emp.platformRole) {
+            platformRole = emp.platformRole;
+          } else {
+            platformRole = 'Super Admin';
+          }
+        }
+        if (platformRole === 'Request Handler' || platformRole === 'Technical Support') {
+          platformRole = 'Ticket Manager';
+        }
+      }
+    }
+
     // Match JWT payload ID to Patient document ID if role is patient
     let tokenPayload = {
       id: user._id,
@@ -233,6 +257,8 @@ router.post("/login", tenantMiddleware, async (req, res) => {
       role: user.role,
       name: user.name,
       tenantId: user.tenantId,
+      specialty: platformRole || user.specialty || '',
+      platformRole: platformRole || user.platformRole || '',
       passwordHash: user.password_hash,
       password_version: user.password_version || 0,
     };
@@ -269,9 +295,12 @@ router.post("/login", tenantMiddleware, async (req, res) => {
       metadata: { method: "password" },
     }).catch(() => {});
 
+    const { getHospitalEffectiveModules } = require('../utils/subscriptionHelper');
+    const effectiveModules = await getHospitalEffectiveModules(hospital);
     const tenantModules = (user.role === 'superadmin' || user.role === 'super_admin')
       ? { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } }
-      : (hospital ? hospital.modules : { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } });
+      : effectiveModules;
+
 
     res.json({
       message: "Login successful",
@@ -283,7 +312,8 @@ router.post("/login", tenantMiddleware, async (req, res) => {
         name: user.name,
         email: user.email || '',
         avatar: user.avatar || '',
-        specialty: user.specialty,
+        specialty: platformRole || user.specialty || '',
+        platformRole: platformRole || user.platformRole || '',
         isSetupComplete: user.role === 'patient' ? isPatientComplete : user.isSetupComplete,
         tenantId: user.tenantId,
         tenantName: hospital ? hospital.name : 'Sunrise Multispeciality',
@@ -499,9 +529,12 @@ router.post("/google-login", tenantMiddleware, async (req, res) => {
         { expiresIn: "24h" },
       );
 
+      const { getHospitalEffectiveModules } = require('../utils/subscriptionHelper');
+      const effectiveModules = await getHospitalEffectiveModules(hospital);
       const tenantModules = (user.role === 'superadmin' || user.role === 'super_admin')
         ? { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } }
-        : (hospital ? hospital.modules : { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } });
+        : effectiveModules;
+
 
       return res.json({
         message: "Login successful via Google (Staff)",
@@ -1462,12 +1495,34 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
     }
 
     // 4. Generate token payload using user.tenantId
+    let platformRole = user.platformRole || user.specialty || '';
+    if (user.role === 'superadmin' || user.role === 'super_admin') {
+      if (user.staff_id === 'superadmin' || user.email === 'super.admin@curoxa.com') {
+        platformRole = 'Super Admin';
+      } else {
+        if (!platformRole) {
+          const SuperAdminEmployee = require('../models/SuperAdminEmployee');
+          const emp = await SuperAdminEmployee.findOne({ email: user.email ? user.email.toLowerCase().trim() : '' });
+          if (emp && emp.platformRole) {
+            platformRole = emp.platformRole;
+          } else {
+            platformRole = 'Super Admin';
+          }
+        }
+        if (platformRole === 'Request Handler' || platformRole === 'Technical Support') {
+          platformRole = 'Ticket Manager';
+        }
+      }
+    }
+
     let tokenPayload = {
       id: user._id,
       staff_id: user.staff_id,
       role: user.role,
       name: user.name,
       tenantId: user.tenantId,
+      specialty: platformRole || user.specialty || '',
+      platformRole: platformRole || user.platformRole || '',
       passwordHash: user.password_hash,
       password_version: user.password_version || 0,
     };
@@ -1519,7 +1574,8 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
         name: user.name,
         email: user.email || '',
         avatar: user.avatar || '',
-        specialty: user.specialty,
+        specialty: platformRole || user.specialty || '',
+        platformRole: platformRole || user.platformRole || '',
         isSetupComplete: user.role === 'patient' ? isPatientComplete : user.isSetupComplete,
         tenantId: user.tenantId,
         tenantName: hospital ? hospital.name : 'Sunrise Multispeciality',
@@ -1659,6 +1715,60 @@ router.post("/support/tickets/:id/message", verifyToken, async (req, res) => {
     }
 
     res.json(ticket);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET a single support ticket by ID (scoped to authenticated tenant)
+router.get("/support/tickets/:id", verifyToken, async (req, res) => {
+  try {
+    const SuperAdminSupport = require("../models/SuperAdminSupport");
+    const SuperAdminHospital = require("../models/SuperAdminHospital");
+    const hospital = await SuperAdminHospital.findOne({ code: req.tenantId });
+    const hospitalName = hospital ? hospital.name : req.tenantId;
+
+    const ticket = await SuperAdminSupport.findOne({
+      $and: [
+        { $or: [{ _id: req.params.id.match(/^[0-9a-fA-F]{24}$/) ? req.params.id : null }, { id: req.params.id }].filter(Boolean) },
+        { $or: [{ hospital: req.tenantId }, { hospital: hospitalName }] }
+      ]
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: 'Ticket not found or access denied.' });
+    }
+
+    res.json(ticket);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Mark ticket as read (scoped to authenticated tenant)
+router.patch("/support/tickets/:id/read", verifyToken, async (req, res) => {
+  try {
+    const SuperAdminSupport = require("../models/SuperAdminSupport");
+    const SuperAdminHospital = require("../models/SuperAdminHospital");
+    const hospital = await SuperAdminHospital.findOne({ code: req.tenantId });
+    const hospitalName = hospital ? hospital.name : req.tenantId;
+
+    const ticket = await SuperAdminSupport.findOne({
+      $and: [
+        { $or: [{ _id: req.params.id.match(/^[0-9a-fA-F]{24}$/) ? req.params.id : null }, { id: req.params.id }].filter(Boolean) },
+        { $or: [{ hospital: req.tenantId }, { hospital: hospitalName }] }
+      ]
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: 'Ticket not found or access denied.' });
+    }
+
+    ticket.readByTenant = true;
+    ticket.readAt = new Date();
+    await ticket.save();
+
+    res.json({ success: true, ticket });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

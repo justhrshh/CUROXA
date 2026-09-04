@@ -339,11 +339,23 @@ function verifyCertificate(cert) {
   return { success: true };
 }
 
+function verifyEmail(email) {
+  if (!email || typeof email !== 'string' || !email.trim()) {
+    return { success: false, error: "Email address is required." };
+  }
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!emailRegex.test(email.trim())) {
+    return { success: false, error: "Invalid email format. Please enter a valid email address (e.g. name@domain.com)." };
+  }
+  return { success: true };
+}
+
 module.exports = {
   verifyGSTIN,
   verifyDrugLicense,
   validateGSTINChecksum,
   verifyPAN,
   verifyCIN,
-  verifyCertificate
+  verifyCertificate,
+  verifyEmail
 };

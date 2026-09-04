@@ -217,9 +217,10 @@ app.use("/api/hr", hrRoutes);
 app.use("/api/returns", checkModule("inventory"), returnRoutes);
 app.use("/api/superadmin", superAdminRoutes);
 app.use("/api/emr", checkModule("doctor"), emrRoutes);
-app.use("/api/clinical-services", clinicalServiceRoutes);
-app.use("/api/pharmacy-tickets", pharmacyTicketRoutes);
+app.use("/api/clinical-services", checkModule(["doctor", "reception"]), clinicalServiceRoutes);
+app.use("/api/pharmacy-tickets", checkModule("pharmacy"), pharmacyTicketRoutes);
 app.use("/api/pharmacy-sales", checkModule("pharmacy"), pharmacySaleRoutes);
+
 app.use("/api/inventory-expiry", checkModule(["pharmacy", "inventory"]), inventoryExpiryRoutes);
 
 const portalRoutes = require("./routes/portalRoutes");

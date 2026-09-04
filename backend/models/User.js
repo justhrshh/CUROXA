@@ -70,6 +70,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  platformRole: {
+    type: String,
+    default: ''
+  },
   isSetupComplete: {
     type: Boolean,
     default: false

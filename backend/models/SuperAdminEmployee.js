@@ -9,8 +9,8 @@ const superAdminEmployeeSchema = new mongoose.Schema({
   designation: { type: String, default: 'Associate' },
   platformRole: { 
     type: String, 
-    enum: ['Onboarding Manager', 'Request Handler', 'Technical Support', 'Finance Manager', 'Platform Admin'],
-    default: 'Request Handler'
+    enum: ['Onboarding Manager', 'Ticket Manager', 'Finance Manager', 'Request Handler', 'Technical Support', 'Platform Admin'],
+    default: 'Onboarding Manager'
   },
   status: { type: String, enum: ['Active', 'On Leave', 'Inactive'], default: 'Active' },
   joiningDate: { type: String, default: '' },

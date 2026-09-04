@@ -16,7 +16,9 @@ import HospitalPortal from './pages/HospitalPortal';
 import { PortalBrandingProvider } from './context/PortalBrandingContext';
 import WakeUpOverlay from './components/WakeUpOverlay';
 import GlobalSupportWidget from './components/GlobalSupportWidget';
+import ModuleUnavailableView from './components/ModuleUnavailableView';
 import api, { clearPortalAuthContext, performLogout } from './utils/api';
+
 
 import { socket, joinTenantRoom } from './utils/socket';
 
@@ -111,8 +113,9 @@ const ProtectedRoute = ({ children, targetRole }) => {
       const moduleKey = moduleMapping[targetRole];
       if (moduleKey && moduleKey !== 'inventory' && tenantModules[moduleKey] && tenantModules[moduleKey].enabled === false) {
         console.warn(`[GATING] Module ${moduleKey} is disabled for this tenant. Access denied.`);
-        return <Navigate to="/login" replace />;
+        return <ModuleUnavailableView moduleKey={moduleKey} />;
       }
+
     } catch (e) {
       console.error(e);
     }
@@ -189,8 +192,29 @@ function App() {
 
     const onDataChanged = (event) => {
       console.log('[SOCKET] Data changed event received:', event);
+      if (event && event.type === 'subscription' && event.modules) {
+        localStorage.setItem('tenantModules', JSON.stringify(event.modules));
+        window.dispatchEvent(new CustomEvent('curoxa_modules_updated', { detail: event.modules }));
+      }
       // Dispatch global window event
       window.dispatchEvent(new CustomEvent('curoxa_sync', { detail: event }));
+    };
+
+    const onHospitalSubUpdated = (data) => {
+      try {
+        const storedUser = localStorage.getItem('user');
+        const currentUser = storedUser ? JSON.parse(storedUser) : null;
+        const currentTenant = localStorage.getItem('tenantId') || currentUser?.tenantId;
+        if (data && data.hospitalCode && currentTenant && String(data.hospitalCode).toLowerCase() === String(currentTenant).toLowerCase()) {
+          if (data.modules) {
+            console.log('[SOCKET] Updating tenantModules from hospital_subscription_updated event:', data.modules);
+            localStorage.setItem('tenantModules', JSON.stringify(data.modules));
+            window.dispatchEvent(new CustomEvent('curoxa_modules_updated', { detail: data.modules }));
+          }
+        }
+      } catch (err) {
+        console.error('Error handling hospital_subscription_updated in App:', err);
+      }
     };
 
     const onSessionRevoked = (data) => {
@@ -242,6 +266,7 @@ function App() {
     };
 
     socket.on('data_changed', onDataChanged);
+    socket.on('hospital_subscription_updated', onHospitalSubUpdated);
     socket.on('session_revoked', onSessionRevoked);
     socket.on('system_broadcast', onSystemBroadcast);
 
@@ -251,9 +276,11 @@ function App() {
       window.removeEventListener('curoxa_theme_changed', handleThemeChangedEvent);
       socket.off('global_theme_changed', onGlobalThemeChangedSocket);
       socket.off('data_changed', onDataChanged);
+      socket.off('hospital_subscription_updated', onHospitalSubUpdated);
       socket.off('session_revoked', onSessionRevoked);
       socket.off('system_broadcast', onSystemBroadcast);
     };
+
   }, []);
 
   return (
@@ -320,6 +347,51 @@ function App() {
         <Route path="/super-admin" element={
           <ProtectedRoute targetRole="superadmin">
             <SuperAdminDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/hospital-onboarding" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="hospital-onboarding" />
+          </ProtectedRoute>
+        } />
+        <Route path="/hospitals" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="hospitals" />
+          </ProtectedRoute>
+        } />
+        <Route path="/subscription-management" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="subscription-mgmt" />
+          </ProtectedRoute>
+        } />
+        <Route path="/customer-support" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="customer-support" />
+          </ProtectedRoute>
+        } />
+        <Route path="/broadcast-center" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="broadcast-center" />
+          </ProtectedRoute>
+        } />
+        <Route path="/finance" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="finance" />
+          </ProtectedRoute>
+        } />
+        <Route path="/employees" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="employees" />
+          </ProtectedRoute>
+        } />
+        <Route path="/platform-reports" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="reports" />
+          </ProtectedRoute>
+        } />
+        <Route path="/platform-control" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="settings" />
           </ProtectedRoute>
         } />
 
