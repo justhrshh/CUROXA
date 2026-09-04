@@ -122,7 +122,87 @@ function buildBrandedOtpEmail({ otp, title = 'Verify Your Identity', message, ho
   };
 }
 
+/**
+ * Validates that an authenticating user is authorized to log in through the requested hospital portal.
+ * Enforces hospital-wise login isolation (Staff A at Hospital A -> OK, Staff A at Hospital B -> Rejected).
+ *
+ * @param {Object} user - The user document from MongoDB
+ * @param {string} [requestedHospitalId] - The hospitalId or code requested by the login portal
+ * @returns {Promise<{ allowed: boolean, message?: string }>}
+ */
+async function validateHospitalLoginAccess(user, requestedHospitalId) {
+  if (!requestedHospitalId || typeof requestedHospitalId !== 'string' || !requestedHospitalId.trim()) {
+    return { allowed: true };
+  }
+
+  // Super admins have platform-wide access and can authenticate through any portal
+  const userRole = String(user?.role || '').toLowerCase();
+  if (['superadmin', 'super_admin', 'platform_admin'].includes(userRole)) {
+    return { allowed: true };
+  }
+
+  const cleanRequestedId = requestedHospitalId.trim();
+
+  // 1. Resolve requested portal's hospital record
+  const portalHospital = await SuperAdminHospital.findOne({
+    $or: [
+      { hospitalId: cleanRequestedId.toUpperCase() },
+      { code: cleanRequestedId.toLowerCase() }
+    ]
+  });
+
+  if (!portalHospital) {
+    return {
+      allowed: false,
+      message: "You are not authorized to log in through this hospital portal."
+    };
+  }
+
+  // 2. Resolve user's assigned hospital record using user.tenantId
+  const userTenant = String(user?.tenantId || '').trim();
+  const userHospital = await SuperAdminHospital.findOne({
+    $or: [
+      { code: userTenant.toLowerCase() },
+      { hospitalId: userTenant.toUpperCase() }
+    ]
+  });
+
+  const portalHospitalId = (portalHospital.hospitalId || '').toUpperCase();
+  const portalCode = (portalHospital.code || '').toLowerCase();
+
+  let isMatch = false;
+
+  if (userHospital) {
+    const userHospitalId = (userHospital.hospitalId || '').toUpperCase();
+    const userCode = (userHospital.code || '').toLowerCase();
+
+    if (portalHospital._id && userHospital._id && portalHospital._id.toString() === userHospital._id.toString()) {
+      isMatch = true;
+    } else if (portalHospitalId && userHospitalId && portalHospitalId === userHospitalId) {
+      isMatch = true;
+    } else if (portalCode && userCode && portalCode === userCode) {
+      isMatch = true;
+    }
+  } else {
+    // Fallback if hospital not in SuperAdminHospital but user.tenantId matches code directly
+    if (userTenant.toLowerCase() === portalCode || userTenant.toUpperCase() === portalHospitalId) {
+      isMatch = true;
+    }
+  }
+
+  if (!isMatch) {
+    return {
+      allowed: false,
+      message: "You are not authorized to log in through this hospital portal."
+    };
+  }
+
+  return { allowed: true };
+}
+
 module.exports = {
   resolveTrustedHospitalBranding,
-  buildBrandedOtpEmail
+  buildBrandedOtpEmail,
+  validateHospitalLoginAccess
 };
+

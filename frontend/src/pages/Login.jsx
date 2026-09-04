@@ -13,6 +13,7 @@ const OTP_SLOT_KEYS = Array.from({ length: OTP_LENGTH }, (_, i) => `otp-slot-${i
 const Login = () => {
   const portalBranding = usePortalBranding();
   const hospital = portalBranding?.hospital;
+  const portalHospitalId = hospital?.hospitalId || portalBranding?.hospitalId || null;
 
   // Mode toggling (SignUp disabled)
   const isSignUp = false;
@@ -166,7 +167,8 @@ const Login = () => {
     setLoading(true);
     try {
       const res = await api.post('/auth/google-login', {
-        credential: response.credential
+        credential: response.credential,
+        ...(portalHospitalId ? { hospitalId: portalHospitalId } : {})
       });
       const { token, user, tenantModules, doctorClinicalMode, plan } = res.data;
       
@@ -244,7 +246,8 @@ const Login = () => {
     try {
       const response = await api.post('/auth/login', {
         staff_id: staffId,
-        password: password
+        password: password,
+        ...(portalHospitalId ? { hospitalId: portalHospitalId } : {})
       });
 
       const { token, user, tenantModules, doctorClinicalMode, plan } = response.data;
@@ -286,7 +289,8 @@ const Login = () => {
     setLoading(true);
     try {
       const response = await api.post('/auth/send-login-otp', {
-        emailOrPhone: emailOrPhone
+        emailOrPhone: emailOrPhone,
+        ...(portalHospitalId ? { hospitalId: portalHospitalId } : {})
       });
       setSuccess('One-Time Password has been generated and sent.');
       setOtpSent(true);
@@ -306,7 +310,8 @@ const Login = () => {
     try {
       const response = await api.post('/auth/login-with-otp', {
         emailOrPhone: emailOrPhone,
-        otp: loginOtp
+        otp: loginOtp,
+        ...(portalHospitalId ? { hospitalId: portalHospitalId } : {})
       });
 
       const { token, user, tenantModules, doctorClinicalMode, plan } = response.data;

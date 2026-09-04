@@ -11,7 +11,7 @@ const AuditLog = require("../models/AuditLog");
 const { getJwtSecret } = require("../config/env");
 const { verifyToken, isAdmin } = require("../middleware/authMiddleware");
 const { isPatientProfileComplete } = require("../utils/patientProfileHelper");
-const { resolveTrustedHospitalBranding, buildBrandedOtpEmail } = require("../utils/hospitalBrandingHelper");
+const { resolveTrustedHospitalBranding, buildBrandedOtpEmail, validateHospitalLoginAccess } = require("../utils/hospitalBrandingHelper");
 const { sendEmail } = require("../utils/emailService");
 const router = express.Router();
 
@@ -95,6 +95,7 @@ router.get("/diagnostic", async (req, res) => {
 
 router.post("/login", tenantMiddleware, async (req, res) => {
   const { staff_id, password } = req.body;
+  const requestedHospitalId = req.body.hospitalId || req.body.portalHospitalId || req.headers['x-hospital-id'] || req.headers['x-portal-id'] || req.query.hospitalId;
 
   if (!staff_id || !password) {
     return res
@@ -144,6 +145,7 @@ router.post("/login", tenantMiddleware, async (req, res) => {
 
     // Try to find the user with matching password
     let user = null;
+    let mismatchedHospitalUser = null;
     const trimmedPassword = password.trim();
     for (const u of users) {
       let isMatch = await bcrypt.compare(trimmedPassword, u.password_hash);
@@ -165,12 +167,28 @@ router.post("/login", tenantMiddleware, async (req, res) => {
       }
 
       if (isMatch) {
-        user = u;
-        break;
+        if (requestedHospitalId) {
+          const access = await validateHospitalLoginAccess(u, requestedHospitalId);
+          if (access.allowed) {
+            user = u;
+            break;
+          } else {
+            mismatchedHospitalUser = u;
+          }
+        } else {
+          user = u;
+          break;
+        }
       }
     }
 
     if (!user) {
+      if (mismatchedHospitalUser) {
+        console.log(`[LOGIN BLOCKED] User "${mismatchedHospitalUser.name}" (${mismatchedHospitalUser.staff_id}) attempted login via unauthorized hospital portal: "${requestedHospitalId}"`);
+        return res.status(403).json({
+          error: "You are not authorized to log in through this hospital portal."
+        });
+      }
       console.log(`[LOGIN DEBUG] Password verification failed for all matching user accounts.`);
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -394,6 +412,16 @@ router.post("/google-login", tenantMiddleware, async (req, res) => {
     let targetTenant = "city_hospital";
 
     if (user) {
+      const requestedHospitalId = req.body.hospitalId || req.body.portalHospitalId || req.headers['x-hospital-id'] || req.headers['x-portal-id'] || req.query.hospitalId;
+      if (requestedHospitalId) {
+        const access = await validateHospitalLoginAccess(user, requestedHospitalId);
+        if (!access.allowed) {
+          return res.status(403).json({
+            error: "You are not authorized to log in through this hospital portal."
+          });
+        }
+      }
+
       targetTenant = user.tenantId;
       user.lastLogin = new Date();
       await user.save();
@@ -1229,6 +1257,16 @@ router.post("/send-login-otp", tenantMiddleware, async (req, res) => {
       return res.status(404).json({ error: "No registered account found for the provided details." });
     }
 
+    const requestedHospitalId = req.body.hospitalId || req.body.portalHospitalId || req.headers['x-hospital-id'] || req.headers['x-portal-id'] || req.query.hospitalId;
+    if (requestedHospitalId) {
+      const access = await validateHospitalLoginAccess(user, requestedHospitalId);
+      if (!access.allowed) {
+        return res.status(403).json({
+          error: "You are not authorized to log in through this hospital portal."
+        });
+      }
+    }
+
     // 3. Check suspension status of hospital using user.tenantId
     const SuperAdminHospital = require("../models/SuperAdminHospital");
     const hospital = await SuperAdminHospital.findOne({ code: user.tenantId });
@@ -1329,6 +1367,16 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
     // 3. Verify OTP
     if (!user.login_otp_code || user.login_otp_code !== targetOtp || user.login_otp_expires_at < new Date() || user.login_otp_purpose !== "LOGIN") {
       return res.status(401).json({ error: "Invalid or expired OTP" });
+    }
+
+    const requestedHospitalId = req.body.hospitalId || req.body.portalHospitalId || req.headers['x-hospital-id'] || req.headers['x-portal-id'] || req.query.hospitalId;
+    if (requestedHospitalId) {
+      const access = await validateHospitalLoginAccess(user, requestedHospitalId);
+      if (!access.allowed) {
+        return res.status(403).json({
+          error: "You are not authorized to log in through this hospital portal."
+        });
+      }
     }
 
     // Clear OTP
