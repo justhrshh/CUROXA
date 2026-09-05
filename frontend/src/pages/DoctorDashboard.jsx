@@ -2774,7 +2774,7 @@ const DoctorDashboard = () => {
           name: p.name,
           age: p.age || '--',
           gender: p.gender || '--',
-          uhid: `MDC-${p._id.substring(18).toUpperCase()}`, // Build beautiful tracking ID from Mongoose ObjectId
+          uhid: p.uhId || p.uhid || (p._id ? `UH-${p._id.substring(18).toUpperCase()}` : '--'),
           contact: p.contact || '--',
           email: p.email || 'N/A',
           address: p.address || 'N/A',
@@ -11742,7 +11742,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
                   <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 900, letterSpacing: '0.5px', fontFamily: "'Outfit', sans-serif" }}>CLINICAL EMR TIMELINE & PATIENT PORTAL</h3>
                 </div>
                 <div style={{ fontSize: '11.5px', color: '#93C5FD', marginTop: '4px', fontWeight: 700, opacity: 0.9 }}>
-                  Active Patient Record: <b style={{ color: '#FFFFFF' }}>{selectedPatient.name}</b> ({selectedPatient.gender}, {selectedPatient.age} Yrs) • Patient ID / UHID: <span style={{ color: '#F3F4F6', letterSpacing: '0.5px' }}>{selectedPatient.uhid || `MDC-${selectedPatient._id?.toString().substring(0, 6).toUpperCase()}`}</span>
+                  Active Patient Record: <b style={{ color: '#FFFFFF' }}>{selectedPatient.name}</b> ({selectedPatient.gender}, {selectedPatient.age} Yrs) • Patient ID / UHID: <span style={{ color: '#F3F4F6', letterSpacing: '0.5px' }}>{selectedPatient.uhId || selectedPatient.uhid || (selectedPatient._id ? `UH-${selectedPatient._id?.toString().substring(18).toUpperCase()}` : '')}</span>
                 </div>
               </div>
               <button 
@@ -11792,7 +11792,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
                       Patient ID / UHID
                     </div>
-                    <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#2563EB', marginTop: '6px' }}>{selectedPatient.uhid || `MDC-${selectedPatient._id?.toString().substring(0, 6).toUpperCase()}`}</div>
+                    <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#2563EB', marginTop: '6px' }}>{selectedPatient.uhId || selectedPatient.uhid || (selectedPatient._id ? `UH-${selectedPatient._id?.toString().substring(18).toUpperCase()}` : '')}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '10.5px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px', display: 'flex', alignItems: 'center', gap: '6px' }}>

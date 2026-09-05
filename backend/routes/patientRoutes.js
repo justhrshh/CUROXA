@@ -12,11 +12,29 @@ router.use(checkDoctorClinicalMode);
 // Get all patients (scoped to tenant)
 router.get('/', async (req, res) => {
   try {
+    const { resolveOrCreateUhid, generateHospitalPatientId } = require('../utils/identifierEngine');
     const patients = await Patient.find({ tenantId: req.tenantId }).sort({ createdAt: 1 });
     let changed = false;
     for (let i = 0; i < patients.length; i++) {
-      if (!patients[i].patientId) {
-        patients[i].patientId = `pat-${String(i + 1).padStart(2, '0')}`;
+      let docChanged = false;
+      if (!patients[i].uhId && patients[i].contact) {
+        try {
+          patients[i].uhId = await resolveOrCreateUhid({
+            contact: patients[i].contact,
+            name: patients[i].name,
+            email: patients[i].email,
+            abhaId: patients[i].abhaId
+          });
+          docChanged = true;
+        } catch (uhErr) {
+          console.warn('UHID backfill warning:', uhErr.message);
+        }
+      }
+      if (!patients[i].patientId || /^pat-\d+$/i.test(patients[i].patientId)) {
+        patients[i].patientId = await generateHospitalPatientId(req.tenantId);
+        docChanged = true;
+      }
+      if (docChanged) {
         await patients[i].save();
         changed = true;
       }
@@ -41,7 +59,7 @@ router.post('/', async (req, res) => {
     const cleanEmail = (email && email.trim() && email.trim().toLowerCase() !== 'n/a') ? email.toLowerCase().trim() : fallbackOtpEmail;
     const cleanContact = contact.trim();
 
-    // Check if email is already registered to another patient (case-insensitive)
+    // Check if email is already registered to another patient in this hospital (case-insensitive)
     if (cleanEmail && cleanEmail !== '') {
       const existingEmailPatient = await Patient.findOne({
         tenantId: req.tenantId,
@@ -51,7 +69,7 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: "This email address is already registered to another patient." });
       }
     }
-    // Check if contact/phone number is already registered to another patient (case-insensitive)
+    // Check if contact/phone number is already registered to another patient in this hospital (case-insensitive)
     const existingContactPatient = await Patient.findOne({
       tenantId: req.tenantId,
       contact: { $regex: new RegExp(`^${cleanContact.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
@@ -72,19 +90,21 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const count = await Patient.countDocuments({ tenantId: req.tenantId });
-    let nextSeq = count + 1;
-    let formattedId = `pat-${String(nextSeq).padStart(2, '0')}`;
-    let exists = await Patient.exists({ tenantId: req.tenantId, patientId: formattedId });
-    while (exists) {
-      nextSeq++;
-      formattedId = `pat-${String(nextSeq).padStart(2, '0')}`;
-      exists = await Patient.exists({ tenantId: req.tenantId, patientId: formattedId });
-    }
+    const { resolveOrCreateUhid, generateHospitalPatientId } = require('../utils/identifierEngine');
+    // Global platform-level UH-ID: retained across hospitals for the same patient
+    const uhId = await resolveOrCreateUhid({
+      contact: cleanContact,
+      name,
+      email: cleanEmail,
+      abhaId: req.body.abhaId || ''
+    });
+    // Hospital-scoped Patient ID: unique within this hospital
+    const hospitalPatientId = await generateHospitalPatientId(req.tenantId);
 
     const patient = await Patient.create({
       tenantId: req.tenantId,
-      patientId: formattedId,
+      uhId,
+      patientId: hospitalPatientId,
       name,
       age: parseInt(age) || 0,
       ageMonths: parseInt(ageMonths) || 0,
@@ -183,10 +203,13 @@ router.get('/:id', async (req, res) => {
   try {
     let patient = null;
 
-    // 1. Try finding by _id within tenant
+    // 1. Try finding by _id within tenant or directly
     try {
       if (req.tenantId) {
         patient = await Patient.findOne({ _id: req.params.id, tenantId: req.tenantId });
+      }
+      if (!patient && req.user && (req.user.role === 'patient' || req.user.id === req.params.id)) {
+        patient = await Patient.findById(req.params.id);
       }
     } catch(e) {}
 
@@ -196,9 +219,11 @@ router.get('/:id', async (req, res) => {
       if (isSelf) {
         try {
           const reqUserPhone = req.user.phone || (req.user.staff_id ? req.user.staff_id.split('_')[0] : '');
-          patient = await Patient.findOne({ contact: reqUserPhone, tenantId: req.tenantId }) || 
-                    await Patient.findOne({ contact: req.user.staff_id, tenantId: req.tenantId }) ||
-                    await Patient.findOne({ _id: req.user.id, tenantId: req.tenantId });
+          patient = (req.tenantId ? await Patient.findOne({ contact: reqUserPhone, tenantId: req.tenantId }) : null) || 
+                    (req.tenantId ? await Patient.findOne({ contact: req.user.staff_id, tenantId: req.tenantId }) : null) ||
+                    await Patient.findOne({ contact: reqUserPhone }) ||
+                    await Patient.findOne({ contact: req.user.staff_id }) ||
+                    await Patient.findById(req.user.id);
         } catch(e) {}
 
         // Auto-provision patient record if user exists and is completing onboarding
@@ -217,8 +242,25 @@ router.get('/:id', async (req, res) => {
               exists = await Patient.exists({ tenantId: effectiveTenant, patientId: formattedId });
             }
 
+            let autoUhid = '';
+            try {
+              const { resolveOrCreateUhid } = require('../utils/identifierEngine');
+              autoUhid = await resolveOrCreateUhid({
+                contact: userObj.phone || userObj.staff_id || req.user?.staff_id,
+                name: userObj.name || 'Patient',
+                email: userObj.email || ''
+              });
+            } catch (e) {}
+
+            let autoPatId = formattedId;
+            try {
+              const { generateHospitalPatientId } = require('../utils/identifierEngine');
+              autoPatId = await generateHospitalPatientId(effectiveTenant);
+            } catch (e) {}
+
             patient = new Patient({
-              patientId: formattedId,
+              patientId: autoPatId || formattedId,
+              uhId: autoUhid,
               name: userObj.name || 'Patient',
               age: userObj.age || 0,
               ageMonths: 0,
@@ -247,8 +289,11 @@ router.get('/:id', async (req, res) => {
             }
 
             const isComplete = isPatientProfileComplete(patient);
+            const patientObj = patient.toObject();
             return res.json({
-              ...patient.toObject(),
+              ...patientObj,
+              uhId: patient.uhId || autoUhid,
+              uhid: patient.uhId || autoUhid,
               isSetupComplete: isComplete
             });
           }
@@ -258,6 +303,35 @@ router.get('/:id', async (req, res) => {
 
     if (!patient) {
       return res.status(404).json({ error: 'Patient not found' });
+    }
+
+    // Ensure UHID & PatientID are backfilled if missing
+    let docChanged = false;
+    if (!patient.uhId && patient.contact) {
+      try {
+        const { resolveOrCreateUhid } = require('../utils/identifierEngine');
+        patient.uhId = await resolveOrCreateUhid({
+          contact: patient.contact,
+          name: patient.name,
+          email: patient.email,
+          abhaId: patient.abhaId
+        });
+        docChanged = true;
+      } catch (uhErr) {
+        console.warn('UHID backfill warning in get/:id:', uhErr.message);
+      }
+    }
+    if (!patient.patientId || /^pat-\d+$/i.test(patient.patientId)) {
+      try {
+        const { generateHospitalPatientId } = require('../utils/identifierEngine');
+        patient.patientId = await generateHospitalPatientId(patient.tenantId || req.tenantId);
+        docChanged = true;
+      } catch (patErr) {
+        console.warn('PatientId backfill warning in get/:id:', patErr.message);
+      }
+    }
+    if (docChanged) {
+      await patient.save().catch(e => console.warn("Patient save backfill err:", e.message));
     }
 
     const isComplete = isPatientProfileComplete(patient);
@@ -270,8 +344,11 @@ router.get('/:id', async (req, res) => {
       }
     } catch (e) {}
 
+    const patientObj = patient.toObject();
     res.json({
-      ...patient.toObject(),
+      ...patientObj,
+      uhId: patient.uhId || patientObj.uhId,
+      uhid: patient.uhId || patientObj.uhId,
       isSetupComplete: isComplete
     });
   } catch (error) {

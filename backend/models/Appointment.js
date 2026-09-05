@@ -40,6 +40,12 @@ const appointmentSchema = new mongoose.Schema({
   },
   noPrescriptionProvided: { type: Boolean, default: false },
 
+  // Visit Encounter Architecture
+  visitId: { type: String, default: null },
+  visitRef: { type: mongoose.Schema.Types.ObjectId, ref: 'Visit', default: null },
+  visitEpisodeId: { type: String, default: null },
+  parentAppointmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Appointment', default: null },
+
   createdAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
@@ -47,11 +53,13 @@ const appointmentSchema = new mongoose.Schema({
 appointmentSchema.index({ tenantId: 1, date: 1 });
 appointmentSchema.index({ tenantId: 1, status: 1 });
 appointmentSchema.index({ tenantId: 1, doctorId: 1, date: 1 });
-// Token uniqueness per tenant + doctor + calendar date
+// Token uniqueness per tenant + doctor + calendar date (applied only when a token is actually allocated)
 appointmentSchema.index(
   { tenantId: 1, doctorId: 1, tokenDate: 1, tokenNumber: 1 },
-  { unique: true, sparse: true }
+  { unique: true, partialFilterExpression: { tokenNumber: { $type: 'number' } } }
 );
+appointmentSchema.index({ tenantId: 1, visitId: 1 });
+appointmentSchema.index({ tenantId: 1, visitEpisodeId: 1 });
 
 module.exports = mongoose.model('Appointment', appointmentSchema);
 

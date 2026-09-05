@@ -31,7 +31,14 @@ router.get('/visits/patient/:patientId', checkPatientConsent('treatment'), async
     const query = req.user?.role === 'patient'
       ? { patientId: req.params.patientId }
       : { patientId: req.params.patientId, tenantId: req.tenantId };
-    const visits = await Visit.find(query).populate('doctorId', 'name').sort({ arrivalTimestamp: -1 });
+    const visits = await Visit.find(query)
+      .populate('doctorId', 'name specialty')
+      .populate({
+        path: 'appointmentIds',
+        select: 'time date status reason doctorId tokenNumber',
+        populate: { path: 'doctorId', select: 'name' }
+      })
+      .sort({ arrivalTimestamp: -1 });
     await writeAudit(req, req.params.patientId, 'VIEW_VISITS', 'Visit History', { count: visits.length });
     res.json(visits);
   } catch (error) {
@@ -42,20 +49,28 @@ router.get('/visits/patient/:patientId', checkPatientConsent('treatment'), async
 // Create a new patient visit
 router.post('/visits', checkPatientConsent('treatment'), restrictEMRRole(['doctor', 'nurse', 'receptionist']), async (req, res) => {
   try {
-    const { patientId, doctorId, department, type, chiefComplaint, priority, queuePosition } = req.body;
+    const { patientId, doctorId, department, type, chiefComplaint, priority, queuePosition, visitId, visitEpisodeId, appointmentIds } = req.body;
     
     // Check if patient exists
     const patient = await Patient.findById(patientId);
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
+    const { generateVisitId } = require('../utils/identifierEngine');
+    const resolvedVisitId = visitId || await generateVisitId(req.tenantId);
+
     const visit = await Visit.create({
       tenantId: req.tenantId,
+      visitId: resolvedVisitId,
+      visitEpisodeId: visitEpisodeId || new mongoose.Types.ObjectId().toString(),
       patientId,
-      doctorId,
-      department,
-      type,
+      uhId: patient.uhId || '',
+      hospitalPatientId: patient.patientId || '',
+      doctorId: doctorId || null,
+      appointmentIds: Array.isArray(appointmentIds) ? appointmentIds : [],
+      department: department || 'OPD',
+      type: type || 'OPD',
       chiefComplaint,
-      priority,
+      priority: priority || 'Green',
       queuePosition,
       status: 'Checked-in'
     });

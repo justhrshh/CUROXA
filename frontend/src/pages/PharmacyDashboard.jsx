@@ -1923,7 +1923,7 @@ const PharmacyDashboard = () => {
         custName = p.name;
         custMobile = p.contact || p.phone || '';
         patId = p._id;
-        patIdentifier = p.patientId || p.uhid || ('MDC-' + p._id.toString().slice(-4).toUpperCase());
+        patIdentifier = p.patientId || p.uhId || p.uhid || ('UH-' + p._id.toString().slice(-4).toUpperCase());
       }
     } else {
       if (!custName) {
@@ -2251,7 +2251,7 @@ const PharmacyDashboard = () => {
       if (ptsRes.data && Array.isArray(ptsRes.data)) {
         const mapped = ptsRes.data.map(p => ({
           ...p,
-          uhid: `MDC-${p._id.toString().substring(18).toUpperCase()}`
+          uhid: p.uhId || p.uhid || (p._id ? `UH-${p._id.toString().substring(18).toUpperCase()}` : '')
         }));
         setPatients(mapped);
       }

@@ -161,6 +161,14 @@ const PatientDashboard = () => {
     return 'Good evening';
   };
 
+  const getPatientFirstName = (name) => {
+    if (!name || typeof name !== 'string') return 'Harsh';
+    const cleaned = name.trim().replace(/^(mr|mrs|ms|dr|prof|shri|smt)\.?\s+/i, '').trim();
+    const target = cleaned || name.trim();
+    const first = target.split(/\s+/)[0];
+    return first ? (first.charAt(0).toUpperCase() + first.slice(1)) : 'Harsh';
+  };
+
   const handleSelectHospital = (h) => {
     if (!h) return;
     setTransitionHospitalTarget(h);
@@ -211,7 +219,6 @@ const PatientDashboard = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const [privacySlideIdx, setPrivacySlideIdx] = useState(0);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
@@ -581,12 +588,17 @@ const PatientDashboard = () => {
   const [prescriptions, setPrescriptions] = useState([]);
   const [patientProfile, setPatientProfile] = useState(null);
 
-  // Formatted UHID string
+  // Formatted UHID string (Global Curoxa Platform UH-ID matching Receptionist & Admin dashboards)
   const patientUhid = useMemo(() => {
-    if (patientProfile?.uhid) return patientProfile.uhid;
-    if (patientProfile?._id) return `CUROXA-${patientProfile._id.substring(18).toUpperCase()}`;
-    return 'CUROXA-784512';
-  }, [patientProfile]);
+    const raw = patientProfile?.uhId || patientProfile?.uhid || currentUser?.uhId || currentUser?.uhid;
+    if (raw) return raw;
+    const apptWithUhid = appointments?.find(a => a.patientId?.uhId || a.patientId?.uhid);
+    if (apptWithUhid?.patientId?.uhId) return apptWithUhid.patientId.uhId;
+    if (apptWithUhid?.patientId?.uhid) return apptWithUhid.patientId.uhid;
+    if (patientProfile?._id) return `UH-${patientProfile._id.substring(18).toUpperCase()}`;
+    if (currentUser?.id) return `UH-${currentUser.id.substring(18).toUpperCase()}`;
+    return '';
+  }, [patientProfile, currentUser, appointments]);
 
 
   const [editProfileData, setEditProfileData] = useState({ name: '', age: '', ageMonths: '', ageDays: '', gender: '', contact: '', address: '', bloodGroup: '', allergies: '', medicalHistory: '' });
@@ -605,7 +617,6 @@ const PatientDashboard = () => {
   const [auditLogs, setAuditLogs] = useState([]);
   
   // Modals and inputs
-  const [showPrivacyOverlay, setShowPrivacyOverlay] = useState(() => localStorage.getItem('curoxa_dpdp_intro_seen') !== 'true');
   const [showAadhaarModal, setShowAadhaarModal] = useState(false);
   const [showAbhaModal, setShowAbhaModal] = useState(false);
   const [showDigitalCardModal, setShowDigitalCardModal] = useState(false);
@@ -660,13 +671,19 @@ const PatientDashboard = () => {
         ? Boolean(fetchedPatient.isSetupComplete)
         : checkPatientProfileComplete(fetchedPatient);
 
+      const effectiveUhid = fetchedPatient.uhId || fetchedPatient.uhid || currentUser.uhId || '';
+      const effectivePatId = fetchedPatient.patientId || currentUser.patientId || '';
+
       if (isComplete) {
-        if (!currentUser.isSetupComplete) {
+        if (!currentUser.isSetupComplete || (effectiveUhid && currentUser.uhId !== effectiveUhid)) {
           const updatedUser = {
             ...currentUser,
             isSetupComplete: true,
             name: fetchedPatient.name || currentUser.name,
-            avatar: fetchedPatient.avatar || currentUser.avatar || ''
+            avatar: fetchedPatient.avatar || currentUser.avatar || '',
+            uhId: effectiveUhid,
+            uhid: effectiveUhid,
+            patientId: effectivePatId
           };
           try {
             localStorage.setItem('user', JSON.stringify(updatedUser));
@@ -674,8 +691,14 @@ const PatientDashboard = () => {
           setCurrentUser(updatedUser);
         }
       } else {
-        if (currentUser.isSetupComplete) {
-          const updatedUser = { ...currentUser, isSetupComplete: false };
+        if (currentUser.isSetupComplete || (effectiveUhid && currentUser.uhId !== effectiveUhid)) {
+          const updatedUser = { 
+            ...currentUser, 
+            isSetupComplete: false,
+            uhId: effectiveUhid,
+            uhid: effectiveUhid,
+            patientId: effectivePatId
+          };
           try {
             localStorage.setItem('user', JSON.stringify(updatedUser));
           } catch(e) {}
@@ -1757,7 +1780,7 @@ const PatientDashboard = () => {
   const handleDownloadDossier = () => {
     const printWindow = window.open('', '_blank');
     const patientName = patientProfile?.name || currentUser.name;
-    const uhid = patientProfile ? `MDC-${patientProfile._id.substring(18).toUpperCase()}` : 'N/A';
+    const uhid = patientUhid || patientProfile?.uhId || patientProfile?.uhid || (patientProfile ? `UH-${patientProfile._id.substring(18).toUpperCase()}` : 'N/A');
     
     let htmlContent = `
       <html>
@@ -3022,240 +3045,6 @@ const PatientDashboard = () => {
         }
       `}</style>
 
-      {/* Interactive DPDP Privacy Rights Walkthrough Overlay */}
-      {showPrivacyOverlay && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(15, 23, 42, 0.75)',
-          backdropFilter: 'blur(12px)',
-          zIndex: 999999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px',
-          boxSizing: 'border-box'
-        }}>
-          <div style={{
-            background: '#FFFFFF',
-            borderRadius: '24px',
-            maxWidth: '600px',
-            width: '100%',
-            maxHeight: '90vh',
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 25px 50px -12px rgba(37, 99, 235, 0.25)',
-            border: '2px solid #DBEAFE',
-            overflow: 'hidden',
-            boxSizing: 'border-box',
-            animation: 'fadeInScale 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
-          }}>
-            {/* Carousel Content */}
-            <div style={{ flex: 1, padding: '32px 32px 24px', overflowY: 'auto' }}>
-              {/* Slide Indicator */}
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
-                {[0, 1, 2, 3].map((idx) => (
-                  <div key={idx} style={{
-                    flex: 1,
-                    height: '6px',
-                    borderRadius: '3px',
-                    background: idx === privacySlideIdx ? '#2563EB' : '#E2E8F0',
-                    transition: 'all 0.3s'
-                  }}></div>
-                ))}
-              </div>
-
-              {privacySlideIdx === 0 && (
-                <div style={{ animation: 'slideInRight 0.3s ease-out' }}>
-                  <div style={{
-                    width: '64px',
-                    height: '64px',
-                    borderRadius: '16px',
-                    background: '#EFF6FF',
-                    color: '#2563EB',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: '20px'
-                  }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                  </div>
-                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: '0 0 12px 0', fontFamily: "'Outfit', sans-serif" }}>
-                    Your Privacy Rights under DPDP Act 2023
-                  </h2>
-                  <p style={{ fontSize: '15px', color: '#475569', lineHeight: '1.6', fontWeight: 600 }}>
-                    Welcome to the Curoxa Privacy Portal. In compliance with the <strong>Digital Personal Data Protection (DPDP) Act, 2023</strong> of India, we empower you with absolute sovereignty over your medical data.
-                  </p>
-                  <p style={{ fontSize: '14.5px', color: '#64748B', lineHeight: '1.5', margin: '16px 0 0 0', fontWeight: 650 }}>
-                    This quick tour will guide you on how to exercise your rights of Access, Correction, Consent Withdrawal, and Erasure securely.
-                  </p>
-                </div>
-              )}
-
-              {privacySlideIdx === 1 && (
-                <div style={{ animation: 'slideInRight 0.3s ease-out' }}>
-                  <div style={{
-                    width: '64px',
-                    height: '64px',
-                    borderRadius: '16px',
-                    background: '#F0FDF4',
-                    color: '#16A34A',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: '20px'
-                  }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                  </div>
-                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: '0 0 12px 0', fontFamily: "'Outfit', sans-serif" }}>
-                    Right to Withdraw Consent
-                  </h2>
-                  <p style={{ fontSize: '15px', color: '#475569', lineHeight: '1.6', fontWeight: 600 }}>
-                    You can grant or restrict clinical data processing purposes (e.g. Treatment, Research, Insurance) via the <strong>Consent Settings</strong> panel.
-                  </p>
-                  <div style={{ background: '#FFF5F5', border: '1.5px solid #FCA5A5', borderRadius: '12px', padding: '14px 16px', marginTop: '16px' }}>
-                    <p style={{ fontSize: '13px', color: '#B91C1C', margin: 0, fontWeight: 700, lineHeight: '1.5' }}>
-                      If you withdraw consent, doctors cannot view or edit your medical record. However, doctors can use the <strong>Break-Glass emergency bypass</strong> in critical situations, which triggers an audit log.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {privacySlideIdx === 2 && (
-                <div style={{ animation: 'slideInRight 0.3s ease-out' }}>
-                  <div style={{
-                    width: '64px',
-                    height: '64px',
-                    borderRadius: '16px',
-                    background: '#FEF3C7',
-                    color: '#D97706',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: '20px'
-                  }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"/></svg>
-                  </div>
-                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: '0 0 12px 0', fontFamily: "'Outfit', sans-serif" }}>
-                    Access, Correction, & Erasure
-                  </h2>
-                  <p style={{ fontSize: '15px', color: '#475569', lineHeight: '1.6', fontWeight: 600 }}>
-                    You have the right to request a complete copy of your records (Access), edit incorrect data (Correction), or ask for full deletion (Erasure).
-                  </p>
-                  <p style={{ fontSize: '14px', color: '#64748B', lineHeight: '1.5', marginTop: '12px', fontWeight: 650 }}>
-                    Submit requests to our Data Protection Officer directly through the <strong>Privacy Requests Center</strong> in the dashboard.
-                  </p>
-                </div>
-              )}
-
-              {privacySlideIdx === 3 && (
-                <div style={{ animation: 'slideInRight 0.3s ease-out' }}>
-                  <div style={{
-                    width: '64px',
-                    height: '64px',
-                    borderRadius: '16px',
-                    background: '#F3E8FF',
-                    color: '#9333EA',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: '20px'
-                  }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                  </div>
-                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: '0 0 12px 0', fontFamily: "'Outfit', sans-serif" }}>
-                    Statutory Data Retention & Legal Hold
-                  </h2>
-                  <p style={{ fontSize: '15px', color: '#475569', lineHeight: '1.6', fontWeight: 600 }}>
-                    While you can request erasure, healthcare providers are legally obligated to retain certain clinical records under municipal/national statutes.
-                  </p>
-                  <div style={{ background: '#FAF5FF', border: '1.5px solid #E9D5FF', borderRadius: '12px', padding: '14px 16px', marginTop: '16px' }}>
-                    <p style={{ fontSize: '13px', color: '#6B21A8', margin: 0, fontWeight: 700, lineHeight: '1.5' }}>
-                      If your account has a <strong>Legal Hold</strong> active flag, erasure requests are suspended until the hold is resolved.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Carousel Footer Buttons */}
-            <div style={{
-              background: '#F8FAFC',
-              padding: '20px 32px',
-              borderTop: '1px solid #E2E8F0',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <button
-                type="button"
-                onClick={() => setPrivacySlideIdx(Math.max(0, privacySlideIdx - 1))}
-                disabled={privacySlideIdx === 0}
-                style={{
-                  height: '42px',
-                  padding: '0 16px',
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#64748B',
-                  fontWeight: 800,
-                  fontSize: '14px',
-                  cursor: privacySlideIdx === 0 ? 'not-allowed' : 'pointer',
-                  opacity: privacySlideIdx === 0 ? 0.3 : 1
-                }}
-              >
-                Back
-              </button>
-
-              {privacySlideIdx < 3 ? (
-                <button
-                  type="button"
-                  onClick={() => setPrivacySlideIdx(privacySlideIdx + 1)}
-                  style={{
-                    height: '42px',
-                    padding: '0 24px',
-                    background: '#2563EB',
-                    border: 'none',
-                    borderRadius: '10px',
-                    color: '#FFFFFF',
-                    fontWeight: 800,
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
-                  }}
-                >
-                  Continue
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    localStorage.setItem('curoxa_dpdp_intro_seen', 'true');
-                    setShowPrivacyOverlay(false);
-                  }}
-                  style={{
-                    height: '42px',
-                    padding: '0 24px',
-                    background: '#16A34A',
-                    border: 'none',
-                    borderRadius: '10px',
-                    color: '#FFFFFF',
-                    fontWeight: 800,
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)'
-                  }}
-                >
-                  Get Started
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className={"sidebar " + (isSidebarCollapsed ? "collapsed " : "") + (mobileSidebarOpen ? "mobile-open" : "")} data-lenis-prevent>
         <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative', width: '100%' }}>
           <img 
@@ -4108,7 +3897,7 @@ const PatientDashboard = () => {
                   margin: '0 0 4px 0',
                   fontFamily: "'Outfit', sans-serif"
                 }}>
-                  Good afternoon,
+                  {getTimeGreeting()},
                 </h1>
 
                 <div style={{
@@ -4123,7 +3912,7 @@ const PatientDashboard = () => {
                   gap: '10px',
                   fontFamily: "'Outfit', sans-serif"
                 }}>
-                  <span>{currentUser.name ? currentUser.name.split(' ')[0] : 'Harsh'}</span>
+                  <span>{getPatientFirstName(currentUser.name || patientProfile?.name)}</span>
                   <span style={{ display: 'inline-block', transform: 'rotate(10deg)' }}>👋</span>
                 </div>
 
@@ -4307,7 +4096,7 @@ const PatientDashboard = () => {
                 margin: '0 0 2px 0',
                 fontFamily: "'Outfit', sans-serif"
               }}>
-                Good afternoon,
+                {getTimeGreeting()},
               </h1>
 
               <div style={{
@@ -4321,7 +4110,7 @@ const PatientDashboard = () => {
                 gap: '6px',
                 fontFamily: "'Outfit', sans-serif"
               }}>
-                <span>{currentUser.name ? currentUser.name.split(' ')[0] : 'Harsh'}</span>
+                <span>{getPatientFirstName(currentUser.name || patientProfile?.name)}</span>
                 <span style={{ display: 'inline-block', transform: 'rotate(10deg)' }}>👋</span>
               </div>
 
@@ -4410,7 +4199,6 @@ const PatientDashboard = () => {
 
             {/* 1.5. NATIONAL DIGITAL HEALTH ID (ABHA) SMART CARD BANNER */}
             {(() => {
-              const patientUhid = patientProfile?.uhid || (patientProfile ? `MDC-${patientProfile._id.substring(18).toUpperCase()}` : (currentUser.id ? `MDC-${currentUser.id.substring(18).toUpperCase()}` : 'MDC-456B50'));
               const patientAbha = patientProfile?.abhaId || (currentUser?.abhaId || '');
               const patientAbhaAddr = patientProfile?.abhaAddress || (patientAbha ? `${(currentUser.name || 'patient').toLowerCase().replace(/\s+/g, '')}@abdm` : '');
               const isLinked = Boolean(patientAbha);
@@ -5549,8 +5337,8 @@ const PatientDashboard = () => {
                                 </div>
                               </div>
 
-                              {/* Token Badge - hidden if Cancelled */}
-                              {app.status !== 'Cancelled' && (
+                              {/* Token Badge - hidden if Cancelled, Completed, or Paid */}
+                              {app.status !== 'Cancelled' && app.status !== 'Completed' && app.status !== 'Paid' && (
                                 app.tokenNumber ? (
                                   <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <span style={{
@@ -6481,29 +6269,6 @@ const PatientDashboard = () => {
               <h1 style={{ fontSize: '24px', fontWeight: 900, margin: 0, fontFamily: "'Outfit', sans-serif" }}>
                 Privacy Shield & Consent Registry
               </h1>
-              <button
-                type="button"
-                onClick={() => {
-                  setPrivacySlideIdx(0);
-                  setShowPrivacyOverlay(true);
-                }}
-                style={{
-                  background: '#EFF6FF',
-                  border: '1px solid #BFDBFE',
-                  color: '#2563EB',
-                  borderRadius: '10px',
-                  padding: '8px 16px',
-                  fontSize: '13px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'background 0.2s'
-                }}
-              >
-                Review Privacy Rights Tour
-              </button>
             </div>
 
             <div className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '32px' }}>
@@ -6986,7 +6751,7 @@ const PatientDashboard = () => {
                     </div>
                     <div className="form-group">
                       <label style={{ fontSize: '12px', fontWeight: 800, color: '#64748B' }}>Patient ID (UHID)</label>
-                      <input type="text" className="form-control" style={{ background: '#F1F5F9', border: '1px solid #E2E8F0', cursor: 'not-allowed', fontWeight: 700 }} value={patientProfile ? `#MDC-${patientProfile._id.substring(18).toUpperCase()}` : '#MC-9921'} readOnly />
+                      <input type="text" className="form-control" style={{ background: '#F1F5F9', border: '1px solid #E2E8F0', cursor: 'not-allowed', fontWeight: 700 }} value={patientUhid || patientProfile?.uhId || patientProfile?.uhid || ''} readOnly />
                     </div>
                   </div>
 
@@ -8316,7 +8081,6 @@ const PatientDashboard = () => {
       {/* DIGITAL ABHA HEALTH ID CARD MODAL */}
       {/* ============================================================ */}
       {showDigitalCardModal && (() => {
-        const patientUhid = patientProfile?.uhid || (patientProfile ? `MDC-${patientProfile._id.substring(18).toUpperCase()}` : (currentUser.id ? `MDC-${currentUser.id.substring(18).toUpperCase()}` : 'MDC-456B50'));
         const patientAbha = patientProfile?.abhaId || '';
         const patientAbhaAddr = patientProfile?.abhaAddress || (patientAbha ? `${(currentUser.name || 'patient').toLowerCase().replace(/\s+/g, '')}@abdm` : 'Not linked');
         const isLinked = Boolean(patientAbha);

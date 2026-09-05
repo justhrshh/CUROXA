@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const patientSchema = new mongoose.Schema({
   tenantId: { type: String, required: true, default: 'city_hospital', index: true },
+  uhId: { type: String },
   patientId: { type: String },
   name: { type: String, required: true },
   age: { type: Number, default: 0 },
@@ -38,5 +39,8 @@ const patientSchema = new mongoose.Schema({
 
 // Compound index to speed up patient lookup on login by contact and tenantId
 patientSchema.index({ tenantId: 1, contact: 1 });
+patientSchema.index({ tenantId: 1, patientId: 1 }, { unique: true, sparse: true });
+patientSchema.index({ tenantId: 1, uhId: 1 }, { unique: true, sparse: true });
+patientSchema.index({ uhId: 1 });
 
 module.exports = mongoose.model('Patient', patientSchema);

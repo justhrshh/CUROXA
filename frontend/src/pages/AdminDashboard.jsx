@@ -2034,6 +2034,7 @@ const AdminDashboard = () => {
       const formattedPatients = (Array.isArray(response.data) ? response.data : []).map(p => ({
         id: p._id,
         patientId: p.patientId || (p.contact ? `pat-${p.contact.slice(-2)}` : `pat-${p._id.substring(p._id.length - 2).toUpperCase()}`),
+        uhId: p.uhId || p.raw?.uhId || '',
         name: p.name,
         ageGender: `${p.age || '--'} ${p.gender?.[0] || 'U'}`,
         lastVisit: p.updatedAt ? new Date(p.updatedAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : 'Unknown',
@@ -3303,8 +3304,18 @@ const AdminDashboard = () => {
   };
 
   const getStaffStatus = (emp) => {
+    if (!emp) return 'On duty';
+
+    // 0. Deactivated or inactive status
+    if (emp.status === 'inactive' || emp.status === 'deactivated' || emp.active === false) {
+      return 'Inactive';
+    }
+
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const todayDayName = dayNames[today.getDay()];
+    const todayDayShort = todayDayName.substring(0, 3).toLowerCase();
     
     // 1. Authoritative check against real MongoDB approved leaves
     const empId = String(emp.staff_id || emp._id || emp.id || '');
@@ -3322,7 +3333,12 @@ const AdminDashboard = () => {
 
     if (hasApprovedServerLeave) return 'On Leave';
 
-    // 2. Check localStorage fallback
+    // 2. Direct property check on employee (e.g. from doctor availability, leave status)
+    if (emp.onLeave || emp.isOnLeave || emp.status === 'onleave' || emp.status === 'On Leave') {
+      return 'On Leave';
+    }
+
+    // 3. Check localStorage fallback
     const leavesKey = `curoxa_hr_leaves_${emp.staff_id || emp.name}`;
     const leavesSaved = localStorage.getItem(leavesKey);
     if (leavesSaved) {
@@ -3333,7 +3349,7 @@ const AdminDashboard = () => {
       } catch (e) {}
     }
     
-    // 3. Check attendance overrides
+    // 4. Check attendance overrides
     const attKey = `curoxa_hr_attendance_${emp.staff_id || emp.name}`;
     const attSaved = localStorage.getItem(attKey);
     if (attSaved) {
@@ -3343,13 +3359,60 @@ const AdminDashboard = () => {
           const statusVal = record[todayStr];
           if (statusVal === 'Present' || statusVal === 'Late') return 'On duty';
           if (statusVal === 'Absent') return 'Absent';
-          if (statusVal === 'Off') return 'Off';
+          if (statusVal === 'Off') return 'On Leave';
           if (statusVal === 'On Leave' || statusVal === 'Leave') return 'On Leave';
         }
       } catch (e) {}
     }
     
-    if (today.getDay() === 0) return 'Off';
+    // 5. Dynamic Days Off / Weekly Off calculation
+    let offDays = [];
+    if (emp?.weeklyOff) {
+      if (Array.isArray(emp.weeklyOff)) {
+        offDays = emp.weeklyOff.map(d => String(d).trim().toLowerCase());
+      } else if (typeof emp.weeklyOff === 'string' && emp.weeklyOff.trim()) {
+        offDays = emp.weeklyOff.split(',').map(d => d.trim().toLowerCase());
+      }
+    }
+    if (offDays.length === 0 && emp?.workingDays) {
+      const wd = String(emp.workingDays).trim().toLowerCase();
+      if (wd === 'mon-sat' || wd === 'mon–sat') {
+        offDays = ['sunday', 'sun'];
+      } else if (wd === 'mon-fri' || wd === 'mon–fri') {
+        offDays = ['saturday', 'sunday', 'sat', 'sun'];
+      } else if (wd === 'sat') {
+        offDays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
+      } else if (wd.includes(',')) {
+        const working = wd.split(',').map(d => d.trim().substring(0, 3).toLowerCase());
+        const allAbbrs = [
+          { key: 'sun', names: ['sunday', 'sun'] },
+          { key: 'mon', names: ['monday', 'mon'] },
+          { key: 'tue', names: ['tuesday', 'tue'] },
+          { key: 'wed', names: ['wednesday', 'wed'] },
+          { key: 'thu', names: ['thursday', 'thu'] },
+          { key: 'fri', names: ['friday', 'fri'] },
+          { key: 'sat', names: ['saturday', 'sat'] }
+        ];
+        allAbbrs.forEach(a => {
+          if (!working.some(w => w.startsWith(a.key))) {
+            offDays.push(...a.names);
+          }
+        });
+      }
+    }
+    if (offDays.length === 0) {
+      offDays = ['sunday', 'sun'];
+    }
+
+    const isOffToday = offDays.some(d => {
+      const clean = String(d).toLowerCase().trim();
+      return clean === todayDayName.toLowerCase() || clean === todayDayShort || clean.startsWith(todayDayShort);
+    });
+
+    if (isOffToday) {
+      return 'On Leave';
+    }
+
     return 'On duty';
   };
 
@@ -13345,7 +13408,7 @@ const AdminDashboard = () => {
                   } else if (selectedStaffStatusFilter === 'onleave') {
                     if (status !== 'On Leave' && status !== 'Absent') return false;
                   } else if (selectedStaffStatusFilter === 'weeklyoff') {
-                    if (status !== 'Off') return false;
+                    if (status !== 'Off' && status !== 'Weekly Off' && status !== 'On Leave') return false;
                   } else if (selectedStaffStatusFilter === 'inactive') {
                     if (item.status !== 'inactive' && item.status !== 'deactivated') return false;
                   }
@@ -18838,7 +18901,7 @@ const AdminDashboard = () => {
                 if (patientSearchQuery) {
                   const q = patientSearchQuery.toLowerCase().trim();
                   const nameMatch = (item.name || '').toLowerCase().includes(q);
-                  const idMatch = (item.patientId || '').toLowerCase().includes(q);
+                  const idMatch = (item.patientId || '').toLowerCase().includes(q) || (item.uhId || item.raw?.uhId || '').toLowerCase().includes(q);
                   const phoneMatch = (item.raw?.contact || item.phone || '').toLowerCase().includes(q);
                   const docMatch = getPatientDoctorName(item).toLowerCase().includes(q);
                   if (!nameMatch && !idMatch && !phoneMatch && !docMatch) return false;
@@ -19391,6 +19454,7 @@ const AdminDashboard = () => {
                         <thead>
                           <tr>
                             <th>PATIENT</th>
+                            <th>UH-ID</th>
                             <th>AGE / GENDER</th>
                             <th>LAST VISIT</th>
                             <th>DOCTOR</th>
@@ -19405,6 +19469,7 @@ const AdminDashboard = () => {
                             const status = getPatientStatus(item);
                             const statusClass = status.toLowerCase() === 'active' ? 'active' : status.toLowerCase() === 'follow-up' ? 'followup' : 'inactive';
                             const avatarStyle = getAvatarStyle((startIndex + idx));
+                            const uhIdVal = item.uhId || item.raw?.uhId;
 
                             return (
                               <tr key={item.id}>
@@ -19419,6 +19484,31 @@ const AdminDashboard = () => {
                                       <div className="pat-id-muted">{item.patientId}</div>
                                     </div>
                                   </div>
+                                </td>
+
+                                {/* UH-ID */}
+                                <td>
+                                  {uhIdVal ? (
+                                    <span style={{ 
+                                      fontFamily: 'monospace', 
+                                      fontWeight: 800, 
+                                      fontSize: '11px', 
+                                      background: '#F0F9FF', 
+                                      color: '#0284C7', 
+                                      padding: '2.5px 7px', 
+                                      borderRadius: '5px',
+                                      border: '1px solid #BAE6FD',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      letterSpacing: '0.03em'
+                                    }} title="Global Curoxa Platform UH-ID">
+                                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#0284C7', display: 'inline-block' }} />
+                                      {uhIdVal}
+                                    </span>
+                                  ) : (
+                                    <span style={{ fontSize: '11.5px', color: '#94A3B8', fontWeight: 600 }}>—</span>
+                                  )}
                                 </td>
 
                                 {/* Age / Gender */}
@@ -26135,11 +26225,17 @@ const AdminDashboard = () => {
       {activeTab !== 'patient-details' && viewingPatient && (
         <div className="admin-modal-overlay" onClick={() => setViewingPatient(null)}>
           <div className="admin-modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '580px', padding: '0px', borderRadius: '16px', overflow: 'hidden' }}>
-            {/* Header */}
             <div className="admin-modal-header" style={{ padding: '24px 28px', borderBottom: '1px solid #F1F5F9' }}>
               <div>
                 <span className="admin-modal-title" style={{ display: 'block', fontSize: '20px', fontWeight: 800 }}>{viewingPatient.name}</span>
-                <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>Patient Profile ({viewingPatient.patientId})</span>
+                <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
+                  Patient ID: <strong style={{ color: '#0F172A' }}>{viewingPatient.patientId}</strong>
+                  {(viewingPatient.uhId || viewingPatient.raw?.uhId) && (
+                    <span style={{ marginLeft: '8px', paddingLeft: '8px', borderLeft: '1px solid #CBD5E1' }}>
+                      UH-ID: <strong style={{ color: '#0284C7', fontFamily: 'monospace' }}>{viewingPatient.uhId || viewingPatient.raw?.uhId}</strong>
+                    </span>
+                  )}
+                </span>
               </div>
               <button className="admin-modal-close-btn" onClick={() => setViewingPatient(null)}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>

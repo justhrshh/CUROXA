@@ -1,8 +1,8 @@
 import React from 'react';
 
 const HealthVaultStrip = ({ currentUser, patientProfile }) => {
-  const abhaId = patientProfile?.abhaId || currentUser?.abhaId || 'ABHA-1234-5678-9012';
-  const uhid = patientProfile?.uhid || currentUser?.uhid || 'CUROXA-456B50';
+  const abhaId = patientProfile?.abhaId || currentUser?.abhaId || '';
+  const uhid = patientProfile?.uhId || patientProfile?.uhid || currentUser?.uhId || currentUser?.uhid || (patientProfile?._id ? `UH-${patientProfile._id.substring(18).toUpperCase()}` : '');
   const bloodGroup = patientProfile?.bloodGroup || currentUser?.bloodGroup || 'B+';
   const allergies = patientProfile?.allergies || (Array.isArray(currentUser?.allergies) ? currentUser.allergies.join(', ') : currentUser?.allergies) || 'No known allergies';
 

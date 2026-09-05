@@ -205,6 +205,11 @@ const initializeDatabase = async (conn) => {
   }
 
   // 3. Sync multi-tenant compound indexes in parallel for fast per-tenant lookups
+  const Patient = require('../models/Patient');
+  const Visit = require('../models/Visit');
+  const PatientIdentity = require('../models/PatientIdentity');
+  const Counter = require('../models/Counter');
+
   const syncIndexPromises = [
     User.syncIndexes(),
     RoleCoverage.syncIndexes(),
@@ -212,10 +217,26 @@ const initializeDatabase = async (conn) => {
     Appointment.syncIndexes(),
     LabRequest.syncIndexes(),
     Prescription.syncIndexes(),
-    Indent.syncIndexes()
+    Indent.syncIndexes(),
+    Patient.syncIndexes(),
+    Visit.syncIndexes(),
+    PatientIdentity.syncIndexes(),
+    Counter.syncIndexes()
   ];
   await Promise.all(syncIndexPromises.map(p => p.catch(err => console.warn('Index sync warning:', err.message))));
   console.log('Multi-tenant compound indexes synced in background.');
+
+  // Safe, non-destructive backfill for existing patient UH-IDs and hospital Patient IDs
+  try {
+    const { backfillPatientIdentifiers } = require('../utils/identifierEngine');
+    backfillPatientIdentifiers().then(res => {
+      if (res.uhidUpdated > 0 || res.patientIdUpdated > 0) {
+        console.log(`[IDENTIFIER-ENGINE] Backfilled ${res.uhidUpdated} UH-IDs and ${res.patientIdUpdated} Patient IDs.`);
+      }
+    }).catch(err => console.warn('[IDENTIFIER-ENGINE] Backfill warning:', err.message));
+  } catch (bfErr) {
+    console.warn('[IDENTIFIER-ENGINE] Init error:', bfErr.message);
+  }
 
   // 4. Delete default seeded medicines and lab inventory items in parallel
   try {

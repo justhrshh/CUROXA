@@ -33,11 +33,15 @@ const PatientHospitalHome = ({
     return 'Good evening';
   };
 
-  const patientFirstName = currentUser?.name
-    ? currentUser.name.split(' ')[0]
-    : patientProfile?.name
-    ? patientProfile.name.split(' ')[0]
-    : 'Harsh';
+  const getPatientFirstName = (name) => {
+    if (!name || typeof name !== 'string') return 'Harsh';
+    const cleaned = name.trim().replace(/^(mr|mrs|ms|dr|prof|shri|smt)\.?\s+/i, '').trim();
+    const target = cleaned || name.trim();
+    const first = target.split(/\s+/)[0];
+    return first ? (first.charAt(0).toUpperCase() + first.slice(1)) : 'Harsh';
+  };
+
+  const patientFirstName = getPatientFirstName(currentUser?.name || patientProfile?.name);
 
   const hospitalName = hospital?.name || 'clinic-2';
 

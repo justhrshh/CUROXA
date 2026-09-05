@@ -263,6 +263,7 @@ router.post("/login", tenantMiddleware, async (req, res) => {
       password_version: user.password_version || 0,
     };
     let isPatientComplete = false;
+    let patientForResponse = null;
     if (user.role === "patient") {
       const patient = await Patient.findOne({
         contact: user.staff_id,
@@ -270,6 +271,19 @@ router.post("/login", tenantMiddleware, async (req, res) => {
       }) || await Patient.findOne({ contact: user.staff_id });
       if (patient) {
         tokenPayload.id = patient._id;
+        patientForResponse = patient;
+        if (!patient.uhId && patient.contact) {
+          try {
+            const { resolveOrCreateUhid } = require('../utils/identifierEngine');
+            patient.uhId = await resolveOrCreateUhid({
+              contact: patient.contact,
+              name: patient.name,
+              email: patient.email,
+              abhaId: patient.abhaId
+            });
+            await patient.save().catch(() => {});
+          } catch (uhErr) {}
+        }
       }
       isPatientComplete = Boolean(isPatientProfileComplete(patient) || user.isSetupComplete);
       if (user.isSetupComplete !== isPatientComplete) {
@@ -315,6 +329,9 @@ router.post("/login", tenantMiddleware, async (req, res) => {
         specialty: platformRole || user.specialty || '',
         platformRole: platformRole || user.platformRole || '',
         isSetupComplete: user.role === 'patient' ? isPatientComplete : user.isSetupComplete,
+        uhId: patientForResponse?.uhId || '',
+        uhid: patientForResponse?.uhId || '',
+        patientId: patientForResponse?.patientId || '',
         tenantId: user.tenantId,
         tenantName: hospital ? hospital.name : 'Sunrise Multispeciality',
         createdAt: user.createdAt,
@@ -1527,6 +1544,7 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
       password_version: user.password_version || 0,
     };
     let isPatientComplete = false;
+    let patientForResponse = null;
     if (user.role === "patient") {
       const patient = await Patient.findOne({
         contact: user.staff_id,
@@ -1534,6 +1552,19 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
       }) || await Patient.findOne({ contact: user.staff_id });
       if (patient) {
         tokenPayload.id = patient._id;
+        patientForResponse = patient;
+        if (!patient.uhId && patient.contact) {
+          try {
+            const { resolveOrCreateUhid } = require('../utils/identifierEngine');
+            patient.uhId = await resolveOrCreateUhid({
+              contact: patient.contact,
+              name: patient.name,
+              email: patient.email,
+              abhaId: patient.abhaId
+            });
+            await patient.save().catch(() => {});
+          } catch (uhErr) {}
+        }
       }
       isPatientComplete = Boolean(isPatientProfileComplete(patient) || user.isSetupComplete);
       if (user.isSetupComplete !== isPatientComplete) {
@@ -1577,6 +1608,9 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
         specialty: platformRole || user.specialty || '',
         platformRole: platformRole || user.platformRole || '',
         isSetupComplete: user.role === 'patient' ? isPatientComplete : user.isSetupComplete,
+        uhId: patientForResponse?.uhId || '',
+        uhid: patientForResponse?.uhId || '',
+        patientId: patientForResponse?.patientId || '',
         tenantId: user.tenantId,
         tenantName: hospital ? hospital.name : 'Sunrise Multispeciality',
         createdAt: user.createdAt,
@@ -1988,6 +2022,19 @@ router.post('/patient-portal/verify-otp', async (req, res) => {
       const jwt = require('jsonwebtoken');
       const targetId = patientDoc ? patientDoc._id : user._id;
 
+      if (patientDoc && !patientDoc.uhId && patientDoc.contact) {
+        try {
+          const { resolveOrCreateUhid } = require('../utils/identifierEngine');
+          patientDoc.uhId = await resolveOrCreateUhid({
+            contact: patientDoc.contact,
+            name: patientDoc.name,
+            email: patientDoc.email,
+            abhaId: patientDoc.abhaId
+          });
+          await patientDoc.save().catch(() => {});
+        } catch (uhErr) {}
+      }
+
       // Always grant role: 'patient' in the portal session token so they see patient dashboard history
       const tokenPayload = {
         id: targetId,
@@ -2010,6 +2057,9 @@ router.post('/patient-portal/verify-otp', async (req, res) => {
           role: 'patient', 
           actualStaffRole: user.role,
           name: patientDoc ? patientDoc.name : user.name,
+          uhId: patientDoc?.uhId || '',
+          uhid: patientDoc?.uhId || '',
+          patientId: patientDoc?.patientId || '',
           avatar: (patientDoc && patientDoc.avatar) ? patientDoc.avatar : (user.avatar || ''),
           isSetupComplete: isComplete,
           password_hash: undefined 

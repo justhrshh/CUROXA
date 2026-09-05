@@ -621,7 +621,7 @@ const LabDashboard = () => {
       if (ptsRes.data && Array.isArray(ptsRes.data)) {
         const mapped = ptsRes.data.map(p => ({
           ...p,
-          uhid: `MDC-${p._id.toString().substring(18).toUpperCase()}`
+          uhid: p.uhId || p.uhid || (p._id ? `UH-${p._id.toString().substring(18).toUpperCase()}` : '')
         }));
         setPatients(mapped);
       }

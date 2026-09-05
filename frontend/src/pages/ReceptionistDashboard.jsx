@@ -891,15 +891,21 @@ const ReceptionistDashboard = () => {
 
   const getFormattedPatientId = (patientId, patientRaw) => {
     if (patientRaw?.patientId) return patientRaw.patientId;
-    if (!patientId) return 'pat-00';
+    if (!patientId) return 'PAT-000000';
     const idStr = patientId.toString();
-    if (idStr.toLowerCase().startsWith('pat-')) return idStr;
+    if (idStr.toUpperCase().startsWith('PAT-') || idStr.toUpperCase().startsWith('HSP-')) return idStr;
     const found = patientsList.find(p => p._id === idStr || p.id === idStr);
     if (found?.patientId) return found.patientId;
-    if (idStr.length >= 24) {
-      return `pat-${idStr.substring(22).toUpperCase()}`;
-    }
-    return `pat-${idStr.toUpperCase()}`;
+    if (idStr.toLowerCase().startsWith('pat-')) return idStr;
+    return idStr;
+  };
+
+  const getFormattedUhid = (patientId, patientRaw) => {
+    if (patientRaw?.uhId) return patientRaw.uhId;
+    if (!patientId) return '';
+    const idStr = patientId.toString();
+    const found = patientsList.find(p => p._id === idStr || p.id === idStr);
+    return found?.uhId || '';
   };
 
   const getNormalizedDateStr = (dateVal) => {
@@ -1214,6 +1220,7 @@ const ReceptionistDashboard = () => {
           // Doctor OPD Appointment Booking Execution (supports single or multiple appointments)
           const apptsToCreate = pendingRegistrationPayload.appointmentsList || [pendingRegistrationPayload.appointmentData];
           let primaryApptId = null;
+          let sharedEpisodeId = null;
 
           for (const apptItem of apptsToCreate) {
             const appointmentRes = await api.post('/appointments', {
@@ -1221,9 +1228,14 @@ const ReceptionistDashboard = () => {
               doctorId: apptItem.doctorId,
               date: apptItem.date,
               time: apptItem.time,
-              reason: apptItem.reason
+              reason: apptItem.reason,
+              visitEpisodeId: sharedEpisodeId || undefined,
+              parentAppointmentId: primaryApptId || undefined
             });
             if (!primaryApptId) primaryApptId = appointmentRes.data._id;
+            if (!sharedEpisodeId && appointmentRes.data?.visitEpisodeId) {
+              sharedEpisodeId = appointmentRes.data.visitEpisodeId;
+            }
           }
 
           await api.post('/billing', {
@@ -1652,18 +1664,92 @@ const ReceptionistDashboard = () => {
   };
 
 
+  const isAppointmentToday = (dateVal) => {
+    if (!dateVal) return false;
+    try {
+      if (typeof dateVal === 'string') {
+        const m = dateVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) {
+          const now = new Date();
+          const curY = now.getFullYear();
+          const curM = String(now.getMonth() + 1).padStart(2, '0');
+          const curD = String(now.getDate()).padStart(2, '0');
+          return `${curY}-${curM}-${curD}` === `${m[1]}-${m[2]}-${m[3]}`;
+        }
+      }
+      const d = new Date(dateVal);
+      const now = new Date();
+      return d.getFullYear() === now.getFullYear() &&
+             d.getMonth() === now.getMonth() &&
+             d.getDate() === now.getDate();
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const isAppointmentInWaitingQueue = (app) => {
+    if (!app) return false;
+    // A patient is in waiting queue ONLY IF they have checked in!
+    // Unchecked-in appointments (no token allocated and not in active queue status) must never appear in waiting queue
+    const hasToken = app.tokenNumber !== null && app.tokenNumber !== undefined && app.tokenNumber !== '';
+    const isCheckedInStatus = app.status === 'Checked In' || app.status === 'Waiting' || app.queueStatus === 'Waiting' || app.queueStatus === 'Serving' || app.status === 'In Progress';
+    if (!hasToken && !isCheckedInStatus) return false;
+
+    // Must not be completed, cancelled, checked out, no-show, or prescription pending
+    const isFinished = ['Completed', 'Paid', 'Cancelled', 'Checked Out', 'No-Show', 'no-show', 'Prescription Pending'].includes(app.status) ||
+                       ['Completed', 'Cancelled', 'No-Show', 'no-show'].includes(app.queueStatus);
+    if (isFinished) return false;
+
+    return true;
+  };
+
   const handleCheckInAppointment = async (app) => {
     if (!app || !app._id) return;
+
+    // Reject check-in for future-dated appointments (anytime check-in allowed on scheduled appointment day)
+    const rawDate = app.date || app.appointmentDate;
+    let apptDateStr = '';
+    if (rawDate) {
+      if (typeof rawDate === 'string') {
+        const m = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) apptDateStr = `${m[1]}-${m[2]}-${m[3]}`;
+      }
+      if (!apptDateStr) {
+        const d = new Date(rawDate);
+        if (!isNaN(d.getTime())) {
+          apptDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+      }
+    }
+
+    if (apptDateStr && !isAppointmentToday(rawDate)) {
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      if (apptDateStr > todayStr) {
+        showToast(`Check-in is only available on the scheduled appointment date (${apptDateStr}).`, 'error');
+        return;
+      }
+    }
+
     try {
       setIsCheckingIn(true);
       const res = await api.post(`/appointments/${app._id}/check-in`);
-      const { appointment: updatedAppt, token } = res.data;
+      const { appointment: updatedAppt, token, visitId } = res.data;
+      const resolvedVisitId = visitId || updatedAppt?.visitId;
 
-      // Update local state immediately
+      // Update local state immediately, syncing visitId across the whole visit episode
       if (updatedAppt) {
-        setAppointments(prev => prev.map(a => a._id === updatedAppt._id ? { ...a, ...updatedAppt } : a));
+        setAppointments(prev => prev.map(a => {
+          if (a._id === updatedAppt._id) {
+            return { ...a, ...updatedAppt, visitId: resolvedVisitId || a.visitId };
+          }
+          if (resolvedVisitId && a.visitEpisodeId && a.visitEpisodeId === updatedAppt.visitEpisodeId) {
+            return { ...a, visitId: resolvedVisitId };
+          }
+          return a;
+        }));
         if (selectedAppointment && selectedAppointment._id === updatedAppt._id) {
-          setSelectedAppointment(prev => ({ ...prev, ...updatedAppt }));
+          setSelectedAppointment(prev => ({ ...prev, ...updatedAppt, visitId: resolvedVisitId || prev.visitId }));
         }
       }
 
@@ -1672,8 +1758,9 @@ const ReceptionistDashboard = () => {
       const slotTime = (updatedAppt && updatedAppt.time) || token?.tokenSlotId || app.time || 'Scheduled Slot';
       const tokenNo = token?.tokenNumber || (updatedAppt && updatedAppt.tokenNumber) || app.tokenNumber;
 
+      const visitMsg = resolvedVisitId ? ` • Visit: ${resolvedVisitId}` : '';
       showToast(
-        `Patient checked in successfully! Token #${tokenNo} • Dr. ${String(docName).replace(/^Dr\.\s*/i, '')} • Slot: ${slotTime}`,
+        `Patient checked in successfully! Token #${tokenNo}${visitMsg} • Dr. ${String(docName).replace(/^Dr\.\s*/i, '')} • Slot: ${slotTime}`,
         'success'
       );
 
@@ -2478,7 +2565,7 @@ const ReceptionistDashboard = () => {
     };
 
     appointments.forEach(app => {
-      const appDate = parseDateSafe(app.createdAt || app.date);
+      const appDate = parseDateSafe(app.date || app.appointmentDate || app.createdAt);
       if (!appDate) return;
       const appDateStr = appDate.toLocaleDateString();
       const dayData = data.find(d => d.fullDate === appDateStr);
@@ -2510,25 +2597,39 @@ const ReceptionistDashboard = () => {
   const overallOnlinePercent = allTimeTotal > 0 ? Math.round((allTimeOnline / allTimeTotal) * 100) : 0;
 
   const filteredAppointments = useMemo(() => {
-    if (!dashboardFilterStartDate || !dashboardFilterEndDate) return appointments;
-    let start = new Date(dashboardFilterStartDate);
-    let end = new Date(dashboardFilterEndDate);
-    if (start > end) {
-      const temp = start;
-      start = end;
-      end = temp;
-    }
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
-
     const pDateSafe = (dStr) => {
       if (!dStr) return null;
+      if (typeof dStr === 'string') {
+        const match = dStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (match) {
+          const [, y, m, day] = match;
+          return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(day, 10));
+        }
+      }
       const d = new Date(dStr);
       return isNaN(d.getTime()) ? null : d;
     };
 
+    let start, end;
+    if (dashboardFilterStartDate && dashboardFilterEndDate) {
+      start = new Date(dashboardFilterStartDate);
+      end = new Date(dashboardFilterEndDate);
+      if (start > end) {
+        const temp = start;
+        start = end;
+        end = temp;
+      }
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    } else {
+      const now = new Date();
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    }
+
     return appointments.filter(app => {
-      const appDate = pDateSafe(app.createdAt || app.date);
+      // Prioritize scheduled appointment date over database createdAt
+      const appDate = pDateSafe(app.date || app.appointmentDate || app.createdAt);
       if (!appDate) return false;
       return appDate >= start && appDate <= end;
     });
@@ -2622,7 +2723,7 @@ const ReceptionistDashboard = () => {
     let lastWeekOnline = 0;
 
     appointments.forEach(app => {
-      const appDate = parseDateSafe(app.createdAt || app.date);
+      const appDate = parseDateSafe(app.date || app.appointmentDate || app.createdAt);
       if (!appDate) return;
 
       if (appDate >= sevenDaysAgo && appDate <= today) {
@@ -2860,6 +2961,16 @@ const ReceptionistDashboard = () => {
         return;
       }
 
+      // Explicitly reject same doctor if this is an Add-On flow attached to an existing appointment
+      if (addOnOriginAppt) {
+        const originDocId = String(addOnOriginAppt.doctorId?._id || addOnOriginAppt.doctorId);
+        if (docIds.includes(originDocId)) {
+          showToast("Same-doctor add-ons are not allowed. Please select a different doctor for this visit episode.", "error");
+          setLoading(false);
+          return;
+        }
+      }
+
       // Check if existing patient already has an appointment today with any of the selected doctors at the exact same time slot in database
       if (isExistingPatient && selectedPatient) {
         const cleanTimeSlotStr = (str) => {
@@ -2962,15 +3073,22 @@ const ReceptionistDashboard = () => {
       // Book appointments
       const apptsToCreate = allApptsToBook;
       let primaryApptId = null;
+      let sharedEpisodeId = addOnOriginAppt ? (addOnOriginAppt.visitEpisodeId || addOnOriginAppt._id) : null;
+
       for (const apptItem of apptsToCreate) {
         const appointmentRes = await api.post('/appointments', {
           patientId: finalPatientId,
           doctorId: apptItem.doctorId,
           date: apptItem.date,
           time: apptItem.time,
-          reason: apptItem.reason
+          reason: apptItem.reason,
+          visitEpisodeId: sharedEpisodeId || undefined,
+          parentAppointmentId: (addOnOriginAppt ? addOnOriginAppt._id : primaryApptId) || undefined
         });
         if (!primaryApptId) primaryApptId = appointmentRes.data._id;
+        if (!sharedEpisodeId && appointmentRes.data?.visitEpisodeId) {
+          sharedEpisodeId = appointmentRes.data.visitEpisodeId;
+        }
       }
 
       // Settle billing
@@ -5535,7 +5653,7 @@ const ReceptionistDashboard = () => {
             {/* 2. 4 VISUALLY DISTINCT KPI COMMAND CARDS */}
             {(() => {
               const completedAppts = filteredAppointments.filter(a => a.status === 'Completed' || a.status === 'Paid');
-              const waitingAppts = filteredAppointments.filter(a => a.status === 'Waiting' || a.status === 'Checked In' || a.status === 'Pending' || a.status === 'Pending Approval' || (!['Completed', 'Paid', 'Cancelled'].includes(a.status)));
+              const waitingAppts = filteredAppointments.filter(isAppointmentInWaitingQueue);
               const availableDocs = doctors.filter(d => !d.isWeeklyOff && !d.isOnLeave && d.available !== false);
               const paidBills = filteredBills.filter(b => b.status === 'Paid');
               const totalRevenueToday = paidBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
@@ -5575,7 +5693,7 @@ const ReceptionistDashboard = () => {
                             <linearGradient id="kpiBlueGradRec" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
                               <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
-                            </linearGradient>
+                          </linearGradient>
                           </defs>
                           <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiBlueGradRec)" />
                           <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
@@ -5598,7 +5716,7 @@ const ReceptionistDashboard = () => {
                     style={{
                       background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)'
                     }}
-                    onClick={() => switchTab('appointments')}
+                    onClick={() => switchTab('waiting-queue')}
                   >
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/25">
@@ -5889,7 +6007,7 @@ const ReceptionistDashboard = () => {
 
                 {/* Panel 2: WAITING QUEUE (OPERATIONALLY CRITICAL) */}
                 {(() => {
-                  const waitingQueue = filteredAppointments.filter(a => a.status === 'Waiting' || a.status === 'Checked In' || a.status === 'Pending' || a.status === 'Pending Approval' || (!['Completed', 'Paid', 'Cancelled'].includes(a.status)));
+                  const waitingQueue = filteredAppointments.filter(isAppointmentInWaitingQueue);
 
                   return (
                     <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '18px', padding: '24px 26px', boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)' }}>
@@ -5931,6 +6049,7 @@ const ReceptionistDashboard = () => {
                             const doctorName = app.doctorId?.name || 'Specialist on Duty';
                             const specialty = app.doctorId?.specialty || 'General Medicine';
                             const tokenNum = app.tokenNumber ? String(app.tokenNumber) : null;
+                            const isServing = app.queueStatus === 'Serving' || app.status === 'In Progress';
 
                             return (
                               <div
@@ -5984,8 +6103,16 @@ const ReceptionistDashboard = () => {
                                   <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', fontVariantNumeric: 'tabular-nums' }}>
                                     {app.time || 'Queue'}
                                   </span>
-                                  <span style={{ fontSize: '10px', fontWeight: 800, padding: '3px 8px', borderRadius: '20px', background: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D' }}>
-                                    WAITING
+                                  <span style={{
+                                    fontSize: '10px',
+                                    fontWeight: 800,
+                                    padding: '3px 8px',
+                                    borderRadius: '20px',
+                                    background: isServing ? '#EFF6FF' : '#FEF3C7',
+                                    color: isServing ? '#1D4ED8' : '#92400E',
+                                    border: `1px solid ${isServing ? '#BFDBFE' : '#FCD34D'}`
+                                  }}>
+                                    {isServing ? 'SERVING' : 'WAITING'}
                                   </span>
                                 </div>
                               </div>
@@ -6934,19 +7061,39 @@ const ReceptionistDashboard = () => {
 
                             {/* Patient ID */}
                             <td style={{ padding: '14px 16px' }}>
-                              <span style={{ 
-                                fontFamily: 'monospace', 
-                                fontWeight: 800, 
-                                fontSize: '12px', 
-                                background: '#F1F5F9', 
-                                color: '#334155', 
-                                padding: '4px 8px', 
-                                borderRadius: '6px',
-                                letterSpacing: '0.04em',
-                                border: '1px solid #E2E8F0'
-                              }}>
-                                {getFormattedPatientId(p._id)}
-                              </span>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                {p.uhId && (
+                                  <span style={{ 
+                                    fontFamily: 'monospace', 
+                                    fontWeight: 800, 
+                                    fontSize: '11px', 
+                                    background: '#F0F9FF', 
+                                    color: '#0284C7', 
+                                    padding: '2px 6px', 
+                                    borderRadius: '5px',
+                                    border: '1px solid #BAE6FD',
+                                    display: 'inline-block',
+                                    width: 'fit-content'
+                                  }} title="Global Curoxa Platform UH-ID">
+                                    {p.uhId}
+                                  </span>
+                                )}
+                                <span style={{ 
+                                  fontFamily: 'monospace', 
+                                  fontWeight: 800, 
+                                  fontSize: '11.5px', 
+                                  background: '#F1F5F9', 
+                                  color: '#334155', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '5px',
+                                  letterSpacing: '0.02em',
+                                  border: '1px solid #E2E8F0',
+                                  display: 'inline-block',
+                                  width: 'fit-content'
+                                }} title="Hospital-scoped Patient ID">
+                                  {getFormattedPatientId(p._id, p)}
+                                </span>
+                              </div>
                             </td>
 
                             {/* Patient Details: Avatar + Name + Age */}
@@ -7416,6 +7563,20 @@ const ReceptionistDashboard = () => {
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                             <h2 style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', margin: 0, letterSpacing: '-0.01em' }}>{selectedPatient.name}</h2>
+                            {selectedPatient.uhId && (
+                              <span style={{
+                                fontSize: '11px',
+                                color: '#0369A1',
+                                fontWeight: 850,
+                                background: 'linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%)',
+                                padding: '3px 10px',
+                                borderRadius: '20px',
+                                border: '1px solid #7DD3FC',
+                                boxShadow: '0 2px 6px rgba(2,132,199,0.1)'
+                              }} title="Global Curoxa Platform Patient ID">
+                                UH-ID: {selectedPatient.uhId}
+                              </span>
+                            )}
                             <span style={{
                               fontSize: '11px',
                               color: '#1D4ED8',
@@ -7425,8 +7586,8 @@ const ReceptionistDashboard = () => {
                               borderRadius: '20px',
                               border: '1px solid #93C5FD',
                               boxShadow: '0 2px 6px rgba(37,99,235,0.1)'
-                            }}>
-                              ID: {getFormattedPatientId(selectedPatient._id)}
+                            }} title="Hospital-scoped Patient Identifier">
+                              Patient ID: {getFormattedPatientId(selectedPatient._id, selectedPatient)}
                             </span>
                           </div>
                           <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 650, marginTop: '4px' }}>
@@ -9394,7 +9555,14 @@ const ReceptionistDashboard = () => {
 
             {/* Doctor */}
             <div className="rx-field-group">
-              <label className="rx-field-label">Consulting Doctor <span className="rx-req">*</span></label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="rx-field-label">Consulting Doctor <span className="rx-req">*</span></label>
+                {addOnOriginAppt && (
+                  <span style={{ fontSize: '11px', color: '#7C3AED', fontWeight: 800 }}>
+                    ↳ Add-On Episode Mode
+                  </span>
+                )}
+              </div>
               <select 
                 className="rx-select" 
                 value={formData.doctorId} 
@@ -9402,12 +9570,20 @@ const ReceptionistDashboard = () => {
                 disabled={!!reschedulingAppointment}
               >
                 <option value="">-- Choose Doctor --</option>
-                {doctors.map(doc => (
-                  <option key={doc._id} value={doc._id}>
-                    {doc.name} {doc.role ? `(${doc.role})` : ''}
-                  </option>
-                ))}
+                {doctors.map(doc => {
+                  const isOriginDoctor = addOnOriginAppt && String(addOnOriginAppt.doctorId?._id || addOnOriginAppt.doctorId) === String(doc._id);
+                  return (
+                    <option key={doc._id} value={doc._id} disabled={isOriginDoctor}>
+                      {doc.name} {doc.role ? `(${doc.role})` : ''} {isOriginDoctor ? '— (Already booked for this visit episode)' : ''}
+                    </option>
+                  );
+                })}
               </select>
+              {addOnOriginAppt && (
+                <div style={{ fontSize: '11.5px', color: '#6D28D9', marginTop: '3px', fontWeight: 650 }}>
+                  Note: Same-doctor add-ons are not allowed. Please select another consulting doctor for this visit episode.
+                </div>
+              )}
             </div>
 
             {/* Date */}
@@ -9792,6 +9968,16 @@ const ReceptionistDashboard = () => {
             const isAppointmentToday = (dateVal) => {
               if (!dateVal) return false;
               try {
+                if (typeof dateVal === 'string') {
+                  const m = dateVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                  if (m) {
+                    const now = new Date();
+                    const curY = now.getFullYear();
+                    const curM = String(now.getMonth() + 1).padStart(2, '0');
+                    const curD = String(now.getDate()).padStart(2, '0');
+                    return `${curY}-${curM}-${curD}` === `${m[1]}-${m[2]}-${m[3]}`;
+                  }
+                }
                 const d = new Date(dateVal);
                 const now = new Date();
                 return d.getFullYear() === now.getFullYear() &&
@@ -10293,6 +10479,16 @@ const ReceptionistDashboard = () => {
                                         </span>
                                       )}
                                     </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '3px', flexWrap: 'wrap', fontSize: '11px' }}>
+                                      {(primary.rawItem?.patientId?.uhId || primary.patientId?.uhId || getFormattedUhid(primary.patientId?._id || primary.patientId)) && (
+                                        <span style={{ fontWeight: 750, color: '#0369A1', background: '#F0F9FF', padding: '1px 5px', borderRadius: '4px', border: '1px solid #BAE6FD' }} title="Global Curoxa Patient UH-ID">
+                                          {primary.rawItem?.patientId?.uhId || primary.patientId?.uhId || getFormattedUhid(primary.patientId?._id || primary.patientId)}
+                                        </span>
+                                      )}
+                                      <span style={{ color: '#64748B', fontWeight: 650 }}>
+                                        ID: {getFormattedPatientId(primary.patientId?._id || primary.patientId, primary.rawItem?.patientId || primary.patientId)}
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               </td>
@@ -10346,23 +10542,64 @@ const ReceptionistDashboard = () => {
                                       </span>
                                     );
                                   }
+                                  const visitIdVal = primary.rawItem?.visitId || primary.visitId;
+                                  const isPrimaryCompleted = primary.status === 'Completed' || primary.status === 'Paid' || primary.rawItem?.status === 'Completed' || primary.rawItem?.status === 'Paid';
+                                  if (isPrimaryCompleted) {
+                                    return (
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                        <span style={{ color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
+                                          —
+                                        </span>
+                                        {visitIdVal && (
+                                          <span style={{
+                                            display: 'inline-block',
+                                            fontSize: '10px',
+                                            fontWeight: 750,
+                                            padding: '1px 5px',
+                                            borderRadius: '4px',
+                                            background: '#F5F3FF',
+                                            color: '#7C3AED',
+                                            border: '1px solid #DDD6FE'
+                                          }} title="Encounter Visit ID">
+                                            {visitIdVal}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  }
                                   if (primary.tokenNumber) {
                                     return (
-                                      <span style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '4px',
-                                        padding: '3px 9px',
-                                        borderRadius: '6px',
-                                        fontSize: '11.5px',
-                                        fontWeight: 800,
-                                        background: '#EFF6FF',
-                                        color: '#1D4ED8',
-                                        border: '1px solid #BFDBFE'
-                                      }}>
-                                        Token #{primary.tokenNumber}
-                                      </span>
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                        <span style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          gap: '4px',
+                                          padding: '3px 9px',
+                                          borderRadius: '6px',
+                                          fontSize: '11.5px',
+                                          fontWeight: 800,
+                                          background: '#EFF6FF',
+                                          color: '#1D4ED8',
+                                          border: '1px solid #BFDBFE'
+                                        }}>
+                                          Token #{primary.tokenNumber}
+                                        </span>
+                                        {visitIdVal && (
+                                          <span style={{
+                                            display: 'inline-block',
+                                            fontSize: '10px',
+                                            fontWeight: 750,
+                                            padding: '1px 5px',
+                                            borderRadius: '4px',
+                                            background: '#F5F3FF',
+                                            color: '#7C3AED',
+                                            border: '1px solid #DDD6FE'
+                                          }} title="Encounter Visit ID">
+                                            {visitIdVal}
+                                          </span>
+                                        )}
+                                      </div>
                                     );
                                   }
                                   return (
@@ -10458,7 +10695,7 @@ const ReceptionistDashboard = () => {
                                       );
                                     }
 
-                                    if (doctorClinicalMode === 'OFFLINE' && (primary.status === 'Prescription Pending' || primary.rawItem?.status === 'Prescription Pending')) {
+                                    if (primary.status === 'Prescription Pending' || primary.rawItem?.status === 'Prescription Pending') {
                                       return (
                                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', flexWrap: 'nowrap' }}>
                                           <span
@@ -10609,6 +10846,63 @@ const ReceptionistDashboard = () => {
                                         </>
                                       );
                                     }
+                                    if (primary.tokenNumber) {
+                                      return (
+                                        <button
+                                          type="button"
+                                          style={{
+                                            padding: '0 11px',
+                                            height: '30px',
+                                            fontSize: '11.5px',
+                                            background: '#ECFDF5',
+                                            color: '#059669',
+                                            border: '1px solid #A7F3D0',
+                                            borderRadius: '8px',
+                                            fontWeight: 800,
+                                            cursor: 'default',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '4px',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                          title="Patient is checked in"
+                                        >
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                          Checked In
+                                        </button>
+                                      );
+                                    }
+
+                                    if (!isAppointmentToday(primary.date)) {
+                                      return (
+                                        <button
+                                          type="button"
+                                          disabled
+                                          style={{
+                                            padding: '0 10px',
+                                            height: '30px',
+                                            fontSize: '11px',
+                                            background: '#F8FAFC',
+                                            color: '#94A3B8',
+                                            border: '1px solid #E2E8F0',
+                                            borderRadius: '8px',
+                                            fontWeight: 700,
+                                            cursor: 'not-allowed',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '4px',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                          title={`Check-in is only available on scheduled appointment date (${primary.date})`}
+                                        >
+                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                          Scheduled
+                                        </button>
+                                      );
+                                    }
+
                                     return (
                                       <button
                                         type="button"
@@ -10616,9 +10910,9 @@ const ReceptionistDashboard = () => {
                                           padding: '0 11px',
                                           height: '30px',
                                           fontSize: '11.5px',
-                                          background: primary.tokenNumber ? '#ECFDF5' : '#2563EB',
-                                          color: primary.tokenNumber ? '#059669' : '#FFFFFF',
-                                          border: primary.tokenNumber ? '1px solid #A7F3D0' : 'none',
+                                          background: '#2563EB',
+                                          color: '#FFFFFF',
+                                          border: 'none',
                                           borderRadius: '8px',
                                           fontWeight: 800,
                                           cursor: 'pointer',
@@ -10627,14 +10921,14 @@ const ReceptionistDashboard = () => {
                                           justifyContent: 'center',
                                           gap: '4px',
                                           whiteSpace: 'nowrap',
-                                          boxShadow: primary.tokenNumber ? 'none' : '0 2px 6px rgba(37, 99, 235, 0.25)'
+                                          boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)'
                                         }}
                                         disabled={isCheckingIn}
                                         onClick={() => handleCheckInAppointment(primary.rawItem)}
-                                        title={primary.tokenNumber ? "Patient is checked in" : "Check in patient and generate live queue token"}
+                                        title="Check in patient and generate live queue token"
                                       >
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                                        {primary.tokenNumber ? 'Checked In' : 'Check In'}
+                                        Check In
                                       </button>
                                     );
                                   })()}
@@ -10775,28 +11069,85 @@ const ReceptionistDashboard = () => {
                                         </span>
                                       );
                                     }
+                                    const addOnVisitId = addOn.rawItem?.visitId || addOn.visitId || primary.rawItem?.visitId || primary.visitId;
+                                    const isAddOnCompleted = addOn.status === 'Completed' || addOn.status === 'Paid' || addOn.rawItem?.status === 'Completed' || addOn.rawItem?.status === 'Paid';
+                                    if (isAddOnCompleted) {
+                                      return (
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                          <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>
+                                            —
+                                          </span>
+                                          {addOnVisitId && (
+                                            <span style={{
+                                              display: 'inline-block',
+                                              fontSize: '9.5px',
+                                              fontWeight: 750,
+                                              padding: '1px 4px',
+                                              borderRadius: '4px',
+                                              background: '#F5F3FF',
+                                              color: '#7C3AED',
+                                              border: '1px solid #DDD6FE'
+                                            }} title="Encounter Visit ID">
+                                              {addOnVisitId}
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    }
                                     if (addOn.tokenNumber) {
                                       return (
-                                        <span style={{
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: '3px',
-                                          padding: '2px 7px',
-                                          borderRadius: '5px',
-                                          fontSize: '11px',
-                                          fontWeight: 800,
-                                          background: '#EFF6FF',
-                                          color: '#1D4ED8',
-                                          border: '1px solid #BFDBFE'
-                                        }}>
-                                          Token #{addOn.tokenNumber}
-                                        </span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                          <span style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '3px',
+                                            padding: '2px 7px',
+                                            borderRadius: '5px',
+                                            fontSize: '11px',
+                                            fontWeight: 800,
+                                            background: '#EFF6FF',
+                                            color: '#1D4ED8',
+                                            border: '1px solid #BFDBFE'
+                                          }}>
+                                            Token #{addOn.tokenNumber}
+                                          </span>
+                                          {addOnVisitId && (
+                                            <span style={{
+                                              display: 'inline-block',
+                                              fontSize: '9.5px',
+                                              fontWeight: 750,
+                                              padding: '1px 4px',
+                                              borderRadius: '4px',
+                                              background: '#F5F3FF',
+                                              color: '#7C3AED',
+                                              border: '1px solid #DDD6FE'
+                                            }} title="Encounter Visit ID">
+                                              {addOnVisitId}
+                                            </span>
+                                          )}
+                                        </div>
                                       );
                                     }
                                     return (
-                                      <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>
-                                        Not Checked In
-                                      </span>
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                        <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>
+                                          Not Checked In
+                                        </span>
+                                        {addOnVisitId && (
+                                          <span style={{
+                                            display: 'inline-block',
+                                            fontSize: '9.5px',
+                                            fontWeight: 750,
+                                            padding: '1px 4px',
+                                            borderRadius: '4px',
+                                            background: '#F5F3FF',
+                                            color: '#7C3AED',
+                                            border: '1px solid #DDD6FE'
+                                          }} title="Encounter Visit ID">
+                                            {addOnVisitId}
+                                          </span>
+                                        )}
+                                      </div>
                                     );
                                   })()}
                                 </td>
@@ -10872,6 +11223,214 @@ const ReceptionistDashboard = () => {
                                           </span>
                                         );
                                       }
+                                      if (addOn.status === 'Prescription Pending' || addOn.rawItem?.status === 'Prescription Pending') {
+                                        return (
+                                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', flexWrap: 'nowrap' }}>
+                                            <span
+                                              style={{
+                                                padding: '0 7px',
+                                                height: '28px',
+                                                fontSize: '10.5px',
+                                                fontWeight: 800,
+                                                background: '#FEF3C7',
+                                                color: '#92400E',
+                                                border: '1px solid #FDE68A',
+                                                borderRadius: '6px',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                whiteSpace: 'nowrap'
+                                              }}
+                                              title="Doctor physical consultation finished. Prescription outcome pending."
+                                            >
+                                              Rx Pending
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenUploadPrescription(addOn.rawItem || addOn)}
+                                              style={{
+                                                padding: '0 8px',
+                                                height: '28px',
+                                                fontSize: '10.5px',
+                                                fontWeight: 800,
+                                                background: '#0D9488',
+                                                color: '#FFFFFF',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '3px',
+                                                boxShadow: '0 1px 3px rgba(13, 148, 136, 0.25)',
+                                                whiteSpace: 'nowrap'
+                                              }}
+                                              title="Upload doctor's handwritten prescription"
+                                            >
+                                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                              Upload Rx
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenNoPrescriptionConfirm(addOn.rawItem || addOn)}
+                                              style={{
+                                                padding: '0 7px',
+                                                height: '28px',
+                                                fontSize: '10.5px',
+                                                fontWeight: 700,
+                                                background: '#F8FAFC',
+                                                color: '#475569',
+                                                border: '1px solid #CBD5E1',
+                                                borderRadius: '6px',
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                whiteSpace: 'nowrap'
+                                              }}
+                                              title="Complete appointment without prescription"
+                                            >
+                                              No Rx
+                                            </button>
+                                          </div>
+                                        );
+                                      }
+
+                                      if (doctorClinicalMode === 'OFFLINE' && addOn.tokenNumber && addOn.status !== 'Completed' && addOn.status !== 'Cancelled') {
+                                        const isServing = addOn.status === 'In Progress' || addOn.queueStatus === 'Serving' || addOn.rawItem?.status === 'In Progress' || addOn.rawItem?.queueStatus === 'Serving';
+                                        return (
+                                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', flexWrap: 'nowrap' }}>
+                                            <button
+                                              type="button"
+                                              style={{
+                                                padding: '0 8px',
+                                                height: '28px',
+                                                fontSize: '10.5px',
+                                                background: '#ECFDF5',
+                                                color: '#059669',
+                                                border: '1px solid #A7F3D0',
+                                                borderRadius: '6px',
+                                                fontWeight: 800,
+                                                cursor: 'default',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '3px',
+                                                whiteSpace: 'nowrap'
+                                              }}
+                                              title="Patient checked in"
+                                            >
+                                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                              Token #{addOn.tokenNumber}
+                                            </button>
+                                            {isServing ? (
+                                              <button
+                                                type="button"
+                                                style={{
+                                                  padding: '0 9px',
+                                                  height: '28px',
+                                                  fontSize: '10.5px',
+                                                  background: '#0D9488',
+                                                  color: '#FFFFFF',
+                                                  border: 'none',
+                                                  borderRadius: '6px',
+                                                  fontWeight: 800,
+                                                  cursor: 'pointer',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'center',
+                                                  gap: '3px',
+                                                  whiteSpace: 'nowrap',
+                                                  boxShadow: '0 2px 5px rgba(13, 148, 136, 0.25)'
+                                                }}
+                                                disabled={isFinishingConsultation === addOn.rawItem?._id}
+                                                onClick={() => handleFinishConsultation(addOn.rawItem)}
+                                                title="Mark doctor physical consultation finished and advance queue"
+                                              >
+                                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                                {isFinishingConsultation === addOn.rawItem?._id ? 'Finishing...' : 'Consultation Finished'}
+                                              </button>
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                disabled
+                                                style={{
+                                                  padding: '0 9px',
+                                                  height: '28px',
+                                                  fontSize: '10.5px',
+                                                  background: '#F8FAFC',
+                                                  color: '#94A3B8',
+                                                  border: '1px solid #E2E8F0',
+                                                  borderRadius: '6px',
+                                                  fontWeight: 700,
+                                                  cursor: 'not-allowed',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: '3px',
+                                                  whiteSpace: 'nowrap'
+                                                }}
+                                                title="Patient is waiting in queue. Action available when token becomes active."
+                                              >
+                                                In Queue
+                                              </button>
+                                            )}
+                                          </div>
+                                        );
+                                      }
+
+                                      if (addOn.tokenNumber) {
+                                        return (
+                                          <button 
+                                            type="button"
+                                            style={{ 
+                                              padding: '0 10px', 
+                                              height: '28px',
+                                              fontSize: '11px', 
+                                              background: '#ECFDF5', 
+                                              color: '#059669', 
+                                              border: '1px solid #A7F3D0', 
+                                              borderRadius: '6px', 
+                                              fontWeight: 800, 
+                                              cursor: 'default', 
+                                              display: 'inline-flex', 
+                                              alignItems: 'center', 
+                                              gap: '4px',
+                                              whiteSpace: 'nowrap'
+                                            }} 
+                                            title="Patient is checked in"
+                                          >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                            Checked In
+                                          </button>
+                                        );
+                                      }
+
+                                      if (!isAppointmentToday(addOn.date)) {
+                                        return (
+                                          <button 
+                                            type="button"
+                                            disabled
+                                            style={{ 
+                                              padding: '0 8px', 
+                                              height: '28px',
+                                              fontSize: '10.5px', 
+                                              background: '#F8FAFC', 
+                                              color: '#94A3B8', 
+                                              border: '1px solid #E2E8F0', 
+                                              borderRadius: '6px', 
+                                              fontWeight: 700, 
+                                              cursor: 'not-allowed', 
+                                              display: 'inline-flex', 
+                                              alignItems: 'center', 
+                                              gap: '4px',
+                                              whiteSpace: 'nowrap'
+                                            }} 
+                                            title={`Check-in is only available on scheduled appointment date (${addOn.date})`}
+                                          >
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                            Scheduled
+                                          </button>
+                                        );
+                                      }
+
                                       return (
                                         <button 
                                           type="button"
@@ -10879,9 +11438,9 @@ const ReceptionistDashboard = () => {
                                             padding: '0 10px', 
                                             height: '28px',
                                             fontSize: '11px', 
-                                            background: addOn.tokenNumber ? '#ECFDF5' : '#2563EB', 
-                                            color: addOn.tokenNumber ? '#059669' : '#FFFFFF', 
-                                            border: addOn.tokenNumber ? '1px solid #A7F3D0' : 'none', 
+                                            background: '#2563EB', 
+                                            color: '#FFFFFF', 
+                                            border: 'none', 
                                             borderRadius: '6px', 
                                             fontWeight: 800, 
                                             cursor: 'pointer', 
@@ -10892,9 +11451,10 @@ const ReceptionistDashboard = () => {
                                           }} 
                                           disabled={isCheckingIn}
                                           onClick={() => handleCheckInAppointment(addOn.rawItem)}
+                                          title="Check in patient and generate live queue token"
                                         >
                                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                                          {addOn.tokenNumber ? 'Checked In' : 'Check In'}
+                                          Check In
                                         </button>
                                       );
                                     })()}
@@ -14558,7 +15118,7 @@ const ReceptionistDashboard = () => {
                 const isCancelled = selectedAppointment.status === 'Cancelled';
                 const isCompleted = selectedAppointment.status === 'Completed' || selectedAppointment.status === 'Checked Out';
 
-                if (selectedAppointment.tokenNumber) {
+                if (selectedAppointment.tokenNumber && !isCompleted && !isCancelled) {
                   return (
                     <div style={{ background: '#EFF6FF', border: '1.5px solid #60A5FA', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                       <div>
@@ -14694,24 +15254,42 @@ const ReceptionistDashboard = () => {
                 }
 
                 if (!isCancelled && !isCompleted) {
+                  const isToday = isAppointmentToday(selectedAppointment.date);
                   return (
-                    <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ background: isToday ? '#FFFBEB' : '#F8FAFC', border: `1.5px solid ${isToday ? '#FCD34D' : '#E2E8F0'}`, borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                       <div>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Patient Arrival & Token</div>
-                        <div style={{ fontSize: '13px', fontWeight: 800, color: '#78350F' }}>Patient has not checked in yet</div>
+                        <div style={{ fontSize: '11px', fontWeight: 800, color: isToday ? '#92400E' : '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          {isToday ? 'Patient Arrival & Token' : 'Scheduled Appointment'}
+                        </div>
+                        <div style={{ fontSize: '13px', fontWeight: 800, color: isToday ? '#78350F' : '#1E293B' }}>
+                          {isToday ? 'Patient has not checked in yet' : `Scheduled for ${selectedAppointment.date}`}
+                        </div>
                         <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
-                          Check in patient upon arrival to allocate an atomic server-generated token and enter doctor's live queue.
+                          {isToday 
+                            ? "Check in patient upon arrival to allocate an atomic server-generated token and enter doctor's live queue."
+                            : `Check-in opens on the day of the appointment (${selectedAppointment.date}).`}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        style={{ background: '#D97706', borderColor: '#D97706', color: '#FFFFFF', fontWeight: 800, padding: '8px 16px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                        disabled={isCheckingIn}
-                        onClick={() => handleCheckInAppointment(selectedAppointment)}
-                      >
-                        <i data-lucide="check-circle-2" style={{ width: '14px', height: '14px' }}></i> Check In & Assign Token
-                      </button>
+                      {isToday ? (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          style={{ background: '#D97706', borderColor: '#D97706', color: '#FFFFFF', fontWeight: 800, padding: '8px 16px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          disabled={isCheckingIn}
+                          onClick={() => handleCheckInAppointment(selectedAppointment)}
+                        >
+                          <i data-lucide="check-circle-2" style={{ width: '14px', height: '14px' }}></i> Check In & Assign Token
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', color: '#94A3B8', fontWeight: 700, padding: '8px 16px', borderRadius: '6px', fontSize: '12px', cursor: 'not-allowed', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          title={`Check-in is only available on scheduled date (${selectedAppointment.date})`}
+                        >
+                          Check-in on {selectedAppointment.date}
+                        </button>
+                      )}
                     </div>
                   );
                 }

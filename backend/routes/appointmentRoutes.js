@@ -137,7 +137,7 @@ router.get('/', async (req, res) => {
     }
 
     const appointments = await Appointment.find(query)
-      .populate('patientId', 'name contact age ageMonths ageDays gender email address bloodGroup allergies currentMedications medicalHistory avatar referredBy patientId')
+      .populate('patientId', 'name contact age ageMonths ageDays gender email address bloodGroup allergies currentMedications medicalHistory avatar referredBy patientId uhId')
       .populate('doctorId', 'name role specialty consultationFee')
       .sort({ date: 1, time: 1 });
 
@@ -239,7 +239,7 @@ const checkSlotCapacity = async (doctorId, date, time, excludeAppointmentId = nu
 
 // Create an appointment (scoped to tenant)
 router.post('/', async (req, res) => {
-  const { patientId, doctorId, date, time, status, reason, notes, diagnosis, regNo } = req.body;
+  const { patientId, doctorId, date, time, status, reason, notes, diagnosis, regNo, visitEpisodeId, parentAppointmentId } = req.body;
   try {
     const User = require('../models/User');
     const doctorObj = await User.findById(doctorId);
@@ -264,8 +264,19 @@ router.post('/', async (req, res) => {
         tenantId: resolvedTenantId
       });
       if (!targetPatient) {
+        const { resolveOrCreateUhid, generateHospitalPatientId } = require('../utils/identifierEngine');
+        const targetUhid = currentPatient.uhId || await resolveOrCreateUhid({
+          contact: currentPatient.contact,
+          name: currentPatient.name,
+          email: currentPatient.email,
+          abhaId: currentPatient.abhaId
+        });
+        const targetHospitalPatientId = await generateHospitalPatientId(resolvedTenantId);
+
         targetPatient = await Patient.create({
           tenantId: resolvedTenantId,
+          uhId: targetUhid,
+          patientId: targetHospitalPatientId,
           name: currentPatient.name,
           age: currentPatient.age,
           gender: currentPatient.gender,
@@ -297,8 +308,47 @@ router.post('/', async (req, res) => {
       targetPatientId = targetPatient._id;
     }
 
+    // Resolve Visit Episode Context
+    let resolvedEpisodeId = visitEpisodeId || null;
+    let resolvedParentAppointmentId = parentAppointmentId || null;
+
+    if (resolvedParentAppointmentId) {
+      const parentAppt = await Appointment.findById(resolvedParentAppointmentId);
+      if (parentAppt) {
+        if (!resolvedEpisodeId) {
+          resolvedEpisodeId = parentAppt.visitEpisodeId || parentAppt._id.toString();
+          if (!parentAppt.visitEpisodeId) {
+            parentAppt.visitEpisodeId = resolvedEpisodeId;
+            await parentAppt.save();
+          }
+        }
+      }
+    }
+
+    // CRITICAL REQUIREMENT 6: SAME DOCTOR ADD-ON IS NOT ALLOWED
+    // If this appointment belongs to a visit episode (Add Appointment flow), verify no active appointment with the same doctor exists in this episode
+    if (resolvedEpisodeId) {
+      const existingEpisodeAppointments = await Appointment.find({
+        tenantId: resolvedTenantId,
+        visitEpisodeId: resolvedEpisodeId,
+        status: { $ne: 'Cancelled' }
+      });
+      const sameDoctorFound = existingEpisodeAppointments.some(
+        app => String(app.doctorId) === String(doctorId)
+      );
+      if (sameDoctorFound) {
+        return res.status(400).json({
+          error: 'Cannot book multiple appointments with the same doctor in a single visit episode.'
+        });
+      }
+    } else {
+      // Fresh appointment flow: assign a brand-new visitEpisodeId
+      resolvedEpisodeId = new mongoose.Types.ObjectId().toString();
+    }
+
     const appointmentSource = req.body.source || (req.user && req.user.role === 'patient' ? 'Online' : 'Walk-In');
 
+    // CRITICAL REQUIREMENT 4: Do NOT generate Visit ID during appointment booking
     const appointment = await Appointment.create({
       tenantId: resolvedTenantId,
       patientId: targetPatientId,
@@ -310,7 +360,11 @@ router.post('/', async (req, res) => {
       notes,
       diagnosis,
       regNo,
-      source: appointmentSource
+      source: appointmentSource,
+      visitEpisodeId: resolvedEpisodeId,
+      parentAppointmentId: resolvedParentAppointmentId,
+      visitId: null, // Left null until check-in
+      visitRef: null
     });
 
     // Auto-dispatch Lab Request if appointment involves lab tests
@@ -603,13 +657,14 @@ router.post('/:id/check-in', async (req, res) => {
     // Ensure tenant isolation
     const resolvedTenant = appointment.tenantId || req.tenantId;
 
-    // Idempotency: If patient already has a token, return existing token without reallocating
+    // Idempotency: If patient already has a token, return existing token and visitId without reallocating
     if (appointment.tokenNumber !== null && appointment.tokenNumber !== undefined) {
       return res.json({
         success: true,
         message: 'Patient is already checked in.',
         alreadyCheckedIn: true,
         appointment,
+        visitId: appointment.visitId,
         token: {
           tokenNumber: appointment.tokenNumber,
           tokenDisplay: appointment.tokenDisplay || String(appointment.tokenNumber),
@@ -625,6 +680,92 @@ router.post('/:id/check-in', async (req, res) => {
     if (!appointment.doctorId) {
       return res.status(400).json({ error: 'Cannot check in an appointment without an assigned doctor' });
     }
+
+    // Ensure check-in is not permitted for future-dated appointments (anytime check-in allowed on scheduled appointment date)
+    if (appointment.date) {
+      const { normalizeDateString } = require('../utils/queueEngine');
+      const todayStr = normalizeDateString(new Date());
+      const apptDateStr = normalizeDateString(appointment.date);
+      if (apptDateStr > todayStr) {
+        return res.status(400).json({
+          error: `Check-in is only available on the scheduled appointment date (${apptDateStr}).`
+        });
+      }
+    }
+
+    // Resolve or create Visit Episode & Visit ID
+    const { generateVisitId } = require('../utils/identifierEngine');
+    const Visit = require('../models/Visit');
+    const Patient = require('../models/Patient');
+
+    const episodeId = appointment.visitEpisodeId || appointment._id.toString();
+    if (!appointment.visitEpisodeId) {
+      appointment.visitEpisodeId = episodeId;
+    }
+
+    // Check if any appointment in this visit episode already has a visitId
+    let resolvedVisitId = appointment.visitId;
+    let resolvedVisitDoc = null;
+
+    if (resolvedVisitId) {
+      resolvedVisitDoc = await Visit.findOne({ tenantId: resolvedTenant, visitId: resolvedVisitId });
+    } else {
+      const siblingWithVisit = await Appointment.findOne({
+        tenantId: resolvedTenant,
+        visitEpisodeId: episodeId,
+        visitId: { $ne: null }
+      });
+      if (siblingWithVisit && siblingWithVisit.visitId) {
+        resolvedVisitId = siblingWithVisit.visitId;
+        resolvedVisitDoc = await Visit.findOne({ tenantId: resolvedTenant, visitId: resolvedVisitId });
+      }
+    }
+
+    // If still no Visit ID, this is the FIRST check-in for this visit episode!
+    // Generate exactly ONE Visit ID for the entire visit episode.
+    if (!resolvedVisitId) {
+      resolvedVisitId = await generateVisitId(resolvedTenant, appointment.date);
+      const patientDoc = await Patient.findById(appointment.patientId);
+
+      resolvedVisitDoc = await Visit.create({
+        tenantId: resolvedTenant,
+        visitId: resolvedVisitId,
+        visitEpisodeId: episodeId,
+        patientId: appointment.patientId,
+        uhId: patientDoc?.uhId || '',
+        hospitalPatientId: patientDoc?.patientId || '',
+        doctorId: appointment.doctorId,
+        appointmentIds: [appointment._id],
+        department: 'OPD',
+        type: 'OPD',
+        arrivalTimestamp: new Date(),
+        chiefComplaint: appointment.reason || 'Consultation',
+        status: 'Checked-in'
+      });
+    } else if (resolvedVisitDoc) {
+      if (!resolvedVisitDoc.appointmentIds.some(id => String(id) === String(appointment._id))) {
+        resolvedVisitDoc.appointmentIds.push(appointment._id);
+        await resolvedVisitDoc.save();
+      }
+    }
+
+    appointment.visitId = resolvedVisitId;
+    appointment.visitRef = resolvedVisitDoc ? resolvedVisitDoc._id : null;
+
+    // Associate all sibling appointments in the same visit episode with this Visit ID
+    await Appointment.updateMany(
+      {
+        tenantId: resolvedTenant,
+        visitEpisodeId: episodeId,
+        visitId: null
+      },
+      {
+        $set: {
+          visitId: resolvedVisitId,
+          visitRef: resolvedVisitDoc ? resolvedVisitDoc._id : null
+        }
+      }
+    );
 
     const { allocateDoctorToken } = require('../utils/queueEngine');
 
@@ -676,13 +817,19 @@ router.post('/:id/check-in', async (req, res) => {
         date: tokenResult.tokenDate,
         lastIssuedToken: tokenResult.tokenNumber
       });
+      io.to(tenantKey).emit("data_changed", {
+        type: "visits",
+        visitId: resolvedVisitId
+      });
     }
 
     res.json({
       success: true,
       message: 'Patient checked in successfully and token generated.',
       appointment,
-      token: tokenResult
+      token: tokenResult,
+      visitId: resolvedVisitId,
+      visit: resolvedVisitDoc
     });
   } catch (error) {
     console.error("Check-in error:", error);
