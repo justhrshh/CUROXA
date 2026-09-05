@@ -126,6 +126,7 @@ const Login = () => {
         case 'lab': navigate('/lab'); break;
         case 'pharmacy': navigate('/pharmacy'); break;
         case 'hr': navigate('/hr'); break;
+        case 'dpo': navigate('/dpo'); break;
         default: break;
       }
     }
@@ -282,6 +283,7 @@ const Login = () => {
         case 'lab': navigate('/lab'); break;
         case 'pharmacy': navigate('/pharmacy'); break;
         case 'hr': navigate('/hr'); break;
+        case 'dpo': navigate('/dpo'); break;
         default: navigate('/'); break;
       }
     } catch (err) {
@@ -352,6 +354,7 @@ const Login = () => {
           case 'lab': navigate('/lab'); break;
           case 'pharmacy': navigate('/pharmacy'); break;
           case 'hr': navigate('/hr'); break;
+          case 'dpo': navigate('/dpo'); break;
           default: navigate('/'); break;
         }
       }, 1000);

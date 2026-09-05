@@ -2845,6 +2845,128 @@ const ReceptionistDashboard = () => {
     setSymptomDropdownOpen(false);
   };
 
+  const handleAddAdditionalAppt = () => {
+    if (reschedulingAppointment) return;
+
+    if (!formData.doctorId) {
+      showToast("Please select Consulting Doctor for Appointment 1 first.", "info");
+      return;
+    }
+    if (!selectedSlot) {
+      showToast("Please select an Available Time Slot for Appointment 1 first.", "info");
+      return;
+    }
+
+    const hasIncompleteAddon = additionalApptsList.some(a => !a.doctorId || !a.time);
+    if (hasIncompleteAddon) {
+      showToast("Please complete the current additional appointment (select Doctor and Time Slot) before adding another.", "info");
+      return;
+    }
+
+    const selectedDocIds = [formData.doctorId, ...additionalApptsList.map(a => a.doctorId)].filter(Boolean);
+    const unselectedDoctors = doctors.filter(d => !selectedDocIds.includes(String(d._id)));
+    if (unselectedDoctors.length === 0) {
+      showToast("All available doctors have already been selected for this visit episode.", "warning");
+      return;
+    }
+
+    const defaultDate = bookingDate || getLocalDateString();
+    const newAddon = {
+      id: 'addon_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+      doctorId: '',
+      doctorName: '',
+      date: defaultDate,
+      time: '',
+      fee: 500,
+      slots: DEFAULT_RECEPTION_SLOTS,
+      available: true,
+      leaveReason: null
+    };
+    setAdditionalApptsList(prev => [...prev, newAddon]);
+  };
+
+  const handleRemoveAdditionalAppt = (index) => {
+    setAdditionalApptsList(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateAdditionalDoctor = async (index, newDoctorId) => {
+    const selDoc = doctors.find(d => String(d._id) === String(newDoctorId));
+    let docSlots = selDoc?.doctorSlots?.length > 0 ? selDoc.doctorSlots : DEFAULT_RECEPTION_SLOTS;
+    let isAvail = true;
+    let reason = null;
+
+    const currentItem = additionalApptsList[index];
+    const targetDate = currentItem?.date || bookingDate || getLocalDateString();
+
+    if (newDoctorId && targetDate) {
+      try {
+        const res = await api.get(`/hr/doctor-availability/${newDoctorId}?date=${targetDate}`);
+        if (res.data) {
+          isAvail = res.data.available !== false;
+          if (res.data.slots && res.data.slots.length > 0) docSlots = res.data.slots;
+          reason = res.data.reason || null;
+        }
+      } catch (err) {
+        // fallback
+      }
+    }
+
+    setAdditionalApptsList(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      return {
+        ...item,
+        doctorId: newDoctorId,
+        doctorName: selDoc ? selDoc.name : '',
+        fee: selDoc ? (selDoc.consultationFee || 500) : 500,
+        time: '',
+        slots: docSlots,
+        available: isAvail,
+        leaveReason: reason
+      };
+    }));
+  };
+
+  const handleUpdateAdditionalDate = async (index, newDate) => {
+    const currentItem = additionalApptsList[index];
+    const docId = currentItem?.doctorId;
+    const selDoc = doctors.find(d => String(d._id) === String(docId));
+    let docSlots = selDoc?.doctorSlots?.length > 0 ? selDoc.doctorSlots : DEFAULT_RECEPTION_SLOTS;
+    let isAvail = true;
+    let reason = null;
+
+    if (docId && newDate) {
+      try {
+        const res = await api.get(`/hr/doctor-availability/${docId}?date=${newDate}`);
+        if (res.data) {
+          isAvail = res.data.available !== false;
+          if (res.data.slots && res.data.slots.length > 0) docSlots = res.data.slots;
+          reason = res.data.reason || null;
+        }
+      } catch (err) {
+        // fallback
+      }
+    }
+
+    setAdditionalApptsList(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      return {
+        ...item,
+        date: newDate,
+        time: '',
+        slots: docSlots,
+        available: isAvail,
+        leaveReason: reason
+      };
+    }));
+  };
+
+  const handleSelectAdditionalSlot = (index, slotTime) => {
+    setAdditionalApptsList(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      return { ...item, time: slotTime };
+    }));
+  };
+
   const getInitials = (name) => {
     if (!name) return '??';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
@@ -2938,8 +3060,8 @@ const ReceptionistDashboard = () => {
         return;
       }
 
-      // Collect active doctor form selection
-      const allApptsToBook = [...additionalApptsList];
+      // Collect active doctor form selection: Primary Appointment FIRST
+      const allApptsToBook = [];
       if (formData.doctorId && selectedSlot) {
         const docObj = doctors.find(d => String(d._id) === String(formData.doctorId));
         allApptsToBook.push({
@@ -2949,6 +3071,25 @@ const ReceptionistDashboard = () => {
           time: selectedSlot,
           reason: selectedSymptoms.join(', ') || 'General Checkup',
           fee: docObj ? (docObj.consultationFee || 500) : 500
+        });
+      }
+
+      // Validate each additional appointment
+      for (let i = 0; i < additionalApptsList.length; i++) {
+        const addAppt = additionalApptsList[i];
+        if (!addAppt.doctorId || !addAppt.time) {
+          showToast(`Please select both a Doctor and Time Slot for Appointment ${i + 2}, or remove it before registering.`, "error");
+          setLoading(false);
+          return;
+        }
+        const docObj = doctors.find(d => String(d._id) === String(addAppt.doctorId));
+        allApptsToBook.push({
+          doctorId: addAppt.doctorId,
+          doctorName: docObj ? docObj.name : (addAppt.doctorName || 'Doctor'),
+          date: addAppt.date || bookingDate,
+          time: addAppt.time,
+          reason: addAppt.reason || selectedSymptoms.join(', ') || 'General Checkup',
+          fee: docObj ? (docObj.consultationFee || 500) : (addAppt.fee || 500)
         });
       }
 
@@ -3564,11 +3705,7 @@ const ReceptionistDashboard = () => {
     } else if (bookingType === 'service') {
       return selectedServicesList.map(item => ({ description: item.serviceName, amount: Number(item.price || 0) }));
     } else {
-      const items = additionalApptsList.map(appt => ({
-        description: `Consultation (${appt.doctorName})`,
-        amount: Number(appt.fee !== undefined ? appt.fee : (doctors.find(d => String(d._id) === String(appt.doctorId))?.consultationFee || 500))
-      }));
-      
+      const items = [];
       const isCurrentDoctorAlreadyQueued = formData.doctorId && additionalApptsList.some(appt => String(appt.doctorId) === String(formData.doctorId));
       if (formData.doctorId && selectedSlot && !isCurrentDoctorAlreadyQueued) {
         const docObj = doctors.find(d => String(d._id) === String(formData.doctorId));
@@ -3577,6 +3714,13 @@ const ReceptionistDashboard = () => {
           amount: Number(docObj?.consultationFee || 500)
         });
       }
+      additionalApptsList.forEach((appt, idx) => {
+        const docObj = doctors.find(d => String(d._id) === String(appt.doctorId));
+        items.push({
+          description: `Consultation (${docObj ? docObj.name : (appt.doctorName || `Doctor ${idx + 2}`)})`,
+          amount: Number(appt.fee !== undefined ? appt.fee : (docObj?.consultationFee || 500))
+        });
+      });
       return items;
     }
   };
@@ -9448,13 +9592,47 @@ const ReceptionistDashboard = () => {
       {/* 2. Appointment & Consultation Card */}
       {bookingType === 'opd' && (
         <div className="rx-form-card" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #FAF5FF 100%)', borderColor: '#E9D5FF' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', paddingBottom: '10px', borderBottom: '1px solid #F3E8FF' }}>
-            <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: '#F3E8FF', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', paddingBottom: '10px', borderBottom: '1px solid #F3E8FF' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: '#F3E8FF', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+              </div>
+              <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>
+                {additionalApptsList.length > 0 ? 'Appointment 1 (Primary)' : 'Appointment & Consultation'}
+              </span>
             </div>
-            <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>Appointment & Consultation</span>
+
+            {!reschedulingAppointment && (
+              <button
+                type="button"
+                onClick={handleAddAdditionalAppt}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 12px',
+                  background: '#FAF5FF',
+                  color: '#7C3AED',
+                  border: '1.5px solid #DDD6FE',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseOver={e => { e.currentTarget.style.background = '#7C3AED'; e.currentTarget.style.color = '#FFFFFF'; }}
+                onMouseOut={e => { e.currentTarget.style.background = '#FAF5FF'; e.currentTarget.style.color = '#7C3AED'; }}
+                title="Add another doctor consultation for this same visit episode"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                + Add Appointment
+              </button>
+            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px 18px', marginBottom: '16px' }}>
@@ -9572,9 +9750,10 @@ const ReceptionistDashboard = () => {
                 <option value="">-- Choose Doctor --</option>
                 {doctors.map(doc => {
                   const isOriginDoctor = addOnOriginAppt && String(addOnOriginAppt.doctorId?._id || addOnOriginAppt.doctorId) === String(doc._id);
+                  const isSelectedInAddon = additionalApptsList.some(a => String(a.doctorId) === String(doc._id));
                   return (
-                    <option key={doc._id} value={doc._id} disabled={isOriginDoctor}>
-                      {doc.name} {doc.role ? `(${doc.role})` : ''} {isOriginDoctor ? '— (Already booked for this visit episode)' : ''}
+                    <option key={doc._id} value={doc._id} disabled={isOriginDoctor || isSelectedInAddon}>
+                      {doc.name} {doc.role ? `(${doc.role})` : ''} {isSelectedInAddon ? '— (Selected in Add-On)' : (isOriginDoctor ? '— (Already booked for this visit episode)' : '')}
                     </option>
                   );
                 })}
@@ -9664,6 +9843,208 @@ const ReceptionistDashboard = () => {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Additional Appointments Cards */}
+      {bookingType === 'opd' && additionalApptsList.map((item, index) => {
+        const appointmentNumber = index + 2;
+        const selectedDocIdsInGroup = [
+          formData.doctorId,
+          ...additionalApptsList.filter((_, i) => i !== index).map(a => a.doctorId)
+        ].filter(Boolean);
+
+        return (
+          <div 
+            key={item.id || index} 
+            className="rx-form-card" 
+            style={{ 
+              background: 'linear-gradient(135deg, #FFFFFF 0%, #FAF5FF 100%)', 
+              borderColor: '#DDD6FE', 
+              marginTop: '12px',
+              borderLeft: '4px solid #7C3AED'
+            }}
+          >
+            {/* Header: Appointment N + Remove Button */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', paddingBottom: '10px', borderBottom: '1px solid #F3E8FF' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: '#EDE9FE', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                </div>
+                <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>
+                  Appointment {appointmentNumber}
+                </span>
+                <span style={{ fontSize: '10.5px', background: '#EDE9FE', color: '#6D28D9', padding: '2px 8px', borderRadius: '6px', fontWeight: 800, border: '1px solid #DDD6FE' }}>
+                  Same Visit Episode
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleRemoveAdditionalAppt(index)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 10px',
+                  background: '#FEF2F2',
+                  border: '1.5px solid #FECACA',
+                  color: '#DC2626',
+                  borderRadius: '6px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseOver={e => { e.currentTarget.style.background = '#DC2626'; e.currentTarget.style.color = '#FFFFFF'; }}
+                onMouseOut={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.color = '#DC2626'; }}
+                title="Remove this appointment"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+                Remove
+              </button>
+            </div>
+
+            {/* Fields: Doctor and Date */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px 18px', marginBottom: '16px' }}>
+              {/* Doctor Selector */}
+              <div className="rx-field-group">
+                <label className="rx-field-label">Consulting Doctor <span className="rx-req">*</span></label>
+                <select 
+                  className="rx-select" 
+                  value={item.doctorId} 
+                  onChange={e => handleUpdateAdditionalDoctor(index, e.target.value)}
+                >
+                  <option value="">-- Choose Doctor --</option>
+                  {doctors.map(doc => {
+                    const isAlreadySelected = selectedDocIdsInGroup.includes(String(doc._id));
+                    return (
+                      <option key={doc._id} value={doc._id} disabled={isAlreadySelected}>
+                        {doc.name} {doc.role ? `(${doc.role})` : ''} {isAlreadySelected ? '— (Already selected in this visit)' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+                <div style={{ fontSize: '11px', color: '#6D28D9', marginTop: '3px', fontWeight: 650 }}>
+                  Select another consulting doctor for this visit episode.
+                </div>
+              </div>
+
+              {/* Date */}
+              <div className="rx-field-group">
+                <label className="rx-field-label">Appointment Date <span className="rx-req">*</span></label>
+                <input 
+                  type="date" 
+                  className="rx-input" 
+                  value={item.date || bookingDate || getLocalDateString()} 
+                  min={getLocalDateString()} 
+                  onChange={e => handleUpdateAdditionalDate(index, e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Available Slots Row */}
+            <div style={{ background: '#FFFFFF', borderRadius: '10px', padding: '14px 16px', border: '1px solid #E9D5FF' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A' }}>Available Time Slots</span>
+                </div>
+                {item.time && (
+                  <span style={{ fontSize: '11px', background: '#FAF5FF', color: '#7C3AED', padding: '2px 8px', borderRadius: '6px', fontWeight: 800, border: '1px solid #DDD6FE' }}>
+                    Selected: {item.time.split(/\(Limit:/i)[0].trim()}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {(!item.doctorId || !item.date) ? (
+                  <div style={{ padding: '10px 0', fontSize: '12px', color: '#94A3B8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    Please select both a doctor and date to view available time slots.
+                  </div>
+                ) : !item.available ? (
+                  <div style={{ padding: '10px 0', fontSize: '12px', color: '#DC2626', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    Doctor is currently unavailable ({item.leaveReason || 'On Leave'})
+                  </div>
+                ) : (
+                  (item.slots || DEFAULT_RECEPTION_SLOTS).map(time => {
+                    let limit = 5;
+                    const match = time.match(/\(Limit:\s*(\d+)\)/i);
+                    if (match) limit = parseInt(match[1], 10);
+                    const cleanTimeSlotStr = (str) => { if (!str) return ''; return str.split(/\(Limit:/i)[0].replace(/\s+/g, ' ').trim().toLowerCase(); };
+                    const targetTimeClean = cleanTimeSlotStr(time);
+                    const targetDateStr = new Date(item.date).toDateString();
+                    let bookedCount = 0;
+                    if (item.doctorId && item.date) {
+                      bookedCount = appointments.filter(app => {
+                        if (app.status === 'Cancelled') return false;
+                        const appDocId = app.doctorId?._id || app.doctorId;
+                        if (String(appDocId) !== String(item.doctorId)) return false;
+                        if (new Date(app.date).toDateString() !== targetDateStr) return false;
+                        return cleanTimeSlotStr(app.time) === targetTimeClean;
+                      }).length;
+                    }
+                    const isFull = bookedCount >= limit;
+                    const isSelected = item.time === time;
+                    const displayTime = time.split(/\(Limit:/i)[0].trim();
+                    return (
+                      <button
+                        key={time}
+                        type="button"
+                        disabled={isFull}
+                        onClick={() => { if (!isFull) handleSelectAdditionalSlot(index, time); }}
+                        className={`rx-slot-chip ${isSelected ? 'selected' : ''} ${isFull ? 'slot-full' : ''}`}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        {displayTime}
+                        {isFull && <span style={{ color: '#DC2626', fontSize: '9.5px', fontWeight: 850 }}>(Full)</span>}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Button to add further appointments if 1 or more already added */}
+      {bookingType === 'opd' && additionalApptsList.length > 0 && !reschedulingAppointment && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', marginBottom: '6px' }}>
+          <button
+            type="button"
+            onClick={handleAddAdditionalAppt}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              background: '#F5F3FF',
+              color: '#7C3AED',
+              border: '1.5px dashed #C4B5FD',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseOver={e => { e.currentTarget.style.background = '#EDE9FE'; }}
+            onMouseOut={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+            title="Add another doctor consultation for this same visit episode"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            + Add Another Appointment
+          </button>
         </div>
       )}
 

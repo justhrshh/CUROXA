@@ -34,6 +34,7 @@ const pharmacyTicketRoutes = require("./routes/pharmacyTicketRoutes");
 const clinicalServiceRoutes = require("./routes/clinicalServiceRoutes");
 const pharmacySaleRoutes = require("./routes/pharmacySaleRoutes");
 const inventoryExpiryRoutes = require("./routes/inventoryExpiryRoutes");
+const dpoRoutes = require("./routes/dpoRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -222,6 +223,7 @@ app.use("/api/pharmacy-tickets", checkModule("pharmacy"), pharmacyTicketRoutes);
 app.use("/api/pharmacy-sales", checkModule("pharmacy"), pharmacySaleRoutes);
 
 app.use("/api/inventory-expiry", checkModule(["pharmacy", "inventory"]), inventoryExpiryRoutes);
+app.use("/api/dpo", dpoRoutes);
 
 const portalRoutes = require("./routes/portalRoutes");
 app.use("/api/public/portal", portalRoutes);

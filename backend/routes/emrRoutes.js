@@ -456,7 +456,11 @@ router.get('/consent/patient/:patientId/dpdp-requests', async (req, res) => {
 // Get all DPDP requests for admin review
 router.get('/consent/dpdp-requests/all', restrictEMRRole(['admin']), async (req, res) => {
   try {
-    const consents = await Consent.find({ tenantId: req.tenantId }).populate('patientId', 'name contact age gender');
+    const rawTenant = req.tenantId || '';
+    const tenantLower = String(rawTenant).toLowerCase().trim();
+    const tenantQuery = { $in: [rawTenant, tenantLower].filter(Boolean) };
+
+    const consents = await Consent.find({ tenantId: tenantQuery }).populate('patientId', 'name contact age gender');
     let allRequests = [];
     consents.forEach(c => {
       if (c.dpdpRequests && c.dpdpRequests.length > 0) {
@@ -477,7 +481,48 @@ router.get('/consent/dpdp-requests/all', restrictEMRRole(['admin']), async (req,
         });
       }
     });
-    allRequests.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+
+    // Also include DPO Consent Withdrawal Requests for this hospital
+    try {
+      const DpoConsentRequest = require('../models/DpoConsentRequest');
+      const dpoReqs = await DpoConsentRequest.find({ tenantId: tenantQuery }).sort({ createdAt: -1 });
+      dpoReqs.forEach(d => {
+        const catLabels = [
+          d.categories?.personal && 'Personal Data',
+          d.categories?.clinical && 'Clinical History',
+          d.categories?.payment && 'Financial & Billing'
+        ].filter(Boolean).join(', ') || 'All Categories';
+
+        let mappedStatus = 'Pending';
+        if (d.status === 'APPROVED' || d.status === 'COMPLETED') mappedStatus = 'Approved';
+        else if (d.status === 'REJECTED' || d.status === 'CANCELLED_BY_PATIENT' || d.status === 'CANCELLED_BY_DPO') mappedStatus = 'Rejected';
+
+        allRequests.push({
+          _id: d._id,
+          isDpo: true,
+          requestId: d.requestId,
+          uhId: d.uhId,
+          hospitalPatientId: d.hospitalPatientId,
+          patientId: d.patientId,
+          patientName: d.patientName || 'Patient',
+          patientContact: d.patientContact || 'N/A',
+          patientAgeGender: d.uhId ? `UHID: ${d.uhId}` : 'N/A',
+          requestType: 'Consent Withdrawal',
+          details: `Scope: ${catLabels}. Request ID: ${d.requestId}. UHID: ${d.uhId}.${d.cancelReason ? ` (Cancelled: ${d.cancelReason})` : ''}${d.rejectionReason ? ` (Rejected: ${d.rejectionReason})` : ''}`,
+          status: mappedStatus,
+          rawStatus: d.status,
+          categories: d.categories,
+          withdrawalWindowEndsAt: d.withdrawalWindowEndsAt,
+          resolutionNotes: d.rejectionReason || d.cancelReason || (d.reviewedBy ? `Reviewed by ${d.reviewedBy.name}` : ''),
+          requestedAt: d.createdAt,
+          resolvedAt: d.reviewedAt || d.cancelledAt
+        });
+      });
+    } catch (dpoErr) {
+      console.warn('[EMR Routes] DPO requests fetch fallback warning:', dpoErr.message);
+    }
+
+    allRequests.sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0));
     res.json(allRequests);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -488,8 +533,59 @@ router.get('/consent/dpdp-requests/all', restrictEMRRole(['admin']), async (req,
 router.put('/consent/dpdp-request/:requestId', restrictEMRRole(['admin']), async (req, res) => {
   try {
     const { status, resolutionNotes } = req.body; // Approved, Rejected, Hold
-    const consent = await Consent.findOne({ 'dpdpRequests._id': req.params.requestId, tenantId: req.tenantId });
-    if (!consent) return res.status(404).json({ error: 'Request not found' });
+    const rawTenant = req.tenantId || '';
+    const tenantLower = String(rawTenant).toLowerCase().trim();
+    const tenantQuery = { $in: [rawTenant, tenantLower].filter(Boolean) };
+
+    const consent = await Consent.findOne({ 'dpdpRequests._id': req.params.requestId, tenantId: tenantQuery });
+    if (!consent) {
+      // Check if this is a DpoConsentRequest
+      const DpoConsentRequest = require('../models/DpoConsentRequest');
+      const dpoReq = await DpoConsentRequest.findOne({ _id: req.params.requestId, tenantId: tenantQuery });
+      if (dpoReq) {
+        const now = new Date();
+        if (status === 'Approved') {
+          if (now < new Date(dpoReq.withdrawalWindowEndsAt)) {
+            return res.status(400).json({ error: '72-hour cancellation window has not expired. Premature approval is prohibited.' });
+          }
+          dpoReq.status = 'APPROVED';
+          dpoReq.reviewedBy = {
+            id: req.user?.staff_id || req.user?.id,
+            role: req.user?.role || 'admin',
+            name: req.user?.name || 'Hospital Admin'
+          };
+          dpoReq.reviewedAt = now;
+          const dpoProcessingService = require('../services/dpoProcessingService');
+          await dpoProcessingService.processWithdrawal(dpoReq, req.user);
+        } else if (status === 'Rejected') {
+          dpoReq.status = 'REJECTED';
+          dpoReq.rejectionReason = resolutionNotes || 'Rejected by hospital administrator';
+          dpoReq.reviewedBy = {
+            id: req.user?.staff_id || req.user?.id,
+            role: req.user?.role || 'admin',
+            name: req.user?.name || 'Hospital Admin'
+          };
+          dpoReq.reviewedAt = now;
+        } else if (status === 'Hold') {
+          dpoReq.status = 'CANCELLED_BY_DPO';
+          dpoReq.cancelReason = resolutionNotes || 'Placed on hold / cancelled by administrator';
+          dpoReq.cancelledBy = {
+            id: req.user?.staff_id || req.user?.id,
+            role: req.user?.role || 'admin',
+            name: req.user?.name || 'Hospital Admin'
+          };
+          dpoReq.cancelledAt = now;
+        }
+        await dpoReq.save();
+        const io = req.app.get("io");
+        if (io && tenantLower) {
+          io.to(tenantLower).emit("data_changed", { type: "dpdp-requests" });
+          io.to(tenantLower).emit("data_changed", { type: "notifications" });
+        }
+        return res.json({ success: true, request: dpoReq });
+      }
+      return res.status(404).json({ error: 'Request not found' });
+    }
 
     const reqItem = consent.dpdpRequests.id(req.params.requestId);
     reqItem.status = status;
@@ -526,8 +622,8 @@ router.put('/consent/dpdp-request/:requestId', restrictEMRRole(['admin']), async
     }
 
     const io = req.app.get("io");
-    if (io && req.tenantId) {
-      io.to(req.tenantId).emit("data_changed", { type: "dpdp-requests" });
+    if (io && tenantLower) {
+      io.to(tenantLower).emit("data_changed", { type: "dpdp-requests" });
     }
 
     res.json(consent);

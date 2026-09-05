@@ -1273,8 +1273,10 @@ const AdminDashboard = () => {
         fetchAuditLogs();
       } else if (type === 'audits' || type === 'audit-logs') {
         fetchAuditLogs();
-      } else if (type === 'dpdp-requests') {
+      } else if (type === 'dpdp-requests' || type === 'dpdp' || type === 'dpo' || type === 'consent') {
         fetchDpdpRequests();
+        fetchAuditLogs();
+        fetchNotifications();
       } else if (type === 'approvals' || type === 'indents' || type === 'indent') {
         fetchApprovals();
         fetchVendors();
@@ -1290,6 +1292,8 @@ const AdminDashboard = () => {
         fetchNotifications();
       } else if (type === 'subscription' || type === 'hospital' || type === 'hospitals') {
         fetchSubscription();
+      } else if (type === 'notifications') {
+        fetchNotifications();
       } else if (type === 'all' || !type) {
         // Initial / Full dashboard fallback ONLY
         fetchStaff();
@@ -1325,6 +1329,10 @@ const AdminDashboard = () => {
       } else if (event && (event.type === 'staff' || event.type === 'attendance')) {
         fetchStaff();
         fetchNotifications();
+      } else if (event && (event.type === 'dpdp-requests' || event.type === 'dpdp' || event.type === 'dpo' || event.type === 'consent' || event.type === 'notifications')) {
+        fetchDpdpRequests();
+        fetchAuditLogs();
+        fetchNotifications();
       }
     };
     socket.on('data_changed', onDirectSocketData);
@@ -1342,6 +1350,7 @@ const AdminDashboard = () => {
       fetchStaff();
       fetchVendors();
       fetchAuditLogs();
+      fetchDpdpRequests();
     };
     window.addEventListener('focus', onAdminWindowFocus);
 
@@ -1354,6 +1363,18 @@ const AdminDashboard = () => {
       window.removeEventListener('focus', onAdminWindowFocus);
     };
   }, []);
+
+  // Live syncing for DPO & DPDP Compliance tab: auto-refresh on tab activation and live polling interval
+  useEffect(() => {
+    if (activeTab === 'dpdp') {
+      fetchDpdpRequests();
+      fetchAuditLogs();
+      const interval = setInterval(() => {
+        fetchDpdpRequests();
+      }, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab]);
 
   // Cross-tab subscription sync: when one Hospital Admin tab renews the subscription,
   // other open tabs of the same portal auto-refresh without needing a manual reload.
@@ -1580,13 +1601,16 @@ const AdminDashboard = () => {
         .map(n => {
           const date = new Date(n.createdAt || Date.now());
           const timeMs = date.getTime();
+          const isDpo = n.category === 'dpo' || (n.title || '').toLowerCase().includes('dpo') || (n.title || '').toLowerCase().includes('consent');
           return {
             id: `tenant-notif-${n._id}`,
-            title: `⚠️ ${n.title || 'Subscription Notice'}`,
+            title: isDpo ? `🛡️ ${n.title || 'DPO Consent Withdrawal'}` : `⚠️ ${n.title || 'Subscription Notice'}`,
             message: n.message,
             time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' · ' + date.toLocaleDateString(),
             isNew: !isNaN(timeMs) && timeMs > lastSeen,
-            targetTab: 'subscription',
+            targetTab: isDpo ? 'dpdp' : 'subscription',
+            category: n.category,
+            requestId: n.metadata?.requestId,
             createdAt: !isNaN(timeMs) ? timeMs : 0
           };
         });
@@ -1793,6 +1817,11 @@ const AdminDashboard = () => {
           if (log.action.includes('change') || log.action.includes('update')) {
             hasReview = true;
           }
+        } else if (log.action.toLowerCase().includes('consent') || log.action.toLowerCase().includes('dpdp') || log.action.toLowerCase().includes('dpo')) {
+          category = 'Consent Registry';
+          tag = 'Consent';
+          type = 'COMPLIANCE';
+          hasReview = true;
         } else if (log.action.includes('vendor') || log.action.includes('medicine') || log.action.includes('procurement')) {
           category = 'Procurement';
           tag = 'Procurement';
@@ -1846,8 +1875,63 @@ const AdminDashboard = () => {
   const fetchDpdpRequests = async () => {
     if (tenantModules.dpdp?.enabled === false) return;
     try {
-      const response = await api.get('/emr/consent/dpdp-requests/all');
-      setDpdpRequests(response.data);
+      const [emrRes, dpoRes] = await Promise.allSettled([
+        api.get('/emr/consent/dpdp-requests/all'),
+        api.get('/dpo/requests')
+      ]);
+
+      const emrData = emrRes.status === 'fulfilled' && Array.isArray(emrRes.value?.data) ? emrRes.value.data : [];
+      const dpoData = dpoRes.status === 'fulfilled' && Array.isArray(dpoRes.value?.data) ? dpoRes.value.data : [];
+
+      const formattedDpo = dpoData.map(d => {
+        const catLabels = [
+          d.categories?.personal && 'Personal Data',
+          d.categories?.clinical && 'Clinical History',
+          d.categories?.payment && 'Financial & Billing'
+        ].filter(Boolean).join(', ') || 'All Categories';
+
+        let mappedStatus = 'Pending';
+        if (d.status === 'APPROVED' || d.status === 'COMPLETED') mappedStatus = 'Approved';
+        else if (d.status === 'REJECTED' || d.status === 'CANCELLED_BY_PATIENT' || d.status === 'CANCELLED_BY_DPO') mappedStatus = 'Rejected';
+
+        return {
+          _id: d._id,
+          id: d._id,
+          isDpo: true,
+          dpoRequest: d,
+          requestId: d.requestId,
+          uhId: d.uhId,
+          hospitalPatientId: d.hospitalPatientId,
+          patientId: d.patientId?._id || d.patientId,
+          patientName: d.patientName || 'Patient',
+          patientContact: d.patientContact || 'N/A',
+          patientAgeGender: d.uhId ? `UHID: ${d.uhId}` : 'N/A',
+          requestType: 'Consent Withdrawal',
+          details: `Scope: ${catLabels}. Request ID: ${d.requestId}. UHID: ${d.uhId}.${d.cancelReason ? ` (Cancelled: ${d.cancelReason})` : ''}${d.rejectionReason ? ` (Rejected: ${d.rejectionReason})` : ''}`,
+          status: mappedStatus,
+          rawStatus: d.status,
+          categories: d.categories,
+          withdrawalWindowEndsAt: d.withdrawalWindowEndsAt,
+          resolutionNotes: d.rejectionReason || d.cancelReason || (d.reviewedBy ? `Reviewed by ${d.reviewedBy.name}` : ''),
+          requestedAt: d.createdAt,
+          resolvedAt: d.reviewedAt || d.cancelledAt
+        };
+      });
+
+      // Avoid duplicates
+      const seenIds = new Set();
+      const combined = [];
+
+      for (const item of [...formattedDpo, ...emrData]) {
+        const key = String(item.requestId || item._id || item.id);
+        if (!seenIds.has(key)) {
+          seenIds.add(key);
+          combined.push(item);
+        }
+      }
+
+      combined.sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0));
+      setDpdpRequests(combined);
     } catch (err) {
       console.error('Failed to fetch DPDP requests in Admin', err);
     }
@@ -1856,10 +1940,25 @@ const AdminDashboard = () => {
   const handleResolveDpdpRequest = async (requestId, status) => {
     setLoading(true);
     try {
-      await api.put(`/emr/consent/dpdp-request/${requestId}`, {
-        status,
-        resolutionNotes: dpdpResolutionNotes
-      });
+      if (viewingDpdpRequest?.isDpo) {
+        if (status === 'Approved') {
+          if (viewingDpdpRequest.withdrawalWindowEndsAt && new Date(viewingDpdpRequest.withdrawalWindowEndsAt) > new Date()) {
+            showToast("Cannot approve: 72-hour statutory cooling-off window is still active.", "warning");
+            setLoading(false);
+            return;
+          }
+          await api.post(`/dpo/requests/${requestId}/approve`);
+        } else if (status === 'Rejected') {
+          await api.post(`/dpo/requests/${requestId}/reject`, { reason: dpdpResolutionNotes || 'Rejected by DPO / Hospital Admin' });
+        } else if (status === 'Hold') {
+          await api.post(`/dpo/requests/${requestId}/cancel-by-dpo`, { reason: dpdpResolutionNotes || 'Placed on hold / cancelled by DPO Manager' });
+        }
+      } else {
+        await api.put(`/emr/consent/dpdp-request/${requestId}`, {
+          status,
+          resolutionNotes: dpdpResolutionNotes
+        });
+      }
       showToast(`DPDP request status updated to ${status}!`, 'success');
       setViewingDpdpRequest(null);
       setDpdpResolutionNotes('');
@@ -2494,11 +2593,13 @@ const AdminDashboard = () => {
     if (newStaff.role === 'lab') dept = 'Pathology & Lab';
     if (newStaff.role === 'pharmacy') dept = 'Pharmacy';
     if (newStaff.role === 'hr') dept = 'Hospital Administration';
+    if (newStaff.role === 'dpo') dept = 'Data Protection & Compliance';
 
     let avatarColor = 'blue';
     if (newStaff.role === 'doctor') avatarColor = 'purple';
     if (newStaff.role === 'receptionist') avatarColor = 'gold';
     if (newStaff.role === 'hr') avatarColor = 'teal';
+    if (newStaff.role === 'dpo') avatarColor = 'indigo';
 
     const payload = {
       ...newStaff,
@@ -11886,6 +11987,13 @@ const AdminDashboard = () => {
                               setHrInitialTab(n.hrTab || 'Attendance');
                               setHrInitialAdding(false);
                               setActiveTab('hr-payroll');
+                            } else if (n.targetTab === 'dpdp') {
+                              setActiveTab('dpdp');
+                              if (n.requestId) {
+                                setDpdpSearchQuery(n.requestId);
+                              }
+                              fetchDpdpRequests();
+                              fetchAuditLogs();
                             } else if (n.targetTab) {
                               setActiveTab(n.targetTab);
                             }
@@ -13718,6 +13826,7 @@ const AdminDashboard = () => {
                           <option value="doctor">Doctors</option>
                           <option value="receptionist">Receptionists</option>
                           <option value="hr">HR Managers</option>
+                          <option value="dpo">DPO Managers</option>
                           <option value="staff">Other Staff</option>
                         </select>
                         <svg className="absolute right-2.5 w-3.5 h-3.5 text-slate-500 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -27423,130 +27532,321 @@ const AdminDashboard = () => {
       )}
 
       {/* DPDP Request Review Modal Overlay */}
-      {viewingDpdpRequest && (
-        <div className="admin-modal-overlay" onClick={() => setViewingDpdpRequest(null)}>
-          <div className="admin-modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '580px', padding: '0px', borderRadius: '16px', overflow: 'hidden' }}>
-            
-            {/* Modal Header */}
-            <div className="admin-modal-header" style={{ padding: '24px 28px', borderBottom: '1px solid #F1F5F9' }}>
-              <div>
-                <span className="admin-modal-title" style={{ display: 'block', fontSize: '20px', fontWeight: 800 }}>Review DPDP Request</span>
-                <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>Patient: {viewingDpdpRequest.patientName || viewingDpdpRequest.patientId?.name || 'Unknown'}</span>
-              </div>
-              <button className="admin-modal-close-btn" onClick={() => setViewingDpdpRequest(null)}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
-              </button>
-            </div>
+      {viewingDpdpRequest && (() => {
+        const isDpo = Boolean(viewingDpdpRequest.isDpo || viewingDpdpRequest.requestId?.startsWith('DPO-') || viewingDpdpRequest.requestType === 'Consent Withdrawal');
+        const is72hActive = Boolean(viewingDpdpRequest.withdrawalWindowEndsAt && new Date(viewingDpdpRequest.withdrawalWindowEndsAt) > new Date());
+        const windowEndsText = viewingDpdpRequest.withdrawalWindowEndsAt ? new Date(viewingDpdpRequest.withdrawalWindowEndsAt).toLocaleString('en-IN') : '';
 
-            {/* Modal Body */}
-            <div style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        return (
+          <div className="admin-modal-overlay" onClick={() => setViewingDpdpRequest(null)}>
+            <div 
+              className="admin-modal-card" 
+              onClick={e => e.stopPropagation()} 
+              style={{ 
+                maxWidth: '640px', 
+                width: '100%',
+                maxHeight: 'min(90vh, 670px)',
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '0px', 
+                borderRadius: '18px', 
+                overflow: 'hidden',
+                backgroundColor: '#FFFFFF',
+                boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.3)',
+                border: '1px solid #E2E8F0'
+              }}
+            >
               
-              {/* Request Info Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 20px' }}>
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Request Type</label>
-                  <div style={{ fontSize: '14.5px', fontWeight: 700, color: viewingDpdpRequest.requestType === 'Deletion' ? '#EF4444' : '#2563EB', marginTop: '4px' }}>
-                    {viewingDpdpRequest.requestType === 'Deletion' ? 'Right to Erasure (Deletion)' : 'Right to Correction'}
-                  </div>
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date Submitted</label>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', marginTop: '4px' }}>
-                    {new Date(viewingDpdpRequest.requestedAt).toLocaleString('en-IN')}
-                  </div>
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Patient Contact</label>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', marginTop: '4px' }}>
-                    {viewingDpdpRequest.patientContact || viewingDpdpRequest.patientId?.contact || 'N/A'}
-                  </div>
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Legal Hold Status</label>
-                  <div style={{ fontSize: '14px', fontWeight: 800, color: (viewingDpdpRequest.legalHold || (viewingDpdpRequest.patientId && viewingDpdpRequest.patientId.legalHold)) ? '#EF4444' : '#10B981', marginTop: '4px' }}>
-                    {(viewingDpdpRequest.legalHold || (viewingDpdpRequest.patientId && viewingDpdpRequest.patientId.legalHold)) ? '⚠️ Active Hold' : 'No Active Holds'}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Request Details / Fields to Modify</label>
-                <div style={{ fontSize: '14px', fontWeight: 600, color: '#334155', marginTop: '6px', padding: '12px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', lineHeight: 1.5 }}>
-                  {viewingDpdpRequest.details}
-                </div>
-              </div>
-
-              {/* Resolution Notes Input */}
-              <div className="admin-input-group" style={{ marginBottom: 0 }}>
-                <label className="admin-input-label">Resolution Notes / Action Comments <span style={{ color: '#EF4444' }}>*</span></label>
-                <textarea 
-                  className="admin-text-input" 
-                  style={{ minHeight: '80px', padding: '10px', resize: 'vertical', fontSize: '13.5px', fontFamily: 'inherit' }}
-                  value={dpdpResolutionNotes} 
-                  onChange={e => setdpdpResolutionNotes(e.target.value)} 
-                  placeholder="Provide clinical or legal justification (e.g. 'Aadhaar details verified and updated' or 'Erasure request denied due to 10-year NABH retention guidelines')."
-                  required 
-                />
-              </div>
-
-              {/* Legal hold warning message block */}
-              {(viewingDpdpRequest.legalHold || (viewingDpdpRequest.patientId && viewingDpdpRequest.patientId.legalHold)) && viewingDpdpRequest.requestType === 'Deletion' && (
-                <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                  <i data-lucide="alert-triangle" style={{ width: '18px', height: '18px', color: '#EF4444', flexShrink: 0, marginTop: '2px' }}></i>
-                  <div style={{ fontSize: '11.5px', color: '#991B1B', fontWeight: 600, lineHeight: 1.4 }}>
-                    <strong>Legal Hold In Force:</strong> This patient record is marked under a legal/investigative hold. Deletion requests cannot be approved while a hold is active. You must either resolve/lift the legal hold or reject this request.
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer Actions */}
-            <div style={{ padding: '20px 28px 24px', backgroundColor: '#F8FAFC', borderTop: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-              <button 
-                className="approval-act-btn" 
-                style={{ border: '1px solid #CBD5E1', padding: '10px 20px', fontSize: '13px', borderRadius: '8px', background: 'white', color: '#475569', fontWeight: 800 }}
-                onClick={() => setViewingDpdpRequest(null)}
+              {/* Pinned Modal Header */}
+              <div 
+                className="admin-modal-header" 
+                style={{ 
+                  padding: '20px 26px', 
+                  borderBottom: '1px solid #F1F5F9', 
+                  flexShrink: 0,
+                  backgroundColor: '#FFFFFF',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}
               >
-                Cancel
-              </button>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="admin-modal-title" style={{ fontSize: '18px', fontWeight: 850, color: '#0F172A', letterSpacing: '-0.02em' }}>
+                      {isDpo ? 'Review DPO Consent Withdrawal' : 'Review DPDP Request'}
+                    </span>
+                    {isDpo && (
+                      <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', backgroundColor: '#EFF6FF', color: '#2563EB', border: '1px solid #DBEAFE' }}>
+                        DPDP Sec 6(4)
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, marginTop: '2px', display: 'block' }}>
+                    Patient: <strong style={{ color: '#1E293B' }}>{viewingDpdpRequest.patientName || viewingDpdpRequest.patientId?.name || 'Unknown'}</strong> {viewingDpdpRequest.uhId ? `· UHID: ${viewingDpdpRequest.uhId}` : ''}
+                  </span>
+                </div>
                 <button 
-                  className="approval-act-btn-new reject" 
-                  onClick={() => handleResolveDpdpRequest(viewingDpdpRequest._id || viewingDpdpRequest.id, 'Rejected')}
-                  disabled={loading || !dpdpResolutionNotes.trim()}
-                  style={{ opacity: (!dpdpResolutionNotes.trim()) ? 0.6 : 1 }}
+                  className="admin-modal-close-btn" 
+                  onClick={() => setViewingDpdpRequest(null)}
+                  style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer' }}
                 >
-                  Reject Request
-                </button>
-                <button 
-                  className="approval-act-btn-new hold" 
-                  onClick={() => handleResolveDpdpRequest(viewingDpdpRequest._id || viewingDpdpRequest.id, 'Hold')}
-                  disabled={loading || !dpdpResolutionNotes.trim()}
-                  style={{ 
-                    opacity: (!dpdpResolutionNotes.trim()) ? 0.6 : 1
-                  }}
-                >
-                  Place on Hold
-                </button>
-                <button 
-                  className="approval-act-btn-new approve" 
-                  onClick={() => handleResolveDpdpRequest(viewingDpdpRequest._id || viewingDpdpRequest.id, 'Approved')}
-                  disabled={loading || !dpdpResolutionNotes.trim() || ((viewingDpdpRequest.legalHold || (viewingDpdpRequest.patientId && viewingDpdpRequest.patientId.legalHold)) && viewingDpdpRequest.requestType === 'Deletion')}
-                  style={{ 
-                    opacity: (!dpdpResolutionNotes.trim() || ((viewingDpdpRequest.legalHold || (viewingDpdpRequest.patientId && viewingDpdpRequest.patientId.legalHold)) && viewingDpdpRequest.requestType === 'Deletion')) ? 0.6 : 1,
-                    backgroundColor: '#10B981',
-                    color: 'white'
-                  }}
-                >
-                  Approve & Resolve
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
                 </button>
               </div>
-            </div>
 
+              {/* Scrollable Modal Body */}
+              <div 
+                style={{ 
+                  padding: '22px 26px', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '16px',
+                  flex: 1,
+                  overflowY: 'auto',
+                  minHeight: 0
+                }}
+                data-lenis-prevent="true"
+              >
+                
+                {/* 72h Statutory Cooling-off Notice Banner */}
+                {isDpo && is72hActive && (
+                  <div style={{ padding: '12px 14px', borderRadius: '10px', backgroundColor: '#FFFBEB', border: '1.5px solid #FCD34D', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: '18px', lineHeight: 1 }}>⏳</span>
+                    <div>
+                      <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#92400E' }}>
+                        72-Hour Statutory Cooling-Off Period Active
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#B45309', fontWeight: 550, marginTop: '2px', lineHeight: 1.4 }}>
+                        Under DPDP Act Sec 6(4), the patient retains the right to cancel their withdrawal until <strong>{windowEndsText}</strong>. Statutory approval will be unlocked once this window elapses.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {isDpo && !is72hActive && (
+                  <div style={{ padding: '10px 14px', borderRadius: '10px', backgroundColor: '#ECFDF5', border: '1.5px solid #A7F3D0', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '16px', color: '#059669', fontWeight: 800 }}>✓</span>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#065F46' }}>
+                      72-Hour Statutory Cooling-Off Window Elapsed. Eligible for DPO Approval and data processing.
+                    </div>
+                  </div>
+                )}
+
+                {/* Request Info Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 18px', padding: '14px', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                  <div>
+                    <label style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Request Type</label>
+                    <div style={{ fontSize: '13px', fontWeight: 750, color: isDpo ? '#EA580C' : (viewingDpdpRequest.requestType === 'Deletion' ? '#EF4444' : '#2563EB'), marginTop: '2px' }}>
+                      {isDpo ? 'DPDP Sec 6(4) Consent Withdrawal' : (viewingDpdpRequest.requestType === 'Deletion' ? 'Right to Erasure (Deletion)' : 'Right to Correction')}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date Submitted</label>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
+                      {new Date(viewingDpdpRequest.requestedAt).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Patient Contact / ID</label>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
+                      {viewingDpdpRequest.patientContact || viewingDpdpRequest.uhId || 'N/A'}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status / Hold</label>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: is72hActive ? '#D97706' : ((viewingDpdpRequest.legalHold || (viewingDpdpRequest.patientId && viewingDpdpRequest.patientId.legalHold)) ? '#EF4444' : '#10B981'), marginTop: '2px' }}>
+                      {is72hActive ? '72h Cooling-off Window' : ((viewingDpdpRequest.legalHold || (viewingDpdpRequest.patientId && viewingDpdpRequest.patientId.legalHold)) ? '⚠️ Active Hold' : (viewingDpdpRequest.status || 'Active'))}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Request Details / Scope</label>
+                  <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#334155', marginTop: '4px', padding: '10px 12px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', lineHeight: 1.45 }}>
+                    {viewingDpdpRequest.details}
+                  </div>
+                </div>
+
+                {/* Resolution Notes Input */}
+                <div className="admin-input-group" style={{ marginBottom: 0 }}>
+                  <label className="admin-input-label" style={{ fontSize: '11.5px', fontWeight: 750 }}>
+                    Resolution Notes / Action Comments <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <textarea 
+                    className="admin-text-input" 
+                    style={{ minHeight: '68px', padding: '8px 12px', resize: 'vertical', fontSize: '12.5px', fontFamily: 'inherit' }}
+                    value={dpdpResolutionNotes} 
+                    onChange={e => setdpdpResolutionNotes(e.target.value)} 
+                    placeholder={isDpo ? "Provide compliance justification (e.g. 'Approved post 72h window' or 'Rejected due to NABH retention rules')." : "Provide clinical or legal justification (e.g. 'Aadhaar details verified' or 'Denied due to NABH retention guidelines')."}
+                    required 
+                  />
+                </div>
+
+                {/* Legal hold warning message block */}
+                {(viewingDpdpRequest.legalHold || (viewingDpdpRequest.patientId && viewingDpdpRequest.patientId.legalHold)) && viewingDpdpRequest.requestType === 'Deletion' && (
+                  <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                    <i data-lucide="alert-triangle" style={{ width: '16px', height: '16px', color: '#EF4444', flexShrink: 0, marginTop: '2px' }}></i>
+                    <div style={{ fontSize: '11px', color: '#991B1B', fontWeight: 600, lineHeight: 1.4 }}>
+                      <strong>Legal Hold In Force:</strong> Patient record is marked under a legal/investigative hold. Deletion requests cannot be approved while a hold is active.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Pinned Modal Footer Actions (Always visible, never clipped) */}
+              <div 
+                style={{ 
+                  padding: '14px 26px 18px', 
+                  backgroundColor: '#F8FAFC', 
+                  borderTop: '1px solid #E2E8F0', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  gap: '10px',
+                  flexShrink: 0
+                }}
+              >
+                {/* Dismiss modal */}
+                <button 
+                  className="approval-act-btn" 
+                  style={{ border: '1px solid #CBD5E1', padding: '8px 16px', fontSize: '12px', borderRadius: '8px', background: 'white', color: '#475569', fontWeight: 800, cursor: 'pointer' }}
+                  onClick={() => setViewingDpdpRequest(null)}
+                >
+                  Close
+                </button>
+
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {isDpo ? (
+                    is72hActive ? (
+                      /* During active 72h window: DPO can cancel request or wait (approval is locked) */
+                      <>
+                        <button 
+                          className="approval-act-btn-new hold" 
+                          onClick={() => handleResolveDpdpRequest(viewingDpdpRequest._id || viewingDpdpRequest.id, 'Hold')}
+                          disabled={loading || !dpdpResolutionNotes.trim()}
+                          title="Cancel this withdrawal request with justification notes"
+                          style={{ 
+                            padding: '8px 14px', 
+                            fontSize: '12px', 
+                            borderRadius: '8px', 
+                            opacity: (!dpdpResolutionNotes.trim()) ? 0.6 : 1,
+                            cursor: (!dpdpResolutionNotes.trim()) ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Cancel Request (DPO)
+                        </button>
+                        <button 
+                          className="approval-act-btn-new approve" 
+                          disabled={true}
+                          title="Statutory cooling-off window is active. Approval becomes eligible once window elapses."
+                          style={{ 
+                            padding: '8px 16px', 
+                            fontSize: '12px', 
+                            borderRadius: '8px', 
+                            opacity: 0.5,
+                            backgroundColor: '#94A3B8',
+                            color: 'white',
+                            fontWeight: 750,
+                            cursor: 'not-allowed'
+                          }}
+                        >
+                          Approve (Locked: 72h Window)
+                        </button>
+                      </>
+                    ) : (
+                      /* Post 72h window: DPO can Reject or Approve */
+                      <>
+                        <button 
+                          className="approval-act-btn-new reject" 
+                          onClick={() => handleResolveDpdpRequest(viewingDpdpRequest._id || viewingDpdpRequest.id, 'Rejected')}
+                          disabled={loading || !dpdpResolutionNotes.trim()}
+                          style={{ 
+                            padding: '8px 14px', 
+                            fontSize: '12px', 
+                            borderRadius: '8px', 
+                            opacity: (!dpdpResolutionNotes.trim()) ? 0.6 : 1,
+                            cursor: (!dpdpResolutionNotes.trim()) ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Reject Request
+                        </button>
+                        <button 
+                          className="approval-act-btn-new approve" 
+                          onClick={() => handleResolveDpdpRequest(viewingDpdpRequest._id || viewingDpdpRequest.id, 'Approved')}
+                          disabled={loading || !dpdpResolutionNotes.trim()}
+                          style={{ 
+                            padding: '8px 16px', 
+                            fontSize: '12px', 
+                            borderRadius: '8px', 
+                            opacity: (!dpdpResolutionNotes.trim()) ? 0.6 : 1,
+                            backgroundColor: '#10B981',
+                            color: 'white',
+                            fontWeight: 750,
+                            cursor: (!dpdpResolutionNotes.trim()) ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Approve & Execute
+                        </button>
+                      </>
+                    )
+                  ) : (
+                    /* Standard Non-DPO DPDP Requests (Right to Erasure / Correction) */
+                    <>
+                      <button 
+                        className="approval-act-btn-new reject" 
+                        onClick={() => handleResolveDpdpRequest(viewingDpdpRequest._id || viewingDpdpRequest.id, 'Rejected')}
+                        disabled={loading || !dpdpResolutionNotes.trim()}
+                        style={{ 
+                          padding: '8px 14px', 
+                          fontSize: '12px', 
+                          borderRadius: '8px', 
+                          opacity: (!dpdpResolutionNotes.trim()) ? 0.6 : 1,
+                          cursor: (!dpdpResolutionNotes.trim()) ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        Reject Request
+                      </button>
+                      <button 
+                        className="approval-act-btn-new hold" 
+                        onClick={() => handleResolveDpdpRequest(viewingDpdpRequest._id || viewingDpdpRequest.id, 'Hold')}
+                        disabled={loading || !dpdpResolutionNotes.trim()}
+                        style={{ 
+                          padding: '8px 14px', 
+                          fontSize: '12px', 
+                          borderRadius: '8px', 
+                          opacity: (!dpdpResolutionNotes.trim()) ? 0.6 : 1,
+                          cursor: (!dpdpResolutionNotes.trim()) ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        Place on Hold
+                      </button>
+                      <button 
+                        className="approval-act-btn-new approve" 
+                        onClick={() => handleResolveDpdpRequest(viewingDpdpRequest._id || viewingDpdpRequest.id, 'Approved')}
+                        disabled={loading || !dpdpResolutionNotes.trim() || ((viewingDpdpRequest.legalHold || (viewingDpdpRequest.patientId && viewingDpdpRequest.patientId.legalHold)) && viewingDpdpRequest.requestType === 'Deletion')}
+                        style={{ 
+                          padding: '8px 16px', 
+                          fontSize: '12px', 
+                          borderRadius: '8px', 
+                          opacity: (!dpdpResolutionNotes.trim() || ((viewingDpdpRequest.legalHold || (viewingDpdpRequest.patientId && viewingDpdpRequest.patientId.legalHold)) && viewingDpdpRequest.requestType === 'Deletion')) ? 0.5 : 1,
+                          backgroundColor: '#10B981',
+                          color: 'white',
+                          fontWeight: 750,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Approve & Resolve
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {activeBroadcastAlert && (
         <div style={{

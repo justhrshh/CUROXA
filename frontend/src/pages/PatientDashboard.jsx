@@ -10,7 +10,7 @@ import HospitalLoadingTransition from '../components/patient/hospital/HospitalLo
 import HospitalTopNav from '../components/patient/hospital/HospitalTopNav';
 import HospitalBottomNav from '../components/patient/hospital/HospitalBottomNav';
 import PatientHospitalHome from '../components/patient/hospital/PatientHospitalHome';
-import WithdrawConsentNoticeModal from '../components/patient/hospital/WithdrawConsentNoticeModal';
+import DpoWithdrawConsentModal from '../components/patient/hospital/DpoWithdrawConsentModal';
 
 // Safeguard React DOM reconciliation against external DOM mutations (e.g. Lucide CDN node replacement)
 if (typeof window !== 'undefined') {
@@ -187,6 +187,7 @@ const PatientDashboard = () => {
     
     // Fetch hospital-scoped data
     fetchData(false);
+    fetchPatientDpoRequests(h);
 
     // Subtle 450ms polished micro-transition
     setTimeout(() => {
@@ -202,10 +203,14 @@ const PatientDashboard = () => {
   const handleChangeHospital = () => {
     try {
       localStorage.removeItem('curoxa_selected_hospital');
+      localStorage.removeItem('tenantId');
+      localStorage.removeItem('tenantName');
     } catch (e) {}
     setSelectedHospital(null);
     setSelectedHospitalId(null);
     setSelectedHospitalDetails(null);
+    setDpoRequests([]);
+    setShowWithdrawConsentModal(false);
     setActiveTab('curoxa-home');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -472,6 +477,8 @@ const PatientDashboard = () => {
   const todayStr = getLocalDateString();
   const [appointmentFilterTab, setAppointmentFilterTab] = useState('ALL');
   const [showWithdrawConsentModal, setShowWithdrawConsentModal] = useState(false);
+  const [dpoRequests, setDpoRequests] = useState([]);
+  const [dpoLoading, setDpoLoading] = useState(false);
 
   // Hospital-scoped appointments
   const hospitalAppointments = useMemo(() => {
@@ -849,6 +856,11 @@ const PatientDashboard = () => {
           const auditsRes = await api.get(`/emr/audits/patient/${patientDbId}`);
           setAuditLogs(auditsRes.data);
         } catch (e) { console.warn("Failed to fetch audit logs", e); }
+
+        try {
+          const dpoRes = await api.get('/dpo/patient/my-requests');
+          setDpoRequests(dpoRes.data || []);
+        } catch (e) { console.warn("Failed to fetch DPO requests", e); }
       }
     } catch (err) {
       console.error(err);
@@ -1264,9 +1276,56 @@ const PatientDashboard = () => {
     }
   };
 
-  // DPDP Consent Withdrawal - Non-destructive informational notice
+  // DPDP Consent Withdrawal Flow - STRICTLY HOSPITAL-SPECIFIC
   const handleWithdrawConsent = () => {
+    const activeHosp = selectedHospitalDetails || selectedHospital;
+    if (!activeHosp) {
+      showToast("Please select a hospital first to manage consent withdrawal.", "warning");
+      return;
+    }
     setShowWithdrawConsentModal(true);
+  };
+
+  const fetchPatientDpoRequests = useCallback(async (hospOverride) => {
+    const activeHosp = hospOverride || selectedHospitalDetails || selectedHospital;
+    const hospitalCode = activeHosp?.code || activeHosp?.hospitalId || activeHosp?.tenantId || (typeof activeHosp === 'string' ? activeHosp : null);
+    if (!hospitalCode) {
+      setDpoRequests([]);
+      return;
+    }
+    try {
+      setDpoLoading(true);
+      const res = await api.get(`/dpo/patient/my-requests?hospitalId=${encodeURIComponent(hospitalCode)}`);
+      setDpoRequests(res.data || []);
+    } catch (err) {
+      console.warn('Failed to fetch patient DPO requests:', err);
+    } finally {
+      setDpoLoading(false);
+    }
+  }, [selectedHospital, selectedHospitalDetails]);
+
+  // Keep hospital-specific DPO requests synchronized with active hospital
+  useEffect(() => {
+    const activeHosp = selectedHospitalDetails || selectedHospital;
+    if (activeHosp) {
+      fetchPatientDpoRequests(activeHosp);
+    } else {
+      setDpoRequests([]);
+    }
+  }, [selectedHospital, selectedHospitalDetails, fetchPatientDpoRequests]);
+
+  const handleCancelDpoRequest = async (requestId) => {
+    if (!window.confirm('Are you sure you want to cancel this consent withdrawal request? Your clinical records will remain active.')) {
+      return;
+    }
+    try {
+      await api.post(`/dpo/requests/${requestId}/cancel`);
+      showToast('Consent withdrawal request cancelled successfully.', 'success');
+      const activeHosp = selectedHospitalDetails || selectedHospital;
+      fetchPatientDpoRequests(activeHosp);
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to cancel withdrawal request.', 'error');
+    }
   };
 
   // DPDP Deletion / Correction Request submission
@@ -6359,6 +6418,162 @@ const PatientDashboard = () => {
                   </div>
                 </div>
 
+                {/* Hospital-Level Consent Withdrawal & 72-Hour Live Status */}
+                <div className="glass-card" style={{ padding: '24px', marginBottom: '32px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <i data-lucide="file-text" style={{ color: '#2563EB' }}></i> Hospital Consent Withdrawal Status
+                      </h3>
+                      <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 0 0' }}>
+                        Track statutory 72-hour cooling-off windows, review readiness, and cancellation states.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => setShowWithdrawConsentModal(true)}
+                      style={{
+                        background: '#FEF2F2',
+                        color: '#DC2626',
+                        border: '1.5px solid #FECACA',
+                        fontWeight: 800,
+                        padding: '9px 18px',
+                        borderRadius: '10px',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <i data-lucide="shield-off" style={{ width: '15px' }}></i>
+                      Withdraw Consent
+                    </button>
+                  </div>
+
+                  {dpoRequests.length === 0 ? (
+                    <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '20px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>🛡️</div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#1E293B', marginBottom: '4px' }}>
+                        No Active Consent Withdrawal Requests
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#64748B', maxWidth: '440px', margin: '0 auto', lineHeight: 1.45 }}>
+                        Your healthcare records, clinical reports, and prescriptions remain securely active under institutional compliance.
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      {dpoRequests.map(req => {
+                        const endsAt = new Date(req.withdrawalWindowEndsAt);
+                        const now = new Date();
+                        const diff = endsAt - now;
+                        const isPending = req.status === 'PENDING' && diff > 0;
+                        const remainingHours = Math.max(0, Math.floor(diff / (1000 * 60 * 60)));
+                        const remainingMins = Math.max(0, Math.floor((diff / (1000 * 60)) % 60));
+
+                        return (
+                          <div
+                            key={req._id}
+                            style={{
+                              background: '#FFFFFF',
+                              border: '1.5px solid #E2E8F0',
+                              borderRadius: '16px',
+                              padding: '16px 18px',
+                              boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
+                              <div>
+                                <span style={{ fontSize: '11px', fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  Hospital Tenant: {req.tenantId?.toUpperCase()}
+                                </span>
+                                <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', fontFamily: 'monospace' }}>
+                                  {req.requestId}
+                                </div>
+                              </div>
+                              <div>
+                                <span
+                                  style={{
+                                    fontSize: '11.5px',
+                                    fontWeight: 800,
+                                    padding: '4px 12px',
+                                    borderRadius: '8px',
+                                    display: 'inline-block',
+                                    background:
+                                      req.status === 'COMPLETED' || req.status === 'APPROVED' ? '#DCFCE7' :
+                                      req.status === 'READY_FOR_REVIEW' || (!isPending && req.status === 'PENDING') ? '#DBEAFE' :
+                                      isPending ? '#FEF3C7' :
+                                      req.status === 'REJECTED' ? '#FEE2E2' : '#F1F5F9',
+                                    color:
+                                      req.status === 'COMPLETED' || req.status === 'APPROVED' ? '#15803D' :
+                                      req.status === 'READY_FOR_REVIEW' || (!isPending && req.status === 'PENDING') ? '#1E40AF' :
+                                      isPending ? '#B45309' :
+                                      req.status === 'REJECTED' ? '#B91C1C' : '#475569'
+                                  }}
+                                >
+                                  {isPending ? `Pending — ${remainingHours}h ${remainingMins}m remaining` :
+                                   req.status === 'READY_FOR_REVIEW' || (!isPending && req.status === 'PENDING') ? 'Ready for DPO Review' :
+                                   req.status === 'COMPLETED' ? 'Completed & Anonymized' :
+                                   req.status === 'APPROVED' ? 'Approved' :
+                                   req.status === 'CANCELLED_BY_PATIENT' ? 'Cancelled by you' :
+                                   req.status === 'CANCELLED_BY_DPO' ? 'Cancelled by DPO' :
+                                   req.status === 'REJECTED' ? 'Rejected' : req.status}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Categories requested */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                              <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 700 }}>Withdrawn Categories:</span>
+                              {req.categories?.personal && (
+                                <span style={{ fontSize: '11px', fontWeight: 800, background: '#EFF6FF', color: '#1D4ED8', padding: '2px 8px', borderRadius: '5px' }}>
+                                  ✓ Personal Records
+                                </span>
+                              )}
+                              {req.categories?.clinical && (
+                                <span style={{ fontSize: '11px', fontWeight: 800, background: '#F0FDF4', color: '#15803D', padding: '2px 8px', borderRadius: '5px' }}>
+                                  ✓ Clinical Records
+                                </span>
+                              )}
+                              {req.categories?.payment && (
+                                <span style={{ fontSize: '11px', fontWeight: 800, background: '#FEF3C7', color: '#B45309', padding: '2px 8px', borderRadius: '5px' }}>
+                                  ✓ Payment Details (Recorded)
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Bottom row: dates and cancellation button */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
+                              <div style={{ fontSize: '11.5px', color: '#94A3B8' }}>
+                                Requested: {new Date(req.createdAt).toLocaleDateString()} • Window ends: {endsAt.toLocaleString()}
+                              </div>
+                              {req.status === 'PENDING' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelDpoRequest(req._id)}
+                                  style={{
+                                    padding: '5px 12px',
+                                    borderRadius: '7px',
+                                    background: '#F1F5F9',
+                                    color: '#475569',
+                                    border: '1px solid #CBD5E1',
+                                    fontSize: '11.5px',
+                                    fontWeight: 800,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Cancel Request
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 {/* DPDP Privacy Audit Trail */}
                 <div className="glass-card" style={{ padding: '24px' }}>
                   <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 16px 0', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -6687,38 +6902,42 @@ const PatientDashboard = () => {
                   </button>
                 </form>
 
-                <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #F1F5F9' }}>
-                  <h4 style={{ fontSize: '15px', fontWeight: 800, marginBottom: '6px', color: '#0F172A' }}>Privacy & Data Rights</h4>
-                  <p style={{ fontSize: '12px', color: '#64748B', lineHeight: 1.45, marginBottom: '14px' }}>
-                    Under the DPDP Act, you maintain sovereignty over your clinical data and consent.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowWithdrawConsentModal(true)}
-                    style={{
-                      width: '100%',
-                      height: '42px',
-                      borderRadius: '8px',
-                      background: '#FEF2F2',
-                      border: '1.5px solid #FCA5A5',
-                      color: '#DC2626',
-                      fontSize: '12.5px',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#FEE2E2'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#FEF2F2'}
-                    title="Consent withdrawal will be available soon. This feature is currently being prepared."
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    <span>Withdraw Consent</span>
-                  </button>
-                </div>
+                {/* Privacy & Data Rights: ONLY visible when active hospital context exists */}
+                {selectedHospital && (
+                  <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #F1F5F9' }}>
+                    <h4 style={{ fontSize: '15px', fontWeight: 800, marginBottom: '6px', color: '#0F172A' }}>
+                      Privacy & Data Rights ({selectedHospital.name})
+                    </h4>
+                    <p style={{ fontSize: '12px', color: '#64748B', lineHeight: 1.45, marginBottom: '14px' }}>
+                      Under the DPDP Act, you maintain sovereignty over your clinical data and consent for {selectedHospital.name}.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleWithdrawConsent}
+                      style={{
+                        width: '100%',
+                        height: '42px',
+                        borderRadius: '8px',
+                        background: '#FEF2F2',
+                        border: '1.5px solid #FCA5A5',
+                        color: '#DC2626',
+                        fontSize: '12.5px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#FEE2E2'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#FEF2F2'}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      <span>Withdraw Consent ({selectedHospital.name})</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -8032,50 +8251,15 @@ const PatientDashboard = () => {
         </div>
       )}
 
-      {/* WITHDRAW CONSENT NOTICE MODAL (UI ONLY, NON-DESTRUCTIVE) */}
-      {showWithdrawConsentModal && (
-        <div className="modal-overlay" style={{ zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(6px)' }}>
-          <div className="modal-box" style={{ maxWidth: '440px', padding: '24px', borderRadius: '20px', background: '#FFFFFF', border: '1px solid #E2E8F0', boxShadow: '0 20px 40px -8px rgba(15, 23, 42, 0.16)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#FEF2F2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              </div>
-              <div>
-                <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Withdraw Consent</h3>
-                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Privacy & Data Rights</span>
-              </div>
-            </div>
-
-            <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px 16px', marginBottom: '18px' }}>
-              <p style={{ fontSize: '13px', color: '#334155', lineHeight: 1.5, margin: 0, fontWeight: 600 }}>
-                Consent withdrawal will be available soon. This feature is currently being prepared in compliance with the Digital Personal Data Protection (DPDP) Act.
-              </p>
-              <p style={{ fontSize: '11.5px', color: '#64748B', lineHeight: 1.4, margin: '8px 0 0 0' }}>
-                Your clinical records remain strictly confidential and protected under hospital governance.
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                onClick={() => setShowWithdrawConsentModal(false)}
-                style={{
-                  background: '#2563EB',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '10px',
-                  padding: '10px 20px',
-                  fontSize: '13px',
-                  fontWeight: 800,
-                  cursor: 'pointer'
-                }}
-              >
-                Understood
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* DPO CONSENT WITHDRAWAL MODAL - Strictly hospital-specific */}
+      <DpoWithdrawConsentModal
+        isOpen={Boolean(showWithdrawConsentModal && (selectedHospitalDetails || selectedHospital))}
+        onClose={() => setShowWithdrawConsentModal(false)}
+        selectedHospital={selectedHospitalDetails || selectedHospital}
+        onRequestCreated={() => {
+          fetchPatientDpoRequests();
+        }}
+      />
 
       {/* ============================================================ */}
       {/* DIGITAL ABHA HEALTH ID CARD MODAL */}
@@ -8374,36 +8558,7 @@ const PatientDashboard = () => {
         />
       )}
 
-      {/* INFORMATIONAL WITHDRAW CONSENT NOTICE MODAL */}
-      {showWithdrawConsentModal && (
-        <div className="modal-overlay" style={{ zIndex: 10000 }}>
-          <div className="modal-box" style={{ maxWidth: '440px', padding: '24px', textAlign: 'center', borderRadius: '16px', background: '#FFFFFF' }}>
-            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#2563EB' }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            </div>
-            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>
-              Consent Management Notice
-            </h3>
-            <p style={{ fontSize: '13px', color: '#64748B', lineHeight: 1.5, marginBottom: '20px' }}>
-              Under India's Digital Personal Data Protection (DPDP) Act and institutional medical compliance, consent preferences are managed in coordination with hospital privacy protocols. Your medical records remain active and safely protected.
-            </p>
-            <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px', fontSize: '12px', color: '#334155', textAlign: 'left', marginBottom: '20px', lineHeight: 1.6 }}>
-              <div style={{ fontWeight: 800, marginBottom: '4px', color: '#0F172A' }}>Privacy Protocol Notice:</div>
-              <div>• No health records have been deleted.</div>
-              <div>• You can customize purpose-specific data sharing in the Privacy tab.</div>
-              <div>• For formal data erasure requests, please submit a DPDP Rights Request to the Hospital Grievance Officer.</div>
-            </div>
-            <button 
-              type="button" 
-              className="btn btn-primary" 
-              style={{ width: '100%', height: '42px', borderRadius: '10px', fontWeight: 800, fontSize: '13px', background: '#2563EB', color: 'white', border: 'none', cursor: 'pointer' }}
-              onClick={() => setShowWithdrawConsentModal(false)}
-            >
-              Understood
-            </button>
-          </div>
-        </div>
-      )}
+
 
       {/* DELETE APPOINTMENT CONFIRMATION MODAL */}
       {deleteApptConfirmId && (

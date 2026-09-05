@@ -12,6 +12,7 @@ import PharmacyDashboard from './pages/PharmacyDashboard';
 import HRPayroll from './pages/HRPayroll';
 import ProcurementDashboard from './pages/ProcurementDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import DpoDashboard from './pages/DpoDashboard';
 import HospitalPortal from './pages/HospitalPortal';
 import { PortalBrandingProvider } from './context/PortalBrandingContext';
 import WakeUpOverlay from './components/WakeUpOverlay';
@@ -94,6 +95,14 @@ const ProtectedRoute = ({ children, targetRole }) => {
     return <Navigate to="/login" replace />;
   }
 
+  // DPO route can be accessed by hospital DPO Manager or hospital Admin
+  if (targetRole === 'dpo') {
+    if (user.role === 'dpo' || user.role === 'admin' || user.role === 'superadmin' || user.role === 'super_admin') {
+      return children;
+    }
+    return <Navigate to="/login" replace />;
+  }
+
   // Patient route can be accessed by any user who logged in via Patient Portal, or admins/staff inspecting it
   if (targetRole === 'patient') {
     return children;
@@ -135,6 +144,7 @@ const ProtectedRoute = ({ children, targetRole }) => {
       case 'lab': return <Navigate to="/lab" replace />;
       case 'pharmacy': return <Navigate to="/pharmacy" replace />;
       case 'hr': return <Navigate to="/hr" replace />;
+      case 'dpo': return <Navigate to="/dpo" replace />;
       default: return <Navigate to="/login" replace />;
     }
   }
@@ -341,6 +351,12 @@ function App() {
         <Route path="/hr" element={
           <ProtectedRoute targetRole="hr">
             <HRPayroll />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/dpo" element={
+          <ProtectedRoute targetRole="dpo">
+            <DpoDashboard />
           </ProtectedRoute>
         } />
 

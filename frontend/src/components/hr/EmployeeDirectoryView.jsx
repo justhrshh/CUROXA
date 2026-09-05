@@ -686,6 +686,7 @@ export default function EmployeeDirectoryView({
               <option value="doctor">Doctors</option>
               <option value="receptionist">Receptionists</option>
               <option value="hr">HR Managers</option>
+              <option value="dpo">DPO Managers</option>
               <option value="nurse">Nurses</option>
               <option value="staff">Other Staff</option>
             </select>

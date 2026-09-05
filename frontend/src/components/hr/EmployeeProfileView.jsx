@@ -931,6 +931,7 @@ export default function EmployeeProfileView({
                       <option value="lab">Laboratory</option>
                       <option value="pharmacy">Pharmacy</option>
                       <option value="hr">HR Manager</option>
+                      <option value="dpo">DPO Manager</option>
                       <option value="admin">System Admin</option>
                     </select>
                   ) : (
