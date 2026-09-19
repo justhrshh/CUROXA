@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../utils/api';
-import { Eye, EyeOff, AlertCircle, CheckCircle, User, Lock, ArrowRight, ShieldCheck, Activity, Share2, Mail, KeyRound } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, CheckCircle, User, Lock, ArrowRight, ShieldCheck, Mail, KeyRound } from 'lucide-react';
 import { OTPField, OTPFieldInput } from '../components/ui/otp-field';
 import loginBg from '../assets/curoxa_bg_enhanced.png';
-import curoxaLogo from '../assets/curoxa_logo_transparent.png';
+import curoxaLogo from '../assets/quroxa_new_logo.png';
 import { usePortalBranding, HospitalBrandLogo } from '../context/PortalBrandingContext';
 
 const OTP_LENGTH = 6;
@@ -414,478 +414,111 @@ const Login = () => {
     }
   };
 
-  return (
-    <div 
-      className="min-h-screen w-full flex flex-col lg:flex-row bg-[#F4F8FC] text-slate-900 font-sans selection:bg-blue-100 selection:text-blue-900 overflow-x-hidden relative bg-no-repeat bg-cover bg-right min-[501px]:bg-center"
-      style={{ 
-        backgroundImage: `url(${loginBg})`,
-        imageRendering: '-webkit-optimize-contrast'
-      }}
-    >
-      
-      {/* MOBILE TOP HEADER: Visible on mobile/tablet */}
-      <header className="lg:hidden w-full px-5 py-4 flex items-center justify-between z-20 bg-white/40 backdrop-blur-md border-b border-slate-200/50">
-        <img 
-          src={curoxaLogo} 
-          alt="Curoxa" 
-          className="h-10 sm:h-12 w-auto object-contain drop-shadow-sm" 
-          onError={(e) => {
-            e.target.src = '/curoxa_logo_transparent.png';
-          }}
-        />
-        <button
-          type="button"
-          onClick={handlePatientPortalNavigation}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white border border-slate-200 text-slate-700 hover:text-blue-600 font-semibold text-xs shadow-sm transition active:scale-[0.98]"
-        >
-          <User className="w-3.5 h-3.5 text-blue-600" />
-          <span>Patient Portal</span>
+﻿  return (
+    <div className="min-h-screen w-full flex flex-col lg:flex-row text-slate-900 font-sans overflow-x-hidden bg-[#eaf4fd]">
+
+      {/* MOBILE HEADER */}
+      <header className="lg:hidden w-full px-5 py-4 flex items-center justify-between z-20 bg-white/60 backdrop-blur-md border-b border-slate-200/50">
+        <img src={curoxaLogo} alt="Quroxa" className="h-10 sm:h-11 w-auto object-contain" onError={(e) => { e.target.src = '/curoxa_logo_transparent.png'; }} />
+        <button type="button" onClick={handlePatientPortalNavigation} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white border border-slate-200 text-slate-700 hover:text-blue-600 font-semibold text-xs shadow-sm transition">
+          <User className="w-3.5 h-3.5 text-blue-600" /><span>Patient Portal</span>
         </button>
       </header>
 
-      {/* LEFT SIDE: Brand & Promotional Area (Desktop only: hidden on mobile/tablet) */}
-      <div className="hidden lg:flex relative w-full lg:w-[55%] min-h-screen flex-col justify-between p-10 lg:p-12 xl:p-16 lg:pl-16 xl:pl-24 2xl:pl-28 bg-transparent">
-        
-        {/* Top Header / Brand Logo */}
-        <div className="relative z-10 lg:ml-4 xl:ml-6">
-          {hospital ? (
-            <div className="flex items-center gap-3.5">
-              <HospitalBrandLogo hospital={hospital} size={54} borderRadius={16} fontSize={20} />
-              <div>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
-                  {hospital.name}
-                </h2>
-                <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100 uppercase tracking-wider">
-                  Hospital Portal • {hospital.hospitalId}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <img 
-              src={curoxaLogo} 
-              alt="Curoxa Healthcare" 
-              className="h-16 sm:h-20 lg:h-20 xl:h-24 w-auto object-contain drop-shadow-sm" 
-              onError={(e) => {
-                e.target.src = '/curoxa_logo_transparent.png';
-              }}
-            />
-          )}
-        </div>
-
-        {/* Main Promotional Copy */}
-        <div className="relative z-10 mt-2 lg:mt-3 mb-auto max-w-lg lg:ml-4 xl:ml-6">
-          <div className="space-y-0.5 sm:space-y-1">
-            <h1 className="text-3xl lg:text-[40px] xl:text-[44px] font-black tracking-tight text-slate-900 leading-[1.15]">
-              {hospital ? 'Clinical Workspace.' : 'Smarter Care.'}
-            </h1>
-            <h1 className="text-3xl lg:text-[40px] xl:text-[44px] font-black tracking-tight bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 bg-clip-text text-transparent leading-[1.15]">
-              {hospital ? 'Connected Care.' : 'Better Outcomes.'}
-            </h1>
-          </div>
-
-          <p className="mt-2 sm:mt-2.5 text-xs sm:text-sm lg:text-[15px] text-slate-600 font-normal leading-relaxed max-w-md">
-            {hospital ? (
-              <>Sign in to access your authorized clinical workspace at <span className="font-semibold text-slate-800">{hospital.name}</span>. Powered by Curoxa EMR platform.</>
-            ) : (
-              <>Track, manage, and optimize every clinical moment with <span className="font-semibold text-slate-800">Curoxa</span> — your complete hospital management solution.</>
-            )}
-          </p>
-        </div>
-      </div>
-
-      {/* MIDDLE FLOATING PILLS & CONNECTION LINE: Exact Match to Reference Mockup */}
-      <div className="hidden xl:block absolute left-[51%] top-[53%] -translate-x-1/2 -translate-y-1/2 w-[460px] h-[380px] pointer-events-none select-none z-10">
-        {/* Continuous S-Curve Dashed Path matching reference */}
-        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 460 380" fill="none">
-          {/* Main dashed connecting spline */}
-          <path 
-            d="M 10,75 C 65,60 120,48 185,55 C 245,62 295,40 335,48 C 365,55 375,105 325,145 C 285,175 235,172 225,205 C 215,240 175,265 205,290 C 235,315 305,305 355,270 C 375,255 395,245 425,250" 
-            stroke="#93C5FD" 
-            strokeWidth="1.5" 
-            strokeDasharray="4 4" 
-          />
-
-          {/* Node 1: Left connector */}
-          <circle cx="65" cy="62" r="5" fill="#93C5FD" fillOpacity="0.4" />
-          <circle cx="65" cy="62" r="3" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="1.5" />
-
-          {/* Node 2: Top-right curve */}
-          <circle cx="335" cy="48" r="5" fill="#93C5FD" fillOpacity="0.4" />
-          <circle cx="335" cy="48" r="3" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="1.5" />
-
-          {/* Node 3: Center-left inflection */}
-          <circle cx="195" cy="235" r="5" fill="#93C5FD" fillOpacity="0.4" />
-          <circle cx="195" cy="235" r="3" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="1.5" />
-
-          {/* Node 4: Right exit towards Login Card */}
-          <circle cx="355" cy="270" r="5" fill="#93C5FD" fillOpacity="0.4" />
-          <circle cx="355" cy="270" r="3" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="1.5" />
-        </svg>
-
-        {/* Badge 1: Secure */}
-        <div className="absolute top-[55px] left-[185px] -translate-x-1/2 -translate-y-1/2 bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_8px_30px_rgba(30,58,138,0.08)] border border-slate-100/90 px-4 py-2 flex items-center gap-2.5">
-          <ShieldCheck className="w-4 h-4 text-blue-500 flex-shrink-0" />
-          <span className="text-[13px] font-semibold text-slate-800 tracking-tight">Secure</span>
-        </div>
-
-        {/* Badge 2: Real-time */}
-        <div className="absolute top-[165px] left-[285px] -translate-x-1/2 -translate-y-1/2 bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_8px_30px_rgba(30,58,138,0.08)] border border-slate-100/90 px-4 py-2 flex items-center gap-2.5">
-          <Activity className="w-4 h-4 text-blue-500 flex-shrink-0" />
-          <span className="text-[13px] font-semibold text-slate-800 tracking-tight">Real-time</span>
-        </div>
-
-        {/* Badge 3: Connected */}
-        <div className="absolute top-[290px] left-[215px] -translate-x-1/2 -translate-y-1/2 bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_8px_30px_rgba(30,58,138,0.08)] border border-slate-100/90 px-4 py-2 flex items-center gap-2.5">
-          <svg className="w-4 h-4 text-blue-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="5" r="2.5"/>
-            <circle cx="6" cy="18" r="2.5"/>
-            <circle cx="18" cy="18" r="2.5"/>
-            <path d="m7.8 16 2.4-8.8"/>
-            <path d="m16.2 16-2.4-8.8"/>
-            <path d="M8.5 18h7"/>
+      {/* LEFT PANEL */}
+      <div className="hidden lg:flex relative w-full lg:w-[58%] min-h-screen flex-col overflow-hidden">
+        <div className="absolute right-0 top-0 h-full w-[52%] pointer-events-none" style={{ backgroundImage: `url(${loginBg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(1.5px) brightness(0.97)' }} />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#eaf4fd] via-[#eaf4fd]/97 to-[#d5ecf8]/60 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-full pointer-events-none z-10" style={{ lineHeight: 0 }}>
+          <svg viewBox="0 0 1440 80" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" className="w-full">
+            <path d="M0,55 C360,0 1080,80 1440,25 L1440,80 L0,80 Z" fill="white" fillOpacity="0.8" />
+            <path d="M0,65 C480,15 960,75 1440,45 L1440,80 L0,80 Z" fill="white" />
           </svg>
-          <span className="text-[13px] font-semibold text-slate-800 tracking-tight">Connected</span>
         </div>
-      </div>
-
-      {/* RIGHT SIDE: Floating Login Card Area (Centered on mobile, right column on desktop) */}
-      <div className="w-full lg:w-[45%] flex-1 lg:min-h-screen flex flex-col justify-center items-center p-4 sm:p-6 lg:p-10 xl:p-14 bg-transparent py-4 sm:py-6 lg:py-12 my-auto">
-        
-        {/* Main Authentication Card */}
-        <div className="w-full max-w-[420px] sm:max-w-[440px] bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-[0_16px_48px_rgba(15,23,42,0.06)] p-5 sm:p-8 transition-all relative z-10">
-          
-          {/* Card Top Branding & Header */}
-          <div className="text-center mb-6">
+        <div className="relative z-10 flex flex-col h-full px-12 xl:px-16 2xl:px-20 pt-8 pb-20">
+          <div className="flex items-start justify-between mb-8">
             {hospital ? (
-              <div className="flex flex-col items-center mb-3">
-                <HospitalBrandLogo hospital={hospital} size={56} borderRadius={16} fontSize={22} className="mb-2.5 shadow-md" />
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight text-center leading-tight">
-                  {hospital.name}
-                </h2>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span className="text-[11px] font-bold text-slate-500 font-mono uppercase tracking-wider">
-                    {hospital.hospitalId}
-                  </span>
+              <div className="flex items-center gap-3">
+                <HospitalBrandLogo hospital={hospital} size={52} borderRadius={14} fontSize={19} />
+                <div>
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight leading-tight">{hospital.name}</h2>
+                  <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 uppercase tracking-wider">Hospital Portal - {hospital.hospitalId}</span>
                 </div>
               </div>
             ) : (
-              <img 
-                src={curoxaLogo} 
-                alt="Curoxa" 
-                className="h-12 sm:h-14 lg:h-16 w-auto mx-auto object-contain mb-3 sm:mb-4 drop-shadow-sm" 
-                onError={(e) => {
-                  e.target.src = '/curoxa_logo_transparent.png';
-                }}
-              />
+              <img src={curoxaLogo} alt="Quroxa" className="h-[52px] xl:h-[58px] w-auto object-contain" onError={(e) => { e.target.src = '/curoxa_logo_transparent.png'; }} />
             )}
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              {hospital ? 'Staff & Clinical Sign In' : 'Welcome back'}
-            </h2>
-            <p className="text-sm sm:text-base text-slate-500 font-normal mt-1.5">
-              {hospital ? 'Enter your credentials to access this hospital portal' : 'Sign in to continue to Curoxa'}
-            </p>
+            <div className="hidden xl:flex items-center gap-3 text-[13px] font-semibold text-slate-500 mt-2">
+              <span>Better Care</span><span className="text-slate-300">|</span><span>Smarter Clinics</span><span className="text-slate-300">|</span><span>Healthier Lives</span>
+            </div>
           </div>
-
-          {/* Feedback Alerts */}
-          {error && (
-            <div className="mb-5 p-3.5 rounded-xl bg-red-50/90 border border-red-200 text-red-700 text-sm font-medium flex items-start gap-2.5 animate-fadeIn">
-              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-              <span className="flex-1 leading-snug">{error}</span>
+          <div className="max-w-[500px] mt-2">
+            <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#0ea5e9] mb-3">Welcome to Quroxa</p>
+            <h1 className="text-[36px] xl:text-[42px] font-black text-[#0f1f3d] leading-[1.18] tracking-tight">{hospital ? 'Clinical Workspace.' : 'Simplify Clinic Operations.'}</h1>
+            <h1 className="text-[36px] xl:text-[42px] font-black text-[#0ea5e9] leading-[1.18] tracking-tight mt-0.5">{hospital ? 'Connected Care.' : 'Focus on Better Care.'}</h1>
+            <p className="mt-4 text-[15px] text-slate-600 leading-relaxed max-w-[420px]">{hospital ? (<>Sign in to access your authorized clinical workspace at <span className="font-semibold text-slate-800">{hospital.name}</span>. Powered by Quroxa EMR platform.</>) : 'All-in-one Clinic Management System for a smoother workflow, happier patients and healthier communities.'}</p>
+          </div>
+          {!hospital && (
+            <div className="mt-8 grid grid-cols-3 gap-x-8 gap-y-6 max-w-[420px]">
+              <div className="flex flex-col items-center gap-2 text-center"><div className="w-12 h-12 rounded-2xl bg-[#e0f2fe] flex items-center justify-center shadow-sm"><svg className="w-6 h-6 text-[#0ea5e9]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-5.356-3.765M9 20H4v-2a4 4 0 015.356-3.765M15 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg></div><span className="text-[12px] font-semibold text-slate-700 leading-tight">Patient Management</span></div>
+              <div className="flex flex-col items-center gap-2 text-center"><div className="w-12 h-12 rounded-2xl bg-[#d1fae5] flex items-center justify-center shadow-sm"><svg className="w-6 h-6 text-[#059669]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="3" strokeLinecap="round" strokeLinejoin="round" /><path strokeLinecap="round" strokeLinejoin="round" d="M16 2v4M8 2v4M3 10h18" /></svg></div><span className="text-[12px] font-semibold text-slate-700 leading-tight">Appointment Scheduling</span></div>
+              <div className="flex flex-col items-center gap-2 text-center"><div className="w-12 h-12 rounded-2xl bg-[#ede9fe] flex items-center justify-center shadow-sm"><svg className="w-6 h-6 text-[#7c3aed]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 3v10.5l-3.5 6.5h9l-3.5-6.5V3M9 3h6" /></svg></div><span className="text-[12px] font-semibold text-slate-700 leading-tight">Lab and Diagnostics</span></div>
+              <div className="flex flex-col items-center gap-2 text-center"><div className="w-12 h-12 rounded-2xl bg-[#fff7ed] flex items-center justify-center shadow-sm"><svg className="w-6 h-6 text-[#ea580c]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg></div><span className="text-[12px] font-semibold text-slate-700 leading-tight">Reports and Analytics</span></div>
+              <div className="flex flex-col items-center gap-2 text-center"><div className="w-12 h-12 rounded-2xl bg-[#ccfbf1] flex items-center justify-center shadow-sm"><svg className="w-6 h-6 text-[#0d9488]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg></div><span className="text-[12px] font-semibold text-slate-700 leading-tight">Pharmacy Management</span></div>
+              <div className="flex flex-col items-center gap-2 text-center"><div className="w-12 h-12 rounded-2xl bg-[#dbeafe] flex items-center justify-center shadow-sm"><svg className="w-6 h-6 text-[#1d4ed8]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg></div><span className="text-[12px] font-semibold text-slate-700 leading-tight">Secure and Reliable</span></div>
             </div>
           )}
+          <div className="mt-auto flex items-center gap-2.5 text-slate-600">
+            <div className="w-8 h-8 rounded-full bg-white/80 flex items-center justify-center shadow-sm"><svg className="w-4 h-4 text-[#0ea5e9]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg></div>
+            <span className="text-[13px] font-semibold">Trusted by Clinics. Loved by Patients.</span>
+          </div>
+        </div>
+      </div>
 
-          {success && (
-            <div className="mb-5 p-3.5 rounded-xl bg-emerald-50/90 border border-emerald-200 text-emerald-700 text-sm font-medium flex items-start gap-2.5 animate-fadeIn">
-              <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-              <span className="flex-1 leading-snug">{success}</span>
-            </div>
-          )}
-
-          {/* Form Switch: Password Mode vs OTP Mode */}
+﻿
+      {/* RIGHT PANEL */}
+      <div className="w-full lg:w-[42%] flex-1 lg:min-h-screen flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 xl:p-10 py-6 sm:py-8 lg:py-0 bg-white/50 lg:bg-transparent">
+        <div className="w-full max-w-[420px] bg-white rounded-3xl shadow-[0_20px_60px_rgba(15,31,61,0.11)] border border-slate-100 p-7 sm:p-8 relative z-10">
+          <div className="flex flex-col items-center mb-5">
+            {hospital ? (
+              <><HospitalBrandLogo hospital={hospital} size={56} borderRadius={16} fontSize={22} className="mb-2" />
+              <h2 className="text-xl font-black text-slate-900 tracking-tight text-center">{hospital.name}</h2>
+              <div className="flex items-center gap-1.5 mt-1"><span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /><span className="text-[11px] font-bold text-slate-500 font-mono uppercase tracking-wider">{hospital.hospitalId}</span></div></>
+            ) : (
+              <img src={curoxaLogo} alt="Quroxa" className="h-[52px] w-auto object-contain" onError={(e) => { e.target.src = '/curoxa_logo_transparent.png'; }} />
+            )}
+          </div>
+          <div className="mb-5">
+            <h2 className="text-[22px] font-bold text-[#0f1f3d]">{hospital ? 'Staff and Clinical Sign In' : 'Sign In'}</h2>
+            <p className="text-[13px] text-slate-500 mt-0.5">{hospital ? 'Enter your credentials to access this hospital portal' : 'Enter your credentials to access your account'}</p>
+          </div>
+          {error && (<div className="mb-4 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium flex items-start gap-2.5"><AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" /><span className="flex-1 leading-snug">{error}</span></div>)}
+          {success && (<div className="mb-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium flex items-start gap-2.5"><CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" /><span className="flex-1 leading-snug">{success}</span></div>)}
           {loginMethod === 'password' ? (
-            /* PASSWORD LOGIN FORM */
-            <form onSubmit={handleLogin} className="space-y-4 sm:space-y-5">
-              
-              {/* Staff ID / Contact Input */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  Staff ID / Contact Number
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <User className="w-5 h-5" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={staffId}
-                    onChange={(e) => setStaffId(e.target.value.toLowerCase())}
-                    placeholder="Enter your Staff ID or Contact Number"
-                    className="w-full h-12 pl-11 pr-4 bg-white rounded-xl border border-slate-200 text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
-                  />
-                </div>
+            <form onSubmit={handleLogin} className="space-y-3.5">
+              <div className="relative"><div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400"><User className="w-5 h-5" /></div><input type="text" required value={staffId} onChange={(e) => setStaffId(e.target.value.toLowerCase())} placeholder="Username or Email" className="w-full h-12 pl-11 pr-4 bg-white rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" /></div>
+              <div className="relative"><div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400"><Lock className="w-5 h-5" /></div><input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full h-12 pl-11 pr-11 bg-white rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button></div>
+              <div className="flex items-center justify-between"><label className="flex items-center gap-2 cursor-pointer select-none"><input type="checkbox" className="w-4 h-4 rounded border-slate-300 accent-blue-600" /><span className="text-[13px] text-slate-600">Remember me</span></label><button type="button" onClick={() => { setShowForgotModal(true); setForgotEmail('); setForgotOtp('); setForgotNewPassword('); setForgotConfirmPassword('); setForgotStep(1); setForgotError('); setForgotSuccess('); }} className="text-[13px] font-semibold text-blue-600 hover:text-blue-700 transition">Forgot Password?</button></div>
+              <button type="submit" disabled={loading} className="w-full h-12 mt-1 rounded-xl bg-gradient-to-r from-[#1a73e8] to-[#0ea5e9] hover:from-[#1558b0] hover:to-[#0284c7] text-white font-bold text-base shadow-md shadow-blue-500/20 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">{loading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Logging in...</> : <>Login <ArrowRight className="w-4 h-4" /></>}</button>
+              <div className="relative text-center"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div><span className="relative bg-white px-3 text-[12px] text-slate-400">Or continue with</span></div>
+              <div className="grid grid-cols-3 gap-2.5">
+                {isGoogleConfigured ? (<div id="googleSignInButton" className="col-span-1 flex justify-center" />) : (<button type="button" onClick={() => setShowGoogleModal(true)} className="h-11 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center gap-1.5 text-[13px] font-semibold text-slate-700 shadow-sm transition"><svg className="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>Google</button>)}
+                <button type="button" className="h-11 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center gap-1.5 text-[13px] font-semibold text-slate-700 shadow-sm transition"><svg className="w-4 h-4" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#F25022" /><rect x="11" y="1" width="9" height="9" fill="#7FBA00" /><rect x="1" y="11" width="9" height="9" fill="#00A4EF" /><rect x="11" y="11" width="9" height="9" fill="#FFB900" /></svg>Microsoft</button>
+                <button type="button" onClick={() => setLoginMethod('otp')} className="h-11 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center gap-1.5 text-[13px] font-semibold text-slate-700 shadow-sm transition"><ShieldCheck className="w-4 h-4 text-slate-500" />SSO</button>
               </div>
-
-              {/* Password Input */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-sm font-semibold text-slate-700">
-                    Password
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowForgotModal(true);
-                      setForgotEmail('');
-                      setForgotOtp('');
-                      setForgotNewPassword('');
-                      setForgotConfirmPassword('');
-                      setForgotStep(1);
-                      setForgotError('');
-                      setForgotSuccess('');
-                    }}
-                    className="text-sm font-medium text-blue-600 hover:text-blue-700 transition"
-                  >
-                    Forgot Password?
-                  </button>
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <Lock className="w-5 h-5" />
-                  </div>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="w-full h-12 pl-11 pr-11 bg-white rounded-xl border border-slate-200 text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition"
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Primary Log In Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full h-12 mt-2 rounded-xl bg-gradient-to-r from-blue-600 via-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold text-sm sm:text-base shadow-md shadow-blue-500/15 hover:shadow-blue-500/25 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Logging in...
-                  </span>
-                ) : (
-                  'Log In'
-                )}
-              </button>
-
-              {/* Divider */}
-              <div className="relative my-4 text-center">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200" />
-                </div>
-                <span className="relative bg-white px-3 text-xs font-bold text-slate-400 tracking-wider">
-                  — OR —
-                </span>
-              </div>
-
-              {/* Patient Portal Option (Subtle Green Tint) */}
-              <button
-                type="button"
-                onClick={handlePatientPortalNavigation}
-                className="w-full h-12 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200 text-emerald-800 font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition duration-150 shadow-sm"
-              >
-                <User className="w-5 h-5 text-emerald-600" />
-                Patient Portal Login (with Email / OTP)
-              </button>
+              <button type="button" onClick={handlePatientPortalNavigation} className="w-full h-10 rounded-xl bg-emerald-50/70 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-semibold text-xs flex items-center justify-center gap-2 transition"><User className="w-4 h-4 text-emerald-600" />Patient Portal Login</button>
+              <div className="pt-3 text-center border-t border-slate-100"><p className="text-[11px] text-slate-400">2025 Quroxa. All rights reserved.</p><div className="flex items-center justify-center gap-2 mt-0.5"><button type="button" className="text-[11px] text-slate-400 hover:text-blue-600 transition">Privacy Policy</button><span className="text-slate-300 text-[11px]">|</span><button type="button" className="text-[11px] text-slate-400 hover:text-blue-600 transition">Terms of Service</button><span className="text-slate-300 text-[11px]">|</span><button type="button" className="text-[11px] text-slate-400 hover:text-blue-600 transition">Support</button></div></div>
             </form>
           ) : (
-            /* OTP LOGIN FORM */
-            <form onSubmit={!otpSent ? handleSendOtp : handleVerifyLoginOtp} className="space-y-4 sm:space-y-5">
-              {!otpSent ? (
-                <>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                      Email or Mobile Number
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                        <Mail className="w-5 h-5" />
-                      </div>
-                      <input
-                        type="text"
-                        required
-                        value={emailOrPhone}
-                        onChange={(e) => setEmailOrPhone(e.target.value.toLowerCase())}
-                        placeholder="Enter registered email or phone"
-                        className="w-full h-12 pl-11 pr-4 bg-white rounded-xl border border-slate-200 text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold text-sm sm:text-base shadow-md shadow-blue-500/15 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60"
-                  >
-                    {loading ? (
-                      <span className="flex items-center gap-2">
-                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Sending OTP...
-                      </span>
-                    ) : (
-                      'Send OTP'
-                    )}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                      Contact Information
-                    </label>
-                    <input
-                      type="text"
-                      disabled
-                      value={emailOrPhone}
-                      className="w-full h-12 px-4 bg-slate-100 rounded-xl border border-slate-200 text-sm sm:text-base text-slate-600 font-medium"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      One-Time Password (OTP)
-                    </label>
-                    <OTPField 
-                      aria-label="One-time password" 
-                      length={OTP_LENGTH}
-                      value={loginOtp}
-                      onChange={setLoginOtp}
-                      className="w-full justify-between"
-                    >
-                      {OTP_SLOT_KEYS.map((slotKey, index) => (
-                        <OTPFieldInput
-                          key={slotKey}
-                          aria-label={index === 0 ? undefined : `Character ${index + 1} of ${OTP_LENGTH}`}
-                        />
-                      ))}
-                    </OTPField>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading || loginOtp.length < 6}
-                    className="w-full h-12 mt-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold text-sm sm:text-base shadow-md shadow-blue-500/15 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60"
-                  >
-                    {loading ? (
-                      <span className="flex items-center gap-2">
-                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Verifying...
-                      </span>
-                    ) : (
-                      'Verify & Log In'
-                    )}
-                  </button>
-
-                  <div className="flex items-center justify-between text-sm pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setOtpSent(false)}
-                      className="text-slate-500 hover:text-slate-700 font-medium hover:underline"
-                    >
-                      Change contact info
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSendOtp}
-                      disabled={loading}
-                      className="text-blue-600 hover:text-blue-700 font-semibold hover:underline"
-                    >
-                      Resend OTP
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {/* Divider */}
-              <div className="relative my-4 text-center">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200" />
-                </div>
-                <span className="relative bg-white px-3 text-xs font-bold text-slate-400 tracking-wider">
-                  — OR —
-                </span>
-              </div>
-
-              {/* Patient Portal Option */}
-              <button
-                type="button"
-                onClick={handlePatientPortalNavigation}
-                className="w-full h-12 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200 text-emerald-800 font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition duration-150 shadow-sm"
-              >
-                <User className="w-5 h-5 text-emerald-600" />
-                Patient Portal Login (with Email / OTP)
-              </button>
+            <form onSubmit={!otpSent ? handleSendOtp : handleVerifyLoginOtp} className="space-y-4">
+              {!otpSent ? (<><div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Email or Mobile Number</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400"><Mail className="w-5 h-5" /></div><input type="text" required value={emailOrPhone} onChange={(e) => setEmailOrPhone(e.target.value.toLowerCase())} placeholder="Enter registered email or phone" className="w-full h-12 pl-11 pr-4 bg-white rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition" /></div></div><button type="submit" disabled={loading} className="w-full h-12 rounded-xl bg-gradient-to-r from-[#1a73e8] to-[#0ea5e9] text-white font-bold text-sm shadow-md active:scale-[0.99] transition flex items-center justify-center gap-2 disabled:opacity-60">{loading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Sending OTP...</> : 'Send OTP'}</button></>) : (<><div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Contact Information</label><input type="text" disabled value={emailOrPhone} className="w-full h-12 px-4 bg-slate-100 rounded-xl border border-slate-200 text-sm text-slate-600 font-medium" /></div><div><label className="block text-sm font-semibold text-slate-700 mb-2">One-Time Password</label><OTPField aria-label="One-time password" length={OTP_LENGTH} value={loginOtp} onChange={setLoginOtp} className="w-full justify-between">{OTP_SLOT_KEYS.map((slotKey, index) => (<OTPFieldInput key={slotKey} aria-label={index === 0 ? undefined : `Character ${index + 1} of ${OTP_LENGTH}`} />))}</OTPField></div><button type="submit" disabled={loading || loginOtp.length < 6} className="w-full h-12 mt-1 rounded-xl bg-gradient-to-r from-[#1a73e8] to-[#0ea5e9] text-white font-bold text-sm shadow-md active:scale-[0.99] transition flex items-center justify-center gap-2 disabled:opacity-60">{loading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Verifying...</> : 'Verify and Log In'}</button><div className="flex items-center justify-between text-sm"><button type="button" onClick={() => setOtpSent(false)} className="text-slate-500 hover:text-slate-700 font-medium hover:underline">Change contact info</button><button type="button" onClick={handleSendOtp} disabled={loading} className="text-blue-600 hover:text-blue-700 font-semibold hover:underline">Resend OTP</button></div></>)}
+              <div className="text-center"><button type="button" onClick={() => { setLoginMethod('password'); setError('); setSuccess('); }} className="text-[13px] text-blue-600 font-semibold hover:underline">Back to Password Login</button></div>
+              <div className="pt-3 text-center border-t border-slate-100"><p className="text-[11px] text-slate-400">2025 Quroxa. All rights reserved.</p></div>
             </form>
           )}
-
-          {/* OTP Mode Toggle Option (Matching Reference UI) */}
-          <div className="mt-6 text-center pt-2">
-            <span className="text-sm text-slate-600 font-normal">
-              {loginMethod === 'password' ? (
-                <>
-                  Prefer login without password?{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginMethod('otp');
-                      setError('');
-                      setSuccess('');
-                      setOtpSent(false);
-                    }}
-                    className="text-blue-600 font-bold hover:text-blue-700 hover:underline transition"
-                  >
-                    Use OTP Login
-                  </button>
-                </>
-              ) : (
-                <>
-                  Know your password?{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginMethod('password');
-                      setError('');
-                      setSuccess('');
-                    }}
-                    className="text-blue-600 font-bold hover:text-blue-700 hover:underline transition"
-                  >
-                    Use Password Login
-                  </button>
-                </>
-              )}
-            </span>
-          </div>
-
         </div>
-
-        {/* Global Footer Copyright */}
-        <div className="mt-8 text-center relative z-10">
-          <p className="text-xs text-slate-400 font-medium">
-            © 2026 Curoxa Healthcare Systems. All rights reserved.
-          </p>
-        </div>
-
       </div>
+
 
       {/* Server Wake-Up Splash Overlay */}
       {showServerSplash && (
