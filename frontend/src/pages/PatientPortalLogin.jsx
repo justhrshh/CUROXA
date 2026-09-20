@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import api from '../utils/api';
-import { ArrowRight, UserPlus, FileText, User, Lock, Mail, KeyRound, AlertCircle, CheckCircle, Shield, ChevronRight } from 'lucide-react';
+import { 
+  ArrowRight, ArrowLeft, UserPlus, FileText, User, Mail, AlertCircle, CheckCircle, 
+  ShieldCheck, ChevronRight, Calendar, FlaskConical, Pill, Heart 
+} from 'lucide-react';
 import { OTPField, OTPFieldInput } from '../components/ui/otp-field';
-import loginBg from '../assets/curoxa_bg_enhanced.png';
-import curoxaLogo from '../assets/curoxa_logo_transparent.png';
+import quroxaRefBg from '../assets/quroxa_reference_bg.jpg';
+import curoxaLogo from '../assets/quroxa_new_logo.png';
+import { usePortalBranding, HospitalBrandLogo } from '../context/PortalBrandingContext';
 
 const OTP_LENGTH = 6;
 const OTP_SLOT_KEYS = Array.from({ length: OTP_LENGTH }, (_, i) => `otp-slot-${i}`);
 
 const PatientPortalLogin = () => {
+  const portalBranding = usePortalBranding();
+  const hospital = portalBranding?.hospital;
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -106,89 +112,241 @@ const PatientPortalLogin = () => {
   };
 
   return (
-    <div 
-      className="min-h-screen w-full flex flex-col bg-[#F4F8FC] text-slate-900 font-sans selection:bg-blue-100 selection:text-blue-900 overflow-x-hidden relative bg-no-repeat bg-cover bg-right min-[501px]:bg-[position:center_84%]"
-      style={{ 
-        backgroundImage: `url(${loginBg})`,
-        imageRendering: '-webkit-optimize-contrast'
-      }}
-    >
-      {/* TOP NAVIGATION BAR */}
-      <header className="w-full px-6 sm:px-10 lg:px-14 xl:px-16 py-3.5 sm:py-5 flex items-center justify-between z-20 bg-white/40 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none border-b border-slate-200/50 lg:border-none">
-        <div className="flex items-center gap-2.5 sm:gap-3.5 cursor-pointer" onClick={() => navigate('/')}>
-          <img 
-            src={curoxaLogo} 
-            alt="Curoxa" 
-            className="h-12 sm:h-16 lg:h-20 w-auto object-contain drop-shadow-sm" 
-            onError={(e) => {
-              e.target.src = '/curoxa_logo_transparent.png';
-            }}
-          />
-          <span className="text-base sm:text-2xl font-bold tracking-tight text-blue-600 inline-block">
-            Patient Portal
-          </span>
-        </div>
+    <div className="min-h-screen w-full relative flex flex-col justify-between overflow-x-hidden font-['Inter',sans-serif] select-none bg-slate-50">
 
-        <button 
-          type="button"
-          onClick={handleStaffLoginNavigation} 
-          className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl bg-white/90 hover:bg-white border border-slate-200 text-slate-700 hover:text-blue-600 font-semibold text-xs sm:text-sm shadow-sm hover:shadow transition active:scale-[0.98]"
-        >
-          <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" />
-          <span>Staff Login</span>
-        </button>
+      {/* ── 1. BACKGROUND HEALTHCARE PHOTOGRAPH ── */}
+      <div 
+        className="absolute inset-0 w-full h-full pointer-events-none bg-no-repeat bg-cover z-0"
+        style={{
+          backgroundImage: `url(${quroxaRefBg})`,
+          backgroundPosition: 'center center',
+          imageRendering: '-webkit-optimize-contrast'
+        }}
+      />
+
+      {/* ── 2. MOBILE ADAPTIVE BACKDROP ── */}
+      <div className="lg:hidden absolute inset-0 bg-[#f8fbfe]/88 backdrop-blur-[2px] pointer-events-none z-[1]" />
+
+      {/* ── 3. HEADER ── */}
+      <header className="lg:absolute top-0 left-0 right-0 z-20 w-full max-w-[1600px] mx-auto px-8 sm:px-12 lg:px-16 pt-7 sm:pt-9 flex items-center justify-between pointer-events-none">
+        {/* Top-Left Logo */}
+        <div className="pointer-events-auto flex items-center gap-3.5 cursor-pointer" onClick={() => navigate('/')}>
+          {hospital ? (
+            <div className="flex items-center gap-3.5">
+              <HospitalBrandLogo hospital={hospital} size={50} borderRadius={14} fontSize={19} />
+              <div>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight leading-tight">
+                  {hospital.name}
+                </h2>
+                <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100 uppercase tracking-wider">
+                  Patient Portal • {hospital.hospitalId}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <img 
+                src={curoxaLogo} 
+                alt="Quroxa Patient Portal" 
+                className="h-18 sm:h-22 lg:h-[94px] w-auto object-contain drop-shadow-sm" 
+                onError={(e) => { e.target.src = '/curoxa_logo_transparent.png'; }} 
+              />
+              <span className="hidden sm:inline-block text-xs font-bold uppercase tracking-widest text-[#0ea5e9] bg-sky-50 px-2.5 py-1 rounded-full border border-sky-100">
+                Patient Portal
+              </span>
+            </div>
+          )}
+        </div>
       </header>
 
-      {/* MAIN VIEWPORT WRAPPER */}
-      <main className="flex-1 w-full flex flex-col lg:flex-row items-center justify-center lg:justify-between px-6 sm:px-10 lg:px-12 xl:px-16 py-6 sm:py-8 lg:py-6 z-10 max-w-7xl 2xl:max-w-[1400px] mx-auto my-auto relative">
-        
-        {/* LEFT SIDE: Promotional Branding Hero (Shifted slightly inward towards center) */}
-        <div className="hidden lg:flex relative w-full lg:w-[48%] xl:w-[48%] flex-col justify-start self-start pt-0 lg:pt-1 xl:pt-2 pb-4 pr-4 lg:pl-4 xl:pl-8 2xl:pl-10">
-          <div className="space-y-0.5 max-w-lg">
-            <h1 className="text-3xl lg:text-[42px] xl:text-[46px] font-black tracking-tight text-slate-900 leading-[1.12]">
-              Your Health.
-            </h1>
-            <h1 className="text-3xl lg:text-[42px] xl:text-[46px] font-black tracking-tight bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 bg-clip-text text-transparent leading-[1.12]">
-              Our Priority.
-            </h1>
+      {/* ── 4. MAIN HERO & LOGIN SECTION ── */}
+      <main className="relative z-10 w-full max-w-[1600px] mx-auto flex-1 min-h-screen flex flex-col lg:flex-row items-center justify-between px-8 sm:px-12 lg:px-16 py-6 lg:py-8 gap-8 lg:gap-12">
+
+        {/* ── LEFT HERO SECTION ── */}
+        <div className="w-full lg:w-[56%] flex flex-col justify-center pt-2 lg:pt-14 pb-4">
+          
+          {/* ── TEXT & 6 ICONS CONTAINER WITH LOCALIZED SOFT WHITE BLUR ── */}
+          <div className="relative max-w-[580px] xl:max-w-[620px]">
+            
+            {/* White soft blur layer strictly behind this block with seamless feathered edges */}
+            <div 
+              className="hidden lg:block absolute -left-[360px] -right-[360px] -top-64 -bottom-24 pointer-events-none -z-10"
+              style={{
+                background: 'radial-gradient(ellipse 48% 54% at 50% 56%, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.92) 36%, rgba(255, 255, 255, 0.62) 60%, rgba(255, 255, 255, 0.22) 80%, rgba(255, 255, 255, 0.04) 94%, transparent 100%)',
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
+                maskImage: 'radial-gradient(ellipse 48% 54% at 50% 56%, black 0%, black 36%, rgba(0, 0, 0, 0.82) 58%, rgba(0, 0, 0, 0.32) 78%, rgba(0, 0, 0, 0.06) 94%, transparent 100%)',
+                WebkitMaskImage: 'radial-gradient(ellipse 48% 54% at 50% 56%, black 0%, black 36%, rgba(0, 0, 0, 0.82) 58%, rgba(0, 0, 0, 0.32) 78%, rgba(0, 0, 0, 0.06) 94%, transparent 100%)'
+              }}
+            />
+
+            {/* Eyebrow & Headlines */}
+            <div>
+              <p className="text-[11px] font-bold tracking-[0.22em] uppercase text-[#0ea5e9] mb-3">
+                WELCOME TO QUROXA PATIENT PORTAL
+              </p>
+              
+              <h1 className="text-2xl sm:text-3xl lg:text-[34px] xl:text-[38px] 2xl:text-[42px] font-black text-[#0f1f3d] tracking-tight leading-[1.16] sm:whitespace-nowrap">
+                {hospital ? `${hospital.name} Patient Portal.` : 'Your Health.'}
+              </h1>
+              
+              <h1 className="text-2xl sm:text-3xl lg:text-[34px] xl:text-[38px] 2xl:text-[42px] font-black text-[#0ea5e9] tracking-tight leading-[1.16] mt-0.5 sm:whitespace-nowrap">
+                {hospital ? 'Personal Health Record.' : 'Our Priority.'}
+              </h1>
+
+              <p className="mt-4 text-[14px] sm:text-[15px] text-slate-500 font-normal leading-relaxed max-w-[480px]">
+                Access your medical records, prescriptions, and appointments — all in one secure place.
+              </p>
+            </div>
+
+            {/* ── 6 FEATURE ICONS (Exact 3 columns × 2 rows matching Login.jsx) ── */}
+            <div className="mt-9 grid grid-cols-3 gap-x-6 sm:gap-x-8 gap-y-6 max-w-[430px]">
+              
+              {/* 1. Medical Records */}
+              <div className="flex flex-col items-center text-center gap-2">
+                <div className="w-12 h-12 rounded-2xl bg-[#e0f2fe] flex items-center justify-center shadow-sm text-[#0ea5e9]">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <span className="text-[12px] sm:text-[13px] font-semibold text-slate-700 leading-tight">
+                  Medical<br />Records
+                </span>
+              </div>
+
+              {/* 2. Appointments */}
+              <div className="flex flex-col items-center text-center gap-2">
+                <div className="w-12 h-12 rounded-2xl bg-[#dcfce7] flex items-center justify-center shadow-sm text-[#16a34a]">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <span className="text-[12px] sm:text-[13px] font-semibold text-slate-700 leading-tight">
+                  Appointment<br />Booking
+                </span>
+              </div>
+
+              {/* 3. Lab Reports */}
+              <div className="flex flex-col items-center text-center gap-2">
+                <div className="w-12 h-12 rounded-2xl bg-[#f3e8ff] flex items-center justify-center shadow-sm text-[#9333ea]">
+                  <FlaskConical className="w-5 h-5" />
+                </div>
+                <span className="text-[12px] sm:text-[13px] font-semibold text-slate-700 leading-tight">
+                  Lab &amp;<br />Diagnostics
+                </span>
+              </div>
+
+              {/* 4. Prescriptions */}
+              <div className="flex flex-col items-center text-center gap-2">
+                <div className="w-12 h-12 rounded-2xl bg-[#ffedd5] flex items-center justify-center shadow-sm text-[#ea580c]">
+                  <Pill className="w-5 h-5" />
+                </div>
+                <span className="text-[12px] sm:text-[13px] font-semibold text-slate-700 leading-tight">
+                  Pharmacy &amp;<br />Prescriptions
+                </span>
+              </div>
+
+              {/* 5. Doctor Consultations */}
+              <div className="flex flex-col items-center text-center gap-2">
+                <div className="w-12 h-12 rounded-2xl bg-[#ccfbf1] flex items-center justify-center shadow-sm text-[#0d9488]">
+                  <User className="w-5 h-5" />
+                </div>
+                <span className="text-[12px] sm:text-[13px] font-semibold text-slate-700 leading-tight">
+                  Doctor<br />Consultations
+                </span>
+              </div>
+
+              {/* 6. Secure & Private */}
+              <div className="flex flex-col items-center text-center gap-2">
+                <div className="w-12 h-12 rounded-2xl bg-[#ede9fe] flex items-center justify-center shadow-sm text-[#7c3aed]">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <span className="text-[12px] sm:text-[13px] font-semibold text-slate-700 leading-tight">
+                  100% Secure<br />&amp; Private
+                </span>
+              </div>
+
+            </div>
           </div>
 
-          <p className="mt-2 sm:mt-2.5 text-xs sm:text-sm lg:text-[15px] text-slate-600 font-normal leading-relaxed max-w-md">
-            Access your medical records, prescriptions, and appointments — all in one secure place.
-          </p>
+          {/* ── TRUST BADGE: Bottom Left pill ── */}
+          <div className="mt-8 flex items-center gap-3">
+            <div className="w-6 h-6 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-500">
+              <Heart className="w-3.5 h-3.5 fill-blue-500/20" />
+            </div>
+            <div className="text-[12px] sm:text-[13px] font-semibold leading-tight text-slate-600">
+              <span>Trusted by Clinics.</span><br />
+              <span>Loved by Patients.</span>
+            </div>
+          </div>
+
         </div>
 
-        {/* RIGHT SIDE: Floating Authentication Card Area (Shifted slightly to the right) */}
-        <div className="w-full lg:w-[52%] xl:w-[50%] flex flex-col justify-center items-center lg:items-end my-auto py-2 lg:py-0 px-2 sm:px-0 lg:pr-0 xl:pr-2 2xl:pr-4 lg:translate-x-2 xl:translate-x-4">
-          
-          <div className="w-full max-w-[420px] sm:max-w-[490px] lg:max-w-[500px] xl:max-w-[530px] bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-[0_16px_48px_rgba(15,23,42,0.07)] p-6 sm:p-9 transition-all relative z-10 mx-auto lg:mx-0">
+        {/* ── RIGHT LOGIN CARD ── */}
+        <div className="w-full lg:w-[44%] xl:w-[42%] flex flex-col items-center lg:items-end my-auto">
+
+          <div className="w-full max-w-[500px] xl:max-w-[515px] bg-white rounded-3xl shadow-[0_25px_70px_rgba(15,31,61,0.08)] border border-slate-100/90 p-7 sm:p-8 lg:p-9 relative z-10">
             
-            {/* Card Top Branding & Heading */}
-            <div className="text-center mb-5 sm:mb-6">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            {/* Top Bar: Back to Staff Login Navigation */}
+            <div className="flex items-center justify-between mb-4 -mt-1">
+              <button 
+                type="button"
+                onClick={handleStaffLoginNavigation}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition group"
+                title="Back to Staff Login"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 group-hover:-translate-x-0.5 transition duration-150" />
+                <span>Back to Staff Login</span>
+              </button>
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Patient Portal</span>
+            </div>
+
+            {/* Centered Quroxa Logo */}
+            <div className="flex flex-col items-center mb-5">
+              {hospital ? (
+                <>
+                  <HospitalBrandLogo hospital={hospital} size={56} borderRadius={16} fontSize={22} className="mb-2 shadow-sm" />
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight text-center">
+                    {hospital.name}
+                  </h2>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[11px] font-bold text-slate-500 font-mono uppercase tracking-wider">
+                      Patient Portal • {hospital.hospitalId}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <img 
+                  src={curoxaLogo} 
+                  alt="Quroxa" 
+                  className="h-14 sm:h-16 lg:h-[66px] w-auto object-contain mx-auto" 
+                  onError={(e) => { e.target.src = '/curoxa_logo_transparent.png'; }} 
+                />
+              )}
+            </div>
+
+            {/* Left-Aligned Heading & Subtitle */}
+            <div className="text-left mb-5">
+              <h2 className="text-[22px] font-bold text-[#0f1f3d] tracking-tight">
                 Welcome back
               </h2>
-              <p className="text-xs sm:text-sm text-slate-500 font-normal mt-1.5 leading-relaxed max-w-xs mx-auto">
+              <p className="text-[14px] sm:text-[15px] text-slate-500 font-normal mt-1.5 leading-relaxed">
                 Enter your mobile number or email to access your medical records, prescriptions, and appointments.
               </p>
             </div>
 
             {/* Feedback Alerts */}
             {error && (
-              <div className="mb-4 p-3.5 rounded-xl bg-red-50/90 border border-red-200 text-red-700 text-sm font-medium flex items-start gap-2.5 animate-fadeIn">
-                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="mb-4 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium flex items-start gap-2.5">
+                <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                 <span className="flex-1 leading-snug">{error}</span>
               </div>
             )}
-
             {success && (
-              <div className="mb-4 p-3.5 rounded-xl bg-emerald-50/90 border border-emerald-200 text-emerald-700 text-sm font-medium flex items-start gap-2.5 animate-fadeIn">
-                <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <div className="mb-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium flex items-start gap-2.5">
+                <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                 <span className="flex-1 leading-snug">{success}</span>
               </div>
             )}
 
-            {/* Step 1: Request OTP Form */}
+            {/* Step 1: Send OTP Form */}
             {!otpSent ? (
               <form onSubmit={handleSendOtp} className="space-y-4">
                 <div>
@@ -197,7 +355,7 @@ const PatientPortalLogin = () => {
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                      <User className="w-5 h-5" />
+                      <Mail className="w-5 h-5" />
                     </div>
                     <input
                       type="text"
@@ -205,7 +363,7 @@ const PatientPortalLogin = () => {
                       value={emailOrPhone}
                       onChange={(e) => setEmailOrPhone(e.target.value)}
                       placeholder="e.g. +44 20 7946 0192 or john@example.com"
-                      className="w-full h-12 pl-11 pr-4 bg-white rounded-xl border border-slate-200 text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+                      className="w-full h-12 pl-11 pr-4 bg-white rounded-xl border border-slate-200 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
                     />
                   </div>
                 </div>
@@ -213,7 +371,7 @@ const PatientPortalLogin = () => {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 via-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold text-sm sm:text-base shadow-md shadow-blue-500/15 hover:shadow-blue-500/25 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full h-12 mt-2 rounded-xl bg-gradient-to-r from-[#1a73e8] to-[#0ea5e9] hover:from-[#1558b0] hover:to-[#0284c7] text-white font-bold text-base shadow-md shadow-blue-500/20 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <span className="flex items-center gap-2">
@@ -255,7 +413,7 @@ const PatientPortalLogin = () => {
                 <button
                   type="submit"
                   disabled={loading || otp.length < 6}
-                  className="w-full h-12 mt-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-bold text-sm sm:text-base shadow-md shadow-emerald-500/15 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full h-12 mt-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-bold text-base shadow-md shadow-emerald-500/20 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <span className="flex items-center gap-2">
@@ -271,57 +429,79 @@ const PatientPortalLogin = () => {
                   <button 
                     type="button" 
                     onClick={() => { setOtpSent(false); setOtp(''); setError(''); }} 
-                    className="text-sm font-medium text-slate-500 hover:text-blue-600 hover:underline transition"
+                    className="text-sm font-semibold text-blue-600 hover:underline transition"
                   >
-                    Use a different number / email
+                    ← Use a different number / email
                   </button>
                 </div>
               </form>
             )}
 
-            {/* Divider OR */}
-            <div className="relative my-5 text-center">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200/80" />
-              </div>
-              <span className="relative bg-white px-3 text-xs font-bold text-slate-400 tracking-wider">
+            {/* Seamless OR Divider */}
+            <div className="flex items-center my-4 gap-3 px-1">
+              <div className="flex-1 h-[1px] bg-slate-200" />
+              <span className="text-[12px] text-slate-400 font-normal shrink-0 uppercase tracking-wider">
                 OR
               </span>
+              <div className="flex-1 h-[1px] bg-slate-200" />
             </div>
 
-            {/* Interactive Feature Cards (Matching Mockup with Chevrons) */}
-            <div className="space-y-3">
-              <div className="p-3 sm:p-3.5 bg-slate-50/70 hover:bg-blue-50/50 rounded-2xl border border-slate-100 flex items-center justify-between transition cursor-pointer group">
+            {/* Interactive Feature Cards */}
+            <div className="space-y-2.5">
+              <div className="p-3 bg-slate-50/80 hover:bg-blue-50/60 rounded-2xl border border-slate-100 flex items-center justify-between transition cursor-pointer group">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-blue-100/80 text-blue-600 flex items-center justify-center flex-shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-blue-100/80 text-blue-600 flex items-center justify-center shrink-0">
                     <UserPlus className="w-4 h-4" />
                   </div>
-                  <div>
+                  <div className="text-left">
                     <h4 className="text-xs sm:text-sm font-bold text-slate-800 leading-tight">New Patient?</h4>
                     <p className="text-[11px] sm:text-xs text-slate-500 font-normal mt-0.5 leading-snug">Just enter your details above to register automatically.</p>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition flex-shrink-0 ml-2" />
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition shrink-0 ml-2" />
               </div>
 
-              <div className="p-3 sm:p-3.5 bg-slate-50/70 hover:bg-emerald-50/50 rounded-2xl border border-slate-100 flex items-center justify-between transition cursor-pointer group">
+              <div className="p-3 bg-slate-50/80 hover:bg-emerald-50/60 rounded-2xl border border-slate-100 flex items-center justify-between transition cursor-pointer group">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-100/80 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100/80 text-emerald-600 flex items-center justify-center shrink-0">
                     <FileText className="w-4 h-4" />
                   </div>
-                  <div>
+                  <div className="text-left">
                     <h4 className="text-xs sm:text-sm font-bold text-slate-800 leading-tight">Access Records</h4>
                     <p className="text-[11px] sm:text-xs text-slate-500 font-normal mt-0.5 leading-snug">View your lab reports and prescriptions securely.</p>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition flex-shrink-0 ml-2" />
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition shrink-0 ml-2" />
               </div>
             </div>
 
-            {/* Legal / Policy Note */}
-            <p className="text-[11px] text-slate-400 text-center mt-5 leading-relaxed">
-              By continuing, you agree to our <span className="font-semibold text-blue-600 hover:underline cursor-pointer">Terms of Service</span> and <span className="font-semibold text-blue-600 hover:underline cursor-pointer">Privacy Policy</span>.
-            </p>
+            {/* Staff Navigation Link */}
+            <div className="mt-4 pt-3.5 border-t border-slate-100 text-center">
+              <p className="text-[12px] text-slate-500 font-normal">
+                Clinic staff or healthcare provider?{' '}
+                <button 
+                  type="button" 
+                  onClick={handleStaffLoginNavigation} 
+                  className="font-semibold text-blue-600 hover:text-blue-700 hover:underline transition"
+                >
+                  Staff Login →
+                </button>
+              </p>
+            </div>
+
+            {/* ── CARD FOOTER: Copyright & Legal links inside panel matching Login.jsx ── */}
+            <div className="pt-4 text-center">
+              <p className="text-[12px] sm:text-[13px] text-slate-400 font-normal">
+                © 2025 Quroxa. All rights reserved.
+              </p>
+              <div className="flex items-center justify-center gap-2 sm:gap-2.5 mt-1.5 text-[12px] sm:text-[13px] text-blue-600/90 font-medium">
+                <button type="button" className="hover:text-blue-700 hover:underline transition">Privacy Policy</button>
+                <span className="text-slate-300 font-light">|</span>
+                <button type="button" className="hover:text-blue-700 hover:underline transition">Terms of Service</button>
+                <span className="text-slate-300 font-light">|</span>
+                <button type="button" className="hover:text-blue-700 hover:underline transition">Support</button>
+              </div>
+            </div>
 
           </div>
 
@@ -329,13 +509,6 @@ const PatientPortalLogin = () => {
 
       </main>
 
-      {/* BOTTOM TRUST BADGE */}
-      <footer className="w-full py-3 text-center z-10">
-        <div className="inline-flex items-center justify-center gap-2 text-xs text-slate-500 font-medium px-4">
-          <Lock className="w-3.5 h-3.5 text-slate-400" />
-          <span>Your data is encrypted and secure with Curoxa</span>
-        </div>
-      </footer>
     </div>
   );
 };

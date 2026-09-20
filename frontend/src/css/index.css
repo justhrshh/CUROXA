@@ -3052,7 +3052,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 .semantic-badge-attention { background: #ffedd5 !important; color: #9a3412 !important; border: 1px solid #fed7aa !important; }
 .semantic-badge-info { background: #dbeafe !important; color: #1e40af !important; border: 1px solid #bfdbfe !important; }
 /* Global Button Hover Effect */
-button:hover, .btn:hover { filter: brightness(0.9) !important; }
+button:hover:not(.ig-icon-btn):not(.password-eye-btn), .btn:hover:not(.ig-icon-btn):not(.password-eye-btn) { filter: brightness(0.9) !important; }
 
 /* ==========================================================
    CUROXA PATIENT PORTAL — HOSPITAL LEVEL REDESIGN RESPONSIVENESS
@@ -3162,6 +3162,24 @@ button:hover, .btn:hover { filter: brightness(0.9) !important; }
   }
 }
 
+.ig-icon-btn,
+.ig-icon-btn:hover,
+.ig-icon-btn:active,
+.ig-icon-btn:focus {
+  transform: translateY(-50%) !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+.ig-icon-btn:hover {
+  background-color: rgba(241, 245, 249, 0.75) !important;
+}
 
-
+.password-eye-btn,
+.password-eye-btn:hover,
+.password-eye-btn:active,
+.password-eye-btn:focus {
+  transform: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
 
