@@ -24,7 +24,7 @@ const defaultPermissions = {
     'lt-queue', 'lt-upload', 'lt-reagents', 'lt-dispatch', 'lt-extlab'
   ],
   pharmacy: [
-    'ph-queue', 'ph-dispense', 'ph-stock', 'ph-reorder', 'ph-billing', 'ph-controlled'
+    'ph-queue', 'ph-dispense', 'ph-stock', 'ph-reorder', 'ph-billing', 'ph-controlled', 'ph-itemmaster', 'ph-quotations'
   ],
   nurse: [
     'nu-vitals', 'nu-ward', 'nu-labassist', 'nu-dispense'

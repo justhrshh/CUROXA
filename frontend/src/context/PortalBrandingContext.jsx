@@ -231,7 +231,7 @@ export const PortalBrandingProvider = ({ children, hospitalIdOverride }) => {
     }
 
     return () => {
-      document.title = originalTitle || 'Curoxa - Healthcare Dashboard';
+      document.title = originalTitle || 'Quroxa - Healthcare Dashboard';
       if (faviconEl) {
         faviconEl.setAttribute('href', originalFavicon || '/curoxa_icon_logo.png');
       }
@@ -259,7 +259,7 @@ export const PortalBrandingProvider = ({ children, hospitalIdOverride }) => {
 export const syncPortalDocumentMetadata = (hospital) => {
   if (!hospital || !hospital.name) return;
   try {
-    document.title = `${hospital.name} | Curoxa`;
+    document.title = `${hospital.name} | Quroxa`;
     let faviconEl = document.getElementById('curoxa-dynamic-favicon') || document.querySelector("link[rel*='icon']");
     if (!faviconEl) return;
 

@@ -387,7 +387,7 @@ function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName, letterhead
       doc.setFontSize(7.5);
       doc.setTextColor(71, 85, 105);
       doc.text(`Stock Intake Report  |  Date Range: ${dateRangeText}`, safeLeft, currentY + 9);
-      doc.text(`Clinic: ${clinicName || 'CUROXA HEALTHCARE'}`, pageWidth - safeRight, currentY + 9, { align: 'right' });
+      doc.text(`Clinic: ${clinicName || 'QUROXA HEALTHCARE'}`, pageWidth - safeRight, currentY + 9, { align: 'right' });
 
       currentY += 13;
     } else {
@@ -398,7 +398,7 @@ function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName, letterhead
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
       doc.setTextColor(255, 255, 255);
-      doc.text(clinicName || 'CUROXA HEALTHCARE', 14, 9);
+      doc.text(clinicName || 'QUROXA HEALTHCARE', 14, 9);
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
@@ -640,7 +640,7 @@ function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName, letterhead
     doc.setTextColor(148, 163, 184); // #94A3B8
     const footerY = pageHeight - Math.max(safeBottom - 8, 5);
     doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, footerY, { align: 'center' });
-    doc.text('CUROXA HEALTHCARE — Confidential Authorized Hospital Document', safeLeft, footerY);
+    doc.text('QUROXA HEALTHCARE — Confidential Authorized Hospital Document', safeLeft, footerY);
     doc.text(`Date Range: ${dateRangeText}`, pageWidth - safeRight, footerY, { align: 'right' });
   }
 }
@@ -736,7 +736,7 @@ export function renderPrescriptionStructuredPdf(doc, rows = [], dateRangeText, c
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
       doc.setTextColor(255, 255, 255);
-      doc.text(clinicName || 'CUROXA HEALTHCARE', 14, 10);
+      doc.text(clinicName || 'QUROXA HEALTHCARE', 14, 10);
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
@@ -904,14 +904,14 @@ export async function generatePdfFile({ dataset, rows, columns, dateRangeText, c
     drawLetterheadBg();
   } else {
     // Fallback: Blue header banner
-    doc.setFillColor(37, 99, 235); // #2563EB Curoxa Royal Blue
+    doc.setFillColor(37, 99, 235); // #2563EB Quroxa Royal Blue
     doc.rect(0, 0, pageWidth, 24, 'F');
 
     // Clinic Brand
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
     doc.setTextColor(255, 255, 255);
-    doc.text(clinicName || 'CUROXA HEALTHCARE', 14, 11);
+    doc.text(clinicName || 'QUROXA HEALTHCARE', 14, 11);
 
     // Subtitle: Dataset Report
     doc.setFont('helvetica', 'normal');
@@ -1055,7 +1055,7 @@ export async function generatePdfFile({ dataset, rows, columns, dateRangeText, c
 
 /**
  * Sends a structured audit log event to the backend upon successful export.
- * Follows the existing Curoxa audit log architecture without storing raw patient data.
+ * Follows the existing Quroxa audit log architecture without storing raw patient data.
  */
 export async function logExportEvent({ dataset, format, recordCount, dateRange = {}, filters }) {
   try {
@@ -1200,6 +1200,22 @@ export async function executeExport(context) {
 }
 
 /**
+ * Universal export engine helper for datasets with custom columns
+ */
+export async function exportEngine(options) {
+  const { data, columns, title, format = 'excel', filename } = options;
+  return executeExport({
+    dataset: title || 'Export',
+    data,
+    columns,
+    dateField: 'none',
+    dateRange: { type: 'All Time' },
+    format: (format || 'excel').toLowerCase(),
+    fileName: filename
+  });
+}
+
+/**
  * Explicit Vendor Export Column Definitions
  */
 export const vendorExportColumns = [
@@ -1214,6 +1230,42 @@ export const vendorExportColumns = [
   { key: 'state', header: 'State', extractor: v => v.state || '--' },
   { key: 'gstNumber', header: 'GST Number', extractor: v => v.gstNumber || '--' },
   { key: 'status', header: 'Status', extractor: v => v.status || 'Active' }
+];
+
+export const itemMasterExportColumns = [
+  { key: 'itemCode', header: 'Item Code', extractor: i => i.itemCode || '--' },
+  { key: 'genericName', header: 'Generic / Chemical Name', extractor: i => i.genericName || '--' },
+  { key: 'brandName', header: 'Brand Name', extractor: i => i.brandName || '--' },
+  { key: 'categoryType', header: 'Category', extractor: i => i.categoryType || '--' },
+  { key: 'departmentType', header: 'Department', extractor: i => i.departmentType || '--' },
+  { key: 'itemType', header: 'Item Type', extractor: i => i.itemType || '--' },
+  { key: 'purchasedUnit', header: 'Purchased Unit', extractor: i => i.purchasedUnit || '--' },
+  { key: 'packSizeDescription', header: 'Pack Size', extractor: i => i.packSizeDescription || '--' },
+  { key: 'converterFactor', header: 'Conversion Factor', extractor: i => i.converterFactor ?? 1 },
+  { key: 'consumptionUnit', header: 'Consumption Unit', extractor: i => i.consumptionUnit || '--' },
+  { key: 'storageTemperature', header: 'Storage Temp', extractor: i => i.storageTemperature || 'Normal' },
+  { key: 'defaultGst', header: 'Default GST %', extractor: i => i.defaultGst !== undefined ? `${i.defaultGst}%` : '--' },
+  { key: 'hsnCode', header: 'HSN Code', extractor: i => i.hsnCode || '--' },
+  { key: 'expiryCutoffDays', header: 'Min Expiry (Days)', extractor: i => i.expiryCutoffDays ?? '--' },
+  { key: 'manufacturer', header: 'Manufacturer', extractor: i => i.manufacturer || '--' },
+  { key: 'status', header: 'Status', extractor: i => i.status || 'Active' }
+];
+
+export const vendorQuotationExportColumns = [
+  { key: 'quotationNo', header: 'Quotation No', extractor: q => q.quotationNo || '--' },
+  { key: 'vendorName', header: 'Vendor Name', extractor: q => q.vendorName || '--' },
+  { key: 'itemCode', header: 'Item Code', extractor: q => q.itemCode || '--' },
+  { key: 'genericName', header: 'Item Generic Name', extractor: q => q.genericName || '--' },
+  { key: 'brandName', header: 'Brand Name', extractor: q => q.brandName || '--' },
+  { key: 'purchasedUnit', header: 'Purchased Unit', extractor: q => q.purchasedUnit || '--' },
+  { key: 'converterFactor', header: 'Converter Factor', extractor: q => q.converterFactor ?? 1 },
+  { key: 'ratePerPurchasedUnit', header: 'Rate / Purchased Unit', extractor: q => `₹${Number(q.ratePerPurchasedUnit || 0).toFixed(2)}` },
+  { key: 'discountPercent', header: 'Discount %', extractor: q => `${q.discountPercent || 0}%` },
+  { key: 'gstPercent', header: 'GST %', extractor: q => `${q.gstPercent || 0}%` },
+  { key: 'netEffectiveRate', header: 'Net Rate / Unit', extractor: q => `₹${Number(q.netEffectiveRate || 0).toFixed(2)}` },
+  { key: 'leadTimeDays', header: 'Lead Time (Days)', extractor: q => q.leadTimeDays ?? 3 },
+  { key: 'validTill', header: 'Valid Till', extractor: q => q.validTill ? new Date(q.validTill).toLocaleDateString('en-IN') : '--' },
+  { key: 'status', header: 'Status', extractor: q => q.status || 'Active' }
 ];
 
 /**
@@ -1241,6 +1293,10 @@ export const grnExportColumns = [
   { key: 'remainingQty', header: 'Remaining Quantity', extractor: r => r.item?.remainingQty ?? '--' },
   { key: 'qtyReceived', header: 'Received Quantity', extractor: r => r.item?.qtyReceived ?? 0 },
   { key: 'rejectedQty', header: 'Rejected Quantity', extractor: r => r.item?.rejectedQty ?? 0 },
+  { key: 'acceptedPurchasedQty', header: 'Accepted Quantity', extractor: r => r.item?.acceptedPurchasedQty ?? Math.max(0, (Number(r.item?.qtyReceived) || 0) - (Number(r.item?.rejectedQty) || 0)) },
+  { key: 'converterFactor', header: 'Converter Factor', extractor: r => r.item?.converterFactor ?? 1 },
+  { key: 'consumptionUnit', header: 'Consumption Unit', extractor: r => r.item?.consumptionUnit || 'Unit' },
+  { key: 'convertedQuantity', header: 'Converted Qty', extractor: r => r.item?.convertedQuantity ?? ((r.item?.acceptedPurchasedQty ?? Math.max(0, (Number(r.item?.qtyReceived) || 0) - (Number(r.item?.rejectedQty) || 0))) * (Number(r.item?.converterFactor) || 1)) },
   { key: 'rejectionReason', header: 'Rejection Reason', extractor: r => r.item?.rejectionReason || '--' },
   { key: 'purchaseRate', header: 'Purchase Rate', extractor: r => r.item?.purchaseRate ?? r.item?.price ?? 0, formatter: v => Number(v || 0).toFixed(2) },
   { key: 'discountPercent', header: 'Discount %', extractor: r => r.item?.discountPercent ?? 0 },
@@ -1298,6 +1354,15 @@ export const poExportColumns = [
   { key: 'itemSku', header: 'Item SKU', extractor: r => r.item?.sku || '--' },
   { key: 'itemName', header: 'Item Name', extractor: r => r.item?.name || (r.poType === 'MASTER' ? '[Consolidated Multi-Supplier Order Summary]' : '') },
   { key: 'requiredQty', header: 'Order Quantity', extractor: r => r.item?.requiredQty ?? r.item?.qty ?? (r.poType === 'MASTER' ? (r.totalItems || '--') : 0) },
+  { key: 'purchasedUnit', header: 'Purchased Unit', extractor: r => r.poType === 'MASTER' ? '--' : (r.item?.purchasedUnit || r.item?.unit || '--') },
+  { key: 'converterFactor', header: 'Converter Factor', extractor: r => r.poType === 'MASTER' ? '--' : (r.item?.converterFactor ?? 1) },
+  { key: 'consumptionUnit', header: 'Consumption Unit', extractor: r => r.poType === 'MASTER' ? '--' : (r.item?.consumptionUnit || 'Unit') },
+  { key: 'expectedConsumptionQty', header: 'Expected Consumption Qty', extractor: r => {
+    if (r.poType === 'MASTER') return '--';
+    const qty = Number(r.item?.requiredQty ?? r.item?.qty ?? 0);
+    const conv = Number(r.item?.converterFactor ?? 1);
+    return r.item?.expectedConsumptionQty ?? (qty * conv);
+  }},
   { key: 'unitPrice', header: 'Unit Price', extractor: r => r.item?.price ?? 0, formatter: (v, r) => r.poType === 'MASTER' ? '--' : Number(v || 0).toFixed(2) },
   { key: 'itemTax', header: 'Item Tax', extractor: r => r.item?.tax ?? 0, formatter: (v, r) => r.poType === 'MASTER' ? '--' : (v !== undefined ? `${v}%` : '0%') },
   { key: 'itemTotal', header: 'Item Total', extractor: r => r.item?.total ?? 0, formatter: (v, r) => r.poType === 'MASTER' ? '--' : Number(v || 0).toFixed(2) },
@@ -1958,7 +2023,7 @@ export async function generateReceiptSlipPdf(activeSlipData, passedConfig = null
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(55);
       doc.setTextColor(241, 245, 249); // slate 100
-      doc.text('CUROXA', pageWidth / 2, pageHeight / 2 - 10, { align: 'center', angle: 35 });
+      doc.text('QUROXA', pageWidth / 2, pageHeight / 2 - 10, { align: 'center', angle: 35 });
       doc.setFontSize(14);
       doc.text('HEALTHCARE • MEDICAL RECEIPT', pageWidth / 2, pageHeight / 2 + 10, { align: 'center', angle: 35 });
       if (doc.restoreGraphicsState) doc.restoreGraphicsState();
@@ -1971,7 +2036,7 @@ export async function generateReceiptSlipPdf(activeSlipData, passedConfig = null
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
     doc.setTextColor(15, 23, 42);
-    doc.text(activeSlipData.hospitalName || 'Curoxa Medical Center', safeLeft, currentY + 4);
+    doc.text(activeSlipData.hospitalName || 'Quroxa Medical Center', safeLeft, currentY + 4);
 
     doc.setFontSize(8.5);
     doc.setFont('helvetica', 'bold');
@@ -2193,7 +2258,7 @@ export async function generateReceiptSlipPdf(activeSlipData, passedConfig = null
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(37, 99, 235);
-  doc.text('www.curoxa-healthcare.com', safeLeft, footerY);
+  doc.text('www.quroxa-healthcare.com', safeLeft, footerY);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
@@ -2242,7 +2307,7 @@ export function exportHospitalValidationReportPdf({
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(255, 255, 255);
-  doc.text('CUROXA HEALTHCARE TECHNOLOGIES', marginX + 5, 15);
+  doc.text('QUROXA HEALTHCARE TECHNOLOGIES', marginX + 5, 15);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
@@ -2401,7 +2466,7 @@ export function exportHospitalValidationReportPdf({
   // Box 4: Master Administrator & Security (Right Column Lower) - H = 34mm
   const sec4Items = [
     { label: 'Administrator Name', value: hospital.adminName || 'Platform Super Admin' },
-    { label: 'Admin Work Email', value: hospital.adminEmail || 'admin@curoxa.health' },
+    { label: 'Admin Work Email', value: hospital.adminEmail || 'admin@quroxa.health' },
     { label: 'Telephone Number', value: hospital.adminPhone || '+91 98105 02343' },
     { label: 'Cluster Sandbox Link', value: hospital.sandboxDbUrl || 'Active (Multi-Tenant Managed DB Cluster)' },
     { label: 'Access Control (RBAC)', value: 'Configured & Role-Restricted (Doctor, Reception, Admin)' },
@@ -2579,7 +2644,7 @@ export function exportHospitalValidationReportPdf({
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(5);
   doc.setTextColor(100, 116, 139);
-  doc.text('Curoxa Cloud Operations · Digital Signature: CRX-AUTH-2026', marginX + 3.5, sigY + 18);
+  doc.text('Quroxa Cloud Operations · Digital Signature: CRX-AUTH-2026', marginX + 3.5, sigY + 18);
 
   // Box 2: Hospital Managing Director / Signatory
   const sig2X = marginX + ((contentWidth - 3) / 2) + 3;
@@ -2619,7 +2684,7 @@ export function exportHospitalValidationReportPdf({
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(5.2);
   doc.setTextColor(37, 99, 235);
-  doc.text('CUROXA HEALTHCARE TECHNOLOGIES', marginX, footerY);
+  doc.text('QUROXA HEALTHCARE TECHNOLOGIES', marginX, footerY);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(4.8);

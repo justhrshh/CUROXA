@@ -320,7 +320,7 @@ const PatientRegistration = () => {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }}></span>
-          <span style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A' }}>Curoxa Patient Self-Registration</span>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A' }}>Quroxa Patient Self-Registration</span>
         </div>
       </div>
 

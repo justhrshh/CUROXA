@@ -1,28 +1,57 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import api, { clearPortalAuthContext, performLogout } from '../utils/api';
 import { printPO, printGRN } from '../utils/printDocHelper';
-import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import quroxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import ExportModal from '../components/export/ExportModal';
 import { grnExportColumns, poExportColumns, flattenGrnForExport, flattenPoForExport, vendorExportColumns } from '../utils/exportEngine';
+import ItemMasterTab from '../components/procurement/ItemMasterTab';
+import ItemMasterForm from '../components/procurement/ItemMasterForm';
+import ItemRequestsPanel from '../components/procurement/ItemRequestsPanel';
+import VendorQuotationsTab from '../components/procurement/VendorQuotationsTab';
+import GoodsReceiptPage from '../components/procurement/GoodsReceiptPage';
 
-const ProcurementDashboard = () => {
-  const [activeTab, setActiveTab] = useState('vendors'); // 'dashboard', 'vendors', 'pos', 'grn', 'payments'
+const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams();
+
+  const getInitialTab = () => {
+    if (initialTab) return initialTab;
+    if (location && location.pathname && location.pathname.startsWith('/procurement/item-master')) return 'item-master';
+    return 'vendors';
+  };
+
+  const [activeTab, setActiveTab] = useState(getInitialTab);
+
+  useEffect(() => {
+    if (location && location.pathname && location.pathname.startsWith('/procurement/item-master')) {
+      setActiveTab('item-master');
+    }
+  }, [location.pathname]);
+
+  const isItemMasterNew = itemMasterSubView === 'new' || (location && location.pathname === '/procurement/item-master/new');
+  const isItemMasterEdit = itemMasterSubView === 'edit' || (location && location.pathname.startsWith('/procurement/item-master/') && location.pathname.endsWith('/edit'));
+  const editItemId = params?.id || (isItemMasterEdit ? location.pathname.split('/')[3] : null);
   const [notification, setNotification] = useState(null);
-  const showToast = (message, type = 'success') => {
+  const showToast = useCallback((message, type = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
-  };
+  }, []);
   const [vendors, setVendors] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [goodsReceipts, setGoodsReceipts] = useState([]);
   const [medicines, setMedicines] = useState([]);
+  const [itemMasters, setItemMasters] = useState([]);
+  const [vendorQuotations, setVendorQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Modal states
   const [showCreatePOModal, setShowCreatePOModal] = useState(false);
   const [showAddVendorModal, setShowAddVendorModal] = useState(false);
   const [showGRNModal, setShowGRNModal] = useState(false);
+  const [grnPageMode, setGrnPageMode] = useState(null); // null | 'new-po' | 'new-direct' | 'edit'
+  const [grnInitialPOId, setGrnInitialPOId] = useState('');
   const [showGrnExportModal, setShowGrnExportModal] = useState(false);
   const [showPoExportModal, setShowPoExportModal] = useState(false);
   const [showVendorExportModal, setShowVendorExportModal] = useState(false);
@@ -190,6 +219,8 @@ const ProcurementDashboard = () => {
   const [activePoItemFocus, setActivePoItemFocus] = useState(null);
   const [poFilter, setPoFilter] = useState('all');
   const [vendorStep, setVendorStep] = useState(1);
+  const [newVendorQuotations, setNewVendorQuotations] = useState([]);
+  const [vendorQuotationItemMasters, setVendorQuotationItemMasters] = useState([]);
 
   useEffect(() => {
     if (!isAddingVendor) return;
@@ -202,7 +233,7 @@ const ProcurementDashboard = () => {
           primarySubmitBtn.click();
         }
       } else if (e.key === 'Escape') {
-        const isModalOpen = !!selectedVendorProfile || !!selectedGrnDetails || !!showGRNModal || !!showPaymentModal;
+        const isModalOpen = !!selectedVendorProfile || !!selectedGrnDetails || !!grnPageMode || !!showPaymentModal;
         if (!isModalOpen) {
           setIsAddingVendor(false);
           setEditingVendor(null);
@@ -216,8 +247,7 @@ const ProcurementDashboard = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isAddingVendor, selectedVendorProfile, selectedGrnDetails, showGRNModal, showPaymentModal]);
 
-  const [currentUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{"name":"Dr. Ramesh","role":"Pharmacy Admin","email":"ramesh@curoxa.com"}'));
-  const navigate = useNavigate();
+  const [currentUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{"name":"Dr. Ramesh","role":"Pharmacy Admin","email":"ramesh@quroxa.com"}'));
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
@@ -240,13 +270,21 @@ const ProcurementDashboard = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [vendorRes, poRes, grnRes, medRes, approvalsRes] = await Promise.all([
+      const [vendorRes, poRes, grnRes, medRes, approvalsRes, itemMasterRes, quotationRes] = await Promise.all([
         api.get('/vendors'),
         api.get('/purchase-orders'),
         api.get('/goods-receipts'),
         api.get('/medicines'),
-        api.get('/approvals').catch(() => ({ data: [] }))
+        api.get('/approvals').catch(() => ({ data: [] })),
+        api.get('/item-master', { params: { limit: 2000, status: 'Active' } }).catch(() => ({ data: { data: [] } })),
+        api.get('/vendor-quotations', { params: { limit: 2000, status: 'Active', expired: 'false' } }).catch(() => ({ data: { data: [] } }))
       ]);
+
+      const fetchedItemMasters = itemMasterRes.data?.data || [];
+      setItemMasters(fetchedItemMasters);
+
+      const fetchedQuotations = quotationRes.data?.data || [];
+      setVendorQuotations(fetchedQuotations);
 
       const fetchedVendors = vendorRes.data || [];
       setVendors(fetchedVendors);
@@ -337,7 +375,10 @@ const ProcurementDashboard = () => {
   };
 
   useEffect(() => {
-    fetchData();
+    // Only fetch general procurement data if NOT currently on dedicated item-master view
+    if (activeTab !== 'item-master') {
+      fetchData();
+    }
     // Initialize Lucide icons
     setTimeout(() => {
       if (window.lucide) {
@@ -345,6 +386,13 @@ const ProcurementDashboard = () => {
       }
     }, 300);
   }, []);
+
+  useEffect(() => {
+    // If switching tabs away from item-master to other views, ensure procurement data is loaded
+    if (activeTab !== 'item-master' && vendors.length === 0) {
+      fetchData();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     const handleOutsideClick = (e) => {
@@ -374,26 +422,33 @@ const ProcurementDashboard = () => {
       const { type } = e.detail;
       console.log('[SOCKET] ProcurementDashboard received sync event for:', type);
       if (['purchase_orders', 'purchase-orders', 'vendors', 'goods_receipts', 'goods-receipts', 'medicines', 'approvals'].includes(type)) {
-        fetchData();
+        if (activeTab !== 'item-master') {
+          fetchData();
+        }
       }
     };
     window.addEventListener('curoxa_sync', handleSync);
 
     const onWindowFocus = () => {
-      fetchData();
+      if (activeTab !== 'item-master') {
+        fetchData();
+      }
     };
     window.addEventListener('focus', onWindowFocus);
 
-    const autoSyncTimer = setInterval(() => {
-      fetchData();
-    }, 6000);
+    let autoSyncTimer = null;
+    if (activeTab !== 'item-master') {
+      autoSyncTimer = setInterval(() => {
+        fetchData();
+      }, 15000);
+    }
 
     return () => {
       window.removeEventListener('curoxa_sync', handleSync);
       window.removeEventListener('focus', onWindowFocus);
-      clearInterval(autoSyncTimer);
+      if (autoSyncTimer) clearInterval(autoSyncTimer);
     };
-  }, []);
+  }, [activeTab]);
 
   // Dynamic lists with NO static mock fallbacks
   const getDisplayVendors = () => {
@@ -527,6 +582,20 @@ const ProcurementDashboard = () => {
       setShowAddVendorModal(false);
       setIsAddingVendor(false);
       resetVendorForm();
+
+      // Save vendor quotations collected in step 4
+      if (newVendorQuotations.length > 0 && savedVendor?._id) {
+        const quotationPromises = newVendorQuotations
+          .filter(q => q.itemMasterId && q.ratePerPurchasedUnit > 0)
+          .map(q => api.post('/vendor-quotations', { ...q, vendorId: savedVendor._id }));
+        try {
+          await Promise.all(quotationPromises);
+        } catch (qErr) {
+          console.error('Failed to save some vendor quotations:', qErr);
+        }
+        setNewVendorQuotations([]);
+      }
+
       fetchData();
 
       const submitterName = e.nativeEvent.submitter?.name;
@@ -797,10 +866,16 @@ const ProcurementDashboard = () => {
 
         return {
           itemType: item.category || 'Medicine',
+          itemMasterId: item.itemMasterId || null,
           itemCode: item.sku || '',
           sku: item.sku,
           name: item.name,
-          unit: item.unit || 'Strip',
+          brandName: item.brandName || '',
+          unit: item.purchasedUnit || item.unit || 'Strip',
+          purchasedUnit: item.purchasedUnit || item.unit || 'Strip',
+          packSize: item.packSize || '',
+          converterFactor: Number(item.converterFactor) > 0 ? Number(item.converterFactor) : 1,
+          consumptionUnit: item.consumptionUnit || 'Unit',
           barcode: '',
           batchNumber: '',
           mfgDate: '',
@@ -860,7 +935,8 @@ const ProcurementDashboard = () => {
     setGrnInvoiceFileName(grn.invoiceUrl || '');
     setGrnInvoiceFile(null);
     setGrnNotes(grn.notes || '');
-    setShowGRNModal(true);
+    setGrnPageMode('edit');
+    setActiveTab('grn');
   };
 
   const handleSaveGRN = async (e, statusParam = 'Verified/Completed') => {
@@ -961,10 +1037,16 @@ const ProcurementDashboard = () => {
         notes: grnNotes || '',
         items: grnItems.map(it => ({
           itemType: it.itemType || 'Medicine',
+          itemMasterId: it.itemMasterId || null,
           itemCode: it.itemCode || it.sku || '',
           sku: it.sku,
           name: it.name,
-          unit: it.unit || 'Strip',
+          brandName: it.brandName || '',
+          unit: it.unit || it.purchasedUnit || 'Strip',
+          purchasedUnit: it.purchasedUnit || it.unit || 'Strip',
+          packSize: it.packSize || '',
+          converterFactor: Number(it.converterFactor) > 0 ? Number(it.converterFactor) : 1,
+          consumptionUnit: it.consumptionUnit || 'Unit',
           barcode: it.barcode || '',
           batchNumber: it.batchNumber || '',
           mfgDate: it.mfgDate || null,
@@ -979,7 +1061,8 @@ const ProcurementDashboard = () => {
           price: Number(it.price || it.purchaseRate) || 0,
           purchaseRate: Number(it.purchaseRate || it.price) || 0,
           discountPercent: Number(it.discountPercent) || 0,
-          gst: it.gst !== undefined ? Number(it.gst) : 12
+          gst: it.gst !== undefined ? Number(it.gst) : 12,
+          mrp: Number(it.mrp) || 0
         }))
       };
 
@@ -989,7 +1072,9 @@ const ProcurementDashboard = () => {
         await api.post('/goods-receipts', payload);
       }
 
-      setShowGRNModal(false);
+      setGrnPageMode(null);
+      setGrnInitialPOId('');
+      setEditingGrn(null);
       setGrnSelectedPOId('');
       setGrnDirectVendorId('');
       setGrnItems([]);
@@ -1042,64 +1127,52 @@ const ProcurementDashboard = () => {
   const handleSendPurchaseOrder = async (e) => {
     if (e) e.preventDefault();
 
-    const validItems = poScreenItems.filter(item => item.sku && Number(item.qty) > 0);
+    const validItems = poScreenItems.filter(item => (item.sku || item.itemCode) && Number(item.qty) > 0);
     if (validItems.length === 0) {
       showToast('Please add at least one valid item with a quantity greater than zero!', 'error');
       return;
     }
 
-    // Auto-resolve missing vendor assignments if any
+    // Verify vendor and quotation assignments
     for (let it of validItems) {
-      if (!it.vendorId) {
-        const itName = it.name || '';
-        const itSku = it.sku || '';
-        const matchingVendors = (vendors || []).filter(v => 
-          (v.status === 'Active' || !v.status) && 
-          v.medicines && 
-          v.medicines.some(med => (itSku && med.sku && med.sku.toLowerCase() === itSku.toLowerCase()) || (itName && med.name && med.name.toLowerCase() === itName.toLowerCase()))
-        );
-        if (matchingVendors.length > 0) {
-          const cheapest = matchingVendors.reduce((min, current) => {
-            const minPrice = min.medicines.find(med => (itSku && med.sku && med.sku.toLowerCase() === itSku.toLowerCase()) || (itName && med.name && med.name.toLowerCase() === itName.toLowerCase()))?.price || Infinity;
-            const currentPrice = current.medicines.find(med => (itSku && med.sku && med.sku.toLowerCase() === itSku.toLowerCase()) || (itName && med.name && med.name.toLowerCase() === itName.toLowerCase()))?.price || Infinity;
-            return currentPrice < minPrice ? current : min;
-          }, matchingVendors[0]);
-          it.vendorId = cheapest._id;
-          it.vendorName = cheapest.name;
-          const medInfo = cheapest.medicines.find(med => (itSku && med.sku && med.sku.toLowerCase() === itSku.toLowerCase()) || (itName && med.name && med.name.toLowerCase() === itName.toLowerCase()));
-          if (medInfo) {
-            it.price = medInfo.price;
-            it.tax = medInfo.gst !== undefined ? medInfo.gst : 12;
-          }
-        }
+      if (it.itemMasterId && !it.quotationId) {
+        showToast(`Please select an active vendor quotation for ${it.brandName || it.name || 'item'}!`, 'error');
+        return;
       }
-    }
-
-    const missingVendorItem = validItems.find(item => !item.vendorId);
-    if (missingVendorItem) {
-      const medName = missingVendorItem.name || medicines.find(m => m.sku === missingVendorItem.sku)?.name || 'selected item';
-      showToast(`Please select a vendor for ${medName} before sending!`, 'error');
-      return;
+      if (!it.vendorId) {
+        showToast(`Please select a vendor for ${it.brandName || it.name || 'item'}!`, 'error');
+        return;
+      }
     }
 
     try {
       const formattedItems = validItems.map(item => {
-        const medObj = (medicines || []).find(m => m.sku === item.sku);
-        const vObj = (vendors || []).find(v => v._id === item.vendorId);
         const subTotal = Number(item.qty) * Number(item.price);
         const discountVal = subTotal * ((Number(item.discount) || 0) / 100);
         const taxVal = (subTotal - discountVal) * ((Number(item.tax) || 12) / 100);
         const lineTotal = subTotal - discountVal + taxVal;
 
         return {
-          name: item.name || (medObj ? medObj.name : (item.tempName || 'Medicine')),
-          sku: item.sku,
+          name: item.name || item.genericName || 'Medicine',
+          genericName: item.genericName || item.name || '',
+          brandName: item.brandName || '',
+          manufacturer: item.manufacturer || '',
+          sku: item.itemCode || item.sku,
+          itemCode: item.itemCode || item.sku,
+          itemMasterId: item.itemMasterId || undefined,
+          quotationId: item.quotationId || undefined,
+          purchasedUnit: item.purchasedUnit || 'Unit',
+          packSize: item.packSize || '',
+          converterFactor: Number(item.converterFactor) > 0 ? Number(item.converterFactor) : 1,
+          consumptionUnit: item.consumptionUnit || 'Unit',
           requiredQty: Number(item.qty),
+          expectedConsumptionQty: Number(item.qty) * (Number(item.converterFactor) > 0 ? Number(item.converterFactor) : 1),
           price: Number(item.price),
+          discount: Number(item.discount || 0),
           tax: Number(item.tax || 12),
           total: Math.round(lineTotal * 100) / 100,
           vendorId: item.vendorId,
-          vendorName: vObj ? vObj.name : (item.vendorName || 'Supplier')
+          vendorName: item.vendorName || 'Supplier'
         };
       });
 
@@ -1124,7 +1197,7 @@ const ProcurementDashboard = () => {
 
       setIsCreatingPO(false);
       setEditingDraftPO(null);
-      setPoScreenItems([{ sku: '', qty: 100, vendorId: '', price: 0, discount: 0, tax: 12 }]);
+      setPoScreenItems([{ itemMasterId: '', quotationId: '', sku: '', itemCode: '', name: '', brandName: '', manufacturer: '', purchasedUnit: 'Box', packSize: '', converterFactor: 1, consumptionUnit: 'Unit', qty: 1, price: 0, discount: 0, tax: 12, vendorId: '', vendorName: '' }]);
       setPoScreenNotes('');
       fetchData();
     } catch (err) {
@@ -1134,7 +1207,7 @@ const ProcurementDashboard = () => {
   };
 
   const handleSaveDraftPO = async () => {
-    const validItems = poScreenItems.filter(item => item.sku && Number(item.qty) > 0);
+    const validItems = poScreenItems.filter(item => (item.sku || item.itemCode) && Number(item.qty) > 0);
     if (validItems.length === 0) {
       showToast('Please add at least one valid item!', 'error');
       return;
@@ -1142,22 +1215,32 @@ const ProcurementDashboard = () => {
 
     try {
       const formattedItems = validItems.map(item => {
-        const medObj = medicines.find(m => m.sku === item.sku);
-        const vObj = vendors.find(v => v._id === item.vendorId);
-        const subTotal = item.qty * (item.price || 10);
-        const discountVal = subTotal * ((item.discount || 0) / 100);
-        const taxVal = (subTotal - discountVal) * ((item.tax || 12) / 100);
+        const subTotal = Number(item.qty) * Number(item.price || 0);
+        const discountVal = subTotal * ((Number(item.discount) || 0) / 100);
+        const taxVal = (subTotal - discountVal) * ((Number(item.tax) || 12) / 100);
         const lineTotal = subTotal - discountVal + taxVal;
 
         return {
-          name: medObj ? medObj.name : item.name || 'Unknown Product',
-          sku: item.sku,
+          name: item.name || item.genericName || 'Medicine',
+          genericName: item.genericName || item.name || '',
+          brandName: item.brandName || '',
+          manufacturer: item.manufacturer || '',
+          sku: item.itemCode || item.sku,
+          itemCode: item.itemCode || item.sku,
+          itemMasterId: item.itemMasterId || undefined,
+          quotationId: item.quotationId || undefined,
+          purchasedUnit: item.purchasedUnit || 'Unit',
+          packSize: item.packSize || '',
+          converterFactor: Number(item.converterFactor) > 0 ? Number(item.converterFactor) : 1,
+          consumptionUnit: item.consumptionUnit || 'Unit',
           requiredQty: Number(item.qty),
-          price: Number(item.price || 10),
+          expectedConsumptionQty: Number(item.qty) * (Number(item.converterFactor) > 0 ? Number(item.converterFactor) : 1),
+          price: Number(item.price || 0),
+          discount: Number(item.discount || 0),
           tax: Number(item.tax || 12),
           total: Math.round(lineTotal * 100) / 100,
-          vendorId: item.vendorId || vendors[0]?._id,
-          vendorName: vObj ? vObj.name : vendors[0]?.name || 'Supplier'
+          vendorId: item.vendorId || (vendors[0]?._id),
+          vendorName: item.vendorName || (vendors[0]?.name || 'Supplier')
         };
       });
 
@@ -1179,7 +1262,7 @@ const ProcurementDashboard = () => {
 
       setIsCreatingPO(false);
       setEditingDraftPO(null);
-      setPoScreenItems([{ sku: '', qty: 100, vendorId: '', price: 0, discount: 0, tax: 12 }]);
+      setPoScreenItems([{ itemMasterId: '', quotationId: '', sku: '', itemCode: '', name: '', brandName: '', manufacturer: '', purchasedUnit: 'Box', packSize: '', converterFactor: 1, consumptionUnit: 'Unit', qty: 1, price: 0, discount: 0, tax: 12, vendorId: '', vendorName: '' }]);
       setPoScreenNotes('');
       fetchData();
       showToast('Draft purchase order(s) saved successfully!', 'success');
@@ -1204,10 +1287,22 @@ const ProcurementDashboard = () => {
     setPoScreenExpectedDelivery(po.expectedDelivery ? new Date(po.expectedDelivery).toISOString().split('T')[0] : '');
     setPoScreenDefaultVendor(po.vendorId || '');
     setPoScreenItems(po.items.map(item => ({
-      sku: item.sku,
-      qty: item.requiredQty,
-      vendorId: po.vendorId,
-      price: item.price,
+      itemMasterId: item.itemMasterId || '',
+      quotationId: item.quotationId || '',
+      sku: item.sku || item.itemCode || '',
+      itemCode: item.itemCode || item.sku || '',
+      name: item.name || item.genericName || '',
+      genericName: item.genericName || item.name || '',
+      brandName: item.brandName || '',
+      manufacturer: item.manufacturer || '',
+      purchasedUnit: item.purchasedUnit || 'Unit',
+      packSize: item.packSize || '',
+      converterFactor: item.converterFactor || 1,
+      consumptionUnit: item.consumptionUnit || 'Unit',
+      qty: item.requiredQty || item.qty || 1,
+      vendorId: item.vendorId || po.vendorId || '',
+      vendorName: item.vendorName || po.vendorName || '',
+      price: item.price || 0,
       discount: item.discount || 0,
       tax: item.tax || 12
     })));
@@ -2926,8 +3021,8 @@ const ProcurementDashboard = () => {
         <aside className={`proc-sidebar ${mobileSidebarOpen ? 'mobile-open' : ''}`} onClick={() => setMobileSidebarOpen(false)}>
           <div className="proc-sidebar-brand" style={{ padding: '20px 22px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <img 
-              src={curoxaSidebarLogo} 
-              alt="CUROXA" 
+              src={quroxaSidebarLogo} 
+              alt="QUROXA" 
               style={{
                 width: '42px',
                 height: '42px',
@@ -2938,7 +3033,7 @@ const ProcurementDashboard = () => {
             />
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 900, fontSize: '18px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1 }}>
-                CUROXA
+                QUROXA
               </span>
               <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '3px' }}>
                 Procurement Suite
@@ -2966,6 +3061,15 @@ const ProcurementDashboard = () => {
             <div style={{ fontSize: '10.5px', fontWeight: 800, textTransform: 'uppercase', color: '#059669', padding: '14px 12px 4px', letterSpacing: '0.05em' }}>
               • VENDORS & PROCUREMENT
             </div>
+            <button className={`proc-menu-item ${activeTab === 'item-master' ? 'active' : ''}`} onClick={() => { setActiveTab('item-master'); navigate('/procurement/item-master'); }}>
+              <i data-lucide="database"></i> Item Master
+            </button>
+            <button className={`proc-menu-item ${activeTab === 'item-requests' ? 'active' : ''}`} onClick={() => setActiveTab('item-requests')}>
+              <i data-lucide="clipboard-list"></i> Item Requests
+            </button>
+            <button className={`proc-menu-item ${activeTab === 'quotations' ? 'active' : ''}`} onClick={() => setActiveTab('quotations')}>
+              <i data-lucide="tag"></i> Vendor Quotations
+            </button>
             <button className={`proc-menu-item ${activeTab === 'vendors' ? 'active' : ''}`} onClick={() => setActiveTab('vendors')}>
               <i data-lucide="users"></i> Vendors & Catalogs
             </button>
@@ -3104,6 +3208,9 @@ const ProcurementDashboard = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '18.5px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}>
                     {activeTab === 'dashboard' && 'Procurement Command Center'}
+                    {activeTab === 'item-master' && (isItemMasterNew ? 'Item Master — Add New Item' : isItemMasterEdit ? 'Item Master — Edit Catalog Item' : 'Item Master Catalog')}
+                    {activeTab === 'item-requests' && 'Item Requests — Global Catalog'}
+                    {activeTab === 'quotations' && 'Vendor Quotations'}
                     {activeTab === 'vendors' && 'Vendors & Supplier Catalogs'}
                     {activeTab === 'pos' && (isCreatingPO ? (editingDraftPO ? 'Resume Purchase Order' : 'Create Purchase Order') : 'Purchase Orders')}
                     {activeTab === 'grn' && 'Goods Receipt Notes (GRN)'}
@@ -3617,7 +3724,7 @@ const ProcurementDashboard = () => {
                         setPoScreenOrderDate(new Date().toISOString().split('T')[0]);
                         setPoScreenExpectedDelivery(new Date(Date.now() + 4*24*60*60*1000).toISOString().split('T')[0]);
                         setPoScreenDefaultVendor('');
-                        const initialItems = [{ sku: '', qty: 100, vendorId: '', price: 0, discount: 0, tax: 12 }];
+                        const initialItems = [{ itemMasterId: '', quotationId: '', sku: '', itemCode: '', name: '', brandName: '', manufacturer: '', purchasedUnit: 'Box', packSize: '', converterFactor: 1, consumptionUnit: 'Unit', qty: 1, price: 0, discount: 0, tax: 12, vendorId: '', vendorName: '' }];
                         setPoScreenItems(initialItems);
                         setPoScreenNotes('');
                         setEditingDraftPO(null);
@@ -4241,6 +4348,38 @@ const ProcurementDashboard = () => {
             )}
 
 
+
+            {/* VIEW: ITEM MASTER */}
+            {activeTab === 'item-master' && (
+              isItemMasterNew ? (
+                <ItemMasterForm
+                  mode="create"
+                  showToast={showToast}
+                  onCancel={() => navigate('/procurement/item-master')}
+                  onSaveSuccess={() => navigate('/procurement/item-master')}
+                />
+              ) : isItemMasterEdit ? (
+                <ItemMasterForm
+                  mode="edit"
+                  itemId={editItemId}
+                  showToast={showToast}
+                  onCancel={() => navigate('/procurement/item-master')}
+                  onSaveSuccess={() => navigate('/procurement/item-master')}
+                />
+              ) : (
+                <ItemMasterTab showToast={showToast} userRole={currentUser?.role} />
+              )
+            )}
+
+            {/* VIEW: ITEM REQUESTS */}
+            {activeTab === 'item-requests' && (
+              <ItemRequestsPanel showToast={showToast} />
+            )}
+
+            {/* VIEW: VENDOR QUOTATIONS */}
+            {activeTab === 'quotations' && (
+              <VendorQuotationsTab vendors={vendors} showToast={showToast} />
+            )}
 
             {/* VIEW 2: VENDORS */}
             {activeTab === 'vendors' && (
@@ -4909,7 +5048,7 @@ const ProcurementDashboard = () => {
                     const step1Complete = Boolean(newVendor.name && newVendor.type && newVendor.supplierCategory);
                     const step2Complete = Boolean(newVendor.city && newVendor.state && (newVendor.contactPerson || newVendor.primaryContactPerson) && (newVendor.phone || newVendor.primaryContactPersonMobileNo));
                     const step3Complete = Boolean(newVendor.gstNumber && (newVendor.panNumber || newVendor.panCardNo) && newVendor.licenseNumber);
-                    const step4Complete = Boolean(newVendor.medicines && newVendor.medicines.length > 0 && newVendor.medicines.some(m => m.name && m.price > 0));
+                    const step4Complete = Boolean(newVendorQuotations.length > 0 && newVendorQuotations.some(q => q.itemMasterId && q.ratePerPurchasedUnit > 0));
 
                     return (
                       <div className="vendor-stepper">
@@ -4970,8 +5109,8 @@ const ProcurementDashboard = () => {
                             {step4Complete && vendorStep !== 4 ? <i data-lucide="check" style={{ width: '14px', height: '14px' }}></i> : '4'}
                           </div>
                           <div className="vendor-step-info">
-                            <span className="vendor-step-name">Rate List</span>
-                            <span className="vendor-step-sub">Medicine & pricing</span>
+                            <span className="vendor-step-name">Vendor Quotation</span>
+                            <span className="vendor-step-sub">Item pricing & rates</span>
                           </div>
                         </button>
 
@@ -6008,314 +6147,261 @@ const ProcurementDashboard = () => {
                     </div>
                   )}
 
-                  {/* STEP 4: RATE LIST */}
+                  {/* STEP 4: VENDOR QUOTATIONS */}
                   {vendorStep === 4 && (
                     <div id="sec-ratelist" className="vendor-card" style={{ animation: 'fadeIn 0.2s ease' }}>
                       <div className="vendor-card-header">
                         <div className="vendor-card-title-group">
                           <div className="vendor-card-icon-box green">
-                            <i data-lucide="package" style={{ width: '20px', height: '20px' }}></i>
+                            <i data-lucide="tag" style={{ width: '20px', height: '20px' }}></i>
                           </div>
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <h3 className="vendor-card-title">Medicine / Rate List</h3>
+                              <h3 className="vendor-card-title">Vendor Quotations</h3>
                               <span style={{ background: '#DCFCE7', color: '#166534', fontWeight: 800, fontSize: '11px', padding: '2px 8px', borderRadius: '12px' }}>
-                                {(newVendor.medicines || []).length} { (newVendor.medicines || []).length === 1 ? 'Item' : 'Items' }
+                                {newVendorQuotations.length} {newVendorQuotations.length === 1 ? 'Quotation' : 'Quotations'}
                               </span>
                             </div>
-                            <p className="vendor-card-subtitle">Add medicines supplied by this vendor and their wholesale purchase prices.</p>
+                            <p className="vendor-card-subtitle">Add items supplied by this vendor with rates, GST, lead time and validity. These become live quotation records.</p>
                           </div>
                         </div>
-
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <span style={{ fontSize: '12px', color: '#D97706', background: '#FEF3C7', padding: '4px 10px', borderRadius: '6px', fontWeight: 700 }}>
-                            At least 1 item required
+                            Optional — add at least 1 for catalog
                           </span>
                           <button
                             type="button"
                             className="proc-btn proc-btn-primary"
                             style={{ padding: '7px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
                             onClick={() => {
-                              const updatedMeds = [...(newVendor.medicines || []), { name: '', sku: '', price: 0, gst: 12, available: true }];
-                              setNewVendor({ ...newVendor, medicines: updatedMeds });
+                              setNewVendorQuotations(prev => [...prev, {
+                                itemMasterId: '',
+                                itemName: '',
+                                purchasedUnit: '',
+                                ratePerPurchasedUnit: '',
+                                discountPercent: 0,
+                                gstPercent: 12,
+                                leadTimeDays: 3,
+                                minimumOrderQty: 1,
+                                validTill: '',
+                              }]);
                             }}
                           >
-                            <i data-lucide="plus" style={{ width: '15px', height: '15px' }}></i> Add New Item
+                            <i data-lucide="plus" style={{ width: '15px', height: '15px' }}></i> Add Quotation Line
                           </button>
                         </div>
                       </div>
 
-                      {(!newVendor.medicines || newVendor.medicines.length === 0) ? (
+                      {newVendorQuotations.length === 0 ? (
                         <div style={{ padding: '36px', textAlign: 'center', background: '#F8FAFC', borderRadius: '10px', border: '1.5px dashed #CBD5E1', color: '#64748B' }}>
-                          <i data-lucide="pill" style={{ width: '36px', height: '36px', color: '#94A3B8', margin: '0 auto 10px auto', display: 'block' }}></i>
-                          <div style={{ fontWeight: 700, fontSize: '14px', color: '#1E293B', marginBottom: '4px' }}>No catalog items added yet</div>
-                          <div style={{ fontSize: '12.5px', marginBottom: '16px' }}>Specify vendor wholesale prices for items supplied by this vendor.</div>
+                          <i data-lucide="file-text" style={{ width: '36px', height: '36px', color: '#94A3B8', margin: '0 auto 10px auto', display: 'block' }}></i>
+                          <div style={{ fontWeight: 700, fontSize: '14px', color: '#1E293B', marginBottom: '4px' }}>No quotations added yet</div>
+                          <div style={{ fontSize: '12.5px', marginBottom: '16px' }}>Add items from your Item Master catalog with vendor-quoted rates, GST, and lead times.</div>
                           <button
                             type="button"
                             className="proc-btn proc-btn-secondary"
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                             onClick={() => {
-                              const updatedMeds = [{ name: '', sku: '', price: 0, gst: 12, available: true }];
-                              setNewVendor({ ...newVendor, medicines: updatedMeds });
+                              setNewVendorQuotations([{
+                                itemMasterId: '',
+                                itemName: '',
+                                purchasedUnit: '',
+                                ratePerPurchasedUnit: '',
+                                discountPercent: 0,
+                                gstPercent: 12,
+                                leadTimeDays: 3,
+                                minimumOrderQty: 1,
+                                validTill: '',
+                              }]);
                             }}
                           >
-                            <i data-lucide="plus" style={{ width: '14px', height: '14px' }}></i> Add First Medicine
+                            <i data-lucide="plus" style={{ width: '14px', height: '14px' }}></i> Add First Quotation
                           </button>
                         </div>
                       ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          {/* Table Header */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '40px 3.5fr 2fr 1.8fr 1.2fr 90px 48px', gap: '12px', padding: '10px 14px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px', alignItems: 'center' }}>
-                            <div style={{ textAlign: 'center' }}>#</div>
-                            <div>Medicine Name <span style={{ color: '#EF4444' }}>*</span></div>
-                            <div>SKU <span style={{ color: '#EF4444' }}>*</span></div>
-                            <div>Purchase Price (₹) <span style={{ color: '#EF4444' }}>*</span></div>
-                            <div>GST (%) <span style={{ color: '#EF4444' }}>*</span></div>
-                            <div style={{ textAlign: 'center' }}>Available</div>
-                            <div style={{ textAlign: 'center' }}>Action</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {/* Header Row */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '28px 3fr 1.4fr 1.3fr 1fr 1fr 1fr 1.3fr 40px', gap: '8px', padding: '8px 12px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px', alignItems: 'center' }}>
+                            <div>#</div>
+                            <div>Item (from Catalog) *</div>
+                            <div>Unit *</div>
+                            <div>Rate (₹) *</div>
+                            <div>Disc %</div>
+                            <div>GST %</div>
+                            <div>Lead (days)</div>
+                            <div>Valid Till</div>
+                            <div></div>
                           </div>
 
-                          {/* Table Rows */}
-                          {newVendor.medicines.map((medRow, idx) => (
-                            <div 
-                              key={idx} 
-                              style={{ 
-                                display: 'grid', 
-                                gridTemplateColumns: '40px 3.5fr 2fr 1.8fr 1.2fr 90px 48px', 
-                                gap: '12px', 
-                                alignItems: 'center', 
-                                padding: '8px 14px',
-                                background: '#FFFFFF',
-                                border: '1px solid #E2E8F0',
-                                borderRadius: '8px',
-                                position: 'relative', 
-                                zIndex: activeVendorMedFocus === idx ? 99 : 1,
-                                transition: 'box-shadow 0.2s ease, border-color 0.2s ease'
-                              }}
-                            >
-                              <div style={{ textAlign: 'center', fontWeight: 700, fontSize: '12px', color: '#64748B' }}>
-                                {idx + 1}
-                              </div>
+                          {newVendorQuotations.map((q, idx) => {
+                            return (
+                              <div
+                                key={idx}
+                                style={{ display: 'grid', gridTemplateColumns: '28px 3fr 1.4fr 1.3fr 1fr 1fr 1fr 1.3fr 40px', gap: '8px', alignItems: 'center', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px' }}
+                              >
+                                <div style={{ textAlign: 'center', fontWeight: 700, fontSize: '12px', color: '#94A3B8' }}>{idx + 1}</div>
 
-                              {/* Medicine Name (Add / Type any medicine name) */}
-                              <div style={{ position: 'relative' }}>
-                                <input
-                                  type="text"
-                                  required
-                                  className="vendor-input"
-                                  placeholder="e.g. Dolo 650, Paracetamol 500mg..."
-                                  value={medRow.name}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    setNewVendor(prev => {
-                                      const updatedMeds = [...prev.medicines];
-                                      const oldSku = updatedMeds[idx]?.sku || '';
-                                      // If SKU is empty or was auto-generated, suggest a clean SKU
-                                      const suggestedSku = (!oldSku || oldSku.startsWith('MED-'))
-                                        ? `MED-${val.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8) || (idx + 1)}`
-                                        : oldSku;
-
-                                      updatedMeds[idx] = { 
-                                        ...updatedMeds[idx], 
-                                        name: val,
-                                        sku: oldSku || suggestedSku
-                                      };
-                                      const match = medicines.find(m => m.name.toLowerCase() === val.trim().toLowerCase());
-                                      if (match) {
-                                        updatedMeds[idx].sku = match.sku;
-                                      }
-                                      return { ...prev, medicines: updatedMeds };
-                                    });
-                                  }}
-                                  onFocus={() => setActiveVendorMedFocus(idx)}
-                                  onBlur={() => setTimeout(() => setActiveVendorMedFocus(null), 300)}
-                                />
-                                {activeVendorMedFocus === idx && (() => {
-                                  const query = (medRow.name || '').trim().toLowerCase();
-                                  if (query.length < 2) return null;
-                                  const filtered = medicines.filter(m => m.name.toLowerCase().includes(query)).slice(0, 5);
-                                  if (filtered.length === 0) return null;
-                                  return (
-                                    <div
-                                      data-lenis-prevent
-                                      onMouseDown={(e) => e.preventDefault()}
-                                      style={{
-                                        position: 'absolute',
-                                        top: '100%',
-                                        left: 0,
-                                        right: 0,
-                                        backgroundColor: '#ffffff',
-                                        border: '1px solid #CBD5E1',
-                                        borderRadius: '8px',
-                                        boxShadow: '0 10px 25px rgba(15, 23, 42, 0.12)',
-                                        zIndex: 1000,
-                                        maxHeight: '180px',
-                                        overflowY: 'auto',
-                                        marginTop: '4px'
-                                      }}
-                                    >
-                                      <div style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 800, color: '#64748B', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textTransform: 'uppercase' }}>
-                                        Existing Hospital Catalog Matches
-                                      </div>
-                                      {filtered.map(m => (
-                                        <div
-                                          key={m._id || m.sku || m.name}
-                                          onMouseDown={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-
-                                            setNewVendor(prev => {
-                                              const updatedMeds = [...prev.medicines];
-                                              updatedMeds[idx] = { ...updatedMeds[idx], name: m.name, sku: m.sku };
-                                              return { ...prev, medicines: updatedMeds };
-                                            });
-                                            setTimeout(() => {
-                                              setActiveVendorMedFocus(null);
-                                            }, 50);
-                                          }}
-                                          style={{
-                                            padding: '8px 12px',
-                                            fontSize: '13px',
-                                            fontWeight: 700,
-                                            color: '#1E293B',
-                                            cursor: 'pointer',
-                                            borderBottom: '1px solid #F1F5F9',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center'
-                                          }}
-                                          onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
-                                          onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}
-                                        >
-                                          <span style={{ pointerEvents: 'none' }}>{m.name}</span>
-                                          <span style={{ fontSize: '11px', color: '#2563EB', fontFamily: 'monospace', fontWeight: 700, pointerEvents: 'none' }}>{m.sku}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-
-                              {/* SKU */}
-                              <div>
-                                <input
-                                  type="text"
-                                  className="vendor-input"
-                                  style={{ fontFamily: 'monospace' }}
-                                  placeholder="SKU Code"
-                                  value={medRow.sku || ''}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    const updatedMeds = [...newVendor.medicines];
-                                    updatedMeds[idx] = { ...updatedMeds[idx], sku: val };
-                                    setNewVendor({ ...newVendor, medicines: updatedMeds });
-                                  }}
-                                />
-                              </div>
-
-                              {/* Purchase Price */}
-                              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                <span style={{ position: 'absolute', left: '10px', color: '#64748B', fontWeight: 700, fontSize: '13px', pointerEvents: 'none' }}>₹</span>
-                                <input
-                                  type="number"
-                                  required
-                                  className="vendor-input"
-                                  style={{ paddingLeft: '24px', fontWeight: 700 }}
-                                  placeholder="0.00"
-                                  min="0"
-                                  step="0.01"
-                                  value={medRow.price || ''}
-                                  onChange={e => {
-                                    const val = Number(e.target.value) || 0;
-                                    const updatedMeds = [...newVendor.medicines];
-                                    updatedMeds[idx] = { ...updatedMeds[idx], price: val };
-                                    setNewVendor({ ...newVendor, medicines: updatedMeds });
-                                  }}
-                                />
-                              </div>
-
-                              {/* GST */}
-                              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                <input
-                                  type="number"
-                                  required
-                                  className="vendor-input"
-                                  style={{ paddingRight: '22px' }}
-                                  placeholder="12"
-                                  min="0"
-                                  max="100"
-                                  value={medRow.gst !== undefined ? medRow.gst : 12}
-                                  onChange={e => {
-                                    const val = Number(e.target.value) || 0;
-                                    const updatedMeds = [...newVendor.medicines];
-                                    updatedMeds[idx] = { ...updatedMeds[idx], gst: val };
-                                    setNewVendor({ ...newVendor, medicines: updatedMeds });
-                                  }}
-                                />
-                                <span style={{ position: 'absolute', right: '10px', color: '#94A3B8', fontSize: '12px', pointerEvents: 'none' }}>%</span>
-                              </div>
-
-                              {/* Available Toggle */}
-                              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                                <label style={{ position: 'relative', display: 'inline-block', width: '38px', height: '20px', margin: 0, cursor: 'pointer' }}>
-                                  <input 
-                                    type="checkbox" 
-                                    checked={medRow.available !== false}
+                                {/* Item Master Select */}
+                                <div>
+                                  <select
+                                    className="vendor-input"
+                                    style={{ fontSize: '12px' }}
+                                    value={q.itemMasterId}
                                     onChange={e => {
-                                      const updatedMeds = [...newVendor.medicines];
-                                      updatedMeds[idx] = { ...updatedMeds[idx], available: e.target.checked };
-                                      setNewVendor({ ...newVendor, medicines: updatedMeds });
+                                      const imId = e.target.value;
+                                      const im = itemMasters.find(x => x._id === imId);
+                                      setNewVendorQuotations(prev => {
+                                        const updated = [...prev];
+                                        updated[idx] = {
+                                          ...updated[idx],
+                                          itemMasterId: imId,
+                                          itemName: im?.itemName || im?.name || '',
+                                          purchasedUnit: im?.purchasedUnit || im?.consumptionUnit || updated[idx].purchasedUnit || '',
+                                          gstPercent: im?.gstPercent !== undefined ? im.gstPercent : updated[idx].gstPercent,
+                                        };
+                                        return updated;
+                                      });
                                     }}
-                                    style={{ opacity: 0, width: 0, height: 0 }}
-                                  />
-                                  <span style={{
-                                    position: 'absolute',
-                                    cursor: 'pointer',
-                                    top: 0,
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    backgroundColor: medRow.available !== false ? '#10B981' : '#CBD5E1',
-                                    transition: '0.2s',
-                                    borderRadius: '20px'
-                                  }}>
-                                    <span style={{
-                                      position: 'absolute',
-                                      content: '""',
-                                      height: '14px',
-                                      width: '14px',
-                                      left: medRow.available !== false ? '20px' : '3px',
-                                      bottom: '3px',
-                                      backgroundColor: 'white',
-                                      transition: '0.2s',
-                                      borderRadius: '50%'
-                                    }}></span>
-                                  </span>
-                                </label>
-                              </div>
+                                  >
+                                    <option value="">-- Select Item --</option>
+                                    {itemMasters.map(im => (
+                                      <option key={im._id} value={im._id}>{im.itemName || im.name}</option>
+                                    ))}
+                                  </select>
+                                </div>
 
-                              {/* Action (Delete) */}
-                              <div style={{ display: 'flex', justifyContent: 'center' }}>
-                                <button
-                                  type="button"
-                                  style={{ background: '#FEE2E2', border: 'none', borderRadius: '6px', cursor: 'pointer', color: '#EF4444', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s ease' }}
-                                  title="Remove Item"
-                                  onClick={() => {
-                                    const updatedMeds = newVendor.medicines.filter((_, i) => i !== idx);
-                                    setNewVendor({ ...newVendor, medicines: updatedMeds });
-                                  }}
-                                >
-                                  <i data-lucide="trash-2" style={{ width: '15px', height: '15px' }}></i>
-                                </button>
+                                {/* Purchased Unit */}
+                                <div>
+                                  <input
+                                    type="text"
+                                    className="vendor-input"
+                                    style={{ fontSize: '12px' }}
+                                    placeholder="Box / Strip..."
+                                    value={q.purchasedUnit}
+                                    onChange={e => {
+                                      setNewVendorQuotations(prev => {
+                                        const updated = [...prev];
+                                        updated[idx] = { ...updated[idx], purchasedUnit: e.target.value };
+                                        return updated;
+                                      });
+                                    }}
+                                  />
+                                </div>
+
+                                {/* Rate */}
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                  <span style={{ position: 'absolute', left: '8px', color: '#64748B', fontSize: '12px', pointerEvents: 'none' }}>₹</span>
+                                  <input
+                                    type="number"
+                                    className="vendor-input"
+                                    style={{ paddingLeft: '20px', fontWeight: 700, fontSize: '12px' }}
+                                    placeholder="0.00"
+                                    min="0"
+                                    step="0.01"
+                                    value={q.ratePerPurchasedUnit}
+                                    onChange={e => {
+                                      setNewVendorQuotations(prev => {
+                                        const updated = [...prev];
+                                        updated[idx] = { ...updated[idx], ratePerPurchasedUnit: Number(e.target.value) || '' };
+                                        return updated;
+                                      });
+                                    }}
+                                  />
+                                </div>
+
+                                {/* Discount % */}
+                                <div>
+                                  <input
+                                    type="number"
+                                    className="vendor-input"
+                                    style={{ fontSize: '12px' }}
+                                    placeholder="0"
+                                    min="0" max="100"
+                                    value={q.discountPercent}
+                                    onChange={e => {
+                                      setNewVendorQuotations(prev => {
+                                        const updated = [...prev];
+                                        updated[idx] = { ...updated[idx], discountPercent: Number(e.target.value) || 0 };
+                                        return updated;
+                                      });
+                                    }}
+                                  />
+                                </div>
+
+                                {/* GST % */}
+                                <div>
+                                  <input
+                                    type="number"
+                                    className="vendor-input"
+                                    style={{ fontSize: '12px' }}
+                                    placeholder="12"
+                                    min="0" max="100"
+                                    value={q.gstPercent}
+                                    onChange={e => {
+                                      setNewVendorQuotations(prev => {
+                                        const updated = [...prev];
+                                        updated[idx] = { ...updated[idx], gstPercent: Number(e.target.value) || 0 };
+                                        return updated;
+                                      });
+                                    }}
+                                  />
+                                </div>
+
+                                {/* Lead Time */}
+                                <div>
+                                  <input
+                                    type="number"
+                                    className="vendor-input"
+                                    style={{ fontSize: '12px' }}
+                                    placeholder="3"
+                                    min="0"
+                                    value={q.leadTimeDays}
+                                    onChange={e => {
+                                      setNewVendorQuotations(prev => {
+                                        const updated = [...prev];
+                                        updated[idx] = { ...updated[idx], leadTimeDays: Number(e.target.value) || 0 };
+                                        return updated;
+                                      });
+                                    }}
+                                  />
+                                </div>
+
+                                {/* Valid Till */}
+                                <div>
+                                  <input
+                                    type="date"
+                                    className="vendor-input"
+                                    style={{ fontSize: '12px' }}
+                                    value={q.validTill}
+                                    onChange={e => {
+                                      setNewVendorQuotations(prev => {
+                                        const updated = [...prev];
+                                        updated[idx] = { ...updated[idx], validTill: e.target.value };
+                                        return updated;
+                                      });
+                                    }}
+                                  />
+                                </div>
+
+                                {/* Remove */}
+                                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                  <button
+                                    type="button"
+                                    style={{ background: '#FEE2E2', border: 'none', borderRadius: '6px', cursor: 'pointer', color: '#EF4444', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    onClick={() => setNewVendorQuotations(prev => prev.filter((_, i) => i !== idx))}
+                                  >
+                                    <i data-lucide="trash-2" style={{ width: '14px', height: '14px' }}></i>
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
 
                       <div className="vendor-callout-tip">
                         <i data-lucide="lightbulb" style={{ width: '16px', height: '16px', flexShrink: 0, color: '#16A34A' }}></i>
-                        <span>Tip: Enter the vendor's wholesale purchase price. Hospital selling price (MRP) is set by Admin during approval.</span>
+                        <span>Tip: Enter the vendor's quoted purchase rate per purchased unit. Quotations are saved as live records and used during PO creation and GRN matching.</span>
                       </div>
                     </div>
                   )}
@@ -6387,22 +6473,23 @@ const ProcurementDashboard = () => {
                             </div>
                           </div>
 
-                          {/* Block 4: Medicines Catalog */}
+                          {/* Block 4: Vendor Quotations */}
                           <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>
                               <span style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <i data-lucide="package" style={{ width: '14px', height: '14px', color: '#059669' }}></i> Catalog Items
+                                <i data-lucide="tag" style={{ width: '14px', height: '14px', color: '#059669' }}></i> Vendor Quotations
                               </span>
                               <button type="button" onClick={() => setVendorStep(4)} style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>Edit</button>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12.5px' }}>
-                              <div><span style={{ color: '#64748B' }}>Total Medicines:</span> <strong style={{ color: '#0F172A' }}>{(newVendor.medicines || []).length} items listed</strong></div>
+                              <div><span style={{ color: '#64748B' }}>Total Quotations:</span> <strong style={{ color: '#0F172A' }}>{newVendorQuotations.length} {newVendorQuotations.length === 1 ? 'item' : 'items'} quoted</strong></div>
                               <div style={{ maxHeight: '60px', overflowY: 'auto', display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
-                                {(newVendor.medicines || []).map((m, i) => (
-                                  <span key={i} style={{ background: '#E2E8F0', color: '#334155', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                                    {m.name || 'Item'} (₹{m.price || 0})
+                                {newVendorQuotations.filter(q => q.itemMasterId).map((q, i) => (
+                                  <span key={i} style={{ background: '#DCFCE7', color: '#166534', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                    {q.itemName || 'Item'} @ ₹{q.ratePerPurchasedUnit || 0}
                                   </span>
                                 ))}
+                                {newVendorQuotations.length === 0 && <span style={{ color: '#94A3B8', fontSize: '12px' }}>No quotations — can be added later</span>}
                               </div>
                             </div>
                           </div>
@@ -6520,7 +6607,7 @@ const ProcurementDashboard = () => {
                       setPoScreenExpectedDelivery(new Date(Date.now() + 4*24*60*60*1000).toISOString().split('T')[0]);
                       setPoScreenDefaultVendor('');
                       
-                      const initialItems = [{ sku: '', qty: 100, vendorId: '', price: 0, discount: 0, tax: 12 }];
+                      const initialItems = [{ itemMasterId: '', quotationId: '', sku: '', itemCode: '', name: '', brandName: '', manufacturer: '', purchasedUnit: 'Box', packSize: '', converterFactor: 1, consumptionUnit: 'Unit', qty: 1, price: 0, discount: 0, tax: 12, vendorId: '', vendorName: '' }];
                       setPoScreenItems(initialItems);
                       setPoScreenNotes('');
                       setEditingDraftPO(null);
@@ -7113,7 +7200,7 @@ const ProcurementDashboard = () => {
                                       }}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        printPO(po, localStorage.getItem('tenantName') || 'CUROXA HEALTHCARE');
+                                        printPO(po, localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE');
                                       }}
                                       title="Download / Print PO PDF"
                                     >
@@ -7209,8 +7296,9 @@ const ProcurementDashboard = () => {
                                               setEditingGrn(null);
                                               handleGrnPOSelection(po._id);
                                               setGrnFlowType('po');
+                                              setGrnInitialPOId(po._id);
+                                              setGrnPageMode('new-po');
                                               setActiveTab('grn');
-                                              setShowGRNModal(true);
                                             }}
                                             title={po.status === 'Partially Received' || po.status === 'Partially Delivered' ? 'Receive Remaining Items against PO' : 'Receive PO Delivery'}
                                           >
@@ -7248,7 +7336,8 @@ const ProcurementDashboard = () => {
                                                   handleGrnPOSelection(po._id);
                                                   setGrnFlowType('po');
                                                   setActiveTab('grn');
-                                                  setShowGRNModal(true);
+                                                  setGrnInitialPOId(po._id);
+                                               setGrnPageMode('new-po');
                                                 }
                                               }}
                                             >
@@ -7271,7 +7360,7 @@ const ProcurementDashboard = () => {
                   </div>
                 </div>
               ) : (() => {
-                const activeScreenItems = poScreenItems.filter(item => item.sku);
+                const activeScreenItems = poScreenItems.filter(item => item.sku || item.itemCode || item.itemMasterId);
                 const totalSubtotal = activeScreenItems.reduce((acc, item) => acc + ((item.qty || 0) * (item.price || 0)), 0);
                 const totalDiscount = activeScreenItems.reduce((acc, item) => {
                   const sub = (item.qty || 0) * (item.price || 0);
@@ -7547,7 +7636,7 @@ const ProcurementDashboard = () => {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '17px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif" }}>Order Items Matrix</span>
                             <span style={{ fontSize: '11px', fontWeight: 800, background: '#EFF6FF', color: '#1D4ED8', padding: '3px 9px', borderRadius: '12px', border: '1px solid #DBEAFE' }}>
-                              {poScreenItems.filter(i => i.sku).length} Active Lines
+                              {poScreenItems.filter(i => i.sku || i.itemCode || i.itemMasterId).length} Active Lines
                             </span>
                           </div>
                           <p style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, margin: '2px 0 0 0' }}>
@@ -7568,7 +7657,7 @@ const ProcurementDashboard = () => {
                             boxShadow: '0 4px 12px rgba(37, 99, 235, 0.28)'
                           }} 
                           onClick={() => {
-                            setPoScreenItems([...poScreenItems, { sku: '', qty: 100, vendorId: '', price: 0, discount: 0, tax: 12 }]);
+                            setPoScreenItems([...poScreenItems, { itemMasterId: '', quotationId: '', sku: '', itemCode: '', name: '', brandName: '', manufacturer: '', purchasedUnit: 'Box', packSize: '', converterFactor: 1, consumptionUnit: 'Unit', qty: 1, price: 0, discount: 0, tax: 12, vendorId: '', vendorName: '' }]);
                           }}
                         >
                           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -7589,13 +7678,13 @@ const ProcurementDashboard = () => {
                         fontWeight: 600 
                       }}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                        <span><strong>Multi-Supplier Auto-Split:</strong> If medicines are ordered from different vendors, Curoxa will automatically bundle them into separate vendor sub-orders upon dispatch.</span>
+                        <span><strong>Multi-Supplier Auto-Split:</strong> If medicines are ordered from different vendors, Quroxa will automatically bundle them into separate vendor sub-orders upon dispatch.</span>
                       </div>
 
-                      {/* Modern Styled Slate/Blue Table Header */}
+                      {/* Modern Item Master & Quotation Matrix Header */}
                       <div style={{ 
                         display: 'grid', 
-                        gridTemplateColumns: '2.5fr 1fr 2fr 1fr 1fr 1fr 1.2fr 45px', 
+                        gridTemplateColumns: '2.5fr 2.5fr 1.2fr 1.3fr 1.1fr 45px', 
                         gap: '12px', 
                         padding: '12px 24px', 
                         background: 'linear-gradient(135deg, #F1F5F9 0%, #EFF6FF 100%)', 
@@ -7608,412 +7697,433 @@ const ProcurementDashboard = () => {
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/></svg>
-                          <span>Product / Medicine</span>
+                          <span>Item Master & Packaging</span>
                         </div>
-                        <div>Qty</div>
-                        <div>Vendor Mapping</div>
-                        <div>Unit ₹</div>
-                        <div>Disc %</div>
-                        <div>Tax %</div>
+                        <div>Vendor Quotation & Rates</div>
+                        <div>Order Qty & Conversion</div>
+                        <div>Commercial Pricing</div>
                         <div style={{ textAlign: 'right' }}>Line Total</div>
                         <div></div>
                       </div>
 
                       {/* Rows Container */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px 20px', background: '#F8FAFC', borderRadius: '0 0 18px 18px', overflow: 'visible' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '16px 20px', background: '#F8FAFC', borderRadius: '0 0 18px 18px', overflow: 'visible' }}>
                         {poScreenItems.map((item, idx) => {
-                          const selectedMed = medicines.find(m => m.sku === item.sku);
-                          const selectedVendorObj = vendors.find(v => v._id === item.vendorId);
-                          
-                          const hasSku = !!item.sku;
-                          const sub = hasSku ? (item.qty || 0) * (item.price || 0) : 0;
-                          const discAmt = sub * ((item.discount || 0) / 100);
-                          const taxAmt = (sub - discAmt) * ((item.tax || 12) / 100);
-                          const lineTotal = sub - discAmt + taxAmt;
+                          const activeCatalog = (itemMasters || []).filter(im => im && (im.status === 'Active' || !im.status));
+                          const selectedItem = (itemMasters || []).find(im => String(im._id) === String(item.itemMasterId) || (im.itemCode && im.itemCode === item.itemCode)) || null;
+
+                          // Find all valid active quotations for this item
+                          const applicableQuotes = selectedItem ? (vendorQuotations || []).filter(vq => 
+                            String(vq.itemMasterId) === String(selectedItem._id) &&
+                            vq.status === 'Active' &&
+                            new Date(vq.validTill) >= new Date() &&
+                            (!vq.effectiveFrom || new Date(vq.effectiveFrom) <= new Date())
+                          ).sort((a, b) => (Number(a.netEffectiveRate) || 0) - (Number(b.netEffectiveRate) || 0)) : [];
+
+                          const selectedQuote = applicableQuotes.find(q => String(q._id) === String(item.quotationId)) || (applicableQuotes.length === 1 ? applicableQuotes[0] : null);
+
+                          const hasItem = Boolean(item.itemMasterId || item.sku || item.itemCode);
+                          const qty = Number(item.qty || 0);
+                          const unitPrice = Number(item.price || 0);
+                          const discountPercent = Number(item.discount || 0);
+                          const taxRate = Number(item.tax || 12);
+                          const cFactor = Number(item.converterFactor) > 0 ? Number(item.converterFactor) : 1;
+                          const expConsQty = qty * cFactor;
+
+                          const lineSubtotal = qty * unitPrice;
+                          const lineDisc = lineSubtotal * (discountPercent / 100);
+                          const taxableAmount = lineSubtotal - lineDisc;
+                          const lineTax = (taxableAmount * taxRate) / 100;
+                          const lineTotal = taxableAmount + lineTax;
+
+                          const selectItemMaster = (im) => {
+                            const quotes = (vendorQuotations || []).filter(vq => 
+                              String(vq.itemMasterId) === String(im._id) &&
+                              vq.status === 'Active' &&
+                              new Date(vq.validTill) >= new Date() &&
+                              (!vq.effectiveFrom || new Date(vq.effectiveFrom) <= new Date())
+                            ).sort((a, b) => (Number(a.netEffectiveRate) || 0) - (Number(b.netEffectiveRate) || 0));
+
+                            const bestQ = quotes.length > 0 ? quotes[0] : null;
+                            const updated = [...poScreenItems];
+                            updated[idx] = {
+                              ...updated[idx],
+                              itemMasterId: im._id,
+                              quotationId: bestQ ? bestQ._id : '',
+                              name: im.genericName,
+                              genericName: im.genericName,
+                              brandName: bestQ?.brandName || im.brandName || '',
+                              manufacturer: im.manufacturer || '',
+                              itemCode: im.itemCode,
+                              sku: im.itemCode,
+                              purchasedUnit: bestQ?.purchasedUnit || im.purchasedUnit || 'Box',
+                              packSize: bestQ?.packSize || im.packSizeDescription || '',
+                              converterFactor: bestQ?.converterFactor || im.converterFactor || 1,
+                              consumptionUnit: im.consumptionUnit || 'Tablet',
+                              price: bestQ ? Number(bestQ.ratePerPurchasedUnit) : 0,
+                              discount: bestQ ? Number(bestQ.discountPercent || 0) : 0,
+                              tax: bestQ ? Number(bestQ.gstPercent !== undefined ? bestQ.gstPercent : (im.defaultGst || 12)) : (im.defaultGst || 12),
+                              netEffectiveRate: bestQ ? Number(bestQ.netEffectiveRate) : 0,
+                              vendorId: bestQ ? bestQ.vendorId : '',
+                              vendorName: bestQ ? bestQ.vendorName : '',
+                              tempName: undefined
+                            };
+                            setPoScreenItems(updated);
+                            setActivePoItemFocus(null);
+                          };
+
+                          const query = item.tempName !== undefined ? item.tempName.trim().toLowerCase() : '';
+                          const filteredCatalog = query
+                            ? activeCatalog.filter(im => 
+                                (im.genericName && im.genericName.toLowerCase().includes(query)) ||
+                                (im.brandName && im.brandName.toLowerCase().includes(query)) ||
+                                (im.itemCode && im.itemCode.toLowerCase().includes(query)) ||
+                                (im.manufacturer && im.manufacturer.toLowerCase().includes(query))
+                              ).slice(0, 15)
+                            : activeCatalog.slice(0, 15);
 
                           return (
                             <div 
                               key={idx} 
                               style={{ 
                                 display: 'grid', 
-                                gridTemplateColumns: '2.5fr 1fr 2fr 1fr 1fr 1fr 1.2fr 45px', 
+                                gridTemplateColumns: '2.5fr 2.5fr 1.2fr 1.3fr 1.1fr 45px', 
                                 gap: '12px', 
                                 alignItems: 'flex-start', 
                                 padding: '14px 18px', 
                                 background: '#FFFFFF', 
-                                border: activePoItemFocus === idx ? '1.5px solid #2563EB' : '1.5px solid #E2E8F0',
-                                borderRadius: '14px',
-                                boxShadow: activePoItemFocus === idx ? '0 6px 18px rgba(37, 99, 235, 0.12)' : '0 2px 6px rgba(15, 23, 42, 0.02)',
+                                border: activePoItemFocus === idx ? '1.5px solid #2563EB' : '1.5px solid #E2E8F0', 
+                                borderRadius: '14px', 
+                                boxShadow: activePoItemFocus === idx ? '0 6px 18px rgba(37, 99, 235, 0.12)' : '0 2px 6px rgba(15, 23, 42, 0.02)', 
                                 position: 'relative', 
-                                zIndex: activePoItemFocus === idx ? 99999 : 1,
-                                overflow: 'visible',
-                                transition: 'all 0.2s ease'
+                                zIndex: activePoItemFocus === idx ? 99999 : 1, 
+                                overflow: 'visible', 
+                                transition: 'all 0.2s ease' 
                               }}
                             >
-                              {/* 1. Medicine Autocomplete Search */}
+                              {/* 1. Item Master Search & Packaging Info */}
                               <div style={{ position: 'relative' }}>
-                                {(() => {
-                                  const catMap = new Map();
-                                  (medicines || []).forEach(m => {
-                                    if (m && m.name) catMap.set(m.name.trim().toLowerCase(), { name: m.name, sku: m.sku || '', stock: m.stock || 0, avgMonthlyUse: m.avgMonthlyUse || 1200 });
-                                  });
-                                  (vendors || []).filter(v => v.status === 'Active' || !v.status).forEach(v => {
-                                    (v.medicines || []).forEach(vm => {
-                                      if (vm && vm.name) {
-                                        const k = vm.name.trim().toLowerCase();
-                                        if (!catMap.has(k)) {
-                                          catMap.set(k, { name: vm.name, sku: vm.sku || '', stock: 0, avgMonthlyUse: 1200 });
-                                        }
+                                <div style={{ position: 'relative' }}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                  </svg>
+                                  <input
+                                    type="text"
+                                    className="proc-input"
+                                    style={{ 
+                                      height: '38px', 
+                                      borderRadius: '10px', 
+                                      border: activePoItemFocus === idx ? '1.5px solid #2563EB' : '1.5px solid #CBD5E1', 
+                                      fontWeight: 700, 
+                                      fontSize: '12.5px', 
+                                      width: '100%', 
+                                      paddingLeft: '32px',
+                                      outline: 'none',
+                                      background: '#FFFFFF'
+                                    }}
+                                    placeholder="Search active Item Master..."
+                                    value={item.tempName !== undefined ? item.tempName : (item.genericName || item.name || '')}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setActivePoItemFocus(idx);
+                                      const updated = [...poScreenItems];
+                                      updated[idx] = { ...updated[idx], tempName: val };
+                                      if (!val.trim()) {
+                                        updated[idx] = { ...updated[idx], itemMasterId: '', quotationId: '', sku: '', itemCode: '', name: '', brandName: '', manufacturer: '', price: 0, discount: 0, tax: 12, vendorId: '', vendorName: '', tempName: '' };
                                       }
-                                    });
-                                  });
-                                  const allCatalog = Array.from(catMap.values());
-
-                                  const selectMedItem = (m) => {
-                                    const matchingVendors = vendors.filter(v => (v.status === 'Active' || !v.status) && v.medicines && v.medicines.some(med => (med.sku && med.sku === m.sku) || (med.name && med.name.toLowerCase() === m.name.toLowerCase())));
-                                    let vId = '';
-                                    let pr = 0;
-                                    let tx = 12;
-                                    let matchedSku = m.sku;
-                                    if (matchingVendors.length > 0) {
-                                      const cheapest = matchingVendors.reduce((min, current) => {
-                                        const minPrice = min.medicines.find(med => (med.sku && med.sku === m.sku) || (med.name && med.name.toLowerCase() === m.name.toLowerCase()))?.price || Infinity;
-                                        const currentPrice = current.medicines.find(med => (med.sku && med.sku === m.sku) || (med.name && med.name.toLowerCase() === m.name.toLowerCase()))?.price || Infinity;
-                                        return currentPrice < minPrice ? current : min;
-                                      }, matchingVendors[0]);
-                                      vId = cheapest._id;
-                                      const medInfo = cheapest.medicines.find(med => (med.sku && med.sku === m.sku) || (med.name && med.name.toLowerCase() === m.name.toLowerCase()));
-                                      pr = medInfo ? medInfo.price : 0;
-                                      tx = medInfo && medInfo.gst !== undefined ? medInfo.gst : 12;
-                                      matchedSku = medInfo?.sku || m.sku;
-                                    }
-                                    const updated = [...poScreenItems];
-                                    updated[idx] = { ...updated[idx], name: m.name, sku: matchedSku, price: pr, tax: tx, vendorId: vId, tempName: undefined };
-                                    setPoScreenItems(updated);
-                                    setActivePoItemFocus(null);
-                                  };
-
-                                  const query = item.tempName !== undefined ? item.tempName.trim().toLowerCase() : '';
-                                  const filteredMeds = query
-                                    ? allCatalog.filter(m => (m.name && m.name.toLowerCase().includes(query)) || (m.sku && m.sku.toLowerCase().includes(query))).slice(0, 10)
-                                    : allCatalog.slice(0, 10);
-
-                                  return (
-                                    <>
-                                      <div style={{ position: 'relative' }}>
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                                          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                                        </svg>
-                                        <input
-                                          type="text"
-                                          className="proc-input"
-                                          style={{ 
-                                            height: '40px', 
-                                            borderRadius: '10px', 
-                                            border: activePoItemFocus === idx ? '1.5px solid #2563EB' : '1.5px solid #CBD5E1', 
-                                            fontWeight: 700, 
-                                            fontSize: '13px', 
-                                            width: '100%', 
-                                            paddingLeft: '32px',
-                                            outline: 'none',
-                                            background: '#FFFFFF'
-                                          }}
-                                          placeholder="Search medicine catalog..."
-                                          value={item.tempName !== undefined ? item.tempName : (selectedMed ? selectedMed.name : '')}
-                                          onChange={e => {
-                                            const val = e.target.value;
-                                            setActivePoItemFocus(idx);
-                                            const updated = [...poScreenItems];
-                                            updated[idx] = { ...updated[idx], tempName: val };
-                                            if (!val.trim()) {
-                                              updated[idx] = { ...updated[idx], sku: '', price: 0, tax: 12, vendorId: '', tempName: '' };
-                                            }
-                                            setPoScreenItems(updated);
-                                          }}
-                                          onClick={() => setActivePoItemFocus(idx)}
-                                          onFocus={e => {
-                                            setActivePoItemFocus(idx);
-                                            e.target.select();
-                                          }}
-                                          onKeyDown={e => {
-                                            if (e.key === 'Enter') {
-                                              e.preventDefault();
-                                              if (filteredMeds.length > 0) {
-                                                selectMedItem(filteredMeds[0]);
-                                              }
-                                            } else if (e.key === 'Escape') {
-                                              setActivePoItemFocus(null);
-                                            }
-                                          }}
-                                          onBlur={() => {
-                                            setTimeout(() => {
-                                              setActivePoItemFocus(null);
-                                              setPoScreenItems(prev => {
-                                                const updated = [...prev];
-                                                if (updated[idx] && updated[idx].sku) {
-                                                  updated[idx].tempName = undefined;
-                                                }
-                                                return updated;
-                                              });
-                                            }, 250);
-                                          }}
-                                        />
-                                      </div>
-
-                                      {activePoItemFocus === idx && (
-                                        <div
-                                          data-lenis-prevent
-                                          onMouseDown={(e) => e.preventDefault()}
-                                          style={{
-                                            position: 'absolute',
-                                            top: 'calc(100% + 4px)',
-                                            left: 0,
-                                            right: 0,
-                                            backgroundColor: '#ffffff',
-                                            border: '1.5px solid #2563EB',
-                                            borderRadius: '12px',
-                                            boxShadow: '0 15px 35px -5px rgba(15, 23, 42, 0.25)',
-                                            zIndex: 999999,
-                                            maxHeight: '230px',
-                                            overflowY: 'auto',
-                                            padding: '6px'
-                                          }}
-                                        >
-                                          {filteredMeds.length > 0 ? (
-                                            filteredMeds.map(m => (
-                                              <div
-                                                key={m.sku || m.name}
-                                                onMouseDown={(e) => {
-                                                  e.preventDefault();
-                                                  selectMedItem(m);
-                                                }}
-                                                style={{
-                                                  padding: '9px 12px',
-                                                  fontSize: '12.5px',
-                                                  fontWeight: 750,
-                                                  color: '#1E293B',
-                                                  cursor: 'pointer',
-                                                  borderRadius: '8px',
-                                                  marginBottom: '2px',
-                                                  display: 'flex',
-                                                  justifyContent: 'space-between',
-                                                  alignItems: 'center',
-                                                  transition: 'background 0.15s ease'
-                                                }}
-                                                onMouseEnter={e => e.currentTarget.style.background = '#EFF6FF'}
-                                                onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}
-                                              >
-                                                <span>{m.name}</span>
-                                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                                  <span style={{ fontSize: '10.5px', color: '#16A34A', background: '#F0FDF4', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>Stock: {m.stock || 0}</span>
-                                                  <span style={{ fontSize: '11px', color: '#64748B', fontFamily: 'monospace' }}>{m.sku}</span>
-                                                </div>
-                                              </div>
-                                            ))
-                                          ) : (
-                                            <div style={{ padding: '12px', fontSize: '12px', color: '#94A3B8', textAlign: 'center', fontStyle: 'italic' }}>
-                                              No matching catalog items
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </>
-                                  );
-                                })()}
-                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', fontWeight: 600, display: 'flex', gap: '10px' }}>
-                                  <span>Stock: <strong style={{ color: '#0F172A' }}>{selectedMed?.stock || 0}</strong></span>
-                                  <span>Avg/mo: <strong style={{ color: '#0F172A' }}>{selectedMed?.avgMonthlyUse || 1200}</strong></span>
-                                </div>
-                              </div>
-
-                              {/* 2. Qty Input */}
-                              <div>
-                                <input 
-                                  type="number" 
-                                  className="proc-input" 
-                                  style={{ 
-                                    height: '40px', 
-                                    borderRadius: '10px', 
-                                    border: '1.5px solid #CBD5E1', 
-                                    fontWeight: 800, 
-                                    fontSize: '14px', 
-                                    textAlign: 'center',
-                                    background: '#F8FAFC',
-                                    color: '#0F172A'
-                                  }} 
-                                  value={item.qty} 
-                                  onChange={e => {
-                                    const updated = [...poScreenItems];
-                                    updated[idx].qty = Number(e.target.value) || 0;
-                                    setPoScreenItems(updated);
-                                  }} 
-                                />
-                              </div>
-
-                              {/* 3. Vendor Selector */}
-                              <div>
-                                {item.sku ? (() => {
-                                  const medName = item.name || selectedMed?.name || '';
-                                  const medSku = item.sku || selectedMed?.sku || '';
-                                  const candidateVendors = (vendors || []).filter(v => 
-                                    (v.status === 'Active' || !v.status) &&
-                                    v.medicines && 
-                                    v.medicines.some(med => (medSku && med.sku && med.sku.toLowerCase() === medSku.toLowerCase()) || (medName && med.name && med.name.toLowerCase() === medName.toLowerCase()))
-                                  );
-                                  return (
-                                    <select
-                                      className="proc-select"
-                                      style={{ 
-                                        height: '40px', 
-                                        borderRadius: '10px', 
-                                        border: '1.5px solid #CBD5E1', 
-                                        fontWeight: 750, 
-                                        fontSize: '12px', 
-                                        background: '#FFFFFF', 
-                                        padding: '0 8px', 
-                                        width: '100%', 
-                                        outline: 'none',
-                                        color: item.vendorId ? '#0F172A' : '#64748B'
-                                      }}
-                                      value={item.vendorId || ''}
-                                      onChange={e => {
-                                        const val = e.target.value;
-                                        const updated = [...poScreenItems];
-                                        if (val) {
-                                          const vObj = vendors.find(v => v._id === val);
-                                          const medInfo = vObj?.medicines?.find(med => (medSku && med.sku && med.sku.toLowerCase() === medSku.toLowerCase()) || (medName && med.name && med.name.toLowerCase() === medName.toLowerCase()));
-                                          updated[idx] = {
-                                            ...updated[idx],
-                                            vendorId: val,
-                                            vendorName: vObj ? vObj.name : '',
-                                            price: medInfo ? medInfo.price : updated[idx].price,
-                                            tax: medInfo && medInfo.gst !== undefined ? medInfo.gst : (updated[idx].tax || 12)
-                                          };
-                                        } else {
-                                          updated[idx] = {
-                                            ...updated[idx],
-                                            vendorId: '',
-                                            vendorName: '',
-                                            price: 0,
-                                            tax: 12
-                                          };
+                                      setPoScreenItems(updated);
+                                    }}
+                                    onClick={() => setActivePoItemFocus(idx)}
+                                    onFocus={e => {
+                                      setActivePoItemFocus(idx);
+                                      e.target.select();
+                                    }}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (filteredCatalog.length > 0) {
+                                          selectItemMaster(filteredCatalog[0]);
                                         }
-                                        setPoScreenItems(updated);
-                                      }}
-                                    >
-                                      <option value="">— Select Vendor —</option>
-                                      {candidateVendors.map(v => {
-                                        const medInfo = v.medicines.find(med => (medSku && med.sku && med.sku.toLowerCase() === medSku.toLowerCase()) || (medName && med.name && med.name.toLowerCase() === medName.toLowerCase()));
-                                        return (
-                                          <option key={v._id} value={v._id}>
-                                            {v.name} (₹{medInfo ? medInfo.price : '--'})
+                                      } else if (e.key === 'Escape') {
+                                        setActivePoItemFocus(null);
+                                      }
+                                    }}
+                                    onBlur={() => {
+                                      setTimeout(() => {
+                                        setActivePoItemFocus(null);
+                                        setPoScreenItems(prev => {
+                                          const updated = [...prev];
+                                          if (updated[idx] && (updated[idx].itemMasterId || updated[idx].sku)) {
+                                            updated[idx].tempName = undefined;
+                                          }
+                                          return updated;
+                                        });
+                                      }, 250);
+                                    }}
+                                  />
+                                </div>
+
+                                {activePoItemFocus === idx && (
+                                  <div
+                                    data-lenis-prevent
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    style={{
+                                      position: 'absolute',
+                                      top: 'calc(100% + 4px)',
+                                      left: 0,
+                                      right: 0,
+                                      backgroundColor: '#ffffff',
+                                      border: '1.5px solid #2563EB',
+                                      borderRadius: '12px',
+                                      boxShadow: '0 15px 35px -5px rgba(15, 23, 42, 0.25)',
+                                      zIndex: 999999,
+                                      maxHeight: '250px',
+                                      overflowY: 'auto',
+                                      padding: '6px'
+                                    }}
+                                  >
+                                    {filteredCatalog.length > 0 ? (
+                                      filteredCatalog.map(im => (
+                                        <div
+                                          key={im._id}
+                                          onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            selectItemMaster(im);
+                                          }}
+                                          style={{
+                                            padding: '8px 10px',
+                                            borderRadius: '8px',
+                                            marginBottom: '2px',
+                                            cursor: 'pointer',
+                                            transition: 'background 0.15s ease'
+                                          }}
+                                          onMouseEnter={e => e.currentTarget.style.background = '#EFF6FF'}
+                                          onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}
+                                        >
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#0F172A' }}>{im.genericName}</span>
+                                            <span style={{ fontSize: '10.5px', fontWeight: 800, background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', padding: '1px 6px', borderRadius: '4px' }}>{im.brandName}</span>
+                                          </div>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '3px', fontSize: '11px', color: '#64748B' }}>
+                                            <span>Code: <code style={{ fontFamily: 'monospace', fontWeight: 700 }}>{im.itemCode}</code> {im.manufacturer ? `| ${im.manufacturer}` : ''}</span>
+                                            <span style={{ background: '#F1F5F9', padding: '1px 6px', borderRadius: '4px', fontWeight: 700, color: '#334155' }}>
+                                              1 {im.purchasedUnit || 'Box'} = {im.converterFactor || 1} {im.consumptionUnit || 'Unit'}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div style={{ padding: '12px', fontSize: '12px', color: '#94A3B8', textAlign: 'center', fontStyle: 'italic' }}>
+                                        No active Item Master records found
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Selected Item Metadata Pill */}
+                                {hasItem && (
+                                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#475569', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                                    <span style={{ background: '#EFF6FF', color: '#1D4ED8', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                                      {item.brandName || 'Generic'}
+                                    </span>
+                                    <span style={{ fontFamily: 'monospace', color: '#64748B', fontWeight: 700 }}>
+                                      {item.itemCode || item.sku}
+                                    </span>
+                                    <span style={{ background: '#F1F5F9', color: '#0F172A', padding: '2px 6px', borderRadius: '4px', fontWeight: 750 }}>
+                                      1 {item.purchasedUnit || 'Box'} = {cFactor} {item.consumptionUnit || 'Unit'}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 2. Vendor Quotation Selector */}
+                              <div>
+                                {hasItem ? (
+                                  <div>
+                                    {applicableQuotes.length > 0 ? (
+                                      <select
+                                        className="proc-select"
+                                        style={{ 
+                                          height: '38px', 
+                                          borderRadius: '10px', 
+                                          border: item.quotationId ? '1.5px solid #CBD5E1' : '1.5px solid #F59E0B', 
+                                          fontWeight: 750, 
+                                          fontSize: '11.5px', 
+                                          background: '#FFFFFF', 
+                                          padding: '0 8px', 
+                                          width: '100%', 
+                                          outline: 'none', 
+                                          color: item.vendorId ? '#0F172A' : '#64748B' 
+                                        }}
+                                        value={item.quotationId || ''}
+                                        onChange={e => {
+                                          const qId = e.target.value;
+                                          const qObj = applicableQuotes.find(q => String(q._id) === String(qId));
+                                          const updated = [...poScreenItems];
+                                          if (qObj) {
+                                            updated[idx] = {
+                                              ...updated[idx],
+                                              quotationId: qObj._id,
+                                              vendorId: qObj.vendorId,
+                                              vendorName: qObj.vendorName,
+                                              brandName: qObj.brandName || updated[idx].brandName,
+                                              purchasedUnit: qObj.purchasedUnit || updated[idx].purchasedUnit,
+                                              packSize: qObj.packSize || updated[idx].packSize,
+                                              converterFactor: qObj.converterFactor || updated[idx].converterFactor,
+                                              price: Number(qObj.ratePerPurchasedUnit),
+                                              discount: Number(qObj.discountPercent || 0),
+                                              tax: Number(qObj.gstPercent !== undefined ? qObj.gstPercent : updated[idx].tax),
+                                              netEffectiveRate: Number(qObj.netEffectiveRate || 0)
+                                            };
+                                          } else {
+                                            updated[idx] = {
+                                              ...updated[idx],
+                                              quotationId: '',
+                                              vendorId: '',
+                                              vendorName: '',
+                                              price: 0,
+                                              discount: 0,
+                                              netEffectiveRate: 0
+                                            };
+                                          }
+                                          setPoScreenItems(updated);
+                                        }}
+                                      >
+                                        <option value="">— Choose Quotation ({applicableQuotes.length} valid) —</option>
+                                        {applicableQuotes.map(q => (
+                                          <option key={q._id} value={q._id}>
+                                            {q.vendorName} | ₹{q.ratePerPurchasedUnit}/{q.purchasedUnit} (Net ₹{q.netEffectiveRate}/{item.consumptionUnit})
                                           </option>
-                                        );
-                                      })}
-                                    </select>
-                                  );
-                                })() : (
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      <div style={{ 
+                                        padding: '7px 10px', 
+                                        background: '#FFFBEB', 
+                                        border: '1.5px solid #FDE68A', 
+                                        borderRadius: '8px', 
+                                        fontSize: '11px', 
+                                        fontWeight: 700, 
+                                        color: '#B45309',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '5px'
+                                      }}>
+                                        <span>⚠️ No active quotation found</span>
+                                      </div>
+                                    )}
+
+                                    {/* Quotation & Vendor Details Badge */}
+                                    {selectedQuote && (
+                                      <div style={{ marginTop: '6px', fontSize: '10.5px', color: '#475569', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                        <span style={{ fontWeight: 800, color: '#0F172A' }}>{selectedQuote.vendorName}</span>
+                                        <span style={{ fontFamily: 'monospace', color: '#2563EB', fontWeight: 700 }}>{selectedQuote.quotationNo}</span>
+                                        <span style={{ color: '#16A34A', fontWeight: 700 }}>
+                                          Valid till {new Date(selectedQuote.validTill).toLocaleDateString()}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
                                   <select
                                     className="proc-select"
-                                    style={{ height: '40px', borderRadius: '10px', border: '1.5px solid #E2E8F0', fontWeight: 600, fontSize: '12px', background: '#F8FAFC', color: '#94A3B8', padding: '0 8px', width: '100%', cursor: 'not-allowed' }}
+                                    style={{ height: '38px', borderRadius: '10px', border: '1.5px solid #E2E8F0', fontWeight: 600, fontSize: '11.5px', background: '#F8FAFC', color: '#94A3B8', padding: '0 8px', width: '100%', cursor: 'not-allowed' }}
                                     disabled
                                   >
-                                    <option>— Select medicine first —</option>
+                                    <option>— Select Item Master first —</option>
                                   </select>
                                 )}
                               </div>
 
-                              {/* 4. Unit Price */}
+                              {/* 3. Ordered Quantity & Packaging Conversion */}
                               <div>
-                                <input 
-                                  type="number" 
-                                  className="proc-input" 
-                                  style={{ 
-                                    height: '40px', 
-                                    borderRadius: '10px', 
-                                    border: '1.5px solid #CBD5E1', 
-                                    background: '#F1F5F9', 
-                                    color: '#1E293B', 
-                                    fontWeight: 800, 
-                                    fontSize: '13.5px', 
-                                    textAlign: 'center', 
-                                    cursor: 'not-allowed' 
-                                  }} 
-                                  value={item.price} 
-                                  readOnly 
-                                />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <input 
+                                    type="number" 
+                                    min="1"
+                                    className="proc-input" 
+                                    style={{ 
+                                      height: '38px', 
+                                      borderRadius: '10px', 
+                                      border: '1.5px solid #CBD5E1', 
+                                      fontWeight: 800, 
+                                      fontSize: '13.5px', 
+                                      textAlign: 'center', 
+                                      background: '#FFFFFF', 
+                                      color: '#0F172A',
+                                      width: '70px'
+                                    }} 
+                                    value={item.qty} 
+                                    onChange={e => {
+                                      const updated = [...poScreenItems];
+                                      updated[idx].qty = Number(e.target.value) || 0;
+                                      setPoScreenItems(updated);
+                                    }} 
+                                  />
+                                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#334155' }}>
+                                    {item.purchasedUnit || 'Boxes'}
+                                  </span>
+                                </div>
+                                <div style={{ marginTop: '5px', fontSize: '11px', color: '#2563EB', fontWeight: 750 }}>
+                                  ≈ {expConsQty.toLocaleString()} {item.consumptionUnit || 'Tablets'}
+                                </div>
                               </div>
 
-                              {/* 5. Discount */}
+                              {/* 4. Commercial Pricing (Authoritative Rates) */}
                               <div>
-                                <input 
-                                  type="number" 
-                                  className="proc-input" 
-                                  style={{ height: '40px', borderRadius: '10px', border: '1.5px solid #CBD5E1', fontWeight: 700, fontSize: '13px', textAlign: 'center', background: '#FFFFFF' }} 
-                                  value={item.discount} 
-                                  onChange={e => {
-                                    const updated = [...poScreenItems];
-                                    updated[idx].discount = Number(e.target.value) || 0;
-                                    setPoScreenItems(updated);
-                                  }} 
-                                />
+                                <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>
+                                  ₹{unitPrice} <span style={{ fontSize: '10px', color: '#64748B', fontWeight: 600 }}>/ {item.purchasedUnit || 'Box'}</span>
+                                </div>
+                                <div style={{ marginTop: '3px', fontSize: '10.5px', color: '#64748B', fontWeight: 600, display: 'flex', gap: '6px' }}>
+                                  <span>Disc: <strong style={{ color: '#0F172A' }}>{discountPercent}%</strong></span>
+                                  <span>GST: <strong style={{ color: '#0F172A' }}>{taxRate}%</strong></span>
+                                </div>
+                                <div style={{ marginTop: '2px', fontSize: '10px', color: '#059669', fontWeight: 750 }}>
+                                  Net: ₹{item.netEffectiveRate || (cFactor > 0 ? (taxableAmount * (1 + taxRate/100) / (cFactor * (qty || 1))).toFixed(2) : '--')} / {item.consumptionUnit || 'Unit'}
+                                </div>
                               </div>
 
-                              {/* 6. Tax % */}
-                              <div>
-                                <input 
-                                  type="number" 
-                                  className="proc-input" 
-                                  style={{ height: '40px', borderRadius: '10px', border: '1.5px solid #CBD5E1', fontWeight: 700, fontSize: '13px', textAlign: 'center', background: '#FFFFFF' }} 
-                                  value={item.tax} 
-                                  onChange={e => {
-                                    const updated = [...poScreenItems];
-                                    updated[idx].tax = Number(e.target.value) || 0;
-                                    setPoScreenItems(updated);
-                                  }} 
-                                />
-                              </div>
-
-                              {/* 7. Line Total */}
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '40px' }}>
+                              {/* 5. Line Total */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '38px' }}>
                                 <span style={{ 
-                                  fontSize: '14px', 
+                                  fontSize: '13.5px', 
                                   fontWeight: 900, 
                                   color: '#0F172A', 
                                   background: '#F8FAFC', 
-                                  padding: '5px 10px', 
+                                  padding: '5px 9px', 
                                   borderRadius: '8px', 
-                                  border: '1px solid #E2E8F0',
-                                  fontFamily: "'Outfit', monospace"
+                                  border: '1px solid #E2E8F0', 
+                                  fontFamily: "'Outfit', monospace" 
                                 }}>
                                   ₹{Math.round(lineTotal).toLocaleString()}
                                 </span>
                               </div>
 
-                              {/* 8. Delete Line Button */}
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '40px' }}>
+                              {/* 6. Delete Line Button */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '38px' }}>
                                 <button 
+                                  type="button"
                                   style={{ 
                                     background: 'transparent', 
                                     border: 'none', 
                                     cursor: 'pointer', 
                                     color: '#EF4444', 
-                                    padding: '7px', 
+                                    padding: '6px', 
                                     borderRadius: '8px', 
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
                                     transition: 'background 0.2s' 
                                   }} 
-                                  onMouseEnter={e => e.currentTarget.style.background = '#FEE2E2'}
-                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                  onMouseEnter={e => e.currentTarget.style.background = '#FEE2E2'} 
+                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'} 
                                   onClick={() => {
                                     if (poScreenItems.length === 1) return;
                                     setPoScreenItems(poScreenItems.filter((_, i) => i !== idx));
-                                  }}
+                                  }} 
                                   title="Remove line"
                                 >
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                                 </button>
                               </div>
                             </div>
@@ -8251,12 +8361,36 @@ const ProcurementDashboard = () => {
             {/* VIEW 4: GOODS RECEIPT */}
             {activeTab === 'grn' && (
               <div>
-                <div className="proc-title-row">
-                  <div>
-                    <h1 className="proc-title">Goods Receipt Notes</h1>
-                    <p className="proc-subtitle">Verify physical deliveries before inventory updates.</p>
-                  </div>
-                </div>
+                {grnPageMode ? (
+                  <GoodsReceiptPage
+                    flowType={grnPageMode === 'new-direct' ? 'direct' : 'po'}
+                    initialSelectedPOId={grnInitialPOId}
+                    editingGrn={editingGrn}
+                    purchaseOrders={purchaseOrders}
+                    vendors={vendors}
+                    itemMasters={itemMasters}
+                    onCancel={() => {
+                      setGrnPageMode(null);
+                      setGrnInitialPOId('');
+                      setEditingGrn(null);
+                    }}
+                    onSuccess={() => {
+                      setGrnPageMode(null);
+                      setGrnInitialPOId('');
+                      setEditingGrn(null);
+                      fetchData();
+                      showToast('Goods Receipt Note processed successfully!', 'success');
+                    }}
+                    showToast={showToast}
+                  />
+                ) : (
+                  <>
+                    <div className="proc-title-row">
+                      <div>
+                        <h1 className="proc-title">Goods Receipt Notes</h1>
+                        <p className="proc-subtitle">Verify physical deliveries before inventory updates.</p>
+                      </div>
+                    </div>
 
                 {/* KPI CARDS ROW (MATCHING ADMIN PORTAL DESIGN LANGUAGE) */}
                 <div style={{
@@ -8651,7 +8785,8 @@ const ProcurementDashboard = () => {
                                     onClick={() => {
                                       handleGrnPOSelection(po._id);
                                       setGrnFlowType('po');
-                                      setShowGRNModal(true);
+                                      setGrnInitialPOId(po._id);
+                                      setGrnPageMode('new-po');
                                     }}
                                   >
                                     Open GRN <i data-lucide="arrow-right" style={{ width: '14px', height: '14px' }}></i>
@@ -8689,10 +8824,8 @@ const ProcurementDashboard = () => {
                       <button className="proc-btn proc-btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => {
                         setGrnFlowType('direct');
                         setGrnSelectedPOId('');
-                        setGrnDirectVendorId(getDisplayVendors()[0]?._id || '');
-                        setGrnItems([{ name: '', sku: '', qtyRequired: 0, qtyReceived: 10, price: 10 }]);
-                        setGrnInvoiceFileName('');
-                        setShowGRNModal(true);
+                        setGrnInitialPOId('');
+                        setGrnPageMode('new-direct');
                       }}>
                         <i data-lucide="plus" style={{ width: '12px', height: '12px' }}></i> Direct Purchase GRN
                       </button>
@@ -8761,7 +8894,7 @@ const ProcurementDashboard = () => {
                                   <button 
                                     className="proc-btn proc-btn-primary" 
                                     style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#059669' }}
-                                    onClick={() => printGRN(grn, localStorage.getItem('tenantName') || 'CUROXA HEALTHCARE')}
+                                    onClick={() => printGRN(grn, localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE')}
                                     title="Print / Save GRN Document"
                                   >
                                     📄 PDF
@@ -8775,6 +8908,8 @@ const ProcurementDashboard = () => {
                     </table>
                   </div>
                 </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -9750,8 +9885,8 @@ const ProcurementDashboard = () => {
         </div>
       )}
 
-      {/* MODAL 3: GENERATE GRN */}
-      {showGRNModal && (
+      {/* MODAL 3: GENERATE GRN — EXCISED DUPLICATE (Active modal is at line 10986) */}
+      {false && showGRNModal && (
         <div className="proc-modal-overlay">
           <form className="proc-modal" style={{ maxWidth: '1000px', width: '95%' }} onSubmit={handleSaveGRN}>
             <div className="proc-modal-header">
@@ -10214,33 +10349,54 @@ const ProcurementDashboard = () => {
                 </div>
               </div>
 
-              {/* Section 7: Mapped Products & Prices */}
+              {/* Section 7: Vendor Quotations */}
               <div>
-                <span style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase', display: 'block', marginBottom: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>Active Contracts / Price List</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase' }}>Vendor Quotations</span>
+                  <button
+                    type="button"
+                    style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#2563EB', fontSize: '12px', fontWeight: 700, padding: '4px 12px', borderRadius: '6px', cursor: 'pointer' }}
+                    onClick={() => {
+                      setSelectedVendorProfile(null);
+                      setActiveTab('quotations');
+                    }}
+                  >
+                    + Add / Edit Quotations
+                  </button>
+                </div>
                 <table className="proc-table" style={{ marginTop: '8px' }}>
                   <thead>
                     <tr>
-                      <th>Medicine Name</th>
-                      <th>Contract SKU</th>
-                      <th>Unit Price</th>
+                      <th>Item Name</th>
+                      <th>Unit</th>
+                      <th>Rate</th>
+                      <th>GST %</th>
+                      <th>Lead</th>
+                      <th>Valid Till</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedVendorProfile.medicines && selectedVendorProfile.medicines.length > 0 ? (
-                      selectedVendorProfile.medicines.map((m, idx) => (
-                        <tr key={idx}>
-                          <td style={{ fontWeight: 700 }}>{m.name}</td>
-                          <td>{m.sku}</td>
-                          <td style={{ fontWeight: 800 }}>₹{m.price}</td>
+                    {(() => {
+                      const profileQuotations = vendorQuotations.filter(q => q.vendorId === selectedVendorProfile._id || q.vendor?._id === selectedVendorProfile._id || q.vendorId?._id === selectedVendorProfile._id);
+                      return profileQuotations.length > 0 ? (
+                        profileQuotations.map((q, idx) => (
+                          <tr key={idx}>
+                            <td style={{ fontWeight: 700 }}>{q.itemMaster?.itemName || q.itemMaster?.name || q.itemName || '—'}</td>
+                            <td>{q.purchasedUnit || '—'}</td>
+                            <td style={{ fontWeight: 800 }}>₹{q.ratePerPurchasedUnit || 0}</td>
+                            <td>{q.gstPercent !== undefined ? q.gstPercent : '—'}%</td>
+                            <td>{q.leadTimeDays ? `${q.leadTimeDays}d` : '—'}</td>
+                            <td>{q.validTill ? new Date(q.validTill).toLocaleDateString('en-IN') : '—'}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="6" style={{ padding: '12px', textAlign: 'center', color: '#64748B' }}>
+                            No quotations on file. Click "+ Add / Edit Quotations" to add rates for this vendor.
+                          </td>
                         </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="3" style={{ padding: '12px', textAlign: 'center', color: '#64748B' }}>
-                          No contract prices mapped. Custom PO rates will apply.
-                        </td>
-                      </tr>
-                    )}
+                      );
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -10982,977 +11138,1067 @@ const ProcurementDashboard = () => {
         );
       })()}
 
-      {/* MODAL 3: GENERATE GRN */}
-      {showGRNModal && (() => {
-        const selectedPoObj = grnFlowType === 'po' 
-          ? getDisplayPOs().find(x => x._id === grnSelectedPOId || x.poId === grnSelectedPOId) 
-          : null;
+      {/* GRN is now handled inline via GoodsReceiptPage component in the GRN tab */}
 
-        // Live financial computations across all items in form
-        const liveTotals = grnItems.reduce((acc, item) => {
-          const qty = Math.max(0, Number(item.qtyReceived) || 0);
-          const rate = Math.max(0, Number(item.price || item.purchaseRate) || 0);
-          const discPct = Math.max(0, Math.min(100, Number(item.discountPercent) || 0));
-          const gstRate = Math.max(0, Number(item.gst !== undefined ? item.gst : 12));
+      {/* MODAL 4: RECORD PAYMENT */}
+      {showPaymentModal && (
+        <div className="proc-modal-overlay">
+          <form className="proc-modal" onSubmit={handleSavePayment}>
+            <div className="proc-modal-header">
+              <span className="proc-modal-title">Record Vendor Payment</span>
+              <button type="button" className="proc-close-btn" onClick={() => setShowPaymentModal(false)}>
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+            <div className="proc-modal-body">
+              <div className="proc-form-group">
+                <label className="proc-form-label">Purchase Order Reference *</label>
+                <select required className="proc-select" value={paymentPOId} onChange={e => setPaymentPOId(e.target.value)}>
+                  {getDisplayPOs().filter(po => ['Approved', 'Sent', 'Confirmed', 'Partially Delivered'].includes(po.status)).map(po => (
+                    <option key={po._id} value={po.poId}>{po.poId} ({po.vendorName}) - Total: ₹{po.totalAmount.toLocaleString()}</option>
+                  ))}
+                </select>
+              </div>
 
-          const gross = qty * rate;
-          const discAmt = Math.round((gross * (discPct / 100)) * 100) / 100;
-          const taxable = Math.max(0, Math.round((gross - discAmt) * 100) / 100);
-          const gstAmt = Math.round((taxable * (gstRate / 100)) * 100) / 100;
-          const net = Math.round((taxable + gstAmt) * 100) / 100;
+              <div className="proc-form-group">
+                <label className="proc-form-label">Payment Amount (₹) *</label>
+                <input type="number" required min="1" className="proc-input" placeholder="e.g. 50000"
+                  value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} />
+              </div>
 
-          return {
-            subtotal: acc.subtotal + gross,
-            totalDiscount: acc.totalDiscount + discAmt,
-            taxableBase: acc.taxableBase + taxable,
-            totalGst: acc.totalGst + gstAmt,
-            grandTotal: acc.grandTotal + net
-          };
-        }, { subtotal: 0, totalDiscount: 0, taxableBase: 0, totalGst: 0, grandTotal: 0 });
+              <div className="proc-form-group">
+                <label className="proc-form-label">Method of Payment</label>
+                <select className="proc-select" value={paymentMode} onChange={e => setPaymentMode(e.target.value)}>
+                  <option value="Bank Transfer">Bank Transfer (NEFT/RTGS)</option>
+                  <option value="UPI">UPI Payout</option>
+                  <option value="Cheque">Corporate Cheque</option>
+                  <option value="Cash">Cash Ledger</option>
+                </select>
+              </div>
+            </div>
+            <div className="proc-modal-footer">
+              <button type="button" className="proc-btn proc-btn-secondary" onClick={() => setShowPaymentModal(false)}>Cancel</button>
+              <button type="submit" className="proc-btn proc-btn-primary">Record Payment</button>
+            </div>
+          </form>
+        </div>
+      )}
 
-        const invoicedVal = Number(grnInvoiceAmount) || 0;
-        const varianceVal = invoicedVal > 0 ? Math.round((liveTotals.grandTotal - invoicedVal) * 100) / 100 : 0;
+      {/* MODAL 5: VENDOR PROFILE */}
+      {selectedVendorProfile && (
+        <div className="proc-modal-overlay">
+          <div className="proc-modal" style={{ maxWidth: '850px', width: '95%', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px' }}>
+            <div className="proc-modal-header" style={{ position: 'sticky', top: 0, background: 'white', zIndex: 10, borderBottom: '1px solid #E2E8F0', padding: '16px 24px' }}>
+              <span className="proc-modal-title" style={{ fontSize: '18px', fontWeight: 900, color: '#0F172A' }}>Supplier Master Profile: {selectedVendorProfile.name}</span>
+              <button type="button" className="proc-close-btn" onClick={() => setSelectedVendorProfile(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            
+            <div className="proc-modal-body" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+              
+              {/* Section 1: General & Classification */}
+              <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase', marginBottom: '12px', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>Supplier Classification</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Supplier Code</span>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#2563EB', marginTop: '2px' }}>{selectedVendorProfile.code}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Supplier Type</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700, marginTop: '2px' }}>{selectedVendorProfile.type || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Supplier Category</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700, marginTop: '2px' }}>{selectedVendorProfile.supplierCategory || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Organization Type</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700, marginTop: '2px' }}>{selectedVendorProfile.organizationType || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Status</span>
+                    <div style={{ marginTop: '2px' }}>
+                      <span className={`proc-badge-status ${(selectedVendorProfile.status || 'Active').toLowerCase()}`}>
+                        {selectedVendorProfile.status || 'Active'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-        return (
-          <div className="proc-modal-overlay" style={{ backdropFilter: 'blur(8px)', background: 'rgba(15, 23, 42, 0.65)' }}>
-            <form 
-              className="proc-modal" 
-              style={{ 
-                maxWidth: '1260px', 
-                width: '90%', 
-                maxHeight: '92vh', 
-                overflowY: 'auto', 
-                borderRadius: '20px', 
-                border: '1px solid rgba(226, 232, 240, 0.9)', 
-                boxShadow: '0 25px 60px -15px rgba(15, 23, 42, 0.35)',
-                background: '#FFFFFF'
-              }} 
-              onSubmit={(e) => handleSaveGRN(e, 'Verified/Completed')}
-            >
-              {/* MODAL HEADER */}
-              <div 
-                className="proc-modal-header" 
-                style={{ 
-                  position: 'sticky', 
-                  top: 0, 
-                  background: 'rgba(255, 255, 255, 0.98)', 
-                  backdropFilter: 'blur(10px)', 
-                  zIndex: 20, 
-                  borderBottom: '1.5px solid #F1F5F9', 
-                  padding: '20px 28px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}
+              {/* Section 2: Address & Communication */}
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase', marginBottom: '12px', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>Address & Communication</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Complete Address</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600, marginTop: '2px' }}>
+                      {selectedVendorProfile.houseNo ? `${selectedVendorProfile.houseNo}, ` : ''}
+                      {selectedVendorProfile.street ? `${selectedVendorProfile.street}, ` : ''}
+                      {selectedVendorProfile.address || ''}
+                      {selectedVendorProfile.city ? `, ${selectedVendorProfile.city}` : ''}
+                      {selectedVendorProfile.state ? `, ${selectedVendorProfile.state}` : ''}
+                      {selectedVendorProfile.zipCode || selectedVendorProfile.pinCode ? ` - ${selectedVendorProfile.zipCode || selectedVendorProfile.pinCode}` : ''}
+                      {selectedVendorProfile.country ? `, ${selectedVendorProfile.country}` : ''}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Email Address</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>{selectedVendorProfile.email || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Website</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#2563EB', marginTop: '2px' }}>{selectedVendorProfile.website || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Landline Number</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600, marginTop: '2px' }}>{selectedVendorProfile.landline || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Fax Number</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600, marginTop: '2px' }}>{selectedVendorProfile.faxNo || '--'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Contact Persons */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase', marginBottom: '10px' }}>Primary Contact Person</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div>
+                      <span style={{ fontSize: '10px', color: '#64748B', fontWeight: 700 }}>NAME / DESIGNATION</span>
+                      <div style={{ fontSize: '13px', fontWeight: 800 }}>{selectedVendorProfile.contactPerson || selectedVendorProfile.primaryContactPerson || '--'} ({selectedVendorProfile.primaryContactPersonDesignation || 'Contact Person'})</div>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', color: '#64748B', fontWeight: 700 }}>MOBILE NUMBER</span>
+                      <div style={{ fontSize: '13px', fontWeight: 700 }}>{selectedVendorProfile.phone || selectedVendorProfile.primaryContactPersonMobileNo || '--'}</div>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', color: '#64748B', fontWeight: 700 }}>EMAIL ID</span>
+                      <div style={{ fontSize: '13px', fontWeight: 700 }}>{selectedVendorProfile.primaryContactPersonEmailId || '--'}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase', marginBottom: '10px' }}>Secondary Contact Person</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div>
+                      <span style={{ fontSize: '10px', color: '#64748B', fontWeight: 700 }}>NAME / DESIGNATION</span>
+                      <div style={{ fontSize: '13px', fontWeight: 800 }}>{selectedVendorProfile.secondaryContactPerson || '--'} {selectedVendorProfile.secondaryContactPersonDesignation ? `(${selectedVendorProfile.secondaryContactPersonDesignation})` : ''}</div>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', color: '#64748B', fontWeight: 700 }}>MOBILE NUMBER</span>
+                      <div style={{ fontSize: '13px', fontWeight: 700 }}>{selectedVendorProfile.secondaryContactPersonMobileNo || '--'}</div>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', color: '#64748B', fontWeight: 700 }}>EMAIL ID</span>
+                      <div style={{ fontSize: '13px', fontWeight: 700 }}>{selectedVendorProfile.secondaryContactPersonEmailId || '--'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 4: Compliance & Business Registration */}
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase', marginBottom: '12px', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>Compliance & Business Registration</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>GST Number</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700 }}>{selectedVendorProfile.gstNumber || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>PAN Card Number</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700 }}>{selectedVendorProfile.panNumber || selectedVendorProfile.panCardNo || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Name on PAN Card</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700 }}>{selectedVendorProfile.nameOnPanCard || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Drug License Number</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700 }}>{selectedVendorProfile.licenseNumber || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>CIN Number</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600 }}>{selectedVendorProfile.cinNo || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>PF Registration No</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600 }}>{selectedVendorProfile.pfRegistrationNo || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>ROC Number</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600 }}>{selectedVendorProfile.rocNo || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>ESI Registration No</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600 }}>{selectedVendorProfile.esiRegistrationNo || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>ISO Certification No</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600 }}>{selectedVendorProfile.isoCertificationNo ? `${selectedVendorProfile.isoCertificationNo} (Exp: ${selectedVendorProfile.isoValidUpto || '--'})` : '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Pollution Control Cert</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600 }}>{selectedVendorProfile.pollutionControlBoardCertificationNo ? `${selectedVendorProfile.pollutionControlBoardCertificationNo} (Exp: ${selectedVendorProfile.pollutionValidUpto || '--'})` : '--'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 5: Bank Details */}
+              <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase', marginBottom: '12px', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>Bank Account Routing</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>BANK NAME</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 800 }}>{selectedVendorProfile.bankName || selectedVendorProfile.bank1Name || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>BRANCH</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700 }}>{selectedVendorProfile.bank1Branch || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>ACCOUNT NUMBER</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>{selectedVendorProfile.accountNumber || selectedVendorProfile.bank1AccountNumber || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>IFSC CODE</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#2563EB' }}>{selectedVendorProfile.ifscCode || selectedVendorProfile.bank1IfscCode || '--'}</div>
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>BANK BRANCH ADDRESS</span>
+                    <div style={{ fontSize: '13px', fontWeight: 600 }}>{selectedVendorProfile.bank1Address || '--'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 6: Commercial Terms & MSME */}
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase', marginBottom: '12px', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>Commercial Terms & MSME Status</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>MSME Registration</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700 }}>
+                      {selectedVendorProfile.isMsmeRegistration === 'Yes' ? `Yes (${selectedVendorProfile.msmeRegistrationNo || '--'} - ${selectedVendorProfile.msmeRegistrationType || ''})` : 'No'}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Payment Terms</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700 }}>{selectedVendorProfile.paymentTerms || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Payment Method</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700 }}>{selectedVendorProfile.paymentMethod || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Credit Limit / Credit Days</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700 }}>₹{(selectedVendorProfile.creditLimit || 0).toLocaleString('en-IN')} ({selectedVendorProfile.creditDays || 30} Days)</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Taxes Config</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600 }}>{selectedVendorProfile.taxes || '--'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Delivery Terms</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600 }}>{selectedVendorProfile.deliveryTerms || '--'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 7: Vendor Quotations */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase' }}>Vendor Quotations</span>
+                  <button
+                    type="button"
+                    style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#2563EB', fontSize: '12px', fontWeight: 700, padding: '4px 12px', borderRadius: '6px', cursor: 'pointer' }}
+                    onClick={() => {
+                      setSelectedVendorProfile(null);
+                      setActiveTab('quotations');
+                    }}
+                  >
+                    + Add / Edit Quotations
+                  </button>
+                </div>
+                <table className="proc-table" style={{ marginTop: '8px' }}>
+                  <thead>
+                    <tr>
+                      <th>Item Name</th>
+                      <th>Unit</th>
+                      <th>Rate</th>
+                      <th>GST %</th>
+                      <th>Lead</th>
+                      <th>Valid Till</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const profileQuotations = vendorQuotations.filter(q => q.vendorId === selectedVendorProfile._id || q.vendor?._id === selectedVendorProfile._id || q.vendorId?._id === selectedVendorProfile._id);
+                      return profileQuotations.length > 0 ? (
+                        profileQuotations.map((q, idx) => (
+                          <tr key={idx}>
+                            <td style={{ fontWeight: 700 }}>{q.itemMaster?.itemName || q.itemMaster?.name || q.itemName || '—'}</td>
+                            <td>{q.purchasedUnit || '—'}</td>
+                            <td style={{ fontWeight: 800 }}>₹{q.ratePerPurchasedUnit || 0}</td>
+                            <td>{q.gstPercent !== undefined ? q.gstPercent : '—'}%</td>
+                            <td>{q.leadTimeDays ? `${q.leadTimeDays}d` : '—'}</td>
+                            <td>{q.validTill ? new Date(q.validTill).toLocaleDateString('en-IN') : '—'}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="6" style={{ padding: '12px', textAlign: 'center', color: '#64748B' }}>
+                            No quotations on file. Click "+ Add / Edit Quotations" to add rates for this vendor.
+                          </td>
+                        </tr>
+                      );
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Remarks/Notes */}
+              {selectedVendorProfile.notes && (
+                <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Remarks / Internal Notes</span>
+                  <div style={{ fontSize: '13px', color: '#475569', marginTop: '4px', fontStyle: 'italic' }}>{selectedVendorProfile.notes}</div>
+                </div>
+              )}
+            </div>
+            
+            <div className="proc-modal-footer" style={{ position: 'sticky', bottom: 0, background: 'white', zIndex: 10, borderTop: '1px solid #E2E8F0', padding: '16px 24px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="button" className="proc-btn proc-btn-primary" onClick={() => setSelectedVendorProfile(null)}>Close Profile</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DEDICATED VENDOR MEDICINE PRICE LIST MODAL */}
+      {selectedVendorPriceList && (
+        <div 
+          className="proc-modal-backdrop" 
+          onClick={() => setSelectedVendorPriceList(null)} 
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}
+        >
+          <div 
+            className="proc-modal" 
+            onClick={e => e.stopPropagation()} 
+            style={{ background: '#ffffff', borderRadius: '16px', width: '92%', maxWidth: '750px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', border: '1px solid #E2E8F0', overflow: 'hidden', animation: 'fadeIn 0.2s ease' }}
+          >
+            {/* Header */}
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <i data-lucide="tag" style={{ width: '22px', height: '22px' }}></i>
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>
+                      {selectedVendorPriceList.name}
+                    </h3>
+                    <span style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 800, color: '#2563EB', background: '#DBEAFE', padding: '2px 8px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
+                      {selectedVendorPriceList.code || 'VND'}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '12.5px', color: '#64748B', display: 'block', marginTop: '3px', fontWeight: 500 }}>
+                    Supplied Medicine Catalogue &amp; Wholesale Contract Rates
+                  </span>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setSelectedVendorPriceList(null)}
+                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div style={{
-                    width: '46px',
-                    height: '46px',
-                    borderRadius: '14px',
-                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                    color: '#FFFFFF',
-                    display: 'flex',
-                    alignItems: 'center',
+                <i data-lucide="x" style={{ width: '20px', height: '20px' }}></i>
+              </button>
+            </div>
+
+            {/* Filter Search Bar & Item Count Badge */}
+            <div style={{ padding: '14px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', background: '#FFFFFF' }}>
+              <div style={{ position: 'relative', flex: 1, maxWidth: '360px' }}>
+                <input 
+                  type="text"
+                  placeholder="Search medicine name or SKU..."
+                  value={priceListSearch}
+                  onChange={e => setPriceListSearch(e.target.value)}
+                  style={{ width: '100%', height: '38px', paddingLeft: '34px', paddingRight: '12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', outline: 'none', background: '#F8FAFC' }}
+                />
+                <i data-lucide="search" style={{ position: 'absolute', left: '11px', top: '11px', width: '15px', height: '15px', color: '#94A3B8' }}></i>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="proc-btn proc-btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '12.5px', fontWeight: 700 }}
+                  onClick={() => {
+                    setTargetVendorForMedicine(selectedVendorPriceList);
+                    setNewMedApprovalData({
+                      name: '',
+                      sku: '',
+                      price: '',
+                      gst: 12,
+                      available: true,
+                      mrp: '',
+                      comment: ''
+                    });
+                    setShowAddMedicineApprovalModal(true);
+                  }}
+                >
+                  <i data-lucide="plus" style={{ width: '14px', height: '14px' }}></i> Add Medicine for Approval
+                </button>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: '#1E40AF', background: '#EFF6FF', border: '1px solid #DBEAFE', padding: '5px 12px', borderRadius: '20px' }}>
+                  {(selectedVendorPriceList.medicines || []).length} Medicines Available
+                </span>
+              </div>
+            </div>
+
+            {/* Body: Medicines & Prices Table */}
+            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
+              {(() => {
+                const meds = (selectedVendorPriceList.medicines || []).filter(m => 
+                  !priceListSearch || 
+                  (m.name || '').toLowerCase().includes(priceListSearch.toLowerCase()) ||
+                  (m.sku || '').toLowerCase().includes(priceListSearch.toLowerCase())
+                );
+
+                if (meds.length === 0) {
+                  return (
+                    <div style={{ padding: '48px 24px', textAlign: 'center', background: '#F8FAFC', borderRadius: '12px', border: '1.5px dashed #CBD5E1', color: '#64748B', fontSize: '13.5px' }}>
+                      <div style={{ fontWeight: 700, color: '#334155', marginBottom: '4px' }}>No medicines found</div>
+                      <div>{priceListSearch ? `No medicine matches "${priceListSearch}" in this catalog.` : 'This vendor does not have any medicines listed yet.'}</div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                          <th style={{ padding: '12px 16px', width: '45px', textAlign: 'center', color: '#64748B', fontWeight: 800 }}>#</th>
+                          <th style={{ padding: '12px 16px', color: '#334155', fontWeight: 800 }}>Medicine Name</th>
+                          <th style={{ padding: '12px 16px', color: '#334155', fontWeight: 800, width: '130px' }}>Contract SKU</th>
+                          <th style={{ padding: '12px 16px', color: '#334155', fontWeight: 800, textAlign: 'right', width: '150px' }}>Wholesale Price</th>
+                          <th style={{ padding: '12px 16px', color: '#334155', fontWeight: 800, textAlign: 'center', width: '90px' }}>GST Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {meds.map((m, idx) => (
+                          <tr key={idx} style={{ borderBottom: idx === (meds.length - 1) ? 'none' : '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', color: '#64748B', fontWeight: 700, fontSize: '12px' }}>{idx + 1}</td>
+                            <td style={{ padding: '12px 16px', fontWeight: 750, color: '#0F172A' }}>{m.name}</td>
+                            <td style={{ padding: '12px 16px', fontFamily: 'monospace', color: '#2563EB', fontWeight: 700 }}>{m.sku || '—'}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#0F172A' }}>
+                              <span style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '4px 10px', borderRadius: '6px' }}>
+                                ₹{Number(m.price || 0).toFixed(2)}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', color: '#64748B', fontWeight: 700 }}>
+                              {m.gst !== undefined ? m.gst : 12}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', background: '#F8FAFC' }}>
+              <button 
+                type="button" 
+                className="proc-btn proc-btn-primary" 
+                onClick={() => setSelectedVendorPriceList(null)}
+                style={{ padding: '8px 24px', fontSize: '13px' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD MEDICINE FOR APPROVAL */}
+      {showAddMedicineApprovalModal && (() => {
+        const vendorObj = targetVendorForMedicine || selectedVendorPriceList || selectedVendorProfile;
+        return (
+          <div 
+            className="modal-overlay" 
+            data-lenis-prevent 
+            style={{ 
+              position: 'fixed', 
+              top: 0, 
+              left: 0, 
+              right: 0, 
+              bottom: 0, 
+              backgroundColor: 'rgba(15, 23, 42, 0.55)', 
+              backdropFilter: 'blur(8px)', 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              zIndex: 10000,
+              padding: '20px'
+            }} 
+            onClick={() => { setShowAddMedicineApprovalModal(false); setTargetVendorForMedicine(null); }}
+          >
+            <div 
+              style={{ 
+                width: '100%', 
+                maxWidth: '560px', 
+                maxHeight: '90vh', 
+                background: '#FFFFFF', 
+                padding: '30px 32px', 
+                borderRadius: '24px', 
+                boxShadow: '0 25px 60px -15px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(226, 232, 240, 0.8)', 
+                position: 'relative', 
+                overflowY: 'auto',
+                animation: 'fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+              }} 
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '22px' }}>
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                  <div style={{ 
+                    width: '46px', 
+                    height: '46px', 
+                    borderRadius: '14px', 
+                    background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)', 
+                    border: '1px solid #BFDBFE',
+                    display: 'flex', 
+                    alignItems: 'center', 
                     justifyContent: 'center',
-                    boxShadow: '0 6px 18px rgba(16, 185, 129, 0.35)',
-                    flexShrink: 0
+                    color: '#2563EB',
+                    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.12)'
                   }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-                      <path d="m3.3 7 8.7 5 8.7-5"/>
-                      <path d="M12 22V12"/>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/>
+                      <path d="m8.5 8.5 7 7"/>
                     </svg>
                   </div>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontSize: '19px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em' }}>
-                        Goods Receipt Note (GRN) Verification
+                    <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+                      Add Medicine for Approval
+                    </h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                      <span style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 500 }}>Target Vendor:</span>
+                      <span style={{ background: '#F1F5F9', border: '1px solid #E2E8F0', padding: '2px 9px', borderRadius: '8px', fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>
+                        {vendorObj?.name || 'Selected Vendor'}
                       </span>
-                      <span style={{ fontSize: '11px', fontWeight: 800, background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '20px' }}>
-                        ● INTAKE LEDGER
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '12.5px', color: '#64748B', marginTop: '2px', fontWeight: 500 }}>
-                      Inspect cartons, verify batch numbers &amp; expiry dates, and lock in received stock against invoice.
+                      {vendorObj?.code && (
+                        <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#2563EB', background: '#EFF6FF', padding: '2px 7px', borderRadius: '6px', fontSize: '11.5px', border: '1px solid #DBEAFE' }}>
+                          {vendorObj.code}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
-
                 <button 
                   type="button" 
-                  onClick={() => setShowGRNModal(false)}
-                  style={{
-                    width: '36px',
-                    height: '36px',
+                  style={{ 
+                    width: '34px',
+                    height: '34px',
                     borderRadius: '10px',
-                    background: '#F1F5F9',
-                    border: '1px solid #E2E8F0',
+                    background: '#F8FAFC', 
+                    border: '1px solid #E2E8F0', 
+                    cursor: 'pointer', 
                     color: '#64748B',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                    fontWeight: 700,
                     transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#FEE2E2'; e.currentTarget.style.color = '#DC2626'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#64748B'; }}
+                  }} 
+                  onMouseEnter={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#0F172A'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.color = '#64748B'; }}
+                  onClick={() => { setShowAddMedicineApprovalModal(false); setTargetVendorForMedicine(null); }}
                 >
-                  ✕
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </div>
 
-              <div className="proc-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px 28px' }}>
-                
-                {/* 1. WORKFLOW SWITCH & RECEIVING STORE */}
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
-                  gap: '18px', 
-                  background: 'linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)', 
-                  padding: '18px 20px', 
-                  borderRadius: '16px', 
-                  border: '1.5px solid #E2E8F0' 
-                }}>
-                  <div>
-                    <label className="proc-form-label" style={{ marginBottom: '8px', fontSize: '11px', textTransform: 'uppercase', color: '#475569', fontWeight: 850, letterSpacing: '0.04em' }}>
-                      Receipt Workflow Mode
-                    </label>
-                    <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
-                      <div 
-                        onClick={() => {
-                          setGrnFlowType('po');
-                          setGrnSelectedPOId('');
-                          setGrnDirectVendorId('');
-                          setGrnItems([]);
-                        }}
-                        style={{
-                          flex: 1,
-                          padding: '10px 14px',
-                          borderRadius: '10px',
-                          border: grnFlowType === 'po' ? '2px solid #2563EB' : '1.5px solid #CBD5E1',
-                          background: grnFlowType === 'po' ? '#EFF6FF' : '#FFFFFF',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          transition: 'all 0.15s ease',
-                          boxShadow: grnFlowType === 'po' ? '0 2px 8px rgba(37, 99, 235, 0.15)' : 'none'
-                        }}
-                      >
-                        <div style={{
-                          width: '18px',
-                          height: '18px',
-                          borderRadius: '50%',
-                          border: grnFlowType === 'po' ? '5px solid #2563EB' : '2px solid #94A3B8',
-                          background: '#FFFFFF'
-                        }} />
-                        <span style={{ fontSize: '12.5px', fontWeight: 800, color: grnFlowType === 'po' ? '#1E40AF' : '#475569' }}>
-                          Against Approved PO
-                        </span>
-                      </div>
-
-                      <div 
-                        onClick={() => {
-                          setGrnFlowType('direct');
-                          setGrnSelectedPOId('');
-                          setGrnDirectVendorId('');
-                          setGrnItems([{
-                            name: '',
-                            sku: '',
-                            itemType: 'Medicine',
-                            unit: 'Strip',
-                            barcode: '',
-                            qtyOrdered: 0,
-                            orderedQty: 0,
-                            previouslyReceivedQty: 0,
-                            remainingQty: 0,
-                            qtyReceived: 100,
-                            rejectedQty: 0,
-                            rejectionReason: '',
-                            price: 10,
-                            purchaseRate: 10,
-                            discountPercent: 0,
-                            gst: 12,
-                            batchNumber: '',
-                            expiryDate: '',
-                            mfgDate: ''
-                          }]);
-                        }}
-                        style={{
-                          flex: 1,
-                          padding: '10px 14px',
-                          borderRadius: '10px',
-                          border: grnFlowType === 'direct' ? '2px solid #2563EB' : '1.5px solid #CBD5E1',
-                          background: grnFlowType === 'direct' ? '#EFF6FF' : '#FFFFFF',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          transition: 'all 0.15s ease',
-                          boxShadow: grnFlowType === 'direct' ? '0 2px 8px rgba(37, 99, 235, 0.15)' : 'none'
-                        }}
-                      >
-                        <div style={{
-                          width: '18px',
-                          height: '18px',
-                          borderRadius: '50%',
-                          border: grnFlowType === 'direct' ? '5px solid #2563EB' : '2px solid #94A3B8',
-                          background: '#FFFFFF'
-                        }} />
-                        <span style={{ fontSize: '12.5px', fontWeight: 800, color: grnFlowType === 'direct' ? '#1E40AF' : '#475569' }}>
-                          Direct Purchase (No PO)
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="proc-form-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: '#475569', fontWeight: 850, letterSpacing: '0.04em' }}>
-                      Receiving Destination Store *
-                    </label>
-                    <select 
-                      className="proc-select" 
-                      value={grnLocation} 
-                      onChange={e => setGrnLocation(e.target.value)}
-                      style={{ height: '42px', fontSize: '13px', fontWeight: 700, borderRadius: '10px', border: '1.5px solid #CBD5E1', background: '#FFFFFF', marginTop: '6px' }}
-                    >
-                      <option value="Main Pharmacy Store">🏥 Main Pharmacy Store</option>
-                      <option value="Central Warehouse Depot">🏢 Central Warehouse Depot</option>
-                      <option value="OPD Dispensing Store">💊 OPD Dispensing Store</option>
-                      <option value="Emergency & ICU Store">🚨 Emergency &amp; ICU Store</option>
-                    </select>
+              <form onSubmit={handleSubmitMedicineForApproval} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Medicine Name */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                    Medicine Name <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. Paracetamol 650mg, Amoxicillin 500mg"
+                      value={newMedApprovalData.name}
+                      onChange={e => setNewMedApprovalData({ ...newMedApprovalData, name: e.target.value })}
+                      style={{ 
+                        width: '100%', 
+                        height: '42px', 
+                        padding: '0 14px', 
+                        borderRadius: '10px', 
+                        border: '1.5px solid #CBD5E1', 
+                        fontSize: '13.5px', 
+                        outline: 'none', 
+                        background: '#F8FAFC',
+                        color: '#0F172A',
+                        fontWeight: 600,
+                        boxSizing: 'border-box',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.background = '#FFFFFF'; e.target.style.boxShadow = '0 0 0 3.5px rgba(37, 99, 235, 0.12)'; }}
+                      onBlur={e => { e.target.style.borderColor = '#CBD5E1'; e.target.style.background = '#F8FAFC'; e.target.style.boxShadow = 'none'; }}
+                    />
                   </div>
                 </div>
 
-                {/* 2. PO SELECTION & READ-ONLY ORDER DETAILS */}
-                {grnFlowType === 'po' ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    <div className="proc-form-group" style={{ margin: 0 }}>
-                      <label className="proc-form-label" style={{ fontSize: '11.5px', textTransform: 'uppercase', color: '#334155', fontWeight: 850, letterSpacing: '0.03em' }}>
-                        Select Approved Purchase Order *
-                      </label>
-                      <select 
-                        required 
-                        className="proc-select" 
-                        value={grnSelectedPOId} 
-                        onChange={e => handleGrnPOSelection(e.target.value)}
-                        style={{ height: '44px', fontSize: '13.5px', fontWeight: 800, borderRadius: '10px', border: '1.5px solid #2563EB', background: '#FFFFFF', color: '#0F172A' }}
-                      >
-                        <option value="">-- Choose Approved Supplier Order --</option>
-                        {getDisplayPOs().filter(po => !po.isParent && po.vendorName !== 'Consolidated Multiple Suppliers' && !(po.vendorOrders && po.vendorOrders.length > 0) && ['Approved', 'Sent', 'Confirmed', 'Partially Delivered', 'Partially Received'].includes(po.status)).map(po => (
-                          <option key={po._id} value={po._id}>
-                            {po.poId} — {po.vendorName} (₹{Number(po.totalAmount || 0).toLocaleString()} • {po.status})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {selectedPoObj && (
-                      <div style={{ 
-                        background: 'linear-gradient(90deg, #EFF6FF 0%, #F8FAFC 100%)', 
-                        border: '1.5px solid #BFDBFE', 
-                        borderRadius: '14px', 
-                        padding: '16px 20px', 
-                        display: 'grid', 
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-                        gap: '16px',
-                        boxShadow: '0 2px 8px rgba(37, 99, 235, 0.06)'
-                      }}>
-                        <div>
-                          <span style={{ fontSize: '10.5px', fontWeight: 850, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.04em' }}>PO NUMBER</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
-                            <span style={{ fontSize: '14.5px', fontWeight: 900, color: '#1E3A8A', fontFamily: 'monospace' }}>{selectedPoObj.poId}</span>
-                            {selectedPoObj.parentPOId && (
-                              <span style={{ fontSize: '9.5px', fontWeight: 800, background: '#DBEAFE', color: '#1E40AF', padding: '1px 5px', borderRadius: '4px' }}>Sub-PO</span>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <span style={{ fontSize: '10.5px', fontWeight: 850, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.04em' }}>ORDER DATE</span>
-                          <div style={{ fontSize: '13.5px', fontWeight: 750, color: '#1E293B', marginTop: '3px' }}>
-                            {new Date(selectedPoObj.createdAt || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          </div>
-                        </div>
-                        <div>
-                          <span style={{ fontSize: '10.5px', fontWeight: 850, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.04em' }}>ASSIGNED VENDOR</span>
-                          <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', marginTop: '3px' }}>{selectedPoObj.vendorName}</div>
-                        </div>
-                        <div>
-                          <span style={{ fontSize: '10.5px', fontWeight: 850, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.04em' }}>APPROVAL STATUS</span>
-                          <div style={{ marginTop: '3px' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 850, padding: '3px 9px', borderRadius: '20px', background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#10B981' }}></span>
-                              {selectedPoObj.status}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="proc-form-group" style={{ margin: 0 }}>
-                    <label className="proc-form-label" style={{ fontSize: '11.5px', textTransform: 'uppercase', color: '#475569', fontWeight: 850 }}>
-                      Supplier / Vendor *
+                {/* SKU and Price Row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                      SKU / Item Code <span style={{ color: '#EF4444' }}>*</span>
                     </label>
-                    <select 
-                      required 
-                      className="proc-select" 
-                      value={grnDirectVendorId} 
-                      onChange={e => setGrnDirectVendorId(e.target.value)}
-                      style={{ height: '42px', fontSize: '13.5px', fontWeight: 700, borderRadius: '10px' }}
-                    >
-                      <option value="">-- Choose Vendor --</option>
-                      {getDisplayVendors().map(v => (
-                        <option key={v._id} value={v._id}>{v.name} ({v.code})</option>
-                      ))}
-                    </select>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. PAR-650"
+                      value={newMedApprovalData.sku}
+                      onChange={e => setNewMedApprovalData({ ...newMedApprovalData, sku: e.target.value.toUpperCase() })}
+                      style={{ 
+                        width: '100%', 
+                        height: '42px', 
+                        padding: '0 14px', 
+                        borderRadius: '10px', 
+                        border: '1.5px solid #CBD5E1', 
+                        fontSize: '13.5px', 
+                        outline: 'none', 
+                        fontFamily: 'monospace', 
+                        fontWeight: 700,
+                        color: '#2563EB',
+                        background: '#F8FAFC',
+                        boxSizing: 'border-box',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.background = '#FFFFFF'; e.target.style.boxShadow = '0 0 0 3.5px rgba(37, 99, 235, 0.12)'; }}
+                      onBlur={e => { e.target.style.borderColor = '#CBD5E1'; e.target.style.background = '#F8FAFC'; e.target.style.boxShadow = 'none'; }}
+                    />
                   </div>
-                )}
-
-                {/* 3. ITEM RECEIVING & QUALITY INSPECTION LEDGER */}
-                {grnItems.length > 0 && (
-                  <div style={{ marginTop: '6px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '13px', textTransform: 'uppercase', color: '#0F172A', fontWeight: 900, letterSpacing: '0.04em' }}>
-                          Physical Receiving &amp; Quality Inspection Ledger
-                        </span>
-                        <span style={{ fontSize: '11px', fontWeight: 800, background: '#EFF6FF', color: '#1D4ED8', padding: '2px 8px', borderRadius: '12px', border: '1px solid #BFDBFE' }}>
-                          {grnItems.length} {grnItems.length === 1 ? 'Line Item' : 'Line Items'}
-                        </span>
-                      </div>
-
-                      {grnFlowType === 'direct' && (
-                        <button 
-                          type="button" 
-                          className="proc-btn proc-btn-primary" 
-                          style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '5px', borderRadius: '8px' }}
-                          onClick={() => {
-                            setGrnItems([...grnItems, {
-                              name: '',
-                              sku: '',
-                              itemType: 'Medicine',
-                              unit: 'Strip',
-                              barcode: '',
-                              qtyOrdered: 0,
-                              orderedQty: 0,
-                              previouslyReceivedQty: 0,
-                              remainingQty: 0,
-                              qtyReceived: 100,
-                              rejectedQty: 0,
-                              rejectionReason: '',
-                              price: 10,
-                              purchaseRate: 10,
-                              discountPercent: 0,
-                              gst: 12,
-                              batchNumber: '',
-                              expiryDate: '',
-                              mfgDate: ''
-                            }]);
-                          }}
-                        >
-                          + Add Item Line
-                        </button>
-                      )}
-                    </div>
-
-                    <div style={{ border: '1.5px solid #E2E8F0', borderRadius: '14px', background: '#FFFFFF', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', overflow: 'hidden' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                        <thead>
-                          <tr style={{ background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
-                            <th style={{ padding: '12px 12px', textAlign: 'left', fontWeight: 850, color: '#334155' }}>ITEM SPECIFICATION</th>
-                            <th style={{ padding: '12px 6px', textAlign: 'left', fontWeight: 850, color: '#334155', width: '90px' }}>BARCODE</th>
-                            <th style={{ padding: '12px 6px', textAlign: 'left', fontWeight: 850, color: '#1E40AF', width: '90px', background: '#EFF6FF' }}>BATCH NO. *</th>
-                            <th style={{ padding: '12px 6px', textAlign: 'left', fontWeight: 850, color: '#334155', width: '108px' }}>MFG DATE</th>
-                            <th style={{ padding: '12px 6px', textAlign: 'left', fontWeight: 850, color: '#B45309', width: '108px', background: '#FEF3C7' }}>EXPIRY DATE *</th>
-                            {grnFlowType === 'po' && (
-                              <>
-                                <th style={{ padding: '12px 4px', textAlign: 'center', fontWeight: 850, color: '#64748B', width: '45px' }}>PO QTY</th>
-                                <th style={{ padding: '12px 4px', textAlign: 'center', fontWeight: 850, color: '#64748B', width: '45px' }}>PREV.</th>
-                                <th style={{ padding: '12px 4px', textAlign: 'center', fontWeight: 900, color: '#1D4ED8', width: '50px', background: '#EFF6FF' }}>REMAIN</th>
-                              </>
-                            )}
-                            <th style={{ padding: '12px 6px', textAlign: 'center', fontWeight: 900, color: '#047857', width: '68px', background: '#ECFDF5' }}>RECV QTY *</th>
-                            <th style={{ padding: '12px 6px', textAlign: 'center', fontWeight: 900, color: '#B91C1C', width: '58px', background: '#FEF2F2' }}>REJ QTY</th>
-                            <th style={{ padding: '12px 6px', textAlign: 'right', fontWeight: 850, color: '#334155', width: '68px' }}>RATE (₹)</th>
-                            <th style={{ padding: '12px 4px', textAlign: 'center', fontWeight: 850, color: '#334155', width: '45px' }}>DISC %</th>
-                            <th style={{ padding: '12px 4px', textAlign: 'center', fontWeight: 850, color: '#334155', width: '45px' }}>GST %</th>
-                            <th style={{ padding: '12px 6px', textAlign: 'right', fontWeight: 850, color: '#1D4ED8', width: '68px' }}>BUY PRICE</th>
-                            <th style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 900, color: '#0F172A', width: '85px' }}>NET TOTAL</th>
-                            {grnFlowType === 'direct' && <th style={{ padding: '12px 4px', width: '30px' }}></th>}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {grnItems.map((item, idx) => {
-                            const qty = Math.max(0, Number(item.qtyReceived) || 0);
-                            const rate = Math.max(0, Number(item.price || item.purchaseRate) || 0);
-                            const discPct = Math.max(0, Math.min(100, Number(item.discountPercent) || 0));
-                            const gstRate = Math.max(0, Number(item.gst !== undefined ? item.gst : 12));
-
-                            const gross = qty * rate;
-                            const discAmt = Math.round((gross * (discPct / 100)) * 100) / 100;
-                            const taxable = Math.max(0, Math.round((gross - discAmt) * 100) / 100);
-                            const gstAmt = Math.round((taxable * (gstRate / 100)) * 100) / 100;
-                            const netAmt = Math.round((taxable + gstAmt) * 100) / 100;
-                            const unitBuyPrice = qty > 0 ? Math.round((netAmt / qty) * 100) / 100 : 0;
-
-                            const remainingLimit = item.remainingQty !== undefined ? item.remainingQty : (item.qtyOrdered || 999999);
-
-                            return (
-                              <tr key={`grn-item-row-${idx}`} style={{ borderBottom: '1px solid #F1F5F9', background: idx % 2 === 0 ? '#FFFFFF' : '#FAFCFF' }}>
-                                <td style={{ padding: '8px 12px' }}>
-                                  {grnFlowType === 'po' ? (
-                                    <div>
-                                      <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px' }}>{item.name}</div>
-                                      <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        <span style={{ fontFamily: 'monospace', color: '#2563EB', fontWeight: 800, background: '#EFF6FF', padding: '1px 4px', borderRadius: '4px', border: '1px solid #DBEAFE' }}>
-                                          {item.sku}
-                                        </span>
-                                        <span>•</span>
-                                        <span style={{ fontWeight: 600 }}>{item.unit || 'Strip'}</span>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                      <input 
-                                        type="text" 
-                                        required 
-                                        placeholder="Item Name" 
-                                        className="proc-input" 
-                                        value={item.name} 
-                                        onChange={e => {
-                                          const updated = [...grnItems];
-                                          updated[idx].name = e.target.value;
-                                          setGrnItems(updated);
-                                        }}
-                                        style={{ height: '30px', fontSize: '11.5px', borderRadius: '6px', width: '100%', boxSizing: 'border-box' }}
-                                      />
-                                      <div style={{ display: 'flex', gap: '4px' }}>
-                                        <input 
-                                          type="text" 
-                                          placeholder="SKU" 
-                                          className="proc-input" 
-                                          value={item.sku} 
-                                          onChange={e => {
-                                            const updated = [...grnItems];
-                                            updated[idx].sku = e.target.value;
-                                            setGrnItems(updated);
-                                          }}
-                                          style={{ height: '24px', fontSize: '10.5px', width: '80px', fontFamily: 'monospace', borderRadius: '6px' }}
-                                        />
-                                        <input 
-                                          type="text" 
-                                          placeholder="Unit" 
-                                          className="proc-input" 
-                                          value={item.unit} 
-                                          onChange={e => {
-                                            const updated = [...grnItems];
-                                            updated[idx].unit = e.target.value;
-                                            setGrnItems(updated);
-                                          }}
-                                          style={{ height: '24px', fontSize: '10.5px', width: '60px', borderRadius: '6px' }}
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
-                                </td>
-
-                                <td style={{ padding: '8px 5px' }}>
-                                  <input 
-                                    type="text" 
-                                    placeholder={qty > 0 ? "Barcode" : "—"} 
-                                    disabled={qty === 0}
-                                    className="proc-input" 
-                                    value={item.barcode || ''} 
-                                    onChange={e => {
-                                      const updated = [...grnItems];
-                                      updated[idx].barcode = e.target.value;
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ height: '30px', fontSize: '11px', padding: '0 6px', fontFamily: 'monospace', borderRadius: '6px', width: '100%', boxSizing: 'border-box', background: qty === 0 ? '#F1F5F9' : '#FFFFFF', cursor: qty === 0 ? 'not-allowed' : 'text', opacity: qty === 0 ? 0.65 : 1 }}
-                                  />
-                                </td>
-
-                                <td style={{ padding: '8px 5px', background: '#F8FAFC' }}>
-                                  <input 
-                                    type="text" 
-                                    required={qty > 0} 
-                                    disabled={qty === 0}
-                                    placeholder={qty > 0 ? "Batch *" : "—"} 
-                                    className="proc-input" 
-                                    value={item.batchNumber || ''} 
-                                    onChange={e => {
-                                      const updated = [...grnItems];
-                                      updated[idx].batchNumber = e.target.value;
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ height: '30px', fontSize: '11.5px', padding: '0 6px', fontWeight: 800, borderRadius: '6px', borderColor: (item.batchNumber || qty === 0) ? '#CBD5E1' : '#93C5FD', background: qty === 0 ? '#F1F5F9' : '#FFFFFF', cursor: qty === 0 ? 'not-allowed' : 'text', width: '100%', boxSizing: 'border-box', opacity: qty === 0 ? 0.65 : 1 }}
-                                  />
-                                </td>
-
-                                <td style={{ padding: '8px 5px' }}>
-                                  <input 
-                                    type="date" 
-                                    disabled={qty === 0}
-                                    max={new Date().toISOString().split('T')[0]}
-                                    className="proc-input" 
-                                    value={item.mfgDate || ''} 
-                                    onChange={e => {
-                                      const updated = [...grnItems];
-                                      updated[idx].mfgDate = e.target.value;
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ height: '30px', fontSize: '10.5px', padding: '0 4px', borderRadius: '6px', width: '100%', boxSizing: 'border-box', background: qty === 0 ? '#F1F5F9' : '#FFFFFF', cursor: qty === 0 ? 'not-allowed' : 'text', opacity: qty === 0 ? 0.65 : 1 }}
-                                  />
-                                </td>
-
-                                <td style={{ padding: '8px 5px', background: '#FFFDF5' }}>
-                                  <input 
-                                    type="date" 
-                                    required={qty > 0}
-                                    disabled={qty === 0}
-                                    className="proc-input" 
-                                    value={item.expiryDate || ''} 
-                                    onChange={e => {
-                                      const updated = [...grnItems];
-                                      updated[idx].expiryDate = e.target.value;
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ height: '30px', fontSize: '10.5px', padding: '0 4px', borderRadius: '6px', borderColor: (item.expiryDate || qty === 0) ? '#CBD5E1' : '#FDE68A', background: qty === 0 ? '#F1F5F9' : '#FFFFFF', cursor: qty === 0 ? 'not-allowed' : 'text', width: '100%', boxSizing: 'border-box', opacity: qty === 0 ? 0.65 : 1 }}
-                                  />
-                                </td>
-
-                                {grnFlowType === 'po' && (
-                                  <>
-                                    <td style={{ padding: '8px 4px', textAlign: 'center', fontWeight: 750, color: '#475569', fontSize: '12px' }}>
-                                      {item.qtyOrdered || 0}
-                                    </td>
-                                    <td style={{ padding: '8px 4px', textAlign: 'center', fontWeight: 700, color: '#64748B', fontSize: '12px' }}>
-                                      {item.previouslyReceivedQty || 0}
-                                    </td>
-                                    <td style={{ padding: '8px 4px', textAlign: 'center', fontWeight: 900, color: '#2563EB', fontSize: '12.5px', background: '#F8FAFC' }}>
-                                      {item.remainingQty !== undefined ? item.remainingQty : Math.max(0, (item.qtyOrdered || 0) - (item.previouslyReceivedQty || 0))}
-                                    </td>
-                                  </>
-                                )}
-
-                                <td style={{ padding: '8px 5px', textAlign: 'center', background: '#F0FDF4' }}>
-                                  <input 
-                                    type="number" 
-                                    required 
-                                    min="0"
-                                    max={grnFlowType === 'po' ? remainingLimit : 999999}
-                                    className="proc-input" 
-                                    value={item.qtyReceived !== undefined ? item.qtyReceived : ''} 
-                                    onChange={e => {
-                                      let val = Number(e.target.value);
-                                      if (grnFlowType === 'po' && val > remainingLimit) {
-                                        showToast(`Quantity received (${val}) exceeds remaining quantity (${remainingLimit})!`, 'error');
-                                        val = remainingLimit;
-                                      }
-                                      const updated = [...grnItems];
-                                      updated[idx].qtyReceived = val;
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ height: '30px', fontSize: '12.5px', padding: '0 4px', textAlign: 'center', fontWeight: 900, color: '#047857', borderColor: '#86EFAC', borderRadius: '6px', background: '#FFFFFF', width: '100%', boxSizing: 'border-box' }}
-                                  />
-                                </td>
-
-                                <td style={{ padding: '8px 5px', textAlign: 'center', background: '#FEF2F2' }}>
-                                  <input 
-                                    type="number" 
-                                    min="0" 
-                                    className="proc-input" 
-                                    value={item.rejectedQty !== undefined ? item.rejectedQty : 0} 
-                                    onChange={e => {
-                                      const updated = [...grnItems];
-                                      updated[idx].rejectedQty = Math.max(0, Number(e.target.value) || 0);
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ height: '30px', fontSize: '12.5px', padding: '0 4px', textAlign: 'center', fontWeight: 900, color: '#DC2626', borderColor: '#FECACA', borderRadius: '6px', background: '#FFFFFF', width: '100%', boxSizing: 'border-box' }}
-                                    title="Rejected units will not be added to active inventory stock"
-                                  />
-                                </td>
-
-                                <td style={{ padding: '8px 5px', textAlign: 'right' }}>
-                                  <input 
-                                    type="number" 
-                                    step="0.01"
-                                    min="0"
-                                    required
-                                    className="proc-input" 
-                                    value={item.price !== undefined ? item.price : item.purchaseRate || 0} 
-                                    onChange={e => {
-                                      const updated = [...grnItems];
-                                      const p = Math.max(0, Number(e.target.value) || 0);
-                                      updated[idx].price = p;
-                                      updated[idx].purchaseRate = p;
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ height: '30px', fontSize: '12px', padding: '0 6px', textAlign: 'right', fontWeight: 800, borderRadius: '6px', width: '100%', boxSizing: 'border-box' }}
-                                  />
-                                </td>
-
-                                <td style={{ padding: '8px 4px', textAlign: 'center' }}>
-                                  <input 
-                                    type="number" 
-                                    min="0" 
-                                    max="100"
-                                    className="proc-input" 
-                                    value={item.discountPercent !== undefined ? item.discountPercent : 0} 
-                                    onChange={e => {
-                                      const updated = [...grnItems];
-                                      updated[idx].discountPercent = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ height: '30px', fontSize: '11px', padding: '0 2px', textAlign: 'center', borderRadius: '6px', width: '100%', boxSizing: 'border-box' }}
-                                  />
-                                </td>
-
-                                <td style={{ padding: '8px 4px', textAlign: 'center' }}>
-                                  <input 
-                                    type="number" 
-                                    min="0" 
-                                    max="100"
-                                    className="proc-input" 
-                                    value={item.gst !== undefined ? item.gst : 12} 
-                                    onChange={e => {
-                                      const updated = [...grnItems];
-                                      updated[idx].gst = Math.max(0, Number(e.target.value) || 0);
-                                      setGrnItems(updated);
-                                    }}
-                                    style={{ height: '30px', fontSize: '11px', padding: '0 2px', textAlign: 'center', borderRadius: '6px', width: '100%', boxSizing: 'border-box' }}
-                                  />
-                                </td>
-
-                                <td style={{ padding: '8px 5px', textAlign: 'right', fontWeight: 800, color: '#2563EB', fontSize: '12px' }}>
-                                  ₹{unitBuyPrice.toFixed(2)}
-                                </td>
-
-                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#0F172A', fontSize: '13px' }}>
-                                  ₹{netAmt.toFixed(2)}
-                                </td>
-
-                                {grnFlowType === 'direct' && (
-                                  <td style={{ padding: '8px 4px', textAlign: 'center' }}>
-                                    <button 
-                                      type="button" 
-                                      className="proc-close-btn" 
-                                      style={{ color: '#EF4444', background: '#FEF2F2', width: '24px', height: '24px', borderRadius: '6px' }} 
-                                      onClick={() => setGrnItems(grnItems.filter((_, i) => i !== idx))}
-                                    >
-                                      ✕
-                                    </button>
-                                  </td>
-                                )}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* 4. INVOICE DETAILS & ATTACHMENT CARD */}
-                <div style={{ 
-                  background: 'linear-gradient(135deg, #F8FAFC 0%, #FFFFFF 100%)', 
-                  border: '1.5px solid #E2E8F0', 
-                  borderRadius: '16px', 
-                  padding: '20px 24px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                    </div>
-                    <span style={{ fontSize: '14px', fontWeight: 900, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                      Supplier Invoice Details &amp; Document
-                    </span>
-                    <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 500 }}>
-                      (Verify supplier bill information against physical invoice document)
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', alignItems: 'flex-start' }}>
-                    <div>
-                      <label className="proc-form-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: '#475569', fontWeight: 850 }}>Invoice Number *</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. INV-2026-9901" 
-                        className="proc-input" 
-                        value={grnInvoiceNumber} 
-                        onChange={e => setGrnInvoiceNumber(e.target.value)}
-                        style={{ height: '40px', fontSize: '13px', fontWeight: 750, borderRadius: '8px', border: '1.5px solid #CBD5E1', marginTop: '4px' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="proc-form-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: '#475569', fontWeight: 850 }}>Invoice Date *</label>
-                      <input 
-                        type="date" 
-                        className="proc-input" 
-                        value={grnInvoiceDate} 
-                        onChange={e => setGrnInvoiceDate(e.target.value)}
-                        style={{ height: '40px', fontSize: '13px', borderRadius: '8px', border: '1.5px solid #CBD5E1', marginTop: '4px' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="proc-form-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: '#475569', fontWeight: 850 }}>Billed Invoice Amount (₹) *</label>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                      Wholesale Price (₹) <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '12px', top: '10px', fontSize: '15px', fontWeight: 800, color: '#64748B' }}>₹</span>
                       <input 
                         type="number" 
                         step="0.01"
-                        placeholder="e.g. 5250.00" 
-                        className="proc-input" 
-                        value={grnInvoiceAmount} 
-                        onChange={e => setGrnInvoiceAmount(e.target.value)}
-                        style={{ height: '40px', fontSize: '13.5px', fontWeight: 900, borderRadius: '8px', border: '1.5px solid #CBD5E1', marginTop: '4px' }}
+                        min="0.01"
+                        required
+                        placeholder="0.00"
+                        value={newMedApprovalData.price}
+                        onChange={e => setNewMedApprovalData({ ...newMedApprovalData, price: e.target.value })}
+                        style={{ 
+                          width: '100%', 
+                          height: '42px', 
+                          padding: '0 14px 0 28px', 
+                          borderRadius: '10px', 
+                          border: '1.5px solid #CBD5E1', 
+                          fontSize: '14px', 
+                          outline: 'none', 
+                          fontWeight: 800, 
+                          color: '#0F172A',
+                          background: '#F8FAFC',
+                          boxSizing: 'border-box',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.background = '#FFFFFF'; e.target.style.boxShadow = '0 0 0 3.5px rgba(37, 99, 235, 0.12)'; }}
+                        onBlur={e => { e.target.style.borderColor = '#CBD5E1'; e.target.style.background = '#F8FAFC'; e.target.style.boxShadow = 'none'; }}
                       />
                     </div>
-
-                    <div>
-                      <label className="proc-form-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: '#475569', fontWeight: 850 }}>Invoice Document Attachment</label>
-                      
-                      {!grnInvoiceFileName ? (
-                        <div style={{ marginTop: '4px' }}>
-                          <input 
-                            type="file" 
-                            id="grn-invoice-file-input"
-                            accept="image/*,application/pdf"
-                            style={{ display: 'none' }}
-                            onChange={e => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                setGrnIsUploading(true);
-                                setGrnUploadProgress(0);
-                                let p = 0;
-                                const timer = setInterval(() => {
-                                  p += 25;
-                                  setGrnUploadProgress(p);
-                                  if (p >= 100) {
-                                    clearInterval(timer);
-                                    setGrnIsUploading(false);
-                                    const reader = new FileReader();
-                                    reader.onload = (event) => {
-                                      setGrnInvoiceFile(file);
-                                      setGrnInvoiceFileName(event.target.result || file.name);
-                                    };
-                                    reader.readAsDataURL(file);
-                                  }
-                                }, 80);
-                              }
-                            }}
-                          />
-                          <button 
-                            type="button" 
-                            className="proc-btn" 
-                            style={{ height: '40px', width: '100%', fontSize: '12.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 750, background: '#EFF6FF', color: '#1D4ED8', border: '1.5px dashed #93C5FD', borderRadius: '8px', cursor: 'pointer' }}
-                            onClick={() => document.getElementById('grn-invoice-file-input')?.click()}
-                          >
-                            📎 + Attach Invoice Document
-                          </button>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: '#DCFCE7', border: '1.5px solid #86EFAC', borderRadius: '8px', height: '40px', boxSizing: 'border-box', marginTop: '4px' }}>
-                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#166534', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
-                            ✓ {grnInvoiceFile ? grnInvoiceFile.name : 'Invoice Attached'}
-                          </span>
-                          <button 
-                            type="button" 
-                            style={{ background: 'none', border: 'none', color: '#DC2626', fontWeight: 800, cursor: 'pointer', fontSize: '11px', textDecoration: 'underline' }}
-                            onClick={() => {
-                              setGrnInvoiceFile(null);
-                              setGrnInvoiceFileName('');
-                            }}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      )}
-
-                      {grnIsUploading && (
-                        <div style={{ marginTop: '6px' }}>
-                          <div style={{ height: '4px', background: '#E2E8F0', borderRadius: '2px', overflow: 'hidden' }}>
-                            <div style={{ width: `${grnUploadProgress}%`, height: '100%', background: '#2563EB', transition: 'width 0.1s ease' }} />
-                          </div>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </div>
 
-                {/* 5. NOTES & AUTHORITATIVE SUMMARY DUAL COLUMN */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', alignItems: 'stretch' }}>
-                  
-                  {/* Left: Notes & Discrepancy Remarks */}
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <label className="proc-form-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: '#475569', fontWeight: 850, letterSpacing: '0.03em', marginBottom: '6px' }}>
-                      Inspection Notes / Discrepancy Remarks
+                {/* GST and Availability Row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                      GST Rate (%)
                     </label>
-                    <textarea 
-                      placeholder="Add inspection observations, batch discrepancies, damaged packaging notes..." 
-                      className="proc-input" 
-                      value={grnNotes} 
-                      onChange={e => setGrnNotes(e.target.value)}
-                      style={{ flex: 1, minHeight: '120px', fontSize: '13px', padding: '12px', borderRadius: '12px', border: '1.5px solid #CBD5E1', resize: 'vertical' }}
-                    />
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        type="number" 
+                        min="0"
+                        max="100"
+                        value={newMedApprovalData.gst}
+                        onChange={e => setNewMedApprovalData({ ...newMedApprovalData, gst: e.target.value })}
+                        style={{ 
+                          width: '100%', 
+                          height: '42px', 
+                          padding: '0 32px 0 14px', 
+                          borderRadius: '10px', 
+                          border: '1.5px solid #CBD5E1', 
+                          fontSize: '13.5px', 
+                          outline: 'none', 
+                          fontWeight: 700,
+                          color: '#0F172A',
+                          background: '#F8FAFC',
+                          boxSizing: 'border-box',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.background = '#FFFFFF'; e.target.style.boxShadow = '0 0 0 3.5px rgba(37, 99, 235, 0.12)'; }}
+                        onBlur={e => { e.target.style.borderColor = '#CBD5E1'; e.target.style.background = '#F8FAFC'; e.target.style.boxShadow = 'none'; }}
+                      />
+                      <span style={{ position: 'absolute', right: '12px', top: '10px', fontSize: '13.5px', fontWeight: 800, color: '#64748B' }}>%</span>
+                    </div>
                   </div>
-
-                  {/* Right: Authoritative GRN Summary & Variance Card */}
-                  <div style={{ 
-                    background: 'linear-gradient(135deg, #F8FAFC 0%, #FFFFFF 100%)', 
-                    border: '1.5px solid #E2E8F0', 
-                    borderRadius: '16px', 
-                    padding: '20px', 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    gap: '10px',
-                    boxShadow: '0 4px 14px rgba(0,0,0,0.03)'
-                  }}>
-                    <div style={{ fontSize: '12px', fontWeight: 900, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '1.5px solid #F1F5F9', paddingBottom: '8px' }}>
-                      GRN Financial Summary
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                      <span>Gross Subtotal:</span>
-                      <strong style={{ color: '#0F172A' }}>₹{liveTotals.subtotal.toFixed(2)}</strong>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                      <span>Total Line Discount:</span>
-                      <strong style={{ color: '#16A34A' }}>−₹{liveTotals.totalDiscount.toFixed(2)}</strong>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                      <span>Taxable Base:</span>
-                      <strong style={{ color: '#0F172A' }}>₹{liveTotals.taxableBase.toFixed(2)}</strong>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                      <span>Total GST Tax:</span>
-                      <strong style={{ color: '#EA580C' }}>+₹{liveTotals.totalGst.toFixed(2)}</strong>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #E2E8F0', paddingTop: '10px', marginTop: '4px', fontSize: '17px', fontWeight: 900, color: '#0F172A' }}>
-                      <span>Calculated GRN Total:</span>
-                      <span style={{ color: '#2563EB', letterSpacing: '-0.02em' }}>₹{liveTotals.grandTotal.toFixed(2)}</span>
-                    </div>
-
-                    {invoicedVal > 0 && (
-                      <div style={{ 
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                      Procurement Status
+                    </label>
+                    <label 
+                      style={{ 
                         display: 'flex', 
-                        justifyContent: 'space-between', 
                         alignItems: 'center', 
-                        background: varianceVal === 0 ? '#DCFCE7' : '#FEF3C7', 
-                        border: `1.5px solid ${varianceVal === 0 ? '#86EFAC' : '#FDE68A'}`, 
-                        padding: '8px 12px', 
+                        height: '42px', 
+                        padding: '0 12px', 
                         borderRadius: '10px', 
-                        marginTop: '6px' 
-                      }}>
-                        <span style={{ fontSize: '12px', fontWeight: 850, color: varianceVal === 0 ? '#166534' : '#92400E' }}>
-                          {varianceVal === 0 ? '✓ Invoice Matched Perfectly' : `⚠ Invoice Variance (${varianceVal > 0 ? '+' : ''}₹${varianceVal.toFixed(2)})`}
-                        </span>
-                        <span style={{ fontSize: '12.5px', fontWeight: 900, color: varianceVal === 0 ? '#166534' : '#92400E' }}>
-                          Billed: ₹{invoicedVal.toFixed(2)}
-                        </span>
-                      </div>
-                    )}
+                        border: '1.5px solid #CBD5E1', 
+                        background: newMedApprovalData.available ? '#F0FDF4' : '#F8FAFC',
+                        cursor: 'pointer',
+                        gap: '10px',
+                        userSelect: 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={newMedApprovalData.available}
+                        onChange={e => setNewMedApprovalData({ ...newMedApprovalData, available: e.target.checked })}
+                        style={{ cursor: 'pointer', width: '17px', height: '17px', accentColor: '#16A34A' }}
+                      />
+                      <span style={{ fontSize: '12.5px', color: newMedApprovalData.available ? '#15803D' : '#64748B', fontWeight: 700 }}>
+                        {newMedApprovalData.available ? '● Available for PO' : '○ Out of Stock'}
+                      </span>
+                    </label>
                   </div>
                 </div>
 
-              </div>
+                {/* Justification / Request Note */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                    Request Note / Justification <span style={{ color: '#94A3B8', fontWeight: 500 }}>(Optional)</span>
+                  </label>
+                  <textarea 
+                    rows={2}
+                    placeholder="e.g. Rate negotiated per wholesale contract renewal..."
+                    value={newMedApprovalData.comment}
+                    onChange={e => setNewMedApprovalData({ ...newMedApprovalData, comment: e.target.value })}
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px 14px', 
+                      borderRadius: '10px', 
+                      border: '1.5px solid #CBD5E1', 
+                      fontSize: '13px', 
+                      outline: 'none', 
+                      fontFamily: 'inherit', 
+                      background: '#F8FAFC',
+                      boxSizing: 'border-box',
+                      lineHeight: 1.4,
+                      resize: 'none',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.background = '#FFFFFF'; e.target.style.boxShadow = '0 0 0 3.5px rgba(37, 99, 235, 0.12)'; }}
+                    onBlur={e => { e.target.style.borderColor = '#CBD5E1'; e.target.style.background = '#F8FAFC'; e.target.style.boxShadow = 'none'; }}
+                  />
+                </div>
 
-              {/* MODAL FOOTER */}
-              <div 
-                className="proc-modal-footer" 
-                style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center', 
-                  position: 'sticky', 
-                  bottom: 0, 
-                  background: '#FFFFFF', 
-                  zIndex: 20, 
-                  borderTop: '1.5px solid #F1F5F9', 
-                  padding: '16px 28px' 
-                }}
-              >
-                <button 
-                  type="button" 
-                  className="proc-btn" 
-                  style={{
-                    padding: '10px 20px',
-                    borderRadius: '10px',
-                    border: '1.5px solid #E2E8F0',
-                    background: '#F8FAFC',
-                    color: '#64748B',
-                    fontWeight: 750,
-                    fontSize: '13px',
-                    cursor: 'pointer'
-                  }}
-                  onClick={() => setShowGRNModal(false)}
-                >
-                  Cancel
-                </button>
+                {/* Workflow Card Banner */}
+                <div style={{ 
+                  padding: '12px 16px', 
+                  background: 'linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%)', 
+                  border: '1px solid #BAE6FD', 
+                  borderRadius: '12px', 
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  <div style={{ 
+                    width: '32px', 
+                    height: '32px', 
+                    borderRadius: '50%', 
+                    background: '#DBEAFE', 
+                    color: '#2563EB', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    flexShrink: 0 
+                  }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                      <path d="m9 12 2 2 4-4"/>
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#1E40AF', lineHeight: 1.45 }}>
+                    <strong>Admin Authorization Required:</strong> This medicine will be submitted for verification. It becomes active immediately once approved by the Admin.
+                  </div>
+                </div>
 
-                <div style={{ display: 'flex', gap: '12px' }}>
+                {/* Footer Buttons */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '6px', paddingTop: '10px' }}>
                   <button 
                     type="button" 
-                    disabled={grnItems.length === 0}
+                    disabled={isSubmittingMedApproval}
+                    onClick={() => { setShowAddMedicineApprovalModal(false); setTargetVendorForMedicine(null); }}
                     style={{ 
                       padding: '10px 20px', 
                       borderRadius: '10px', 
-                      border: '1.5px solid #BFDBFE', 
-                      background: '#EFF6FF', 
-                      color: '#1D4ED8', 
-                      fontWeight: 800, 
+                      border: '1.5px solid #E2E8F0', 
+                      background: '#F8FAFC', 
+                      color: '#475569', 
+                      fontWeight: 700, 
                       fontSize: '13px', 
-                      cursor: grnItems.length === 0 ? 'not-allowed' : 'pointer',
-                      opacity: grnItems.length === 0 ? 0.6 : 1,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px'
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
                     }}
-                    onClick={(e) => handleSaveGRN(e, 'Draft')}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#0F172A'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.color = '#475569'; }}
                   >
-                    💾 Save as Draft
+                    Cancel
                   </button>
-
                   <button 
                     type="submit" 
-                    disabled={grnItems.length === 0 || (grnFlowType === 'direct' && !grnDirectVendorId)}
+                    disabled={isSubmittingMedApproval}
                     style={{ 
                       padding: '10px 24px', 
                       borderRadius: '10px', 
                       border: 'none', 
-                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', 
+                      background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', 
                       color: '#FFFFFF', 
-                      fontWeight: 850, 
-                      fontSize: '13.5px', 
-                      cursor: (grnItems.length === 0 || (grnFlowType === 'direct' && !grnDirectVendorId)) ? 'not-allowed' : 'pointer',
-                      opacity: (grnItems.length === 0 || (grnFlowType === 'direct' && !grnDirectVendorId)) ? 0.6 : 1,
-                      boxShadow: '0 4px 16px rgba(16, 185, 129, 0.35)',
-                      display: 'inline-flex',
+                      fontWeight: 800, 
+                      fontSize: '13px', 
+                      cursor: isSubmittingMedApproval ? 'not-allowed' : 'pointer', 
+                      opacity: isSubmittingMedApproval ? 0.75 : 1,
+                      display: 'flex',
                       alignItems: 'center',
-                      gap: '8px'
+                      gap: '8px',
+                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+                      transition: 'all 0.15s ease'
                     }}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 6 9 17l-5-5"/>
-                    </svg>
-                    Generate GRN &amp; Update Inventory
+                    {isSubmittingMedApproval ? (
+                      <>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 0.8s linear infinite' }}>
+                          <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3"/>
+                          <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+                        </svg>
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        Submit for Approval
+                      </>
+                    )}
                   </button>
                 </div>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
         );
       })()}
 
+      {/* VENDOR COMPARISON DRAWER */}
+      {compareItemIdx !== null && (() => {
+        const item = poScreenItems[compareItemIdx];
+        const med = medicines.find(m => m.sku === item.sku);
+        if (!med) return null;
+
+        const getVendorPriceForMedicine = (vendor, med) => {
+          const contract = vendor.medicines?.find(m => m.sku === med.sku || m.name.toLowerCase() === med.name.toLowerCase());
+          if (contract) return contract.price;
+          
+          if (med.name.toLowerCase().includes('paracetamol')) {
+            if (vendor.name.includes('Apex')) return 46;
+            if (vendor.name.includes('MediCorp') || vendor.name.includes('MedLife') || vendor.name.includes('City')) return 48;
+            if (vendor.name.includes('SureMed') || vendor.name.includes('Pacific') || vendor.name.includes('Global')) return 50;
+          }
+          if (med.name.toLowerCase().includes('pantoprazole')) {
+            if (vendor.name.includes('Pacific') || vendor.name.includes('Global')) return 89;
+            if (vendor.name.includes('Apex')) return 92;
+            if (vendor.name.includes('SureMed') || vendor.name.includes('MediCorp') || vendor.name.includes('MedLife')) return 95;
+          }
+          
+          const hash = vendor.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          return Math.round((med.price || 40) * (0.85 + (hash % 20) / 100));
+        };
+
+        const getVendorLeadTime = (vendor) => {
+          if (vendor.name.includes('SureMed') || vendor.name.includes('Global')) return '1 day';
+          if (vendor.name.includes('MediCorp') || vendor.name.includes('MedLife') || vendor.name.includes('City')) return '2 days';
+          if (vendor.name.includes('Apex')) return '5 days';
+          if (vendor.name.includes('Pacific')) return '3 days';
+          return '3 days';
+        };
+
+        const options = getDisplayVendors().map(vendor => {
+          const price = getVendorPriceForMedicine(vendor, med);
+          const leadTime = getVendorLeadTime(vendor);
+          return {
+            vendor,
+            price,
+            leadTime,
+            lineTotal: price * item.qty
+          };
+        }).sort((a, b) => a.price - b.price);
+
+        const lowestOpt = options[0];
+        const highestOpt = options[options.length - 1];
+        const savings = (highestOpt.price - lowestOpt.price) * item.qty;
+
+        return (
+          <div className="proc-drawer-backdrop" onClick={() => setCompareItemIdx(null)}>
+            <div className="proc-drawer" onClick={e => e.stopPropagation()}>
+              <div className="proc-drawer-header">
+                <div>
+                  <span className="proc-drawer-title">Vendor Price Comparison</span>
+                  <div className="proc-drawer-subtitle">{med.name} - Required {item.qty} units</div>
+                </div>
+                <button type="button" className="proc-close-btn" style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px', fontWeight: 800 }} onClick={() => setCompareItemIdx(null)}>
+                  <i data-lucide="x"></i>
+                </button>
+              </div>
+
+              <div className="proc-drawer-body">
+                <div className="proc-drawer-stats">
+                  <div className="proc-drawer-detail-item">
+                    <span className="proc-drawer-stat-label">Current Inventory</span>
+                    <span className="proc-drawer-stat-val">{med.stock || 420}</span>
+                  </div>
+                  <div className="proc-drawer-detail-item">
+                    <span className="proc-drawer-stat-label">Avg Monthly Use</span>
+                    <span className="proc-drawer-stat-val">{med.avgMonthlyUse || 1200}</span>
+                  </div>
+                  <div className="proc-drawer-detail-item">
+                    <span className="proc-drawer-stat-label">Last Purchase</span>
+                    <span className="proc-drawer-stat-val">₹{med.price || 48}</span>
+                    <span className="proc-drawer-stat-sub">MediCorp</span>
+                  </div>
+                </div>
+
+                {lowestOpt && (
+                  <div className="proc-rec-banner">
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      <div className="proc-rec-icon">
+                        <i data-lucide="trophy" style={{ width: '20px', height: '20px' }}></i>
+                      </div>
+                      <div>
+                        <div className="proc-rec-title">SYSTEM RECOMMENDATION</div>
+                        <div className="proc-rec-desc">{lowestOpt.vendor.name} · ₹{lowestOpt.price} per unit</div>
+                        {savings > 0 && (
+                          <div className="proc-rec-savings">Potential savings of ₹{savings.toLocaleString()} vs highest offer</div>
+                        )}
+                      </div>
+                    </div>
+                    <button 
+                      className="proc-btn proc-btn-primary" 
+                      style={{ padding: '8px 14px', fontSize: '12px' }}
+                      onClick={() => {
+                        const updated = [...poScreenItems];
+                        const medInVendor = lowestOpt.vendor.medicines?.find(m => m.sku === item.sku);
+                        updated[compareItemIdx] = {
+                          ...updated[compareItemIdx],
+                          vendorId: lowestOpt.vendor._id,
+                          price: lowestOpt.price,
+                          tax: medInVendor && medInVendor.gst !== undefined ? medInVendor.gst : 12
+                        };
+                        setPoScreenItems(updated);
+                        setCompareItemIdx(null);
+                      }}
+                    >
+                      Use Recommendation
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {options.map((opt, oIdx) => {
+                    const isSelected = item.vendorId === opt.vendor._id;
+                    const isLowest = oIdx === 0;
+                    const isFastest = opt.leadTime === '1 day';
+
+                    return (
+                      <div key={opt.vendor._id} className={`proc-vendor-opt-card ${isSelected ? 'selected' : ''}`}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span className="proc-vendor-opt-name">{opt.vendor.name}</span>
+                            {isLowest && (
+                              <span className="proc-badge completed" style={{ fontSize: '9px', padding: '2px 6px' }}>Lowest Price</span>
+                            )}
+                            {isFastest && !isLowest && (
+                              <span className="proc-badge partially-delivered" style={{ fontSize: '9px', padding: '2px 6px' }}>Fastest Delivery</span>
+                            )}
+                          </div>
+                          <div className="proc-vendor-opt-code">{opt.vendor.code || `VND-00${oIdx+1}`} · {opt.vendor.city || 'Mumbai'}</div>
+                          
+                          <div className="proc-vendor-opt-details">
+                            <div className="proc-vendor-opt-detail-item">
+                              <span className="proc-vendor-opt-detail-label">Price</span>
+                              <span className="proc-vendor-opt-detail-val">₹{opt.price}</span>
+                            </div>
+                            <div className="proc-vendor-opt-detail-item">
+                              <span className="proc-vendor-opt-detail-label">Lead Time</span>
+                              <span className="proc-vendor-opt-detail-val">{opt.leadTime}</span>
+                            </div>
+                            <div className="proc-vendor-opt-detail-item">
+                              <span className="proc-vendor-opt-detail-label">Line Total</span>
+                              <span className="proc-vendor-opt-detail-val">₹{opt.lineTotal.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          {isSelected ? (
+                            <button className="proc-btn proc-btn-primary" style={{ padding: '8px 16px', fontSize: '13px', background: '#2563EB', border: 'none', color: '#fff' }} disabled>
+                              Selected
+                            </button>
+                          ) : (
+                            <button 
+                              className="proc-btn proc-btn-secondary" 
+                              style={{ padding: '8px 16px', fontSize: '13px' }}
+                              onClick={() => {
+                                const updated = [...poScreenItems];
+                                const medInVendor = opt.vendor.medicines?.find(m => m.sku === item.sku);
+                                updated[compareItemIdx] = {
+                                  ...updated[compareItemIdx],
+                                  vendorId: opt.vendor._id,
+                                  price: opt.price,
+                                  tax: medInVendor && medInVendor.gst !== undefined ? medInVendor.gst : 12
+                                };
+                                setPoScreenItems(updated);
+                                setCompareItemIdx(null);
+                              }}
+                            >
+                              Select Vendor
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* GRN is now handled inline via GoodsReceiptPage component in the GRN tab */}
       {/* MODAL 4: RECORD PAYMENT */}
       {showPaymentModal && (
         <div className="proc-modal-overlay">
@@ -12191,7 +12437,7 @@ const ProcurementDashboard = () => {
                 <div>
                   <div style={{ fontSize: '18px', fontWeight: 900, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-                    Curoxa Pharmacy
+                    Quroxa Pharmacy
                   </div>
                   <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', fontWeight: 500 }}>
                     102, Medical Enclave, Sector-4<br />
@@ -12550,7 +12796,7 @@ const ProcurementDashboard = () => {
                   type="button" 
                   className="proc-btn" 
                   style={{ background: '#10B981', color: 'white', fontWeight: 800, border: 'none', borderRadius: '6px', cursor: 'pointer', padding: '8px 16px' }}
-                  onClick={() => printGRN(selectedGrnDetails, localStorage.getItem('tenantName') || 'CUROXA HEALTHCARE')}
+                  onClick={() => printGRN(selectedGrnDetails, localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE')}
                 >
                   Download PDF
                 </button>
@@ -12569,7 +12815,7 @@ const ProcurementDashboard = () => {
           columns={vendorExportColumns}
           dateField={null}
           currentFilters={{}}
-          clinicName={localStorage.getItem('tenantName') || 'CUROXA HEALTHCARE'}
+          clinicName={localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE'}
           onClose={() => setShowVendorExportModal(false)}
           onSuccess={(result) => {
             showToast(`Exported ${result.recordCount} vendor(s) to ${result.fileName}!`, 'success');
@@ -12598,7 +12844,7 @@ const ProcurementDashboard = () => {
             currentFilters={{
               search: searchQuery || ''
             }}
-            clinicName={localStorage.getItem('tenantName') || 'CUROXA HEALTHCARE'}
+            clinicName={localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE'}
             onClose={() => setShowGrnExportModal(false)}
             onSuccess={(result) => {
               showToast(`Exported ${result.recordCount} GRN line item(s) to ${result.fileName}!`, 'success');
@@ -12646,7 +12892,7 @@ const ProcurementDashboard = () => {
               statusTab: poFilter,
               search: searchQuery || ''
             }}
-            clinicName={localStorage.getItem('tenantName') || 'CUROXA HEALTHCARE'}
+            clinicName={localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE'}
             onClose={() => setShowPoExportModal(false)}
             onSuccess={(result) => {
               showToast(`Exported ${result.recordCount} Purchase Order line(s) to ${result.fileName}!`, 'success');

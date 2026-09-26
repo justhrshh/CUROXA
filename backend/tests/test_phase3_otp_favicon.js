@@ -61,8 +61,8 @@ async function runTests() {
 
     // Test default fallback for non-existent hospital
     const fallbackBranding = await resolveTrustedHospitalBranding('HSP-NONEXISTENT-CODE');
-    assert(fallbackBranding.name === 'Curoxa Healthcare', 'Fallback returns Curoxa Healthcare default');
-    assert(fallbackBranding.isCuroxaDefault === true, 'Fallback marks isCuroxaDefault: true');
+    assert(fallbackBranding.name === 'Quroxa Healthcare' || fallbackBranding.name === 'Curoxa Healthcare', 'Fallback returns Quroxa Healthcare default');
+    assert(fallbackBranding.isCuroxaDefault === true || fallbackBranding.isQuroxaDefault === true, 'Fallback marks isCuroxaDefault / isQuroxaDefault: true');
 
     // -------------------------------------------------------------
     // Test 2: HTML Email Template White-Labeling

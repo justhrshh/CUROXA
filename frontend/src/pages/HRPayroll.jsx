@@ -15,7 +15,7 @@ import DashboardView from '../components/hr/DashboardView';
 import EmployeeDirectoryView from '../components/hr/EmployeeDirectoryView';
 import EmployeeProfileView from '../components/hr/EmployeeProfileView';
 import AttendanceLeaveView from '../components/hr/AttendanceLeaveView';
-import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import curoxaSidebarLogo from '../assets/quroxa_new_logo.png';
 
 import ReportsView from '../components/hr/ReportsView';
 import HRPayrollStaff from './HRPayrollStaff';
@@ -828,12 +828,12 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
           <div className={`p-4 border-b border-slate-100/80 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-start gap-3.5'} relative transition-all duration-300`}>
             <img 
               src={curoxaSidebarLogo} 
-              alt="CUROXA" 
+              alt="QUROXA" 
               className="w-11 h-11 object-contain shrink-0 drop-shadow-sm transition-all" 
             />
             {!isSidebarCollapsed && (
               <div className="logo-text overflow-hidden whitespace-nowrap transition-opacity duration-200">
-                <h2 className="font-black text-blue-600 text-sm leading-none tracking-tight">CUROXA</h2>
+                <h2 className="font-black text-blue-600 text-sm leading-none tracking-tight">QUROXA</h2>
                 <span className="text-[9px] font-extrabold uppercase tracking-wider block mt-1 text-slate-400">Hospital HR</span>
               </div>
             )}

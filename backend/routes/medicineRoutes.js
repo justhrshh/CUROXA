@@ -15,6 +15,29 @@ const seedDefaultMedicines = async (tenantId) => {
 router.get('/', async (req, res) => {
   try {
     await seedDefaultMedicines(req.tenantId);
+
+    const isPaginationRequested = req.query.page !== undefined || req.query.limit !== undefined || req.query.paginated === 'true';
+    if (isPaginationRequested) {
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.max(1, Math.min(2000, parseInt(req.query.limit, 10) || 50));
+      const skip = (page - 1) * limit;
+
+      const [total, medicines] = await Promise.all([
+        Medicine.countDocuments({ tenantId: req.tenantId }),
+        Medicine.find({ tenantId: req.tenantId }).sort({ createdAt: -1 }).skip(skip).limit(limit)
+      ]);
+
+      return res.json({
+        data: medicines,
+        pagination: {
+          total,
+          page,
+          limit,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    }
+
     const medicines = await Medicine.find({ tenantId: req.tenantId }).sort({ createdAt: -1 });
     res.json(medicines);
   } catch (error) {

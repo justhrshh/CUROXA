@@ -13,7 +13,7 @@ const https = require("https");
 async function sendEmail({ to, subject, text, html, senderName }) {
   const recipients = Array.isArray(to) ? to : [to];
   const results = [];
-  const displayName = (senderName && senderName.trim()) ? senderName.trim() : "Curoxa Healthcare";
+  const displayName = (senderName && senderName.trim()) ? senderName.trim() : "Quroxa Healthcare";
 
   const cleanHtml = (html && typeof html === 'object' && html.html) ? html.html : (typeof html === 'string' ? html : (html ? String(html) : ''));
   const cleanText = (text && typeof text === 'string') ? text : (html && typeof html === 'object' && html.text ? html.text : '');
@@ -28,7 +28,7 @@ async function sendEmail({ to, subject, text, html, senderName }) {
       try {
         const plainText = (cleanText && cleanText.trim())
           ? cleanText.trim()
-          : (cleanHtml ? cleanHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : (subject || "Curoxa Notification"));
+          : (cleanHtml ? cleanHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : (subject || "Quroxa Notification"));
 
         const smtpConfig = {
           host: process.env.SMTP_HOST || "smtp.gmail.com",
@@ -65,7 +65,7 @@ async function sendEmail({ to, subject, text, html, senderName }) {
       try {
         const plainText = (cleanText && cleanText.trim())
           ? cleanText.trim()
-          : (cleanHtml ? cleanHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : (subject || "Curoxa Notification"));
+          : (cleanHtml ? cleanHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : (subject || "Quroxa Notification"));
 
         const senderEmail = process.env.SMTP_USER || "curoxatechnology@gmail.com";
 

@@ -77,7 +77,7 @@ export const clearPortalAuthContext = ({ preservePortal = false } = {}) => {
     localStorage.removeItem('curoxa_active_portal_id');
     // Restore document title and favicon to standard Curoxa platform defaults
     try {
-      document.title = 'Curoxa - Healthcare Dashboard';
+      document.title = 'Quroxa - Healthcare Dashboard';
       const faviconEl = document.getElementById('curoxa-dynamic-favicon') || document.querySelector("link[rel*='icon']");
       if (faviconEl) {
         faviconEl.setAttribute('href', '/curoxa_icon_logo.png');

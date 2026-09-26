@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { performLogout } from '../utils/api';
-import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import quroxaLogo from '../assets/quroxa_new_logo.png';
 import { 
   Stethoscope, 
   Pill, 
@@ -178,8 +178,8 @@ const ModuleUnavailableView = ({ moduleName, moduleKey }) => {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <img 
-            src={curoxaSidebarLogo} 
-            alt="Curoxa" 
+            src={quroxaLogo} 
+            alt="Quroxa" 
             style={{ height: '28px', objectFit: 'contain' }} 
           />
           <div style={{
@@ -241,7 +241,7 @@ const ModuleUnavailableView = ({ moduleName, moduleKey }) => {
 
           <button
             onClick={() => performLogout()}
-            title="Sign out of Curoxa"
+            title="Sign out of Quroxa"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -516,7 +516,7 @@ const ModuleUnavailableView = ({ moduleName, moduleKey }) => {
                 borderRadius: '50%',
                 backgroundColor: '#10B981'
               }} />
-              <span>Curoxa Cloud Shield Active</span>
+              <span>Quroxa Cloud Shield Active</span>
             </div>
             <div style={{ fontFamily: 'monospace', fontSize: '11.5px', color: '#94A3B8' }}>
               tenant: {tenantId}

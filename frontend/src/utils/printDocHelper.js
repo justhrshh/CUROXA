@@ -2,7 +2,7 @@
  * Helper utility to generate and download/print PO and GRN documents as PDF using browser's print engine.
  */
 
-export const printPO = (po, clinicName = 'CUROXA HEALTHCARE') => {
+export const printPO = (po, clinicName = 'QUROXA HEALTHCARE') => {
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.left = '-9999px';
@@ -34,16 +34,22 @@ export const printPO = (po, clinicName = 'CUROXA HEALTHCARE') => {
     const price = item.price || 0;
     const tax = item.tax !== undefined ? item.tax : 12;
     const subtotal = qty * price;
-    const total = item.total || (subtotal + (subtotal * tax) / 100);
+    const discountVal = subtotal * ((Number(item.discount) || 0) / 100);
+    const total = item.total || (subtotal - discountVal + ((subtotal - discountVal) * tax) / 100);
     return `
       <tr>
         <td style="padding: 10px; border-bottom: 1px solid #E2E8F0;">${idx + 1}</td>
         <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-weight: 600;">
-          ${item.name}
+          ${item.name || item.genericName}
+          ${item.brandName ? `<span style="font-size: 11px; background: #EFF6FF; color: #1D4ED8; padding: 1px 6px; border-radius: 4px; margin-left: 4px;">${item.brandName}</span>` : ''}
+          ${item.packSize || (item.converterFactor && item.converterFactor > 1) ? `<div style="font-size: 10.5px; color: #64748B; margin-top: 2px;">📦 Pack: ${item.packSize || `${item.purchasedUnit || 'Unit'} of ${item.converterFactor} ${item.consumptionUnit || 'Units'}`}</div>` : ''}
           ${(isMasterPO && item.vendorName) ? `<div style="font-size: 11px; color: #2563EB; font-weight: 700; margin-top: 2px;">🏢 Supplier: ${item.vendorName}</div>` : ''}
         </td>
-        <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-family: monospace;">${item.sku || '—'}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: center;">${qty}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-family: monospace;">${item.itemCode || item.sku || '—'}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: center;">
+          <div style="font-weight: 700;">${qty} ${item.purchasedUnit ? `${item.purchasedUnit}` : ''}</div>
+          ${item.expectedConsumptionQty && item.expectedConsumptionQty !== qty ? `<div style="font-size: 10px; color: #2563EB;">(${item.expectedConsumptionQty} ${item.consumptionUnit || 'Units'})</div>` : ''}
+        </td>
         <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right;">₹${price.toFixed(2)}</td>
         <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: center; color: #64748B;">${tax}%</td>
         <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-weight: 600;">₹${total.toFixed(2)}</td>
@@ -195,7 +201,7 @@ export const printPO = (po, clinicName = 'CUROXA HEALTHCARE') => {
   printWindow.document.close();
 };
 
-export const printGRN = (grn, clinicName = 'CUROXA HEALTHCARE') => {
+export const printGRN = (grn, clinicName = 'QUROXA HEALTHCARE') => {
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.left = '-9999px';

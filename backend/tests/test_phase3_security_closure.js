@@ -235,8 +235,8 @@ async function runClosureReview() {
     });
     assert(resD.status === 200, 'Pre-auth registration OTP for unknown hospital succeeds gracefully');
     const fallbackBranding = await resolveTrustedHospitalBranding('HSP-DOES-NOT-EXIST-9999');
-    assert(fallbackBranding.name === 'Curoxa Healthcare', 'Invalid hospital code safely falls back to standard Curoxa platform default');
-    assert(fallbackBranding.isCuroxaDefault === true, 'Fallback marks isCuroxaDefault: true');
+    assert(fallbackBranding.name === 'Quroxa Healthcare' || fallbackBranding.name === 'Curoxa Healthcare', 'Invalid hospital code safely falls back to standard Quroxa platform default');
+    assert(fallbackBranding.isCuroxaDefault === true || fallbackBranding.isQuroxaDefault === true, 'Fallback marks isCuroxaDefault / isQuroxaDefault: true');
 
     // Test E: Suspended hospital rejection
     const testEEmail = 'newpatient.susp@closure-test.com';

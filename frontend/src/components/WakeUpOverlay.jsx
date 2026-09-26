@@ -37,7 +37,7 @@ const WakeUpOverlay = ({ visible, message = 'Waking up server…', onTimeout }) 
       alignItems: 'center', justifyContent: 'center',
       color: '#F8FAFC', fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
-      {/* Curoxa logo */}
+      {/* Quroxa logo */}
       <div style={{
         width: 88, height: 88, borderRadius: 22,
         background: '#2563EB',
@@ -49,12 +49,12 @@ const WakeUpOverlay = ({ visible, message = 'Waking up server…', onTimeout }) 
         marginBottom: 24,
         fontFamily: "'Outfit', 'Urbanist', sans-serif"
       }}>
-        C
+        Q
       </div>
 
       <h1 style={{
         fontSize: 28, fontWeight: 900, margin: 0, letterSpacing: '-0.02em'
-      }}>Curoxa</h1>
+      }}>Quroxa</h1>
       <p style={{
         fontSize: 14, fontWeight: 600, color: '#94A3B8',
         marginTop: 8, marginBottom: 32

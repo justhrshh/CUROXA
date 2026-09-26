@@ -1,6 +1,8 @@
 const express = require('express');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const Vendor = require('../models/Vendor');
+const ItemMaster = require('../models/ItemMaster');
+const VendorQuotation = require('../models/VendorQuotation');
 const { verifyToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 
@@ -66,6 +68,29 @@ router.get('/', async (req, res) => {
       if (req.query.isParent !== undefined) filter.isParent = req.query.isParent === 'true';
     }
 
+    // Server-side pagination support (with backwards-compatible array fallback)
+    const isPaginationRequested = req.query.page !== undefined || req.query.limit !== undefined || req.query.paginated === 'true';
+    if (isPaginationRequested) {
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20));
+      const skip = (page - 1) * limit;
+
+      const [total, pos] = await Promise.all([
+        PurchaseOrder.countDocuments(filter),
+        PurchaseOrder.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit)
+      ]);
+
+      return res.json({
+        data: pos,
+        pagination: {
+          total,
+          page,
+          limit,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    }
+
     const pos = await PurchaseOrder.find(filter).sort({ createdAt: -1 });
     res.json(pos);
   } catch (error) {
@@ -125,71 +150,240 @@ router.post('/', async (req, res) => {
 
     for (let idx = 0; idx < items.length; idx++) {
       const it = items[idx];
-      if (!it.name || !it.name.trim()) {
-        return res.status(400).json({ error: `Item name is required for line #${idx + 1}` });
-      }
-      if (!it.sku || !it.sku.trim()) {
-        return res.status(400).json({ error: `SKU is required for item '${it.name}'` });
-      }
-      
       const qty = Number(it.requiredQty || it.qty || 0);
       if (!Number.isFinite(qty) || qty <= 0) {
-        return res.status(400).json({ error: `Quantity must be a positive number for '${it.name}'` });
+        return res.status(400).json({ error: `Quantity must be a positive number for line #${idx + 1}` });
       }
 
-      // Determine vendor
-      let vId = it.vendorId ? it.vendorId.toString() : null;
-      let vObj = vId ? activeVendorMap.get(vId) : null;
+      let itemDoc = null;
+      let quotationDoc = null;
+      let vObj = null;
+      let vId = null;
 
-      if (!vObj) {
-        // Find cheapest active vendor supplying this item if vendorId was not explicitly passed
-        let cheapestVendor = null;
-        let lowestPrice = Infinity;
-        let bestGst = 12;
+      // 1. MODERN PIPELINE: When itemMasterId or quotationId is provided
+      if (it.itemMasterId || it.quotationId) {
+        if (!it.itemMasterId) {
+          return res.status(400).json({ error: `Item Master reference is required for line #${idx + 1}` });
+        }
 
-        for (const v of activeVendors) {
-          const match = (v.medicines || []).find(m => m.sku === it.sku.trim().toUpperCase() && m.available !== false);
-          if (match && Number(match.price) < lowestPrice) {
-            lowestPrice = Number(match.price);
-            bestGst = match.gst !== undefined ? Number(match.gst) : 12;
-            cheapestVendor = v;
+        // Step 1 & 2: Verify Item Master exists (either hospital-scoped or global catalog)
+        itemDoc = await ItemMaster.findOne({
+          _id: it.itemMasterId,
+          $or: [{ tenantId: req.tenantId }, { scope: 'GLOBAL' }]
+        });
+        if (!itemDoc) {
+          return res.status(400).json({ error: `Item Master not found or belongs to another hospital for line #${idx + 1}` });
+        }
+
+        // Step 3: Verify Item Master is Active
+        if (itemDoc.status !== 'Active') {
+          return res.status(400).json({ error: `Item Master '${itemDoc.brandName || itemDoc.genericName}' (${itemDoc.itemCode}) is Inactive and cannot be ordered` });
+        }
+
+        // Step 4 & 5: Verify Vendor Quotation exists and belongs to current tenant
+        if (!it.quotationId) {
+          return res.status(400).json({ error: `Vendor Quotation is required for '${itemDoc.brandName || itemDoc.genericName}'` });
+        }
+
+        quotationDoc = await VendorQuotation.findOne({ _id: it.quotationId, tenantId: req.tenantId });
+        if (!quotationDoc) {
+          return res.status(400).json({ error: `Vendor Quotation not found or belongs to another hospital for line #${idx + 1}` });
+        }
+
+        // Step 6: Verify quotation references the selected Item Master
+        if (quotationDoc.itemMasterId.toString() !== itemDoc._id.toString()) {
+          return res.status(400).json({ error: `Vendor Quotation '${quotationDoc.quotationNo}' does not reference selected Item Master '${itemDoc.itemCode}'` });
+        }
+
+        // Step 7: Verify quotation status (must be Active or Approved)
+        const now = new Date();
+        if (quotationDoc.status !== 'Active' && quotationDoc.status !== 'Approved') {
+          return res.status(400).json({ error: `Vendor Quotation '${quotationDoc.quotationNo}' is not active/approved (status: ${quotationDoc.status})` });
+        }
+        if (quotationDoc.validTill && new Date(quotationDoc.validTill) < now) {
+          return res.status(400).json({ error: `Vendor Quotation '${quotationDoc.quotationNo}' expired on ${new Date(quotationDoc.validTill).toLocaleDateString()}` });
+        }
+        if (quotationDoc.effectiveTo && new Date(quotationDoc.effectiveTo) < now) {
+          return res.status(400).json({ error: `Vendor Quotation '${quotationDoc.quotationNo}' expired on ${new Date(quotationDoc.effectiveTo).toLocaleDateString()}` });
+        }
+        if (quotationDoc.effectiveFrom && new Date(quotationDoc.effectiveFrom) > now) {
+          return res.status(400).json({ error: `Vendor Quotation '${quotationDoc.quotationNo}' is not yet effective` });
+        }
+
+        // Step 8: Verify quotation vendor belongs to current tenant and is Active
+        vId = quotationDoc.vendorId.toString();
+        vObj = activeVendorMap.get(vId);
+        if (!vObj) {
+          return res.status(400).json({ error: `Vendor '${quotationDoc.vendorName}' is inactive or not found for quotation '${quotationDoc.quotationNo}'` });
+        }
+
+        // Step 8b: Verify quotation vendor matches selected vendor (if specified on item or PO)
+        if (it.vendorId && it.vendorId.toString() !== vId) {
+          return res.status(400).json({ error: `Vendor mismatch: Quotation '${quotationDoc.quotationNo}' belongs to vendor '${quotationDoc.vendorName}' but item specified a different vendor` });
+        }
+        if (req.body.vendorId && req.body.vendorId.toString() !== vId) {
+          return res.status(400).json({ error: `Vendor mismatch: Purchase order specifies vendor '${req.body.vendorId}' but quotation belongs to vendor '${quotationDoc.vendorName}'` });
+        }
+
+        // Step 8c: Verify packaging metadata and converterFactor consistency if supplied by client
+        const canonicalConverter = Number(quotationDoc.converterFactor || itemDoc.converterFactor || 1);
+        if (it.converterFactor && Math.abs(Number(it.converterFactor) - canonicalConverter) > 0.001) {
+          return res.status(400).json({ error: `Packaging inconsistency: Converter factor (${it.converterFactor}) does not match authoritative quotation/item master converter factor (${canonicalConverter})` });
+        }
+      } else {
+        // 2. LEGACY FALLBACK: When neither itemMasterId nor quotationId is provided
+        if (!it.name || !it.name.trim()) {
+          return res.status(400).json({ error: `Item name is required for line #${idx + 1}` });
+        }
+        if (!it.sku || !it.sku.trim()) {
+          return res.status(400).json({ error: `SKU is required for item '${it.name}'` });
+        }
+
+        // Attempt to find active ItemMaster by SKU or name (tenant or global catalog)
+        itemDoc = await ItemMaster.findOne({
+          $or: [{ tenantId: req.tenantId }, { scope: 'GLOBAL' }],
+          status: 'Active',
+          $and: [
+            {
+              $or: [
+                { itemCode: it.sku.trim().toUpperCase() },
+                { genericName: { $regex: new RegExp(`^${it.name.trim()}$`, 'i') } }
+              ]
+            }
+          ]
+        });
+
+        if (itemDoc) {
+          const activeQuotation = await VendorQuotation.findOne({
+            tenantId: req.tenantId,
+            itemMasterId: itemDoc._id,
+            status: 'Active',
+            validTill: { $gte: new Date() }
+          }).sort({ netEffectiveRate: 1 });
+
+          if (activeQuotation && activeVendorMap.has(activeQuotation.vendorId.toString())) {
+            quotationDoc = activeQuotation;
+            vObj = activeVendorMap.get(activeQuotation.vendorId.toString());
+            vId = vObj._id.toString();
           }
         }
 
-        if (cheapestVendor) {
-          vObj = cheapestVendor;
-          vId = cheapestVendor._id.toString();
-        } else if (activeVendors.length > 0) {
-          vObj = activeVendors[0];
-          vId = vObj._id.toString();
-        } else {
-          return res.status(400).json({ error: `No Active vendor available to fulfill '${it.name}'` });
+        if (!vObj) {
+          vId = it.vendorId ? it.vendorId.toString() : null;
+          vObj = vId ? activeVendorMap.get(vId) : null;
+        }
+
+        if (!vObj) {
+          // Find vendor supplying this item in legacy medicines
+          let cheapestVendor = null;
+          let lowestPrice = Infinity;
+          for (const v of activeVendors) {
+            const match = (v.medicines || []).find(m => m.sku === it.sku.trim().toUpperCase() && m.available !== false);
+            if (match && Number(match.price) < lowestPrice) {
+              lowestPrice = Number(match.price);
+              cheapestVendor = v;
+            }
+          }
+          if (cheapestVendor) {
+            vObj = cheapestVendor;
+            vId = cheapestVendor._id.toString();
+          } else if (activeVendors.length > 0) {
+            vObj = activeVendors[0];
+            vId = vObj._id.toString();
+          } else {
+            return res.status(400).json({ error: `No Active vendor available to fulfill '${it.name}'` });
+          }
         }
       }
 
-      // Read vendor rate list to verify authoritative price & GST
-      const medRate = (vObj.medicines || []).find(m => m.sku === it.sku.trim().toUpperCase() && m.available !== false);
-      const unitPrice = medRate ? Number(medRate.price) : (Number(it.price) || 0);
-      const taxRate = medRate && medRate.gst !== undefined ? Number(medRate.gst) : (Number(it.tax) || 12);
-      
-      if (unitPrice <= 0) {
-        return res.status(400).json({ error: `Valid positive purchase price not found for '${it.name}' from vendor '${vObj.name}'` });
+      // Step 9: Resolve Authoritative Server-Side Pricing, Taxes, and Packaging Conversion
+      let unitPrice = 0;
+      let discountPercent = 0;
+      let taxRate = 12;
+      let cFactor = 1;
+      let pUnit = 'Unit';
+      let cUnit = 'Unit';
+      let packSize = '';
+      let brandName = '';
+      let manufacturer = '';
+      let itemCode = '';
+      let genericName = '';
+      let itemName = '';
+
+      if (quotationDoc) {
+        unitPrice = Number(quotationDoc.ratePerPurchasedUnit);
+        discountPercent = Number(quotationDoc.discountPercent || 0);
+        taxRate = Number(quotationDoc.gstPercent !== undefined ? quotationDoc.gstPercent : (itemDoc?.defaultGst ?? 12));
+        cFactor = Number(quotationDoc.converterFactor || itemDoc?.converterFactor || 1);
+        pUnit = quotationDoc.purchasedUnit || itemDoc?.purchasedUnit || 'Unit';
+        cUnit = itemDoc?.consumptionUnit || 'Unit';
+        packSize = quotationDoc.packSize || itemDoc?.packSizeDescription || '';
+        brandName = quotationDoc.brandName || itemDoc?.brandName || '';
+        manufacturer = itemDoc?.manufacturer || '';
+        itemCode = quotationDoc.itemCode || itemDoc?.itemCode || '';
+        genericName = quotationDoc.genericName || itemDoc?.genericName || '';
+        itemName = genericName || itemDoc?.genericName || it.name || 'Medicine';
+      } else if (itemDoc) {
+        itemCode = itemDoc.itemCode;
+        genericName = itemDoc.genericName;
+        brandName = itemDoc.brandName;
+        manufacturer = itemDoc.manufacturer || '';
+        pUnit = itemDoc.purchasedUnit || 'Unit';
+        cUnit = itemDoc.consumptionUnit || 'Unit';
+        cFactor = itemDoc.converterFactor || 1;
+        packSize = itemDoc.packSizeDescription || '';
+        itemName = itemDoc.genericName;
+        const medRate = (vObj.medicines || []).find(m => m.sku === itemDoc.itemCode.toUpperCase() && m.available !== false);
+        unitPrice = medRate ? Number(medRate.price) : Number(it.price || 0);
+        taxRate = medRate && medRate.gst !== undefined ? Number(medRate.gst) : (itemDoc.defaultGst || 12);
+      } else {
+        const medRate = (vObj.medicines || []).find(m => m.sku === it.sku.trim().toUpperCase() && m.available !== false);
+        unitPrice = medRate ? Number(medRate.price) : Number(it.price || 0);
+        taxRate = medRate && medRate.gst !== undefined ? Number(medRate.gst) : (Number(it.tax) || 12);
+        itemName = it.name.trim();
+        itemCode = it.sku.trim().toUpperCase();
+        genericName = it.name.trim();
+        pUnit = it.purchasedUnit || 'Unit';
+        cUnit = it.consumptionUnit || 'Unit';
+        cFactor = Number(it.converterFactor) > 0 ? Number(it.converterFactor) : 1;
+        packSize = it.packSize || '';
       }
 
+      if (unitPrice <= 0) {
+        return res.status(400).json({ error: `Valid positive purchase price not found for '${itemName}' from vendor '${vObj.name}'` });
+      }
+
+      // Authoritative calculations (server cannot be tricked by frontend price tampering)
+      const expConsQty = qty * cFactor;
       const lineSubtotal = qty * unitPrice;
-      const lineTax = (lineSubtotal * taxRate) / 100;
-      const lineTotal = lineSubtotal + lineTax;
+      const lineDiscount = lineSubtotal * (discountPercent / 100);
+      const taxableAmount = lineSubtotal - lineDiscount;
+      const lineTax = (taxableAmount * taxRate) / 100;
+      const lineTotal = taxableAmount + lineTax;
 
       grandSubtotal += lineSubtotal;
       grandTaxAmount += lineTax;
       grandTotal += lineTotal;
 
+      // Step 10: Construct validated, canonical PO line item
       const sanitizedLine = {
         itemId: it.itemId || it._id || undefined,
-        name: it.name.trim(),
-        sku: it.sku.trim().toUpperCase(),
+        itemMasterId: itemDoc ? itemDoc._id : undefined,
+        quotationId: quotationDoc ? quotationDoc._id : undefined,
+        itemCode: itemCode || it.sku.trim().toUpperCase(),
+        name: itemName,
+        genericName: genericName || itemName,
+        sku: itemCode || it.sku.trim().toUpperCase(),
+        brandName,
+        manufacturer,
+        purchasedUnit: pUnit,
+        packSize,
+        converterFactor: cFactor,
+        consumptionUnit: cUnit,
         requiredQty: qty,
+        expectedConsumptionQty: expConsQty,
         price: unitPrice,
+        discount: discountPercent,
         tax: taxRate,
         total: Math.round(lineTotal * 100) / 100,
         vendorId: vObj._id,

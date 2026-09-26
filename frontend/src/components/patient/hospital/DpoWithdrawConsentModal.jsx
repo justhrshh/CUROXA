@@ -588,7 +588,7 @@ const DpoWithdrawConsentModal = ({ isOpen, onClose, selectedHospital, onRequestC
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
                     <span style={{ color: '#2563EB', fontWeight: 800 }}>•</span>
                     <div>
-                      <strong>Hospital Tenant Isolation:</strong> This request applies strictly to <em>{hospitalName}</em>. Other hospitals in Curoxa remain unaffected.
+                      <strong>Hospital Tenant Isolation:</strong> This request applies strictly to <em>{hospitalName}</em>. Other hospitals in Quroxa remain unaffected.
                     </div>
                   </div>
 

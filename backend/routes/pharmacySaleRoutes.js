@@ -1,6 +1,7 @@
 const express = require('express');
 const { PharmacySale, PharmacySaleCounter } = require('../models/PharmacySale');
 const Medicine = require('../models/Medicine');
+const MedicineBatch = require('../models/MedicineBatch');
 const Prescription = require('../models/Prescription');
 const Patient = require('../models/Patient');
 const AuditLog = require('../models/AuditLog');
@@ -386,11 +387,19 @@ router.post('/', async (req, res) => {
     } catch (createError) {
       // Rollback stock deduction if creation failed
       if (normalizedSaleType === 'DIRECT') {
-        for (const rollback of successfullyDeducted) {
-          await Medicine.updateOne(
-            { _id: rollback.medicineId, tenantId: req.tenantId },
-            { $inc: { stock: rollback.qty } }
-          );
+        for (const plan of fefoPlans) {
+          for (const alloc of (plan.allocations || [])) {
+            await MedicineBatch.updateOne(
+              { _id: alloc.batchId, tenantId: req.tenantId },
+              { $inc: { availableQuantity: alloc.quantity }, $set: { status: 'Active' } }
+            );
+          }
+          if (plan.medicineDoc?._id) {
+            await Medicine.updateOne(
+              { _id: plan.medicineDoc._id, tenantId: req.tenantId },
+              { $inc: { stock: plan.quantity } }
+            );
+          }
         }
       }
       console.error('Create PharmacySale error:', createError);
@@ -428,6 +437,95 @@ router.post('/', async (req, res) => {
     res.status(201).json(sale);
   } catch (error) {
     console.error('POST /api/pharmacy-sales unexpected error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// POST /api/pharmacy-sales/:id/cancel — Reversal of pharmacy sale & exact stock restoration
+router.post('/:id/cancel', async (req, res) => {
+  try {
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(req.params.id);
+    const query = {
+      tenantId: req.tenantId,
+      ...(isObjectId ? { $or: [{ _id: req.params.id }, { saleId: req.params.id }] } : { saleId: req.params.id })
+    };
+
+    const sale = await PharmacySale.findOne(query);
+    if (!sale) {
+      return res.status(404).json({ error: 'Pharmacy sale not found.' });
+    }
+
+    if (sale.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'Pharmacy sale has already been cancelled.' });
+    }
+
+    // Restore stock if it was directly deducted by this sale
+    if (sale.saleType === 'DIRECT') {
+      for (const item of (sale.items || [])) {
+        const qty = Number(item.quantity) || 0;
+        if (qty <= 0) continue;
+
+        // Restore to batch if batchNumber was saved
+        if (item.batchNumber) {
+          const batches = item.batchNumber.split(',').map(s => s.trim()).filter(Boolean);
+          if (batches.length > 0) {
+            await MedicineBatch.findOneAndUpdate(
+              { tenantId: req.tenantId, sku: item.sku, batchNumber: batches[0] },
+              { $inc: { availableQuantity: qty }, $set: { status: 'Active' } }
+            );
+          }
+        }
+
+        // Restore to aggregate Medicine.stock
+        const medQuery = { tenantId: req.tenantId };
+        if (item.medicineId) {
+          medQuery._id = item.medicineId;
+        } else if (item.sku) {
+          medQuery.sku = item.sku;
+        }
+        const med = await Medicine.findOneAndUpdate(
+          medQuery,
+          { $inc: { stock: qty } },
+          { returnDocument: 'after' }
+        );
+        if (med) {
+          const newStock = med.stock;
+          const status = newStock === 0 ? 'Out of Stock' : (newStock <= 20 ? 'Low Stock' : 'In Stock');
+          await Medicine.updateOne({ _id: med._id }, { $set: { status } });
+        }
+      }
+    }
+
+    sale.status = 'CANCELLED';
+    sale.paymentStatus = 'REFUNDED';
+    await sale.save();
+
+    AuditLog.create({
+      tenantId: req.tenantId,
+      actor: req.user?.staff_id || req.user?.id || 'system',
+      actorName: req.user?.name || 'Pharmacist',
+      actorRole: req.user?.role || 'pharmacy',
+      action: 'pharmacy_sale_cancelled',
+      target: sale._id.toString(),
+      metadata: {
+        saleId: sale.saleId,
+        saleType: sale.saleType,
+        grandTotal: sale.grandTotal,
+        reason: req.body.reason || 'Customer Return / Sale Cancellation'
+      }
+    }).catch(() => {});
+
+    const io = req.app.get('io');
+    if (io && req.tenantId) {
+      io.to(req.tenantId).emit('data_changed', { type: 'pharmacy_sales' });
+      if (sale.saleType === 'DIRECT') {
+        io.to(req.tenantId).emit('data_changed', { type: 'medicines' });
+      }
+    }
+
+    res.json({ message: 'Pharmacy sale cancelled and stock restored successfully.', sale });
+  } catch (error) {
+    console.error('Cancel pharmacy sale error:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });

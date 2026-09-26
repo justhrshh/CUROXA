@@ -293,7 +293,7 @@ export default function GlobalSupportWidget() {
                 <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Platform Help Center</h3>
                 <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span style={{ width: '6px', height: '6px', background: '#10B981', borderRadius: '50%', display: 'inline-block' }}></span>
-                  Curoxa Support Desk Live
+                  Quroxa Support Desk Live
                 </span>
               </div>
             </div>

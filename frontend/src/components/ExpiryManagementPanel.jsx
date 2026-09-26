@@ -1078,7 +1078,7 @@ function ExpiryManagementPanel({ showToast, onStockUpdated }) {
             category: categoryFilter,
             search: searchQuery
           }}
-          clinicName={localStorage.getItem('tenantName') || 'CUROXA HEALTHCARE'}
+          clinicName={localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE'}
           onClose={() => setShowExportModal(false)}
           onSuccess={(result) => {
             if (showToast) showToast(`Exported ${result.recordCount} batch records to ${result.fileName}!`, 'success');

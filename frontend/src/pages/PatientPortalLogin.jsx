@@ -149,7 +149,7 @@ const PatientPortalLogin = () => {
                 src={curoxaLogo} 
                 alt="Quroxa Patient Portal" 
                 className="h-18 sm:h-22 lg:h-[94px] w-auto object-contain drop-shadow-sm" 
-                onError={(e) => { e.target.src = '/curoxa_logo_transparent.png'; }} 
+                onError={(e) => { e.target.src = '/quroxa_new_logo.png'; }} 
               />
               <span className="hidden sm:inline-block text-xs font-bold uppercase tracking-widest text-[#0ea5e9] bg-sky-50 px-2.5 py-1 rounded-full border border-sky-100">
                 Patient Portal
@@ -317,7 +317,7 @@ const PatientPortalLogin = () => {
                   src={curoxaLogo} 
                   alt="Quroxa" 
                   className="h-14 sm:h-16 lg:h-[66px] w-auto object-contain mx-auto" 
-                  onError={(e) => { e.target.src = '/curoxa_logo_transparent.png'; }} 
+                  onError={(e) => { e.target.src = '/quroxa_new_logo.png'; }} 
                 />
               )}
             </div>

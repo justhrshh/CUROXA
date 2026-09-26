@@ -155,9 +155,9 @@ export default function HRPayrollStaff({ onExit }) {
       } catch (err) {
         console.warn('Fallback to local registry for HR portal:', err);
         const mockStaff = [
-          { staff_id: 'EMP-1001', name: 'Dr. Anjali Mehta', role: 'doctor', email: 'anjali@curoxa.com', joined: '12 Jan 2023', dept: 'General Medicine', initials: 'AM', documents: [] },
-          { staff_id: 'EMP-1002', name: 'Roshni Patel', role: 'receptionist', email: 'roshni@curoxa.com', joined: '18 Feb 2023', dept: 'Front desk', initials: 'RP', documents: [] },
-          { staff_id: 'EMP-1003', name: 'Dr. Rajan K', role: 'doctor', email: 'rajan@curoxa.com', joined: '05 Mar 2024', dept: 'Ortho', initials: 'RK', documents: [] },
+          { staff_id: 'EMP-1001', name: 'Dr. Anjali Mehta', role: 'doctor', email: 'anjali@quroxa.com', joined: '12 Jan 2023', dept: 'General Medicine', initials: 'AM', documents: [] },
+          { staff_id: 'EMP-1002', name: 'Roshni Patel', role: 'receptionist', email: 'roshni@quroxa.com', joined: '18 Feb 2023', dept: 'Front desk', initials: 'RP', documents: [] },
+          { staff_id: 'EMP-1003', name: 'Dr. Rajan K', role: 'doctor', email: 'rajan@quroxa.com', joined: '05 Mar 2024', dept: 'Ortho', initials: 'RK', documents: [] },
         ];
         setEmployees(mockStaff);
         if (!selectedEmployee) {
@@ -317,7 +317,7 @@ export default function HRPayrollStaff({ onExit }) {
   const downloadDoc = (doc) => {
     let url = doc.dataUrl;
     if (url === 'dummy') {
-      const blob = new Blob([`Curoxa Document: ${doc.name}\nGenerated on: ${new Date().toLocaleDateString()}`], { type: 'text/plain' });
+      const blob = new Blob([`Quroxa Document: ${doc.name}\nGenerated on: ${new Date().toLocaleDateString()}`], { type: 'text/plain' });
       url = URL.createObjectURL(blob);
     }
     const link = document.createElement('a');
@@ -1348,7 +1348,7 @@ export default function HRPayrollStaff({ onExit }) {
         <div className={`admin-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
           <div className="admin-sidebar-brand">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-            {!isSidebarCollapsed && <span style={{ fontWeight: 800 }}>Curoxa HR</span>}
+            {!isSidebarCollapsed && <span style={{ fontWeight: 800 }}>Quroxa HR</span>}
           </div>
 
           <div style={{ flex: 1, padding: '16px' }} data-lenis-prevent>
@@ -2271,7 +2271,7 @@ export default function HRPayrollStaff({ onExit }) {
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>{currentUser.name}</h3>
-                      <p style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600, margin: '4px 0 0 0' }}>{currentUser.role?.toUpperCase()} • Curoxa Clinic</p>
+                      <p style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600, margin: '4px 0 0 0' }}>{currentUser.role?.toUpperCase()} • Quroxa Clinic</p>
                     </div>
                   </div>
                   <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -2283,7 +2283,7 @@ export default function HRPayrollStaff({ onExit }) {
                       </div>
                       <div>
                         <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Email Address</span>
-                        <p style={{ fontSize: '14px', fontWeight: 700, margin: '4px 0 0 0' }}>{currentUser.email || 'staff@curoxa.com'}</p>
+                        <p style={{ fontSize: '14px', fontWeight: 700, margin: '4px 0 0 0' }}>{currentUser.email || 'staff@quroxa.com'}</p>
                       </div>
                       <div>
                         <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>Staff ID</span>
@@ -4539,8 +4539,8 @@ export default function HRPayrollStaff({ onExit }) {
       {/* Sidebar Navigation */}
       <div className={`hr-sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${mobileSidebarOpen ? 'mobile-open' : ''}`} data-lenis-prevent>
         <div className="hr-sidebar-brand" style={{ position: 'relative', width: '100%' }}>
-          <div className="hr-brand-logo">C</div>
-          {!isSidebarCollapsed && <span>Curoxa HR</span>}
+          <div className="hr-brand-logo">Q</div>
+          {!isSidebarCollapsed && <span>Quroxa HR</span>}
           <button 
             className="sidebar-collapse-toggle desktop-only-flex"
             onClick={(e) => {
@@ -4702,7 +4702,7 @@ export default function HRPayrollStaff({ onExit }) {
             </div>
             <div style={{ textAlign: 'left' }} className="desktop-only">
               <div style={{ fontSize: '13px', fontWeight: 800 }}>{currentUser.name || 'Priya Arora'}</div>
-              <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Curoxa Clinic</div>
+              <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Quroxa Clinic</div>
             </div>
           </div>
         </div>
@@ -4734,7 +4734,7 @@ export default function HRPayrollStaff({ onExit }) {
                   <>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '24px' }}>
                       <h1 style={{ fontSize: '24px', fontWeight: 800 }}>HR Management Dashboard</h1>
-                      <p style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>Overview of Curoxa staff and operations</p>
+                      <p style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>Overview of Quroxa staff and operations</p>
                     </div>
 
                     <div className="hr-admin-stats-grid">
@@ -4897,7 +4897,7 @@ export default function HRPayrollStaff({ onExit }) {
                           <h2>{currentUser.name || 'Staff User'}</h2>
                           <div className="hr-profile-banner-meta">
                             <span>{userRoleDisplay} • {empDept} • {staffId}</span>
-                            <span>Curoxa Clinic • Joined {joinedDate}</span>
+                            <span>Quroxa Clinic • Joined {joinedDate}</span>
                           </div>
                         </div>
                       </div>
@@ -4936,7 +4936,7 @@ export default function HRPayrollStaff({ onExit }) {
                           <div className="hr-manager-contacts">
                             <div className="hr-contact-row">
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#94A3B8' }}><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-                              <span>{selectedEmployee?.reportingManagerName?.includes('Ishita') ? 'ishita.jain@curoxa.health' : 'admin@curoxa.health'}</span>
+                              <span>{selectedEmployee?.reportingManagerName?.includes('Ishita') ? 'ishita.jain@quroxa.health' : 'admin@quroxa.health'}</span>
                             </div>
                             <div className="hr-contact-row">
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#94A3B8' }}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
@@ -5082,7 +5082,7 @@ export default function HRPayrollStaff({ onExit }) {
               <div className="animate-in">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '24px' }}>
                   <h1 style={{ fontSize: '24px', fontWeight: 800 }}>Attendance</h1>
-                  <p style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>Curoxa Clinic</p>
+                  <p style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>Quroxa Clinic</p>
                 </div>
 
                 {/* Month Selector Switcher */}
@@ -5869,7 +5869,7 @@ export default function HRPayrollStaff({ onExit }) {
                   )}
                   <div style={{ textAlign: 'center' }}>
                     <h3 style={{ fontSize: '16px', fontWeight: 800 }}>{selectedEmployee?.name || 'Staff Member'}</h3>
-                    <p style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>{userRoleDisplay} • Curoxa Clinic</p>
+                    <p style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>{userRoleDisplay} • Quroxa Clinic</p>
                   </div>
                   <button className="hr-btn" style={{ width: '100%', justifyContent: 'center' }} onClick={() => showToast('Edit avatar feature coming soon!', 'info')}>Change photo</button>
                 </div>
@@ -5884,7 +5884,7 @@ export default function HRPayrollStaff({ onExit }) {
                     </div>
                     <div>
                       <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Email Address</div>
-                      <div style={{ fontSize: '13.5px', fontWeight: 700, marginTop: '4px' }}>{selectedEmployee?.email || 'staff@curoxa.com'}</div>
+                      <div style={{ fontSize: '13.5px', fontWeight: 700, marginTop: '4px' }}>{selectedEmployee?.email || 'staff@quroxa.com'}</div>
                     </div>
                     <div>
                       <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Staff ID</div>
@@ -6262,9 +6262,9 @@ export default function HRPayrollStaff({ onExit }) {
               {previewDoc.dataUrl === 'dummy' ? (
                 <div style={{ padding: '40px', background: 'white', borderRadius: '12px', border: '1px solid #E2E8F0', width: '100%', maxWidth: '600px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingBottom: '16px', borderBottom: '2px solid #E2E8F0' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>C</div>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>Q</div>
                     <div>
-                      <h4 style={{ fontSize: '15px', fontWeight: 900, margin: 0, color: '#0F172A' }}>Curoxa Clinical Portal</h4>
+                      <h4 style={{ fontSize: '15px', fontWeight: 900, margin: 0, color: '#0F172A' }}>Quroxa Clinical Portal</h4>
                       <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>EMPLOYEE DOCUMENT SYSTEM</span>
                     </div>
                   </div>

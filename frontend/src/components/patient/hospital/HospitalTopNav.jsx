@@ -179,7 +179,7 @@ const HospitalTopNav = ({
                 e.currentTarget.style.background = '#EFF6FF';
                 e.currentTarget.style.borderColor = '#BFDBFE';
               }}
-              title="Switch to another hospital in Curoxa"
+              title="Switch to another hospital in Quroxa"
             >
               <span>Change</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>

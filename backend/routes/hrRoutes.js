@@ -6,6 +6,7 @@ const AttendanceRecord = require("../models/AttendanceRecord");
 const Asset = require("../models/Asset");
 const User = require("../models/User");
 const { verifyToken } = require("../middleware/authMiddleware");
+const { getCanonicalLogoUrl } = require("../config/urls");
 
 // Helper: tenant-specific auto-seeder for leaves, attendance, and assets
 const seedIfNeeded = async (tenantId) => {
@@ -96,9 +97,12 @@ router.post("/notify-leave", async (req, res) => {
   const subject = `${statusEmoji} Leave ${statusLabel} — ${leaveType || "Leave"} (${fromDate} to ${toDate})`;
 
   const htmlBody = `
-    <div style="font-family:'Segoe UI',Roboto,Arial,sans-serif;max-width:520px;margin:0 auto;background:#FFFFFF;border-radius:12px;border:1px solid #E2E8F0;overflow:hidden;">
-      <div style="background:linear-gradient(135deg,#1E293B 0%,#334155 100%);padding:28px 32px;">
-        <h1 style="margin:0;color:white;font-size:20px;font-weight:800;letter-spacing:-0.3px;">Curoxa HR</h1>
+    <div style="font-family:'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Arial,sans-serif;max-width:520px;margin:0 auto;background:#FFFFFF;border-radius:12px;border:1px solid #E2E8F0;overflow:hidden;">
+      <div style="background:linear-gradient(135deg,#1E293B 0%,#334155 100%);padding:28px 32px;text-align:center;">
+        <div style="margin-bottom:12px;">
+          <img src="${getCanonicalLogoUrl()}" alt="Quroxa" width="140" border="0" style="max-height:40px;max-width:160px;width:auto;height:auto;object-fit:contain;display:inline-block;outline:none;text-decoration:none;" />
+        </div>
+        <h1 style="margin:0;color:white;font-size:20px;font-weight:800;letter-spacing:-0.3px;">Quroxa HR</h1>
         <p style="margin:4px 0 0 0;color:#94A3B8;font-size:12px;font-weight:600;">Leave Notification</p>
       </div>
       <div style="padding:28px 32px;">
@@ -119,11 +123,11 @@ router.post("/notify-leave", async (req, res) => {
           </table>
         </div>
         <p style="margin:0;color:#64748B;font-size:12px;line-height:1.5;">
-          This is an automated notification from the Curoxa HR Portal. If you believe this is an error, please contact your HR administrator.
+          This is an automated notification from the Quroxa HR Portal. If you believe this is an error, please contact your HR administrator.
         </p>
       </div>
       <div style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #E2E8F0;text-align:center;">
-        <span style="color:#94A3B8;font-size:11px;font-weight:600;">© ${new Date().getFullYear()} Curoxa — Sunrise Clinic</span>
+        <span style="color:#94A3B8;font-size:11px;font-weight:600;">© ${new Date().getFullYear()} Quroxa Healthcare Systems</span>
       </div>
     </div>
   `;
@@ -134,7 +138,8 @@ router.post("/notify-leave", async (req, res) => {
     const result = await sendEmail({
       to: employeeEmail,
       subject,
-      html: htmlBody
+      html: htmlBody,
+      senderName: 'Quroxa HR'
     });
     if (result.success) {
       console.log(`[HR] Leave ${statusLabel} email sent to ${employeeEmail}`);

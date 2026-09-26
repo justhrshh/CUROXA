@@ -1,6 +1,26 @@
 import ClinicalRichEditor from '../components/ClinicalRichEditor';
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import api from '../utils/api';
+import DOMPurify from 'dompurify';
+import { cleanHtmlText } from '../utils/textHelper';
+import { convertPdfToImage } from '../utils/pdfHelper';
+import { 
+  Stethoscope, 
+  Pill, 
+  FlaskConical, 
+  FileText, 
+  Plus, 
+  Calendar, 
+  Clock, 
+  ChevronDown, 
+  Trash2, 
+  Send, 
+  Building2, 
+  Check,
+  AlertCircle,
+  Upload,
+  Printer
+} from 'lucide-react';
 
 export default function PrescriptionMakerTab({
   selectedPatient,
@@ -34,10 +54,186 @@ export default function PrescriptionMakerTab({
   emergencyBypassActive = false,
   setShowBreakGlassModal,
   toggleEmergencyBypass,
-  printSettings = { template: 'standard', topSpacer: 38, bottomSpacer: 28, fontSize: 100, digitalPreset: 'none' },
+  printSettings = { template: 'standard', topSpacer: 38, bottomSpacer: 28, fontSize: 100, digitalPreset: 'none', letterheadMode: 'hospital' },
   setPrintSettings = () => {},
-  adminTemplates = []
+  adminTemplates = [],
+  hospitalLetterhead = null,
+  doctorCustomLetterhead: propDoctorCustomLetterhead = null,
+  letterheadMode: propLetterheadMode = 'hospital',
+  setLetterheadMode: propSetLetterheadMode,
+  handleDoctorLetterheadUpload: propHandleDoctorLetterheadUpload,
+  handleRemoveDoctorLetterhead: propHandleRemoveDoctorLetterhead,
+  handlePrintPrescription
 }) {
+  // Letterhead controls and popover states
+  const [showLetterheadPopover, setShowLetterheadPopover] = useState(false);
+  const letterheadFileInputRef = useRef(null);
+
+  const doctorStorageKey = `curoxa_doctor_letterhead_${user?.id || user?._id || 'default'}`;
+  const modeStorageKey = `curoxa_doctor_letterhead_mode_${user?.id || user?._id || 'default'}`;
+
+  const [localDoctorLetterhead, setLocalDoctorLetterhead] = useState(() => {
+    try {
+      return localStorage.getItem(doctorStorageKey) || null;
+    } catch {
+      return null;
+    }
+  });
+
+  const activeDoctorLetterhead = propDoctorCustomLetterhead || localDoctorLetterhead;
+  const activeLetterheadMode = printSettings.letterheadMode || propLetterheadMode || 'hospital';
+
+  const selectedTpl = adminTemplates.find(t => t._id === printSettings.template) || adminTemplates.find(t => t.isStandard) || adminTemplates[0];
+  const activeYTop = selectedTpl ? selectedTpl.yTop : (printSettings.topSpacer || 38);
+  const activeYBottom = selectedTpl ? selectedTpl.yBottom : (printSettings.bottomSpacer || 28);
+  const activeXLeft = selectedTpl ? selectedTpl.xLeft : 15;
+  const activeXRight = selectedTpl ? selectedTpl.xRight : 15;
+
+  const optimizeLetterheadImageLocal = (dataUrl, maxWidth = 1240, quality = 0.85) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width;
+        let h = img.height;
+        if (w > maxWidth) {
+          h = Math.round((h * maxWidth) / w);
+          w = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  };
+
+  const internalHandleUpload = async (e) => {
+    if (propHandleDoctorLetterheadUpload) {
+      return propHandleDoctorLetterheadUpload(e);
+    }
+    const file = e.target?.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File size exceeds 10MB limit.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        const rawResult = reader.result;
+        let finalImg = rawResult;
+        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf') || String(rawResult).startsWith('data:application/pdf')) {
+          finalImg = await convertPdfToImage(rawResult);
+        } else {
+          finalImg = await optimizeLetterheadImageLocal(rawResult);
+        }
+        if (finalImg) {
+          try {
+            localStorage.setItem(doctorStorageKey, finalImg);
+            localStorage.setItem(modeStorageKey, 'custom');
+          } catch (storageErr) {
+            console.warn("Storage warning:", storageErr);
+          }
+          setLocalDoctorLetterhead(finalImg);
+          setPrintSettings(prev => ({ ...prev, letterheadMode: 'custom' }));
+        }
+      } catch (err) {
+        console.error("Letterhead processing error:", err);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const internalHandleRemove = () => {
+    if (propHandleRemoveDoctorLetterhead) {
+      return propHandleRemoveDoctorLetterhead();
+    }
+    try {
+      localStorage.removeItem(doctorStorageKey);
+      localStorage.setItem(modeStorageKey, 'hospital');
+    } catch (e) {}
+    setLocalDoctorLetterhead(null);
+    setPrintSettings(prev => ({ ...prev, letterheadMode: 'hospital' }));
+  };
+
+  const internalSetMode = (mode) => {
+    if (propSetLetterheadMode) {
+      propSetLetterheadMode(mode);
+    } else {
+      try {
+        localStorage.setItem(modeStorageKey, mode);
+      } catch (e) {}
+      setPrintSettings(prev => ({ ...prev, letterheadMode: mode }));
+    }
+  };
+
+  const triggerPrintWithSelectedLetterhead = () => {
+    const validMedicines = (medicines || [])
+      .filter(m => m && m.name && m.name.trim() !== '')
+      .map(m => {
+        const days = parseInt(m.duration, 10) || 5;
+        let dailyFreq = 1;
+        const f = (m.freq || m.frequency || 'Once a day').toLowerCase();
+        if (f.includes('twice') || f.includes('bd') || f.includes('2')) dailyFreq = 2;
+        else if (f.includes('thrice') || f.includes('tds') || f.includes('3')) dailyFreq = 3;
+        else if (f.includes('four') || f.includes('qd') || f.includes('4')) dailyFreq = 4;
+        const qty = days * dailyFreq;
+        return {
+          medicine: m.name.trim(),
+          dosage: (m.dose || m.dosage || '500 mg').trim(),
+          duration: (m.duration || '5 Days').trim(),
+          instructions: `${m.freq || m.frequency || 'Once a day'} (${m.timing || 'After Food'})`,
+          quantity: qty
+        };
+      });
+
+    const validLabs = (labs || [])
+      .filter(test => {
+        if (!test) return false;
+        return typeof test === 'string' ? test.trim() !== '' : (test.name && test.name.trim() !== '');
+      })
+      .map(test => typeof test === 'string' ? test.trim() : test.name.trim());
+
+    const cleanDiagnosisText = diagnosisText ? diagnosisText.trim() : '';
+
+    const currentPrintItem = {
+      items: validMedicines,
+      tests: validLabs,
+      diagnosis: cleanDiagnosisText,
+      notes: soap?.plan || soap?.assessment || '',
+      date: new Date().toLocaleDateString('en-IN'),
+      doctor: user?.name || 'Doctor',
+      originalApp: {
+        regNo: activeAppointment?._id 
+          ? activeAppointment._id.substring(0, 8).toUpperCase() 
+          : (activeAppointment?.regNo || 'NEW')
+      },
+      patient: selectedPatient
+    };
+
+    const finalSettings = {
+      ...printSettings,
+      template: printSettings.template,
+      letterheadMode: activeLetterheadMode,
+      doctorCustomLetterhead: activeDoctorLetterhead,
+      topSpacer: activeYTop,
+      bottomSpacer: activeYBottom,
+      xLeft: activeXLeft,
+      xRight: activeXRight,
+      fontSize: printSettings.fontSize || 100
+    };
+
+    if (handlePrintPrescription) {
+      handlePrintPrescription(null, currentPrintItem, finalSettings);
+    } else {
+      window.print();
+    }
+  };
+
   // Sidebar drawer visibility and width states
   const [showAssignLabDrawer, setShowAssignLabDrawer] = useState(false);
   const [labDrawerWidth, setLabDrawerWidth] = useState(480);
@@ -315,9 +511,9 @@ export default function PrescriptionMakerTab({
           <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', fontWeight: 800, color: '#C2410C', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i data-lucide="thermometer" style={{ width: '16px', height: '16px', color: '#C2410C' }}></i> Symptoms
           </h4>
-          {soap.subjective && soap.subjective.trim() !== '' ? (
+          {soap.subjective && cleanHtmlText(soap.subjective).trim() !== '' ? (
             <ul style={{ paddingLeft: '8px', margin: 0, color: '#334155', fontSize: '14px', lineHeight: 1.6, fontWeight: 600, listStyle: 'none' }}>
-              {soap.subjective.split('\n').filter(l => l.trim()).map((line, i) => (
+              {cleanHtmlText(soap.subjective).split('\n').filter(l => l.trim()).map((line, i) => (
                 <li key={i} style={{ marginBottom: '4px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                   <span style={{ color: '#C2410C', fontSize: '8px', marginTop: '7px', flexShrink: 0 }}>●</span>
                   <span>{line.trim()}</span>
@@ -328,7 +524,7 @@ export default function PrescriptionMakerTab({
             <ul style={{ paddingLeft: '8px', margin: 0, color: '#334155', fontSize: '14px', lineHeight: 1.6, fontWeight: 600, listStyle: 'none' }}>
               <li style={{ marginBottom: '4px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                 <span style={{ color: '#C2410C', fontSize: '8px', marginTop: '7px', flexShrink: 0 }}>●</span>
-                <span>{activeAppointment.reason}</span>
+                <span>{cleanHtmlText(activeAppointment.reason)}</span>
               </li>
             </ul>
           ) : (
@@ -448,10 +644,43 @@ export default function PrescriptionMakerTab({
               DATE: {new Date(latestCompletedPrescription.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
             </div>
 
-            {prevAppt?.diagnosis && (
+            {(prevAppt?.diagnosis || latestCompletedPrescription?.soapAssessment || latestCompletedPrescription?.diagnosis) && (
               <div>
-                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 650, display: 'block' }}>Diagnosis</span>
-                <span style={{ fontSize: '13px', color: '#1E293B', fontWeight: 750 }}>{prevAppt.diagnosis}</span>
+                <style>{`
+                  .previous-visit-rich-content ul {
+                    margin: 4px 0;
+                    padding-left: 18px;
+                    list-style-type: disc;
+                  }
+                  .previous-visit-rich-content ol {
+                    margin: 4px 0;
+                    padding-left: 18px;
+                    list-style-type: decimal;
+                  }
+                  .previous-visit-rich-content li {
+                    margin-bottom: 2px;
+                  }
+                  .previous-visit-rich-content strong {
+                    font-weight: 800;
+                  }
+                  .previous-visit-rich-content mark {
+                    background-color: #FEF08A;
+                    padding: 1px 4px;
+                    border-radius: 4px;
+                    color: #854D0E;
+                  }
+                `}</style>
+                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 650, display: 'block', marginBottom: '2px' }}>Diagnosis</span>
+                <div 
+                  className="previous-visit-rich-content"
+                  style={{ fontSize: '13px', color: '#1E293B', fontWeight: 650, lineHeight: 1.5, wordBreak: 'break-word' }}
+                  dangerouslySetInnerHTML={{
+                    __html: DOMPurify.sanitize(prevAppt?.diagnosis || latestCompletedPrescription?.soapAssessment || latestCompletedPrescription?.diagnosis || '', {
+                      ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'u', 'span', 'font', 'mark', 'p', 'div', 'ul', 'ol', 'li', 'br'],
+                      ALLOWED_ATTR: ['style', 'color', 'class']
+                    })
+                  }}
+                />
               </div>
             )}
 
@@ -461,8 +690,8 @@ export default function PrescriptionMakerTab({
                 <div style={{ maxHeight: '80px', overflowY: 'auto', paddingRight: '4px', marginTop: '4px' }}>
                   {latestCompletedPrescription.items.map((item, idx) => (
                     <div key={idx} style={{ fontSize: '12px', color: '#334155', fontWeight: 600, display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                      <span>💊 {item.medicine}</span>
-                      <span style={{ color: '#64748B', fontSize: '11px' }}>{item.dosage}</span>
+                      <span>💊 {item.medicine || item.name}</span>
+                      <span style={{ color: '#64748B', fontSize: '11px' }}>{item.dosage || item.dose}</span>
                     </div>
                   ))}
                 </div>
@@ -484,21 +713,30 @@ export default function PrescriptionMakerTab({
 
             <button
               onClick={() => {
+                const prevDiag = latestCompletedPrescription.soapAssessment || prevAppt?.diagnosis || '';
                 // Set notes/SOAP
                 setSoap(prev => ({
                   ...prev,
                   subjective: latestCompletedPrescription.soapSubjective || latestCompletedPrescription.notes || prev.subjective || '',
                   objective: latestCompletedPrescription.soapObjective || prev.objective || '',
-                  assessment: latestCompletedPrescription.soapAssessment || prev.assessment || '',
+                  assessment: prevDiag || prev.assessment || '',
                   plan: latestCompletedPrescription.soapPlan || prev.plan || ''
                 }));
+                if (prevDiag) {
+                  setDiagnosisText(prevDiag);
+                }
                 // Set medicines
                 if (latestCompletedPrescription.items && latestCompletedPrescription.items.length > 0) {
                   setMedicines(latestCompletedPrescription.items.map(item => ({
-                    medicine: item.medicine,
-                    dosage: item.dosage,
-                    instructions: item.instructions,
-                    duration: item.duration
+                    id: Math.random().toString(),
+                    name: item.medicine || item.name || '',
+                    medicine: item.medicine || item.name || '',
+                    dose: item.dosage || item.dose || '500 mg',
+                    dosage: item.dosage || item.dose || '500 mg',
+                    freq: item.instructions || item.freq || 'Twice a Day',
+                    instructions: item.instructions || item.freq || 'Twice a Day',
+                    duration: item.duration || '5 Days',
+                    timing: item.timing || 'After Food'
                   })));
                 }
                 setLabToast({ type: 'success', message: 'Previous prescription template loaded!' });
@@ -635,29 +873,63 @@ export default function PrescriptionMakerTab({
           )}
         
         {/* Main Prescription Card */}
-        <div style={{ border: '1px solid #E2E8F0', borderRadius: '16px', padding: '16px', background: '#ffffff', boxShadow: '0 1.5px 4px rgba(0,0,0,0.03)' }}>
+        <div style={{ border: '1px solid #E2E8F0', borderRadius: '20px', padding: '24px', background: '#ffffff', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)' }}>
           
           {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <i data-lucide="file-text" style={{ width: '20px', height: '20px', color: '#1E293B' }}></i> Prescription
-            </h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '14px', paddingBottom: '18px', borderBottom: '1px solid #F1F5F9' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '38px', height: '38px', borderRadius: '10px',
+                background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+                border: '1px solid #BFDBFE',
+                color: '#2563EB',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 2px 6px rgba(37, 99, 235, 0.12)'
+              }}>
+                <i data-lucide="file-text" style={{ width: '20px', height: '20px' }}></i>
+              </div>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  Prescription
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#059669', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }}></span> Active Rx
+                  </span>
+                </h2>
+                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B', fontWeight: 500 }}>
+                  Clinical consultation & digital prescription sheet
+                </p>
+              </div>
+            </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              {/* Custom Live Template Popover Dropdown */}
+              {/* Single Unified Print Layout & Letterhead Popover Dropdown */}
               <div style={{ position: 'relative' }}>
                 <button
+                  type="button"
                   onClick={() => setShowLayoutPopover(!showLayoutPopover)}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: '8px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: 800, color: '#800020', transition: 'all 0.2s ease', outline: 'none'
+                    display: 'flex', alignItems: 'center', gap: '8px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', fontSize: '12.5px', fontWeight: 800, color: '#800020', transition: 'all 0.2s ease', outline: 'none', boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
                   }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#F8FAFC'}
                 >
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>Print Layout:</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Print Layout:</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     {(() => {
                       const selectedTpl = adminTemplates.find(t => t._id === printSettings.template) || adminTemplates.find(t => t.isStandard) || adminTemplates[0];
                       return selectedTpl ? `📋 ${selectedTpl.name}` : '📋 Default Template';
                     })()}
+                    <span style={{
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      padding: '2px 7px',
+                      borderRadius: '12px',
+                      background: activeLetterheadMode === 'custom' ? '#EFF6FF' : activeLetterheadMode === 'none' ? '#F1F5F9' : '#ECFDF5',
+                      color: activeLetterheadMode === 'custom' ? '#2563EB' : activeLetterheadMode === 'none' ? '#475569' : '#059669',
+                      border: `1px solid ${activeLetterheadMode === 'custom' ? '#BFDBFE' : activeLetterheadMode === 'none' ? '#CBD5E1' : '#A7F3D0'}`
+                    }}>
+                      {activeLetterheadMode === 'custom' ? '🩺 Custom' : activeLetterheadMode === 'none' ? '🚫 No Letterhead' : '🏥 Hospital'}
+                    </span>
                   </span>
                   <span style={{ fontSize: '10px', color: '#64748B' }}>▼</span>
                 </button>
@@ -670,76 +942,377 @@ export default function PrescriptionMakerTab({
                       style={{ position: 'fixed', inset: 0, zIndex: 99 }}
                     />
                     <div style={{
-                      position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: '340px', background: '#FFFFFF', borderRadius: '16px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)', border: '1px solid #E2E8F0', padding: '12px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '8px'
+                      position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: '380px', maxHeight: '85vh', overflowY: 'auto', background: '#FFFFFF', borderRadius: '16px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)', border: '1px solid #E2E8F0', padding: '16px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '14px'
                     }}>
-                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', paddingBottom: '6px', borderBottom: '1px solid #F1F5F9', marginBottom: '4px' }}>
-                        Select Print Template Design
+                      {/* Hidden file input for uploading doctor letterhead */}
+                      <input 
+                        type="file" 
+                        ref={letterheadFileInputRef} 
+                        accept="image/*,application/pdf" 
+                        style={{ display: 'none' }} 
+                        onChange={internalHandleUpload} 
+                      />
+
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '8px', borderBottom: '1px solid #F1F5F9' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 900, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Print Layout & Letterhead
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 500, marginTop: '1px' }}>
+                            Choose letterhead background & safe area margins
+                          </div>
+                        </div>
+                        <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 7px', borderRadius: '4px', background: '#EFF6FF', color: '#2563EB' }}>
+                          A4 Print
+                        </span>
                       </div>
-                      
-                      {adminTemplates && adminTemplates.length > 0 ? (
-                        adminTemplates.map(tpl => {
-                          const isSelected = printSettings.template === tpl._id || (printSettings.template === 'standard' && tpl.isStandard);
-                          return (
-                            <div 
-                              key={tpl._id}
-                              onClick={() => {
-                                setPrintSettings(prev => ({ ...prev, template: tpl._id }));
-                                setShowLayoutPopover(false);
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '10px',
-                                padding: '10px',
-                                borderRadius: '12px',
-                                border: isSelected ? '2px solid #800020' : '1px solid #E2E8F0',
-                                background: isSelected ? '#FFF5F6' : '#FFFFFF',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease'
-                              }}
-                            >
-                              <div style={{
-                                width: '32px',
-                                height: '32px',
-                                borderRadius: '6px',
-                                background: isSelected ? '#FCE7F3' : '#F1F5F9',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                border: isSelected ? '1px solid #FDA4AF' : '1px solid #E2E8F0',
-                                flexShrink: 0
-                              }}>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isSelected ? '#800020' : '#64748B'} strokeWidth="2.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+
+                      {/* SECTION 1: LETTERHEAD SOURCE & UPLOAD */}
+                      <div>
+                        <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '8px' }}>
+                          1. Select Letterhead Background
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {/* Option 1: Hospital Letterhead (Default) */}
+                          <div 
+                            onClick={() => internalSetMode('hospital')}
+                            style={{
+                              border: activeLetterheadMode === 'hospital' ? '2px solid #059669' : '1px solid #E2E8F0',
+                              background: activeLetterheadMode === 'hospital' ? '#F0FDF4' : '#FFFFFF',
+                              borderRadius: '12px',
+                              padding: '10px 12px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: '#ECFDF5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <Building2 style={{ width: '15px', height: '15px', color: '#059669' }} />
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    Hospital Letterhead
+                                    <span style={{ fontSize: '9px', fontWeight: 800, background: '#D1FAE5', color: '#065F46', padding: '1px 5px', borderRadius: '4px' }}>Default</span>
+                                  </div>
+                                  <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 500 }}>
+                                    {hospitalLetterhead ? 'Official hospital letterhead from Admin' : 'Standard header with Admin safe margins'}
+                                  </div>
+                                </div>
                               </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontWeight: 850, fontSize: '12px', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tpl.name}</span>
-                                  {tpl.isStandard && (
-                                    <span style={{ background: '#D1FAE5', color: '#065F46', fontSize: '8px', fontWeight: 800, padding: '0.5px 3.5px', borderRadius: '3px', flexShrink: 0 }}>Std</span>
+                              <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: activeLetterheadMode === 'hospital' ? '5px solid #059669' : '2px solid #CBD5E1', boxSizing: 'border-box' }} />
+                            </div>
+                            {hospitalLetterhead && (
+                              <div style={{ marginTop: '2px', padding: '4px', background: '#FFFFFF', borderRadius: '6px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <img src={hospitalLetterhead} alt="Hospital Letterhead Preview" style={{ width: '48px', height: '26px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #CBD5E1' }} />
+                                <span style={{ fontSize: '10px', color: '#059669', fontWeight: 700 }}>Hospital letterhead configured in Admin</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Option 2: Doctor Custom Letterhead */}
+                          <div 
+                            onClick={() => internalSetMode('custom')}
+                            style={{
+                              border: activeLetterheadMode === 'custom' ? '2px solid #2563EB' : '1px solid #E2E8F0',
+                              background: activeLetterheadMode === 'custom' ? '#EFF6FF' : '#FFFFFF',
+                              borderRadius: '12px',
+                              padding: '10px 12px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: '#DBEAFE', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <Stethoscope style={{ width: '15px', height: '15px', color: '#2563EB' }} />
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    Doctor Custom Letterhead
+                                    {activeDoctorLetterhead && (
+                                      <span style={{ fontSize: '9px', fontWeight: 800, background: '#BFDBFE', color: '#1E40AF', padding: '1px 5px', borderRadius: '4px' }}>Active</span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 500 }}>
+                                    {activeDoctorLetterhead ? 'Personal letterhead active on prints' : 'Upload your personal letterhead (PDF / Image)'}
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: activeLetterheadMode === 'custom' ? '5px solid #2563EB' : '2px solid #CBD5E1', boxSizing: 'border-box' }} />
+                            </div>
+
+                            {/* Upload Button or Thumbnail Actions */}
+                            {activeDoctorLetterhead ? (
+                              <div style={{ background: '#FFFFFF', borderRadius: '8px', border: '1px solid #BFDBFE', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                  <img src={activeDoctorLetterhead} alt="Custom Letterhead" style={{ width: '50px', height: '28px', objectFit: 'contain', borderRadius: '4px', border: '1px solid #CBD5E1', background: '#F8FAFC' }} />
+                                  <span style={{ fontSize: '10.5px', color: '#1E293B', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Custom File Active</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      letterheadFileInputRef.current?.click();
+                                    }}
+                                    style={{
+                                      padding: '4px 8px', borderRadius: '6px', background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#2563EB', fontSize: '10.5px', fontWeight: 700, cursor: 'pointer'
+                                    }}
+                                  >
+                                    Change
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      internalHandleRemove();
+                                    }}
+                                    style={{
+                                      padding: '4px 8px', borderRadius: '6px', background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: '10.5px', fontWeight: 700, cursor: 'pointer'
+                                    }}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  letterheadFileInputRef.current?.click();
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px',
+                                  borderRadius: '8px',
+                                  border: '1.5px dashed #93C5FD',
+                                  background: '#FFFFFF',
+                                  color: '#2563EB',
+                                  fontSize: '11.5px',
+                                  fontWeight: 700,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '6px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Upload style={{ width: '13px', height: '13px' }} />
+                                Upload Letterhead (PDF / PNG / JPG)
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Option 3: No Letterhead (Pre-printed Paper) */}
+                          <div 
+                            onClick={() => internalSetMode('none')}
+                            style={{
+                              border: activeLetterheadMode === 'none' ? '2px solid #475569' : '1px solid #E2E8F0',
+                              background: activeLetterheadMode === 'none' ? '#F8FAFC' : '#FFFFFF',
+                              borderRadius: '12px',
+                              padding: '10px 12px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '4px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: '#F1F5F9', border: '1px solid #CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <Printer style={{ width: '15px', height: '15px', color: '#475569' }} />
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    No Letterhead Graphic
+                                    <span style={{ fontSize: '9px', fontWeight: 800, background: '#E2E8F0', color: '#475569', padding: '1px 5px', borderRadius: '4px' }}>Physical Paper</span>
+                                  </div>
+                                  <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 500 }}>
+                                    For pre-printed stationary or blank paper. Background is empty.
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: activeLetterheadMode === 'none' ? '5px solid #475569' : '2px solid #CBD5E1', boxSizing: 'border-box' }} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* SECTION 2: PRINT TEMPLATE DESIGN */}
+                      <div>
+                        <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '8px' }}>
+                          2. Print Layout Template
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {adminTemplates && adminTemplates.length > 0 ? (
+                            adminTemplates.map(tpl => {
+                              const isSelected = printSettings.template === tpl._id || (printSettings.template === 'standard' && tpl.isStandard);
+                              return (
+                                <div 
+                                  key={tpl._id}
+                                  onClick={() => {
+                                    setPrintSettings(prev => ({ ...prev, template: tpl._id }));
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px',
+                                    padding: '8px 10px',
+                                    borderRadius: '10px',
+                                    border: isSelected ? '2px solid #800020' : '1px solid #E2E8F0',
+                                    background: isSelected ? '#FFF5F6' : '#FFFFFF',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease'
+                                  }}
+                                >
+                                  <div style={{
+                                    width: '28px',
+                                    height: '28px',
+                                    borderRadius: '6px',
+                                    background: isSelected ? '#FCE7F3' : '#F1F5F9',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    border: isSelected ? '1px solid #FDA4AF' : '1px solid #E2E8F0',
+                                    flexShrink: 0
+                                  }}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={isSelected ? '#800020' : '#64748B'} strokeWidth="2.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 800, fontSize: '11.5px', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tpl.name}</span>
+                                      {tpl.isStandard && (
+                                        <span style={{ background: '#D1FAE5', color: '#065F46', fontSize: '8px', fontWeight: 800, padding: '0.5px 3.5px', borderRadius: '3px', flexShrink: 0 }}>Std</span>
+                                      )}
+                                    </div>
+                                    <div style={{ fontSize: '9.5px', color: '#64748B', marginTop: '1px', fontWeight: 500 }}>
+                                      L:{tpl.xLeft} | R:{tpl.xRight} | T:{tpl.yTop} | B:{tpl.yBottom} (mm)
+                                    </div>
+                                  </div>
+                                  {isSelected && (
+                                    <span style={{ color: '#800020', fontWeight: 900, fontSize: '11px' }}>✓</span>
                                   )}
                                 </div>
-                                <div style={{ fontSize: '9.5px', color: '#64748B', marginTop: '1px', fontWeight: 500 }}>
-                                  L:{tpl.xLeft} | R:{tpl.xRight} | T:{tpl.yTop} | B:{tpl.yBottom} (mm)
-                                </div>
-                              </div>
-                              {isSelected && (
-                                <span style={{ color: '#800020', fontWeight: 900, fontSize: '11px' }}>✓</span>
-                              )}
+                              );
+                            })
+                          ) : (
+                            <div style={{ padding: '8px', textAlign: 'center', fontSize: '11px', color: '#64748B', fontWeight: 600, background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                              Default layout active. Admin templates available.
                             </div>
-                          );
-                        })
-                      ) : (
-                        <div style={{ padding: '12px', textAlign: 'center', fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
-                          No templates configured. Default layout active.
+                          )}
                         </div>
-                      )}
+                      </div>
+
+                      {/* SECTION 3: ADMIN SAFE MARGINS NOTICE */}
+                      <div style={{
+                        background: '#F8FAFC',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '10px',
+                        padding: '9px 10px',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '8px'
+                      }}>
+                        <span style={{ fontSize: '13px' }}>🔒</span>
+                        <div style={{ fontSize: '10.5px', color: '#475569', lineHeight: 1.4 }}>
+                          <span style={{ fontWeight: 800, color: '#0F172A' }}>Admin Safe Margins Kept: </span>
+                          <span>Top: <b>{activeYTop}mm</b> | Bottom: <b>{activeYBottom}mm</b> | Left: <b>{activeXLeft}mm</b> | Right: <b>{activeXRight}mm</b>. Preserved exactly across Hospital, Custom, and No Letterhead.</span>
+                        </div>
+                      </div>
+
+                      {/* SECTION 4: DIRECT PRINT ACTION */}
+                      <div style={{ marginTop: '2px', paddingTop: '10px', borderTop: '1px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowLayoutPopover(false);
+                            triggerPrintWithSelectedLetterhead();
+                          }}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            background: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 60%, #3B82F6 100%)',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '10px',
+                            padding: '11px 16px',
+                            fontSize: '13px',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            boxShadow: '0 3px 10px rgba(37, 99, 235, 0.25)',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                          onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                        >
+                          <Printer style={{ width: '15px', height: '15px' }} />
+                          <span>Print Prescription ({activeLetterheadMode === 'custom' ? 'Doctor Custom' : activeLetterheadMode === 'none' ? 'No Letterhead' : 'Hospital Letterhead'})</span>
+                        </button>
+                        <div style={{ textAlign: 'center', fontSize: '10px', color: '#64748B', fontWeight: 600 }}>
+                          Prints with exact {activeYTop}mm top safe margin applied
+                        </div>
+                      </div>
+
                     </div>
                   </>
                 )}
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button 
+            </div>
+          </div>
+
+          {/* Diagnosis Section */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '26px', height: '26px', borderRadius: '7px', background: '#FFFBEB', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Stethoscope style={{ width: '14px', height: '14px', color: '#D97706' }} />
+                </div>
+                <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#0F172A', letterSpacing: '0.05em' }}>DIAGNOSIS</span>
+                <span style={{ fontSize: '10px', fontWeight: 800, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FECACA', padding: '2px 7px', borderRadius: '12px', letterSpacing: '0.03em' }}>Required</span>
+              </div>
+            </div>
+            <ClinicalRichEditor
+              value={diagnosisText}
+              onChange={val => {
+                setDiagnosisText(val);
+                setSoap(prev => ({ ...prev, assessment: val }));
+              }}
+              placeholder="Enter Patient Diagnosis (use toolbar for bold, italic, highlight, and bullet points)..."
+              borderColor="#E2E8F0"
+              focusBorderColor="#D97706"
+              accentColor="#D97706"
+              minHeight="72px"
+            />
+          </div>
+
+          {/* Medications Section */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '26px', height: '26px', borderRadius: '7px', background: '#ECFDF5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Pill style={{ width: '14px', height: '14px', color: '#059669' }} />
+                </div>
+                <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#0F172A', letterSpacing: '0.05em' }}>MEDICATIONS</span>
+                <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#059669', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '12px' }}>
+                  {medicines.filter(m => m.name && m.name.trim() !== '').length} Prescribed
+                </span>
+              </div>
+              {medicines.filter(m => m.name && m.name.trim() !== '').length > 0 && (
+                <button
                   onClick={() => {
                     setDrawerMedName('');
                     setDrawerMedDose('');
@@ -749,48 +1322,15 @@ export default function PrescriptionMakerTab({
                     setMedSearchQuery('');
                     setShowMedicationDrawer(true);
                   }}
-                  style={{ border: '1px solid #D1FAE5', background: '#ECFDF5', color: '#059669', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', transition: '0.2s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#D1FAE5'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#ECFDF5'}
+                  style={{ border: '1px solid #A7F3D0', background: '#ECFDF5', color: '#059669', fontSize: '11.5px', fontWeight: 700, padding: '5px 10px', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                 >
-                  <span style={{ fontSize: '14px', fontWeight: 'bold' }}>+</span> Add Medication
+                  <Plus style={{ width: '13px', height: '13px' }} /> Add Medicine
                 </button>
-
-                <button 
-                  onClick={() => setShowAssignLabDrawer(true)}
-                  style={{ border: '1px solid #DBEAFE', background: '#EFF6FF', color: '#2563EB', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', transition: '0.2s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#DBEAFE'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#EFF6FF'}
-                >
-                  <span style={{ fontSize: '14px', fontWeight: 'bold' }}>+</span> Assign Lab test
-                </button>
-              </div>
+              )}
             </div>
-          </div>
-
-          {/* Diagnosis Section */}
-          <div style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#D97706', letterSpacing: '0.05em', marginBottom: '8px' }}>DIAGNOSIS (REQUIRED)</label>
-            <ClinicalRichEditor
-              value={diagnosisText}
-              onChange={val => {
-                setDiagnosisText(val);
-                setSoap(prev => ({ ...prev, assessment: val }));
-              }}
-              placeholder="Enter Patient Diagnosis (use toolbar for bold, italic, highlight, and bullet points)..."
-              borderColor="#CBD5E1"
-              focusBorderColor="#D97706"
-              accentColor="#D97706"
-              minHeight="70px"
-            />
-          </div>
-
-          {/* Medications Section */}
-          <div style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#64748B', letterSpacing: '0.05em', marginBottom: '12px' }}>MEDICATIONS</label>
             
             {medicines && medicines.filter(m => m.name && m.name.trim() !== '').length > 0 ? (
-              <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', overflowX: activeMedFocus ? 'visible' : 'auto', minHeight: activeMedFocus ? '320px' : 'auto' }}>
+              <div style={{ border: '1px solid #E2E8F0', borderRadius: '14px', overflowX: activeMedFocus ? 'visible' : 'auto', minHeight: activeMedFocus ? '320px' : 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                 <table style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
@@ -808,7 +1348,7 @@ export default function PrescriptionMakerTab({
                       const filteredList = medicines.filter(m => m.name && m.name.trim() !== '');
                       return (
                         <tr key={med.id || idx} style={{ borderBottom: idx === filteredList.length - 1 ? 'none' : '1px solid #E2E8F0' }}>
-                          <td style={{ padding: '8px 6px', fontSize: '13.5px', fontWeight: 700, color: '#64748B' }}>{idx + 1}</td>
+                          <td style={{ padding: '8px 6px', fontSize: '13px', fontWeight: 700, color: '#64748B' }}>{idx + 1}</td>
                           <td style={{ padding: '8px 6px', position: 'relative', zIndex: activeMedFocus === med.id ? 99 : 1 }}>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                               <input 
@@ -920,7 +1460,7 @@ export default function PrescriptionMakerTab({
                                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                       >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, pointerEvents: 'none' }}>
-                                          <i data-lucide="pill" style={{ width: '14px', height: '14px', color: '#64748B', flexShrink: 0 }}></i>
+                                          <Pill style={{ width: '14px', height: '14px', color: '#64748B', flexShrink: 0 }} />
                                           <span style={{ fontWeight: 700, color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{mName}</span>
                                           {dbMatch?.category && (
                                             <span style={{ fontSize: '9px', fontWeight: 700, color: '#64748B', background: '#F1F5F9', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>{dbMatch.category}</span>
@@ -952,7 +1492,7 @@ export default function PrescriptionMakerTab({
                                 padding: '8px 24px 8px 8px', 
                                 borderRadius: '8px', 
                                 border: '1px solid #E2E8F0', 
-                                fontSize: '13.5px', 
+                                fontSize: '13px', 
                                 fontWeight: 600, 
                                 color: '#1E293B', 
                                 outline: 'none', 
@@ -986,7 +1526,7 @@ export default function PrescriptionMakerTab({
                                 padding: '8px 24px 8px 8px', 
                                 borderRadius: '8px', 
                                 border: '1px solid #E2E8F0', 
-                                fontSize: '13.5px', 
+                                fontSize: '13px', 
                                 fontWeight: 600, 
                                 color: '#1E293B', 
                                 outline: 'none', 
@@ -1018,7 +1558,7 @@ export default function PrescriptionMakerTab({
                                 padding: '8px 24px 8px 8px', 
                                 borderRadius: '8px', 
                                 border: '1px solid #E2E8F0', 
-                                fontSize: '13.5px', 
+                                fontSize: '13px', 
                                 fontWeight: 600, 
                                 color: '#1E293B', 
                                 outline: 'none', 
@@ -1049,7 +1589,7 @@ export default function PrescriptionMakerTab({
                                 padding: '8px 24px 8px 8px', 
                                 borderRadius: '8px', 
                                 border: '1px solid #E2E8F0', 
-                                fontSize: '13.5px', 
+                                fontSize: '13px', 
                                 fontWeight: 600, 
                                 color: '#1E293B', 
                                 outline: 'none', 
@@ -1072,9 +1612,12 @@ export default function PrescriptionMakerTab({
                           <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                             <button 
                               onClick={() => removeMedicineRow(med.id)} 
-                              style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', padding: '4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', padding: '6px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#FEE2E2'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                              title="Remove medicine"
                             >
-                              <i data-lucide="trash-2" style={{ width: '15px', height: '15px', color: '#EF4444' }}></i>
+                              <Trash2 style={{ width: '15px', height: '15px' }} />
                             </button>
                           </td>
                         </tr>
@@ -1082,7 +1625,7 @@ export default function PrescriptionMakerTab({
                     })}
                     
                     <tr>
-                      <td colSpan="7" style={{ padding: '16px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}>
+                      <td colSpan="7" style={{ padding: '12px 16px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}>
                         <button 
                           onClick={() => {
                             setDrawerMedName('');
@@ -1093,9 +1636,11 @@ export default function PrescriptionMakerTab({
                             setMedSearchQuery('');
                             setShowMedicationDrawer(true);
                           }} 
-                          style={{ border: 'none', background: 'none', color: '#2563EB', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: 0 }}
+                          style={{ border: '1px dashed #A7F3D0', background: '#ECFDF5', color: '#059669', fontSize: '12.5px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '7px 14px', borderRadius: '8px', transition: 'all 0.15s ease' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#D1FAE5'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#ECFDF5'}
                         >
-                          <span style={{ fontSize: '16px', color: '#2563EB', fontWeight: 'bold', marginRight: '4px' }}>+</span> Add Medicine
+                          <Plus style={{ width: '14px', height: '14px' }} /> Add Another Medicine
                         </button>
                       </td>
                     </tr>
@@ -1103,9 +1648,12 @@ export default function PrescriptionMakerTab({
                 </table>
               </div>
             ) : (
-              <div style={{ padding: '24px', textAlign: 'center', background: '#F8FAFC', borderRadius: '12px', border: '1.5px dashed #E2E8F0' }}>
-                <p style={{ margin: 0, fontSize: '13.5px', color: '#64748B', fontWeight: 600 }}>No medications added yet.</p>
-                <p style={{ margin: '4px 0 16px 0', fontSize: '11px', color: '#94A3B8' }}>Please prescribe medicines from the sidebar drawer.</p>
+              <div style={{ padding: '36px 20px', textAlign: 'center', background: 'linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%)', borderRadius: '16px', border: '1.5px dashed #CBD5E1' }}>
+                <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#ECFDF5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.12)' }}>
+                  <Pill style={{ width: '24px', height: '24px', color: '#059669' }} />
+                </div>
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#1E293B' }}>No medications added yet</h4>
+                <p style={{ margin: '4px 0 16px 0', fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Search hospital pharmacy inventory or prescribe clinical medications.</p>
                 <button 
                   onClick={() => {
                     setDrawerMedName('');
@@ -1116,70 +1664,130 @@ export default function PrescriptionMakerTab({
                     setMedSearchQuery('');
                     setShowMedicationDrawer(true);
                   }}
-                  style={{ border: 'none', background: '#10B981', color: 'white', fontSize: '13px', fontWeight: 700, padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  style={{ border: 'none', background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)', color: '#ffffff', fontSize: '13px', fontWeight: 700, padding: '9px 20px', borderRadius: '10px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '7px', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)', transition: 'all 0.15s ease' }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                 >
-                  <span style={{ fontSize: '14px', fontWeight: 'bold' }}>+</span> Add Medication
+                  <Plus style={{ width: '15px', height: '15px' }} /> Add Medication
                 </button>
               </div>
             )}
           </div>
 
           {/* Lab Tests Section */}
-          {labs && labs.length > 0 && (
-            <div style={{ marginBottom: '24px' }}>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#2563EB', letterSpacing: '0.05em', marginBottom: '12px' }}>ASSIGNED LAB TESTS</label>
-              
-              <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', overflowX: 'auto' }}>
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '26px', height: '26px', borderRadius: '7px', background: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <FlaskConical style={{ width: '14px', height: '14px', color: '#2563EB' }} />
+                </div>
+                <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#0F172A', letterSpacing: '0.05em' }}>LAB TESTS</span>
+                <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#2563EB', background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: '12px' }}>
+                  {labs.length} Ordered
+                </span>
+              </div>
+              {labs.length > 0 && (
+                <button
+                  onClick={() => setShowAssignLabDrawer(true)}
+                  style={{ border: '1px solid #BFDBFE', background: '#EFF6FF', color: '#2563EB', fontSize: '11.5px', fontWeight: 700, padding: '5px 10px', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Plus style={{ width: '13px', height: '13px' }} /> Assign Lab Test
+                </button>
+              )}
+            </div>
+            
+            {labs && labs.length > 0 ? (
+              <div style={{ border: '1px solid #E2E8F0', borderRadius: '14px', overflowX: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      <th style={{ padding: '10px 12px', fontSize: '11px', fontWeight: 700, color: '#64748B', width: '40px' }}>#</th>
-                      <th style={{ padding: '10px 12px', fontSize: '11px', fontWeight: 700, color: '#64748B' }}>TEST NAME</th>
-                      <th style={{ padding: '10px 12px', width: '60px', textAlign: 'center' }}>ACTIONS</th>
+                      <th style={{ padding: '10px 14px', fontSize: '11px', fontWeight: 700, color: '#64748B', width: '40px' }}>#</th>
+                      <th style={{ padding: '10px 14px', fontSize: '11px', fontWeight: 700, color: '#64748B' }}>TEST NAME</th>
+                      <th style={{ padding: '10px 14px', width: '60px', textAlign: 'center' }}>ACTIONS</th>
                     </tr>
                   </thead>
                   <tbody>
                     {labs.map((testName, idx) => (
                       <tr key={idx} style={{ borderBottom: idx === labs.length - 1 ? 'none' : '1px solid #E2E8F0' }}>
-                        <td style={{ padding: '10px 12px', fontSize: '13.5px', fontWeight: 700, color: '#64748B' }}>{idx + 1}</td>
-                        <td style={{ padding: '10px 12px', fontSize: '13.5px', fontWeight: 700, color: '#1E293B' }}>{testName}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        <td style={{ padding: '10px 14px', fontSize: '13px', fontWeight: 700, color: '#64748B' }}>{idx + 1}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <FlaskConical style={{ width: '13px', height: '13px', color: '#2563EB' }} />
+                            </div>
+                            <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#1E293B' }}>{testName}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }}>
                           <button 
                             onClick={() => {
                               const updated = labs.filter((_, i) => i !== idx);
                               setLabs(updated);
                               setSelectedLabsList(updated);
                             }} 
-                            style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', padding: '4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', padding: '6px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#FEE2E2'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                            title="Remove lab test"
                           >
-                            <i data-lucide="trash-2" style={{ width: '15px', height: '15px', color: '#EF4444' }}></i>
+                            <Trash2 style={{ width: '15px', height: '15px' }} />
                           </button>
                         </td>
                       </tr>
                     ))}
+                    <tr>
+                      <td colSpan="3" style={{ padding: '12px 16px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}>
+                        <button 
+                          onClick={() => setShowAssignLabDrawer(true)} 
+                          style={{ border: '1px dashed #BFDBFE', background: '#EFF6FF', color: '#2563EB', fontSize: '12.5px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '7px 14px', borderRadius: '8px', transition: 'all 0.15s ease' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#DBEAFE'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#EFF6FF'}
+                        >
+                          <Plus style={{ width: '14px', height: '14px' }} /> Add Another Lab Test
+                        </button>
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
+            ) : (
+              <div style={{ padding: '36px 20px', textAlign: 'center', background: 'linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%)', borderRadius: '16px', border: '1.5px dashed #CBD5E1' }}>
+                <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.12)' }}>
+                  <FlaskConical style={{ width: '24px', height: '24px', color: '#2563EB' }} />
+                </div>
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#1E293B' }}>No lab tests assigned yet</h4>
+                <p style={{ margin: '4px 0 16px 0', fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Select clinical investigations, blood panels, imaging or pathology orders.</p>
+                <button 
+                  onClick={() => setShowAssignLabDrawer(true)}
+                  style={{ border: 'none', background: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%)', color: '#ffffff', fontSize: '13px', fontWeight: 700, padding: '9px 20px', borderRadius: '10px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '7px', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s ease' }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                >
+                  <Plus style={{ width: '15px', height: '15px' }} /> Add Lab Test
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Notes for Patient */}
           <div>
             <div 
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', cursor: 'pointer', userSelect: 'none' }}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', cursor: 'pointer', userSelect: 'none' }}
               onClick={() => setNotesCollapsed(!notesCollapsed)}
             >
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#64748B', letterSpacing: '0.05em', margin: 0, cursor: 'pointer' }}>
-                NOTES FOR PATIENT {notesCollapsed ? '(Hidden)' : ''}
-              </label>
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                width="16" height="16" 
-                viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" 
-                style={{ transition: 'transform 0.2s', transform: notesCollapsed ? 'none' : 'rotate(180deg)' }}
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '26px', height: '26px', borderRadius: '7px', background: '#F1F5F9', border: '1px solid #CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <FileText style={{ width: '14px', height: '14px', color: '#475569' }} />
+                </div>
+                <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#0F172A', letterSpacing: '0.05em' }}>NOTES & INSTRUCTIONS FOR PATIENT</span>
+                <span style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', background: '#F1F5F9', border: '1px solid #E2E8F0', padding: '2px 7px', borderRadius: '12px' }}>Optional</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 700, color: '#64748B' }}>
+                <span>{notesCollapsed ? 'Expand' : 'Collapse'}</span>
+                <ChevronDown 
+                  style={{ width: '16px', height: '16px', transition: 'transform 0.2s', transform: notesCollapsed ? 'rotate(-90deg)' : 'none' }}
+                />
+              </div>
             </div>
             
             {!notesCollapsed && (
@@ -1188,7 +1796,7 @@ export default function PrescriptionMakerTab({
                   value={soap.plan || ''}
                   onChange={val => setSoap(prev => ({ ...prev, plan: val }))}
                   placeholder="Type patient instructions & advice here (use toolbar for bold, italic, highlight, and bullet points)..."
-                  borderColor="#CBD5E1"
+                  borderColor="#E2E8F0"
                   focusBorderColor="#2563EB"
                   accentColor="#2563EB"
                   minHeight="80px"
@@ -1198,30 +1806,39 @@ export default function PrescriptionMakerTab({
           </div>
 
           {/* Follow-Up Section */}
-          <div style={{ marginTop: '24px' }}>
+          <div style={{ marginTop: '24px', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '16px 20px', background: followUpEnabled ? '#F8FAFC' : '#ffffff', transition: 'all 0.2s ease' }}>
             <div 
-              style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', marginBottom: followUpEnabled ? '16px' : '0' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
               onClick={() => setFollowUpEnabled(!followUpEnabled)}
             >
-              <div style={{
-                width: '22px', height: '22px', borderRadius: '6px',
-                border: followUpEnabled ? '2px solid #2563EB' : '2px solid #CBD5E1',
-                background: followUpEnabled ? '#2563EB' : '#ffffff',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.2s ease', flexShrink: 0
-              }}>
-                {followUpEnabled && (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '9px', background: followUpEnabled ? '#EFF6FF' : '#F1F5F9', border: `1px solid ${followUpEnabled ? '#BFDBFE' : '#E2E8F0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
+                  <Calendar style={{ width: '16px', height: '16px', color: followUpEnabled ? '#2563EB' : '#64748B' }} />
+                </div>
+                <div>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B', display: 'block' }}>Schedule Follow-Up Appointment</span>
+                  <span style={{ fontSize: '11px', fontWeight: 500, color: '#64748B' }}>Book a follow-up review slot for this patient</span>
+                </div>
               </div>
-              <div>
-                <span style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>Schedule Follow-Up Appointment</span>
-                <span style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748B', marginTop: '1px' }}>Tick to appoint a follow-up visit if necessary</span>
+
+              {/* Custom Toggle Switch */}
+              <div style={{
+                width: '42px', height: '24px', borderRadius: '12px',
+                background: followUpEnabled ? '#2563EB' : '#E2E8F0',
+                position: 'relative', transition: 'background 0.2s ease', cursor: 'pointer'
+              }}>
+                <div style={{
+                  width: '18px', height: '18px', borderRadius: '50%', background: '#ffffff',
+                  position: 'absolute', top: '3px',
+                  left: followUpEnabled ? '21px' : '3px',
+                  transition: 'left 0.2s ease',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                }} />
               </div>
             </div>
 
             {followUpEnabled && (
-              <div style={{ display: 'flex', gap: '24px', animation: 'slideUp 0.25s ease-out' }}>
+              <div style={{ display: 'flex', gap: '20px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #E2E8F0', animation: 'slideUp 0.25s ease-out' }}>
                 <div style={{ flex: 1 }}>
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#64748B', letterSpacing: '0.05em', marginBottom: '8px' }}>FOLLOW-UP DATE</label>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -1230,7 +1847,7 @@ export default function PrescriptionMakerTab({
                       value={followUpDate}
                       min={(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })()}
                       onChange={e => setFollowUpDate(e.target.value)}
-                      style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '14px', fontWeight: 600, color: '#1E293B', outline: 'none', background: '#ffffff', boxSizing: 'border-box' }} 
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13.5px', fontWeight: 600, color: '#1E293B', outline: 'none', background: '#ffffff', boxSizing: 'border-box' }} 
                     />
                   </div>
                 </div>
@@ -1240,7 +1857,7 @@ export default function PrescriptionMakerTab({
                     <select 
                       value={followUpTime}
                       onChange={e => setFollowUpTime(e.target.value)}
-                      style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '14px', fontWeight: 600, color: '#1E293B', outline: 'none', background: '#ffffff', boxSizing: 'border-box', cursor: 'pointer', appearance: 'none', paddingRight: '40px' }} 
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13.5px', fontWeight: 600, color: '#1E293B', outline: 'none', background: '#ffffff', boxSizing: 'border-box', cursor: 'pointer', appearance: 'none', paddingRight: '40px' }} 
                     >
                       <option value="10:00 AM">10:00 AM</option>
                       <option value="11:00 AM">11:00 AM</option>
@@ -1251,8 +1868,8 @@ export default function PrescriptionMakerTab({
                       <option value="04:00 PM">04:00 PM</option>
                       <option value="05:00 PM">05:00 PM</option>
                     </select>
-                    <div style={{ position: 'absolute', right: '16px', pointerEvents: 'none', display: 'flex', alignItems: 'center', color: '#64748B' }}>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    <div style={{ position: 'absolute', right: '14px', pointerEvents: 'none', display: 'flex', alignItems: 'center', color: '#64748B' }}>
+                      <Clock style={{ width: '16px', height: '16px' }} />
                     </div>
                   </div>
                 </div>
@@ -1263,39 +1880,70 @@ export default function PrescriptionMakerTab({
         </div>
 
         {/* Bottom Action Footer */}
-        <div style={{ border: '1px solid #E2E8F0', borderRadius: '16px', padding: '16px', background: '#ffffff', boxShadow: '0 1.5px 4px rgba(0,0,0,0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ border: '1px solid #E2E8F0', borderRadius: '18px', padding: '18px 24px', background: '#ffffff', boxShadow: '0 4px 20px rgba(15, 23, 42, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginTop: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <input 
-              type="checkbox" 
-              id="sendPharmacyCheck" 
-              checked={sendToPharmacy} 
-              onChange={e => setSendToPharmacy(e.target.checked)} 
-              style={{ width: '18px', height: '18px', accentColor: '#2563EB', cursor: 'pointer' }} 
-            />
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Building2 style={{ width: '18px', height: '18px', color: '#2563EB' }} />
+            </div>
             <div>
-              <label htmlFor="sendPharmacyCheck" style={{ fontSize: '14px', fontWeight: 700, color: '#1E293B', cursor: 'pointer' }}>Send prescription to pharmacy</label>
-              <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Curoxa Pharmacy, Main Branch</p>
+              <label 
+                htmlFor="sendPharmacyCheck" 
+                style={{ fontSize: '13.5px', fontWeight: 700, color: '#1E293B', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <input 
+                  type="checkbox" 
+                  id="sendPharmacyCheck" 
+                  checked={sendToPharmacy} 
+                  onChange={e => setSendToPharmacy(e.target.checked)} 
+                  style={{ width: '17px', height: '17px', accentColor: '#2563EB', cursor: 'pointer' }} 
+                />
+                Send prescription to pharmacy
+              </label>
+              <p style={{ margin: '2px 0 0 25px', fontSize: '11.5px', color: '#64748B', fontWeight: 500 }}>Quroxa Pharmacy • Main Branch (Instant Queue)</p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <button 
               onClick={() => {
                 setDiagnosisText('');
                 setMedicines([]);
               }}
-              style={{ border: 'none', background: 'none', color: '#64748B', fontSize: '14px', fontWeight: 700, cursor: 'pointer', padding: '8px 16px' }}
+              style={{ border: '1px solid #E2E8F0', background: '#F8FAFC', color: '#64748B', fontSize: '13.5px', fontWeight: 700, cursor: 'pointer', padding: '10px 18px', borderRadius: '10px', transition: 'all 0.15s ease' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#1E293B'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.color = '#64748B'; }}
             >
-              Cancel
+              Clear
             </button>
             <button 
               onClick={handleLockPrescription}
               disabled={isSavingPrescription}
-              style={{ background: isSavingPrescription ? '#94A3B8' : '#2563EB', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '12px 28px', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', cursor: isSavingPrescription ? 'not-allowed' : 'pointer', boxShadow: '0 4px 10px rgba(37, 99, 235, 0.2)', transition: '0.2s' }}
+              style={{
+                background: isSavingPrescription ? '#94A3B8' : 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 60%, #3B82F6 100%)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '12px 28px',
+                fontSize: '14px',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: isSavingPrescription ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+                transition: 'all 0.2s'
+              }}
               onMouseEnter={e => !isSavingPrescription && (e.currentTarget.style.transform = 'translateY(-1px)')}
               onMouseLeave={e => !isSavingPrescription && (e.currentTarget.style.transform = 'translateY(0)')}
             >
-              {isSavingPrescription ? 'Sending...' : 'Send Prescription'}
+              {isSavingPrescription ? (
+                <>Sending...</>
+              ) : (
+                <>
+                  <Send style={{ width: '15px', height: '15px' }} />
+                  Send Prescription
+                </>
+              )}
             </button>
           </div>
         </div>

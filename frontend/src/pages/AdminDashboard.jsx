@@ -5,7 +5,7 @@ import { socket, joinTenantRoom } from '../utils/socket';
 import HRPayroll from './HRPayroll';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import { printPO, printGRN } from '../utils/printDocHelper';
-import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import curoxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import { HospitalBrandLogo, getActivePortalBranding, restoreActivePortalDocumentMetadata } from '../context/PortalBrandingContext';
 import ExportModal from '../components/export/ExportModal';
 import { staffExportColumns, appointmentExportColumns } from '../utils/exportEngine';
@@ -70,6 +70,8 @@ const pmModules = [
   { id: 'ph-dispense',   name: 'Medicine dispensing',        desc: 'Mark medicines dispensed',             group: 'Pharmacist — core', coreFor: ['pharmacy'] },
   { id: 'ph-stock',      name: 'Stock inventory',            desc: 'Full view of stock, expiry, batches',  group: 'Pharmacist — core', coreFor: ['pharmacy'] },
   { id: 'ph-reorder',    name: 'Reorder management',         desc: 'Raise purchase orders to suppliers',   group: 'Pharmacist — core', coreFor: ['pharmacy'] },
+  { id: 'ph-itemmaster', name: 'Item Master Catalog',        desc: 'Manage canonical medicine & supply items', group: 'Pharmacist — core', coreFor: ['pharmacy'] },
+  { id: 'ph-quotations', name: 'Vendor Quotations',          desc: 'Manage supplier price quotations & rates', group: 'Pharmacist — core', coreFor: ['pharmacy'] },
   { id: 'ph-billing',    name: 'Prescription billing',       desc: 'Generate pharmacy bill & collect payment',group: 'Pharmacist — ops', coreFor: [] },
   { id: 'ph-controlled', name: 'Controlled drugs log',       desc: 'Maintain NDPS narcotics register',     group: 'Pharmacist — ops', coreFor: [] },
   /* ---- NURSE ---- */
@@ -11094,7 +11096,7 @@ const AdminDashboard = () => {
               ) : (
                 <img 
                   src={curoxaSidebarLogo} 
-                  alt="CUROXA" 
+                  alt="QUROXA" 
                   style={{
                     width: '44px',
                     height: '44px',
@@ -11106,7 +11108,7 @@ const AdminDashboard = () => {
               )}
                 <div className="sidebar-brand-text-group" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                   <span className="sidebar-brand-text" style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif", fontWeight: 900, fontSize: '18px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isSidebarCollapsed ? '0px' : '160px' }}>
-                    {getActivePortalBranding()?.name || 'CUROXA'}
+                    {getActivePortalBranding()?.name || 'QUROXA'}
                   </span>
                   <span className="sidebar-brand-subtitle" style={{ fontSize: '11px', color: '#64748B', fontWeight: 500, letterSpacing: '-0.01em', marginTop: '3px', lineHeight: 1 }}>
                     {getActivePortalBranding() ? `${getActivePortalBranding()?.hospitalId} • EMR` : 'Health Management'}
@@ -12137,7 +12139,7 @@ const AdminDashboard = () => {
                 <div>
                   <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#991B1B' }}>
                     {subscription?.isTrial || subscription?.trialUsed
-                      ? "Your trial has ended. Choose a paid plan to continue using CUROXA."
+                      ? "Your trial has ended. Choose a paid plan to continue using QUROXA."
                       : "Hospital Subscription Expired — Restricted Mode Active"}
                   </h4>
                   <p style={{ margin: '3px 0 0 0', fontSize: '13px', color: '#B91C1C', fontWeight: 500 }}>
@@ -14244,7 +14246,7 @@ const AdminDashboard = () => {
                         department: selectedStaffDeptFilter,
                                       status: selectedStaffStatusFilter
                       }}
-                      clinicName={currentUser?.tenantName || subscription?.name || 'CUROXA HEALTHCARE'}
+                      clinicName={currentUser?.tenantName || subscription?.name || 'QUROXA HEALTHCARE'}
                       onClose={() => setShowStaffExportModal(false)}
                       onSuccess={(result) => {
                         showToast(`Exported ${result.recordCount} staff record(s) to ${result.fileName}!`, 'success');
@@ -18175,7 +18177,7 @@ const AdminDashboard = () => {
                         status: selectedStatusFilter,
                         search: searchQuery
                       }}
-                      clinicName={currentUser?.tenantName || 'CUROXA HEALTHCARE'}
+                      clinicName={currentUser?.tenantName || 'QUROXA HEALTHCARE'}
                       onClose={() => setShowAppointmentExportModal(false)}
                       onSuccess={(result) => {
                         showToast(`Exported ${result.recordCount} appointment(s) to ${result.fileName}!`, 'success');
@@ -19611,7 +19613,7 @@ const AdminDashboard = () => {
                                       alignItems: 'center',
                                       gap: '4px',
                                       letterSpacing: '0.03em'
-                                    }} title="Global Curoxa Platform UH-ID">
+                                    }} title="Global Quroxa Platform UH-ID">
                                       <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#0284C7', display: 'inline-block' }} />
                                       {uhIdVal}
                                     </span>
@@ -19777,7 +19779,7 @@ const AdminDashboard = () => {
                         status: selectedPatientStatusFilter,
                         dateFilter: selectedPatientDateFilter
                       }}
-                      clinicName={currentUser?.tenantName || subscription?.name || 'CUROXA HEALTHCARE'}
+                      clinicName={currentUser?.tenantName || subscription?.name || 'QUROXA HEALTHCARE'}
                       onClose={() => setShowPatientExportModal(false)}
                       onSuccess={(result) => {
                         showToast(`Exported ${result.recordCount} patient record(s) to ${result.fileName}!`, 'success');
@@ -20194,8 +20196,8 @@ const AdminDashboard = () => {
                           <h4 style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: 800, color: (subscription?.isTrial || subscription?.trialUsed) ? '#991B1B' : '#1E3A8A' }}>
                             {(subscription?.isTrial || subscription?.trialUsed)
                               ? (subscription?.isExpired || daysLeft === 0
-                                  ? "Your trial has ended. Choose a paid plan to continue using CUROXA."
-                                  : `Trial expires in ${daysLeft} days. Choose a paid plan to continue using CUROXA.`)
+                                  ? "Your trial has ended. Choose a paid plan to continue using QUROXA."
+                                  : `Trial expires in ${daysLeft} days. Choose a paid plan to continue using QUROXA.`)
                               : `Subscription renewal due in ${daysLeft} days`}
                           </h4>
                           <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: (subscription?.isTrial || subscription?.trialUsed) ? '#B91C1C' : '#1E40AF' }}>
@@ -20911,7 +20913,7 @@ const AdminDashboard = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <div>
                   <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: '0 0 2px 0' }}>Super Admin Broadcast Notices</h3>
-                  <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Live system updates and patches dispatched by Curoxa network administrators</span>
+                  <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Live system updates and patches dispatched by Quroxa network administrators</span>
                 </div>
                 <button
                   className="widget-header-action-btn"
@@ -24726,10 +24728,21 @@ const AdminDashboard = () => {
                   <input 
                     type={showEditPassword ? 'text' : 'password'} 
                     className="admin-text-input" 
-                    style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 38px 0 12px', fontSize: '13px', fontWeight: 600, background: '#FFFFFF' }}
+                    style={{ 
+                      width: '100%', 
+                      height: '40px', 
+                      borderRadius: '8px', 
+                      border: '1px solid #CBD5E1', 
+                      padding: '0 38px 0 14px', 
+                      fontSize: !showEditPassword && editStaffFields.password ? '20px' : '13px', 
+                      letterSpacing: !showEditPassword && editStaffFields.password ? '0.22em' : 'normal', 
+                      fontWeight: 600, 
+                      background: '#FFFFFF',
+                      transition: 'all 0.15s ease'
+                    }}
                     value={editStaffFields.password} 
                     onChange={e => setEditStaffFields({...editStaffFields, password: e.target.value})} 
-                    placeholder="••••••••" 
+                    placeholder="Leave blank to keep current password" 
                   />
                   <button 
                     type="button"
@@ -24872,23 +24885,23 @@ const AdminDashboard = () => {
             </div>
 
             {/* Status Guidance Strip */}
-            <div className="bg-white px-6 py-2 border-b border-slate-200/80 flex items-center justify-between flex-wrap gap-2 text-xs shrink-0">
+            <div className="bg-white px-6 py-2.5 border-b border-slate-200/80 flex items-center justify-between flex-wrap gap-2 text-xs sm:text-[13px] shrink-0">
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-1.5 font-bold text-slate-700">
                   <span className="w-2 h-2 rounded-full bg-rose-500 ring-4 ring-rose-100" />
-                  <span className="text-rose-600 font-extrabold">Required</span>
-                  <span className="text-slate-500 font-normal">Compulsory for registration</span>
+                  <span className="text-rose-600 font-extrabold text-xs sm:text-[12.5px]">Required</span>
+                  <span className="text-slate-500 font-normal text-xs sm:text-[12.5px]">Compulsory for registration</span>
                 </span>
                 <span className="text-slate-300">•</span>
                 <span className="flex items-center gap-1.5 font-bold text-slate-700">
                   <span className="w-2 h-2 rounded-full bg-slate-300" />
-                  <span className="text-slate-600 font-semibold">Optional</span>
-                  <span className="text-slate-500 font-normal">Can be skipped or filled later</span>
+                  <span className="text-slate-600 font-semibold text-xs sm:text-[12.5px]">Optional</span>
+                  <span className="text-slate-500 font-normal text-xs sm:text-[12.5px]">Can be skipped or filled later</span>
                 </span>
               </div>
-              <div className="text-[11px] text-slate-400 font-medium hidden sm:flex items-center gap-1">
+              <div className="text-xs text-slate-500 font-medium hidden sm:flex items-center gap-1">
                 <span>Press</span>
-                <kbd className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 border border-slate-300 rounded text-slate-700">Enter ↵</kbd>
+                <kbd className="px-1.5 py-0.5 text-xs font-bold bg-slate-100 border border-slate-300 rounded text-slate-700 font-mono">Enter ↵</kbd>
                 <span>for next field</span>
               </div>
             </div>
@@ -24896,7 +24909,7 @@ const AdminDashboard = () => {
             {/* Form Scrollable Body */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/60" data-lenis-prevent>
               {error && (
-                <div id="staff-form-error" className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2.5 animate-shake">
+                <div id="staff-form-error" className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2.5 animate-shake">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
                   <span className="flex-1">{error}</span>
                 </div>
@@ -24906,17 +24919,17 @@ const AdminDashboard = () => {
               <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs">
+                    <div className="w-7.5 h-7.5 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs sm:text-sm">
                       1
                     </div>
                     <div>
-                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 m-0">
+                      <h4 className="text-[13px] sm:text-sm font-black uppercase tracking-wider text-slate-900 m-0">
                         Account Credentials & Security
                       </h4>
-                      <p className="text-[11px] text-slate-400 m-0">Core login identification for the staff member</p>
+                      <p className="text-xs text-slate-500 m-0">Core login identification for the staff member</p>
                     </div>
                   </div>
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
                     Compulsory
                   </span>
                 </div>
@@ -24925,10 +24938,10 @@ const AdminDashboard = () => {
                   {/* Full Name */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                         Full Legal Name
                       </label>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                      <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                         Required
                       </span>
                     </div>
@@ -24940,7 +24953,7 @@ const AdminDashboard = () => {
                         placeholder="e.g. Dr. Rajesh Sharma"
                         value={newStaff.name}
                         onChange={(e) => setNewStaff({...newStaff, name: e.target.value})}
-                        className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                        className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                         style={{ paddingLeft: '44px' }}
                       />
                     </div>
@@ -24949,10 +24962,10 @@ const AdminDashboard = () => {
                   {/* Phone Number (Used as Login Username) */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                        Phone Number <span className="text-slate-400 font-normal">(Login Username)</span>
+                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
+                        Phone Number <span className="text-slate-500 font-normal text-xs">(Login Username)</span>
                       </label>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                      <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                         10 Digits
                       </span>
                     </div>
@@ -24972,7 +24985,7 @@ const AdminDashboard = () => {
                             staff_id: val
                           });
                         }}
-                        className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                        className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                         style={{ paddingLeft: '44px' }}
                       />
                     </div>
@@ -24981,10 +24994,10 @@ const AdminDashboard = () => {
                   {/* Username / Staff ID (Auto-populated from phone) */}
                   <div className="md:col-span-2">
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                         System Login ID / Staff ID
                       </label>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
                         Auto-Populated
                       </span>
                     </div>
@@ -24994,12 +25007,12 @@ const AdminDashboard = () => {
                         type="text" 
                         readOnly
                         value={newStaff.phone || 'Enter 10-digit Phone Number above'}
-                        className="w-full h-10 pr-3.5 bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-not-allowed select-none"
+                        className="w-full h-10 pr-3.5 bg-slate-100/80 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 cursor-not-allowed select-none font-mono"
                         style={{ paddingLeft: '44px' }}
                       />
                       {newStaff.phone?.length === 10 && (
-                        <span className="absolute right-3 text-[11px] font-bold text-emerald-600 flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5 stroke-[3]" /> Valid ID
+                        <span className="absolute right-3 text-xs font-bold text-emerald-600 flex items-center gap-1">
+                          <Check className="w-4 h-4 stroke-[3]" /> Valid ID
                         </span>
                       )}
                     </div>
@@ -25008,13 +25021,13 @@ const AdminDashboard = () => {
                   {/* Password Field */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                         Login Password
                       </label>
                       <div className="flex items-center gap-2">
                         {newStaff.password && (
                           <span 
-                            className="text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.2 rounded border"
+                            className="text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded border"
                             style={{ 
                               color: getPasswordStrength(newStaff.password).color,
                               borderColor: getPasswordStrength(newStaff.password).color,
@@ -25027,10 +25040,10 @@ const AdminDashboard = () => {
                         <button
                           type="button"
                           onClick={generateRandomPassword}
-                          className="text-[10px] font-bold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded px-1.5 py-0.5 transition-all cursor-pointer flex items-center gap-1"
+                          className="text-xs font-bold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md px-2 py-0.5 transition-all cursor-pointer flex items-center gap-1"
                           title="Generate secure password"
                         >
-                          <Sparkles className="w-2.5 h-2.5" />
+                          <Sparkles className="w-3 h-3" />
                           <span>Generate</span>
                         </button>
                       </div>
@@ -25040,16 +25053,18 @@ const AdminDashboard = () => {
                       <input 
                         type={showAddStaffPassword ? "text" : "password"} 
                         required
-                        placeholder="••••••••••••"
+                        placeholder="Enter login password"
                         value={newStaff.password}
                         onChange={(e) => setNewStaff({...newStaff, password: e.target.value})}
-                        className="w-full h-10 pr-10 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                        className={`w-full h-10 pr-10 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm placeholder:tracking-normal focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs ${
+                          !showAddStaffPassword && newStaff.password ? 'text-lg tracking-[0.22em]' : 'text-sm tracking-normal'
+                        }`}
                         style={{ paddingLeft: '44px' }}
                       />
                       <button
                         type="button"
                         onClick={() => setShowAddStaffPassword(!showAddStaffPassword)}
-                        className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+                        className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors p-1"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
@@ -25060,7 +25075,7 @@ const AdminDashboard = () => {
                       <div className="mt-1.5 flex gap-1 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
                         <div 
                           className="h-full transition-all duration-300 rounded-full"
-                          style={{
+                          style={{ 
                             width: getPasswordStrength(newStaff.password).label === 'Weak' ? '33%' : getPasswordStrength(newStaff.password).label === 'Medium' ? '66%' : '100%',
                             backgroundColor: getPasswordStrength(newStaff.password).color
                           }}
@@ -25072,11 +25087,11 @@ const AdminDashboard = () => {
                   {/* Confirm Password */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                         Confirm Password
                       </label>
                       {newStaff.confirmPassword && (
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border ${
+                        <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
                           newStaff.password === newStaff.confirmPassword 
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                             : 'bg-rose-50 text-rose-600 border-rose-200'
@@ -25090,16 +25105,18 @@ const AdminDashboard = () => {
                       <input 
                         type={showAddStaffConfirmPassword ? "text" : "password"} 
                         required
-                        placeholder="••••••••••••"
+                        placeholder="Confirm login password"
                         value={newStaff.confirmPassword}
                         onChange={(e) => setNewStaff({...newStaff, confirmPassword: e.target.value})}
-                        className="w-full h-10 pr-10 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                        className={`w-full h-10 pr-10 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm placeholder:tracking-normal focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs ${
+                          !showAddStaffConfirmPassword && newStaff.confirmPassword ? 'text-lg tracking-[0.22em]' : 'text-sm tracking-normal'
+                        }`}
                         style={{ paddingLeft: '44px' }}
                       />
                       <button
                         type="button"
                         onClick={() => setShowAddStaffConfirmPassword(!showAddStaffConfirmPassword)}
-                        className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+                        className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors p-1"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
@@ -25112,17 +25129,17 @@ const AdminDashboard = () => {
               <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                    <div className="w-7.5 h-7.5 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs sm:text-sm">
                       2
                     </div>
                     <div>
-                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 m-0">
+                      <h4 className="text-[13px] sm:text-sm font-black uppercase tracking-wider text-slate-900 m-0">
                         Role & Department Assignment
                       </h4>
-                      <p className="text-[11px] text-slate-400 m-0">Sets module permissions and department affiliation</p>
+                      <p className="text-xs text-slate-500 m-0">Sets module permissions and department affiliation</p>
                     </div>
                   </div>
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
                     Compulsory
                   </span>
                 </div>
@@ -25131,17 +25148,17 @@ const AdminDashboard = () => {
                   {/* Access Role */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                         Access Role
                       </label>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                      <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                         Required
                       </span>
                     </div>
                     <div className="relative flex items-center group">
                       <Shield className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
                       <select 
-                        className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
+                        className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
                         style={{ paddingLeft: '44px', paddingRight: '36px' }}
                         value={newStaff.role} 
                         onChange={(e) => setNewStaff({...newStaff, role: e.target.value})}
@@ -25157,10 +25174,10 @@ const AdminDashboard = () => {
                   {/* Hospital Email */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                         Hospital / Work Email
                       </label>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                      <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                         Required
                       </span>
                     </div>
@@ -25172,7 +25189,7 @@ const AdminDashboard = () => {
                         placeholder="staff.name@hospital.com"
                         value={newStaff.email}
                         onChange={(e) => setNewStaff({...newStaff, email: e.target.value})}
-                        className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                        className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                         style={{ paddingLeft: '44px' }}
                       />
                     </div>
@@ -25185,17 +25202,17 @@ const AdminDashboard = () => {
                 <div className="bg-gradient-to-br from-teal-500/5 via-teal-50/50 to-white rounded-xl p-5 border-2 border-teal-500/40 shadow-xs space-y-4 animate-slideDown">
                   <div className="flex items-center justify-between border-b border-teal-200/60 pb-2.5">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                      <div className="w-7.5 h-7.5 rounded-lg bg-teal-600 text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-xs">
                         <Stethoscope className="w-4 h-4" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-black uppercase tracking-wider text-teal-950 m-0">
+                        <h4 className="text-[13px] sm:text-sm font-black uppercase tracking-wider text-teal-950 m-0">
                           3. Doctor Clinical Configuration
                         </h4>
-                        <p className="text-[11px] text-teal-700 m-0">Specialization, appointment fees, and OPD schedule</p>
+                        <p className="text-xs text-teal-700 m-0">Specialization, appointment fees, and OPD schedule</p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-300">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-300">
                       Doctor Setup
                     </span>
                   </div>
@@ -25204,10 +25221,10 @@ const AdminDashboard = () => {
                     {/* Specialization */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                           Medical Specialization
                         </label>
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                        <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                           Required
                         </span>
                       </div>
@@ -25216,7 +25233,7 @@ const AdminDashboard = () => {
                         <select 
                           value={newStaff.specialty || ''}
                           onChange={(e) => setNewStaff({...newStaff, specialty: e.target.value})}
-                          className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-teal-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
+                          className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-teal-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
                           style={{ paddingLeft: '44px', paddingRight: '36px' }}
                         >
                           <option value="">-- Select Specialization --</option>
@@ -25231,22 +25248,22 @@ const AdminDashboard = () => {
                     {/* Doctor Consultation Fee */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                          Consultation Fee (₹ INR)
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
+                          Consultation Fee <span className="text-slate-500 font-normal text-xs">(₹ INR)</span>
                         </label>
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                        <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                           Default: ₹500
                         </span>
                       </div>
                       <div className="relative flex items-center group">
-                        <span className="absolute left-3.5 font-bold text-sm text-slate-500 pointer-events-none group-focus-within:text-teal-600 transition-colors z-10">₹</span>
+                        <span className="absolute left-3.5 font-bold text-base text-slate-500 pointer-events-none group-focus-within:text-teal-600 transition-colors z-10">₹</span>
                         <input 
                           type="number" 
                           min="0"
                           placeholder="e.g. 500"
                           value={newStaff.consultationFee !== undefined ? newStaff.consultationFee : 500}
                           onChange={(e) => setNewStaff({...newStaff, consultationFee: e.target.value !== '' ? Number(e.target.value) : ''})}
-                          className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-teal-500/15 transition-all shadow-2xs"
+                          className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-teal-500/15 transition-all shadow-2xs"
                           style={{ paddingLeft: '44px' }}
                         />
                       </div>
@@ -25256,10 +25273,10 @@ const AdminDashboard = () => {
                     <div className="md:col-span-2 space-y-2.5">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                             Attending OPD Time Slots
                           </label>
-                          <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs">
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs">
                             {(newStaff.doctorSlots || []).length} Active
                           </span>
                         </div>
@@ -25278,7 +25295,7 @@ const AdminDashboard = () => {
                               ];
                               setNewStaff({ ...newStaff, doctorSlots: Array.from(new Set(allBase)) });
                             }}
-                            className="text-[11px] font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
+                            className="text-xs font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
                           >
                             Select All
                           </button>
@@ -25286,11 +25303,11 @@ const AdminDashboard = () => {
                           <button
                             type="button"
                             onClick={() => setNewStaff({ ...newStaff, doctorSlots: [] })}
-                            className="text-[11px] font-bold text-slate-500 hover:text-rose-600 underline cursor-pointer"
+                            className="text-xs font-bold text-slate-500 hover:text-rose-600 underline cursor-pointer"
                           >
                             Clear All
                           </button>
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200 ml-1">
+                          <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200 ml-1">
                             Required (≥ 1)
                           </span>
                         </div>
@@ -25305,7 +25322,7 @@ const AdminDashboard = () => {
                             placeholder="Add custom slot (e.g. 10:00 AM - 11:00 AM)" 
                             value={adminCustomSlotInput}
                             onChange={e => setAdminCustomSlotInput(e.target.value)}
-                            className="w-full h-9 pl-9 pr-3 bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-lg text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-3 focus:ring-teal-500/15 transition-all"
+                            className="w-full h-10 pl-9 pr-3 bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-lg text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-3 focus:ring-teal-500/15 transition-all"
                           />
                         </div>
                         <button
@@ -25322,26 +25339,26 @@ const AdminDashboard = () => {
                             }
                             setAdminCustomSlotInput('');
                           }}
-                          className="px-3.5 h-9 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 flex items-center gap-1"
+                          className="px-4 h-10 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-lg text-xs sm:text-[13px] font-bold transition-all shadow-xs cursor-pointer active:scale-95 flex items-center gap-1.5"
                         >
-                          <Plus className="w-3.5 h-3.5" />
+                          <Plus className="w-4 h-4" />
                           <span>Add Slot</span>
                         </button>
                       </div>
 
                       {/* Visual Legend */}
-                      <div className="flex items-center justify-between text-[11px] px-1 text-slate-500 pt-0.5">
+                      <div className="flex items-center justify-between text-xs px-1 text-slate-500 pt-0.5">
                         <div className="flex items-center gap-3">
                           <span className="inline-flex items-center gap-1.5 font-bold text-blue-700">
-                            <span className="w-4 h-4 rounded bg-blue-600 text-white inline-flex items-center justify-center text-[10px] shadow-2xs">✓</span>
+                            <span className="w-4 h-4 rounded bg-blue-600 text-white inline-flex items-center justify-center text-[11px] shadow-2xs font-bold">✓</span>
                             Selected (Scheduled OPD)
                           </span>
                           <span className="inline-flex items-center gap-1.5 font-medium text-slate-500">
-                            <span className="w-4 h-4 rounded border border-dashed border-slate-400 bg-white text-slate-400 inline-flex items-center justify-center text-[10px]">+</span>
+                            <span className="w-4 h-4 rounded border border-dashed border-slate-400 bg-white text-slate-400 inline-flex items-center justify-center text-[11px] font-bold">+</span>
                             Deselected (Click to enable)
                           </span>
                         </div>
-                        <span className="text-[10.5px] text-slate-400 hidden sm:inline">Click slot to toggle</span>
+                        <span className="text-xs text-slate-400 hidden sm:inline">Click slot to toggle</span>
                       </div>
 
                       {/* Slots Pill Stack */}
@@ -25368,7 +25385,7 @@ const AdminDashboard = () => {
                                 }
                                 setNewStaff({...newStaff, doctorSlots: currentSlots});
                               }}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer select-none active:scale-95 ${
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer select-none active:scale-95 ${
                                 isSelected
                                   ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs shadow-blue-500/25 border border-blue-600'
                                   : 'bg-white hover:bg-blue-50/50 text-slate-600 border border-dashed border-slate-300 hover:border-blue-400 hover:text-blue-700'
@@ -25395,14 +25412,14 @@ const AdminDashboard = () => {
                     <div className="md:col-span-2 space-y-1.5">
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                             Weekly Off Days
                           </label>
-                          <span className="text-[10.5px] text-slate-500 font-medium">
+                          <span className="text-xs text-slate-500 font-medium">
                             (Mark which days doctor does NOT attend clinic)
                           </span>
                         </div>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                           Optional
                         </span>
                       </div>
@@ -25426,14 +25443,14 @@ const AdminDashboard = () => {
                                 }
                                 setNewStaff({...newStaff, weeklyOff: currentOffs});
                               }}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer select-none active:scale-95 ${
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-[13px] font-bold border transition-all cursor-pointer select-none active:scale-95 ${
                                 isSelected
                                   ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-transparent shadow-xs shadow-blue-500/25'
                                   : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                               }`}
                               title={isSelected ? `${day} marked as OFF (Click to mark Working)` : `${day} is Working (Click to mark OFF)`}
                             >
-                              {isSelected && <Check className="w-3 h-3 text-white stroke-[3]" />}
+                              {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
                               <span>{day.slice(0, 3)}</span>
                             </button>
                           );
@@ -25452,18 +25469,18 @@ const AdminDashboard = () => {
                   className="w-full px-5 py-3.5 bg-slate-50/70 hover:bg-slate-100/70 flex items-center justify-between transition-colors border-b border-slate-200/80 text-left cursor-pointer"
                 >
                   <div className="flex items-center gap-2.5">
-                    <div className="w-6 h-6 rounded-md bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs">
-                      <FileText className="w-3.5 h-3.5" />
+                    <div className="w-7 h-7 rounded-md bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs sm:text-sm">
+                      <FileText className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 m-0">
+                      <h4 className="text-[13px] sm:text-sm font-extrabold uppercase tracking-wider text-slate-800 m-0">
                         4. Personal, Statutory & Emergency Details
                       </h4>
-                      <p className="text-[11px] text-slate-400 m-0">Demographics, Aadhaar/PAN, Address & Emergency Contact</p>
+                      <p className="text-xs text-slate-500 m-0">Demographics, Aadhaar/PAN, Address & Emergency Contact</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">
+                    <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">
                       All Optional
                     </span>
                     {showAddStaffOptional ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
@@ -25476,22 +25493,22 @@ const AdminDashboard = () => {
                       {/* Annual CTC */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            Annual CTC (₹ INR)
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
+                            Annual CTC <span className="text-slate-500 font-normal text-xs">(₹ INR)</span>
                           </label>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                             Optional
                           </span>
                         </div>
                         <div className="relative flex items-center group">
-                          <span className="absolute left-3.5 font-bold text-sm text-slate-400 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10">₹</span>
+                          <span className="absolute left-3.5 font-bold text-base text-slate-400 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10">₹</span>
                           <input 
                             type="number" 
                             min="0"
                             placeholder="e.g. 600000"
                             value={newStaff.ctcAnnual || ''}
                             onChange={e => setNewStaff({...newStaff, ctcAnnual: e.target.value})}
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                             style={{ paddingLeft: '44px' }}
                           />
                         </div>
@@ -25500,10 +25517,10 @@ const AdminDashboard = () => {
                       {/* Date of Birth */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                             Date of Birth
                           </label>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                             Optional
                           </span>
                         </div>
@@ -25513,7 +25530,7 @@ const AdminDashboard = () => {
                             type="date" 
                             value={newStaff.dob || ''} 
                             onChange={e => setNewStaff({...newStaff, dob: e.target.value})} 
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                             style={{ paddingLeft: '44px' }}
                           />
                         </div>
@@ -25522,10 +25539,10 @@ const AdminDashboard = () => {
                       {/* Gender */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                             Gender
                           </label>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                             Optional
                           </span>
                         </div>
@@ -25534,7 +25551,7 @@ const AdminDashboard = () => {
                           <select 
                             value={newStaff.gender || ''} 
                             onChange={e => setNewStaff({...newStaff, gender: e.target.value})} 
-                            className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
+                            className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
                             style={{ paddingLeft: '44px', paddingRight: '36px' }}
                           >
                             <option value="">-- Select Gender --</option>
@@ -25549,10 +25566,10 @@ const AdminDashboard = () => {
                       {/* Blood Group */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                             Blood Group
                           </label>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                             Optional
                           </span>
                         </div>
@@ -25561,7 +25578,7 @@ const AdminDashboard = () => {
                           <select 
                             value={newStaff.bloodGroup || ''} 
                             onChange={e => setNewStaff({...newStaff, bloodGroup: e.target.value})} 
-                            className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
+                            className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
                             style={{ paddingLeft: '44px', paddingRight: '36px' }}
                           >
                             <option value="">-- Select Blood Group --</option>
@@ -25574,10 +25591,10 @@ const AdminDashboard = () => {
                       {/* Aadhaar Number */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            Aadhaar Card (12 Digits)
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
+                            Aadhaar Card <span className="text-slate-500 font-normal text-xs">(12 Digits)</span>
                           </label>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                             Optional
                           </span>
                         </div>
@@ -25589,7 +25606,7 @@ const AdminDashboard = () => {
                             placeholder="XXXX XXXX XXXX" 
                             value={newStaff.aadhaar || ''} 
                             onChange={e => setNewStaff({...newStaff, aadhaar: e.target.value.replace(/\D/g, '')})} 
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs font-mono"
                             style={{ paddingLeft: '44px' }}
                           />
                         </div>
@@ -25598,10 +25615,10 @@ const AdminDashboard = () => {
                       {/* PAN Card */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            PAN Number (10 Characters)
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
+                            PAN Number <span className="text-slate-500 font-normal text-xs">(10 Characters)</span>
                           </label>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                             Optional
                           </span>
                         </div>
@@ -25613,7 +25630,7 @@ const AdminDashboard = () => {
                             placeholder="ABCDE1234F" 
                             value={newStaff.pan || ''} 
                             onChange={e => setNewStaff({...newStaff, pan: e.target.value.toUpperCase()})} 
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 uppercase focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm uppercase focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs font-mono"
                             style={{ paddingLeft: '44px' }}
                           />
                         </div>
@@ -25622,10 +25639,10 @@ const AdminDashboard = () => {
                       {/* Residential Address */}
                       <div className="md:col-span-3">
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                             Residential Address
                           </label>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                             Optional
                           </span>
                         </div>
@@ -25636,7 +25653,7 @@ const AdminDashboard = () => {
                             placeholder="Street address, city, state, postal pin code..." 
                             value={newStaff.address || ''} 
                             onChange={e => setNewStaff({...newStaff, address: e.target.value})} 
-                            className="w-full pr-3.5 pt-2.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            className="w-full pr-3.5 pt-2.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                             style={{ paddingLeft: '44px' }}
                           />
                         </div>
@@ -25645,10 +25662,10 @@ const AdminDashboard = () => {
                       {/* Emergency Contact Name */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                             Emergency Contact Name
                           </label>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                             Optional
                           </span>
                         </div>
@@ -25659,7 +25676,7 @@ const AdminDashboard = () => {
                             placeholder="Next of Kin / Contact Name" 
                             value={newStaff.emergencyContactName || ''} 
                             onChange={e => setNewStaff({...newStaff, emergencyContactName: e.target.value})} 
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                             style={{ paddingLeft: '44px' }}
                           />
                         </div>
@@ -25668,10 +25685,10 @@ const AdminDashboard = () => {
                       {/* Emergency Contact Relation */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                             Relationship
                           </label>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                             Optional
                           </span>
                         </div>
@@ -25682,7 +25699,7 @@ const AdminDashboard = () => {
                             placeholder="e.g. Spouse / Parent / Sibling" 
                             value={newStaff.emergencyContactRelation || ''} 
                             onChange={e => setNewStaff({...newStaff, emergencyContactRelation: e.target.value})} 
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                             style={{ paddingLeft: '44px' }}
                           />
                         </div>
@@ -25691,10 +25708,10 @@ const AdminDashboard = () => {
                       {/* Emergency Contact Phone */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                             Emergency Phone Number
                           </label>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                             Optional
                           </span>
                         </div>
@@ -25706,7 +25723,7 @@ const AdminDashboard = () => {
                             placeholder="10-digit emergency phone" 
                             value={newStaff.emergencyContactPhone || ''} 
                             onChange={e => setNewStaff({...newStaff, emergencyContactPhone: e.target.value.replace(/\D/g, '')})} 
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                             style={{ paddingLeft: '44px' }}
                           />
                         </div>
@@ -25719,9 +25736,9 @@ const AdminDashboard = () => {
 
             {/* Modal Sticky Footer */}
             <div className="px-6 py-4 bg-white border-t border-slate-200 flex items-center justify-between flex-wrap gap-3 shrink-0 shadow-lg">
-              <div className="text-[11px] text-slate-400 hidden sm:flex items-center gap-1.5">
-                <span className="font-semibold text-slate-500">Shortcut:</span>
-                <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-[10px] text-slate-600">Enter ↵</kbd>
+              <div className="text-xs text-slate-500 hidden sm:flex items-center gap-1.5 font-medium">
+                <span className="font-semibold text-slate-600">Shortcut:</span>
+                <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-xs text-slate-700 font-bold">Enter ↵</kbd>
                 <span>advances fields & submits</span>
               </div>
 
@@ -25734,18 +25751,18 @@ const AdminDashboard = () => {
                     setShowAddStaffConfirmPassword(false);
                     setError('');
                   }} 
-                  className="px-5 py-2.5 rounded-xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-all cursor-pointer active:scale-95"
+                  className="px-5 py-2.5 rounded-xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-700 font-bold text-sm transition-all cursor-pointer active:scale-95"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
                   disabled={loading}
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 text-white font-extrabold text-xs shadow-md shadow-blue-500/25 transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 text-white font-extrabold text-sm shadow-md shadow-blue-500/25 transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <>
-                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       <span>Registering Staff...</span>
                     </>
                   ) : (

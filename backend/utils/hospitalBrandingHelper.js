@@ -1,4 +1,5 @@
 const SuperAdminHospital = require('../models/SuperAdminHospital');
+const { resolveEmailLogoUrl, getPublicAssetUrl } = require('../config/urls');
 
 /**
  * Resolves trusted hospital branding from MongoDB tenant record.
@@ -8,12 +9,13 @@ const SuperAdminHospital = require('../models/SuperAdminHospital');
  */
 async function resolveTrustedHospitalBranding(tenantId) {
   const fallback = {
-    name: 'Curoxa Healthcare',
+    name: 'Quroxa Healthcare',
     logo: null,
     hospitalId: null,
     tenantCode: null,
     primaryColor: '#2563eb',
-    isCuroxaDefault: true
+    isCuroxaDefault: true,
+    isQuroxaDefault: true
   };
 
   if (!tenantId || tenantId === 'platform' || tenantId === 'default') {
@@ -36,12 +38,13 @@ async function resolveTrustedHospitalBranding(tenantId) {
       );
 
       return {
-        name: hospital.name || 'Curoxa Healthcare',
+        name: hospital.name || 'Quroxa Healthcare',
         logo: isImageLogo ? hospital.logo : null,
         hospitalId: hospital.hospitalId || hospital.code,
         tenantCode: hospital.code,
         primaryColor: hospital.theme?.primaryColor || hospital.theme_color || '#2563eb',
-        isCuroxaDefault: false
+        isCuroxaDefault: false,
+        isQuroxaDefault: false
       };
     }
   } catch (err) {
@@ -62,16 +65,16 @@ async function resolveTrustedHospitalBranding(tenantId) {
  * @returns {{ subject: string, text: string, html: string }}
  */
 function buildBrandedOtpEmail({ otp, title = 'Verify Your Identity', message, hospital, expiryMinutes = 15 }) {
-  const hospitalName = hospital?.name || 'Curoxa Healthcare';
-  const logoUrl = hospital?.logo || null;
+  const hospitalName = hospital?.name || 'Quroxa Healthcare';
+  const logoUrl = resolveEmailLogoUrl(hospital?.logo);
   const primaryColor = hospital?.primaryColor || '#2563eb';
   
   const subject = `${hospitalName} Verification Code: ${otp}`;
   const text = `Your ${hospitalName} verification code is: ${otp}. This code is valid for ${expiryMinutes} minutes.`;
 
   const logoMarkup = logoUrl ? `
-    <div style="margin-bottom: 16px;">
-      <img src="${logoUrl}" alt="${hospitalName}" style="max-height: 48px; max-width: 180px; object-fit: contain; display: inline-block; background: #ffffff; padding: 4px; border-radius: 8px;" />
+    <div style="margin-bottom: 16px; text-align: center;">
+      <img src="${logoUrl}" alt="${hospitalName}" width="160" height="auto" style="max-height: 48px; max-width: 180px; object-fit: contain; display: inline-block; background: #ffffff; padding: 4px 8px; border-radius: 8px; border: 0; outline: none; text-decoration: none;" />
     </div>
   ` : '';
 
@@ -105,7 +108,7 @@ function buildBrandedOtpEmail({ otp, title = 'Verify Your Identity', message, ho
         <!-- Footer -->
         <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 18px 24px; text-align: center;">
           <p style="color: #94a3b8; font-size: 11px; margin: 0; line-height: 1.5;">
-            &copy; 2026 ${hospitalName}. Powered by Curoxa Healthcare Systems.
+            &copy; ${new Date().getFullYear()} ${hospitalName}. Powered by Quroxa Healthcare Systems.
           </p>
         </div>
       </div>

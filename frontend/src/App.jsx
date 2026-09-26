@@ -348,6 +348,24 @@ function App() {
           </ProtectedRoute>
         } />
 
+        <Route path="/procurement/item-master" element={
+          <ProtectedRoute targetRole="inventory">
+            <ProcurementDashboard initialTab="item-master" />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/procurement/item-master/new" element={
+          <ProtectedRoute targetRole="inventory">
+            <ProcurementDashboard initialTab="item-master" itemMasterSubView="new" />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/procurement/item-master/:id/edit" element={
+          <ProtectedRoute targetRole="inventory">
+            <ProcurementDashboard initialTab="item-master" itemMasterSubView="edit" />
+          </ProtectedRoute>
+        } />
+
         <Route path="/hr" element={
           <ProtectedRoute targetRole="hr">
             <HRPayroll />

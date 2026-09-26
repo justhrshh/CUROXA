@@ -5,9 +5,12 @@ import { socket, joinTenantRoom } from '../utils/socket';
 import { useRealTimeSync } from '../hooks/useRealTimeSync';
 import HRPayroll from './HRPayroll';
 import WaitingQueuePanel from '../components/WaitingQueuePanel';
-import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import quroxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import { HospitalBrandLogo, getActivePortalBranding, restoreActivePortalDocumentMetadata } from '../context/PortalBrandingContext';
 import { generateReceiptSlipPdf, fetchLetterheadConfig } from '../utils/exportEngine';
+import { triggerPrintPrescriptionDocument } from '../utils/prescriptionPrinter';
+import { convertPdfToImage } from '../utils/pdfHelper';
+import { cleanHtmlText } from '../utils/textHelper';
 
 
 const permissionNames = {
@@ -206,7 +209,7 @@ const ReceptionistDashboard = () => {
   // Batch SMS Modal states
   const [showBatchSmsModal, setShowBatchSmsModal] = useState(false);
   const [batchSmsTemplate, setBatchSmsTemplate] = useState('reminder');
-  const [batchSmsMessage, setBatchSmsMessage] = useState('Dear Patient, this is an official reminder for your clinical visit at Curoxa Medical Center. Please arrive 10 mins early.');
+  const [batchSmsMessage, setBatchSmsMessage] = useState('Dear Patient, this is an official reminder for your clinical visit at Quroxa Medical Center. Please arrive 10 mins early.');
   const [batchSmsSending, setBatchSmsSending] = useState(false);
   const [batchSmsSuccessToast, setBatchSmsSuccessToast] = useState('');
 
@@ -839,6 +842,62 @@ const ReceptionistDashboard = () => {
   const [rescheduleProfileTime, setRescheduleProfileTime] = useState('');
   const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
   const [selectedPrescription, setSelectedPrescription] = useState(null);
+  const [patientPrescriptionHistory, setPatientPrescriptionHistory] = useState([]);
+
+  // Share prescription modal states
+  const [showShareEmailModal, setShowShareEmailModal] = useState(false);
+  const [shareEmailRecipient, setShareEmailRecipient] = useState('');
+  const [shareCustomNote, setShareCustomNote] = useState('');
+  const [isSharingEmail, setIsSharingEmail] = useState(false);
+  const [sharePrescriptionData, setSharePrescriptionData] = useState(null);
+
+  const [showSummaryLetterheadPopover, setShowSummaryLetterheadPopover] = useState(false);
+  const [letterheadMode, setLetterheadMode] = useState('hospital');
+  const [adminTemplates, setAdminTemplates] = useState([]);
+  const [customLetterhead, setCustomLetterhead] = useState(null);
+  const [printSettings, setPrintSettings] = useState({
+    template: '',
+    topSpacer: 38,
+    bottomSpacer: 28,
+    xLeft: 15,
+    xRight: 15,
+    fontSize: 100
+  });
+
+  useEffect(() => {
+    const fetchHospitalLetterhead = async () => {
+      try {
+        const res = await api.get('/admin/letterhead');
+        const templates = res.data?.prescriptionTemplates || [];
+        setAdminTemplates(templates);
+        const standardTpl = templates.find(t => t.isStandard) || templates[0];
+        if (standardTpl) {
+          setPrintSettings(prev => ({
+            ...prev,
+            template: standardTpl._id,
+            topSpacer: standardTpl.yTop,
+            bottomSpacer: standardTpl.yBottom
+          }));
+        }
+        let letterheadUrl = res.data?.letterheadUrl || "";
+        letterheadUrl = letterheadUrl.replace(/\\/g, '/');
+        if (letterheadUrl && !letterheadUrl.startsWith('http://') && !letterheadUrl.startsWith('https://') && !letterheadUrl.startsWith('data:')) {
+          const apiURL = import.meta.env.VITE_API_URL || '';
+          const backendBase = apiURL ? apiURL.replace('/api', '') : 'https://curoxa.onrender.com';
+          const baseClean = backendBase.endsWith('/') ? backendBase.slice(0, -1) : backendBase;
+          const pathClean = letterheadUrl.startsWith('/') ? letterheadUrl : `/${letterheadUrl}`;
+          letterheadUrl = `${baseClean}${pathClean}`;
+        }
+        if (letterheadUrl) {
+          const imgUrl = await convertPdfToImage(letterheadUrl);
+          setCustomLetterhead(imgUrl);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch hospital letterhead in receptionist:", err);
+      }
+    };
+    fetchHospitalLetterhead();
+  }, []);
   const [labModalOpen, setLabModalOpen] = useState(false);
   const [selectedLabRequest, setSelectedLabRequest] = useState(null);
   const [allLabsModalOpen, setAllLabsModalOpen] = useState(false);
@@ -1178,7 +1237,7 @@ const ReceptionistDashboard = () => {
             discountAmount: discAmt,
             totalAmount: finalAmt,
             paymentMethod: paymentMethod,
-            hospitalName: currentUser.tenantName || 'Curoxa Medical Center'
+            hospitalName: currentUser.tenantName || 'Quroxa Medical Center'
           });
           setShowSlipPdfModal(true);
 
@@ -1211,7 +1270,7 @@ const ReceptionistDashboard = () => {
             discountAmount: discAmt,
             totalAmount: finalAmt,
             paymentMethod: paymentMethod,
-            hospitalName: currentUser.tenantName || 'Curoxa Medical Center'
+            hospitalName: currentUser.tenantName || 'Quroxa Medical Center'
           });
           setShowSlipPdfModal(true);
 
@@ -1265,7 +1324,7 @@ const ReceptionistDashboard = () => {
             discountAmount: discAmt,
             totalAmount: finalAmt,
             paymentMethod: paymentMethod,
-            hospitalName: currentUser.tenantName || 'Curoxa Medical Center'
+            hospitalName: currentUser.tenantName || 'Quroxa Medical Center'
           });
           setShowSlipPdfModal(true);
 
@@ -1340,7 +1399,7 @@ const ReceptionistDashboard = () => {
           discountAmount: discAmt,
           totalAmount: finalAmt,
           paymentMethod: paymentMethod,
-          hospitalName: currentUser.tenantName || 'Curoxa Medical Center'
+          hospitalName: currentUser.tenantName || 'Quroxa Medical Center'
         });
         setShowSlipPdfModal(true);
 
@@ -1984,7 +2043,7 @@ const ReceptionistDashboard = () => {
           name: app.patientId?.name || 'Unknown',
           age: app.patientId?.age || 0,
           gender: app.patientId?.gender || 'N/A',
-          symptoms: app.reason || 'General Checkup',
+          symptoms: cleanHtmlText(app.reason, 'General Checkup'),
           status: app.status || 'Upcoming',
           notes: app.notes || '',
           diagnosis: app.diagnosis || '',
@@ -2180,7 +2239,7 @@ const ReceptionistDashboard = () => {
         discountAmount: discAmt,
         totalAmount: finalAmt,
         paymentMethod: bookingPaymentMethod,
-        hospitalName: currentUser.tenantName || 'Curoxa Medical Center'
+        hospitalName: currentUser.tenantName || 'Quroxa Medical Center'
       });
       setShowSlipPdfModal(true);
 
@@ -2278,7 +2337,7 @@ const ReceptionistDashboard = () => {
         discountAmount: discAmt,
         totalAmount: finalAmt,
         paymentMethod: bookingPaymentMethod,
-        hospitalName: currentUser.tenantName || 'Curoxa Medical Center'
+        hospitalName: currentUser.tenantName || 'Quroxa Medical Center'
       });
       setShowSlipPdfModal(true);
 
@@ -3340,7 +3399,7 @@ const ReceptionistDashboard = () => {
         discountAmount: finalDiscAmt,
         totalAmount: finalTotalAmt,
         paymentMethod: bookingPaymentMethod || 'Cash',
-        hospitalName: currentUser.tenantName || 'Curoxa Medical Center'
+        hospitalName: currentUser.tenantName || 'Quroxa Medical Center'
       });
       setShowSlipPdfModal(true);
 
@@ -3477,19 +3536,177 @@ const ReceptionistDashboard = () => {
   };
 
   const handleViewPrescription = async (apptId) => {
+    if (!selectedPatient) return;
     try {
       setLoading(true);
       const res = await api.get(`/prescriptions?patientId=${selectedPatient._id}`);
-      const rx = res.data.find(r => r.appointmentId === apptId || (r.appointmentId?._id && r.appointmentId._id === apptId));
-      if (rx) {
-        setSelectedPrescription(rx);
-        setPrescriptionModalOpen(true);
-      } else {
-        showToast("No prescription has been generated for this appointment yet.", "info");
+      const rxList = res.data || [];
+      if (!rxList || rxList.length === 0) {
+        showToast("No prescriptions have been generated for this patient yet.", "info");
+        return;
       }
+      // Sort prescriptions descending by date (latest first)
+      const sorted = [...rxList].sort((a, b) => {
+        const dateA = new Date(a.date || a.createdAt || 0);
+        const dateB = new Date(b.date || b.createdAt || 0);
+        return dateB - dateA;
+      });
+      setPatientPrescriptionHistory(sorted);
+
+      let targetRx = null;
+      if (apptId) {
+        targetRx = sorted.find(r => String(r.appointmentId?._id || r.appointmentId) === String(apptId));
+      }
+      // If not matched or no apptId given, default to the latest prescription
+      if (!targetRx) {
+        targetRx = sorted[0];
+      }
+      setSelectedPrescription(targetRx);
+      setPrescriptionModalOpen(true);
     } catch (err) {
-      console.error(err);
+      console.error("View prescription error:", err);
       showToast("Failed to load prescription.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenShareModal = (summaryData) => {
+    if (!summaryData) return;
+    setSharePrescriptionData(summaryData);
+    const pEmail = summaryData.patient?.email;
+    const aEmail = summaryData.appointment?.patientId?.email;
+    const validEmail = (pEmail && pEmail !== 'N/A' && pEmail.includes('@')) 
+      ? pEmail 
+      : ((aEmail && aEmail !== 'N/A' && aEmail.includes('@')) ? aEmail : '');
+    setShareEmailRecipient(validEmail);
+    setShareCustomNote('');
+    setShowShareEmailModal(true);
+  };
+
+  const handleSendShareEmail = async () => {
+    const trimmedEmail = (shareEmailRecipient || '').trim();
+    if (!trimmedEmail || !trimmedEmail.includes('@') || !trimmedEmail.includes('.')) {
+      showToast("Please enter a valid recipient email address.", "error");
+      return;
+    }
+    if (!sharePrescriptionData) return;
+
+    try {
+      setIsSharingEmail(true);
+      const { appointment, patient, prescription, labs, doctor } = sharePrescriptionData;
+      
+      const payload = {
+        email: trimmedEmail,
+        customNote: (shareCustomNote || '').trim(),
+        patient: {
+          name: patient?.name,
+          uhid: patient?.uhid || patient?.patientId,
+          age: patient?.age,
+          gender: patient?.gender,
+          contact: patient?.contact
+        },
+        doctor: {
+          name: doctor?.name,
+          specialty: doctor?.specialty || doctor?.department || doctor?.designation,
+          staff_id: doctor?.staff_id
+        },
+        appointment: {
+          date: appointment?.date || prescription?.createdAt,
+          diagnosis: appointment?.diagnosis || prescription?.diagnosis,
+          notes: appointment?.notes || prescription?.notes,
+          vitals: appointment?.vitals || patient?.vitals
+        },
+        items: prescription?.items || [],
+        labs: labs || [],
+        diagnosis: prescription?.diagnosis || appointment?.diagnosis || '',
+        notes: prescription?.notes || appointment?.notes || ''
+      };
+
+      const rxId = prescription?._id;
+      const url = rxId ? `/prescriptions/${rxId}/share` : '/prescriptions/share';
+      const res = await api.post(url, payload);
+
+      showToast(res.data?.message || `Prescription sent to ${trimmedEmail} successfully!`, 'success');
+      setShowShareEmailModal(false);
+      setSharePrescriptionData(null);
+    } catch (err) {
+      console.error("Share email error:", err);
+      showToast(err.response?.data?.error || "Failed to send prescription via email.", "error");
+    } finally {
+      setIsSharingEmail(false);
+    }
+  };
+
+  const handleDirectSharePrescription = async (apptId, patientParam = null) => {
+    let patient = patientParam;
+    if (typeof patient === 'string') {
+      patient = (patientsList || []).find(p => String(p._id) === String(patientParam)) || selectedPatient;
+    }
+    if (!patient) {
+      patient = selectedPatient;
+    }
+
+    if (!patient && apptId) {
+      const matchedAppt = (appointments || []).find(a => String(a._id) === String(apptId));
+      if (matchedAppt?.patientId) {
+        if (typeof matchedAppt.patientId === 'object') {
+          patient = matchedAppt.patientId;
+        } else {
+          patient = (patientsList || []).find(p => String(p._id) === String(matchedAppt.patientId));
+        }
+      }
+    }
+
+    if (!patient || !patient._id) {
+      showToast("Please select a patient or appointment with patient details.", "warning");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await api.get(`/prescriptions?patientId=${patient._id}`);
+      const rxList = res.data || [];
+      if (!rxList || rxList.length === 0) {
+        showToast("No prescriptions have been generated for this patient yet.", "info");
+        return;
+      }
+
+      const sorted = [...rxList].sort((a, b) => {
+        const dateA = new Date(a.date || a.createdAt || 0);
+        const dateB = new Date(b.date || b.createdAt || 0);
+        return dateB - dateA;
+      });
+
+      let targetRx = null;
+      if (apptId) {
+        targetRx = sorted.find(r => String(r.appointmentId?._id || r.appointmentId) === String(apptId));
+      }
+      if (!targetRx) {
+        targetRx = sorted[0];
+      }
+
+      const targetApptId = targetRx.appointmentId?._id || targetRx.appointmentId || apptId;
+      const linkedApp = (appointments || []).find(a => String(a._id) === String(targetApptId))
+        || (typeof targetRx.appointmentId === 'object' ? targetRx.appointmentId : null)
+        || selectedProfileAppointment;
+
+      const linkedDoctor = targetRx.doctor 
+        || (targetRx.doctorId && typeof targetRx.doctorId === 'object' ? targetRx.doctorId : null)
+        || linkedApp?.doctor
+        || (linkedApp?.doctorId && typeof linkedApp.doctorId === 'object' ? linkedApp.doctorId : null)
+        || (doctors || []).find(d => String(d._id) === String(targetRx.doctorId || linkedApp?.doctorId));
+
+      handleOpenShareModal({
+        patient: patient,
+        doctor: linkedDoctor,
+        appointment: linkedApp,
+        prescription: targetRx,
+        labs: []
+      });
+    } catch (err) {
+      console.error("Direct share prescription error:", err);
+      showToast("Failed to fetch prescription details for sharing.", "error");
     } finally {
       setLoading(false);
     }
@@ -3694,7 +3911,7 @@ const ReceptionistDashboard = () => {
       discountAmount: billToPrint.discountAmount || 0,
       totalAmount: billToPrint.totalAmount,
       paymentMethod: billToPrint.paymentMethod || 'Cash',
-      hospitalName: currentUser?.tenantName || 'Curoxa Medical Center'
+      hospitalName: currentUser?.tenantName || 'Quroxa Medical Center'
     });
     setShowSlipPdfModal(true);
   };
@@ -4688,8 +4905,8 @@ const ReceptionistDashboard = () => {
                 />
               ) : (
                 <img 
-                  src={curoxaSidebarLogo} 
-                  alt="CUROXA" 
+                  src={quroxaSidebarLogo} 
+                  alt="QUROXA" 
                   style={{
                     width: '44px',
                     height: '44px',
@@ -4701,7 +4918,7 @@ const ReceptionistDashboard = () => {
               )}
               <div className="sidebar-brand-text-group" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                 <span className="sidebar-brand-text" style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif", fontWeight: 900, fontSize: '18px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isSidebarCollapsed ? '0px' : '160px' }}>
-                  {getActivePortalBranding()?.name || 'CUROXA'}
+                  {getActivePortalBranding()?.name || 'QUROXA'}
                 </span>
                 <span className="sidebar-brand-subtitle" style={{ fontSize: '11px', color: '#64748B', fontWeight: 500, letterSpacing: '-0.01em', marginTop: '3px', lineHeight: 1 }}>
                   {getActivePortalBranding() ? `${getActivePortalBranding()?.hospitalId} • Reception` : 'Health Management'}
@@ -5518,7 +5735,7 @@ const ReceptionistDashboard = () => {
                             </div>
                             {app.reason && (
                               <div style={{ color: '#64748B', fontWeight: 600, marginTop: '4px', fontSize: '11px' }}>
-                                Reason: <span style={{ color: '#334155' }}>{app.reason}</span>
+                                Reason: <span style={{ color: '#334155' }}>{cleanHtmlText(app.reason)}</span>
                               </div>
                             )}
                           </div>
@@ -7218,7 +7435,7 @@ const ReceptionistDashboard = () => {
                                     border: '1px solid #BAE6FD',
                                     display: 'inline-block',
                                     width: 'fit-content'
-                                  }} title="Global Curoxa Platform UH-ID">
+                                  }} title="Global Quroxa Platform UH-ID">
                                     {p.uhId}
                                   </span>
                                 )}
@@ -7717,7 +7934,7 @@ const ReceptionistDashboard = () => {
                                 borderRadius: '20px',
                                 border: '1px solid #7DD3FC',
                                 boxShadow: '0 2px 6px rgba(2,132,199,0.1)'
-                              }} title="Global Curoxa Platform Patient ID">
+                              }} title="Global Quroxa Platform Patient ID">
                                 UH-ID: {selectedPatient.uhId}
                               </span>
                             )}
@@ -7794,6 +8011,60 @@ const ReceptionistDashboard = () => {
                             <polyline points="10 9 9 9 8 9"/>
                           </svg>
                           Lab Reports
+                        </button>
+
+                        <button 
+                          className="btn" 
+                          style={{
+                            background: 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)',
+                            border: '1.5px solid #BBF7D0',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            color: '#15803D',
+                            padding: '7px 14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '12px',
+                            fontWeight: 850,
+                            boxShadow: '0 2px 6px rgba(22, 163, 74, 0.12)',
+                            transition: 'all 0.15s'
+                          }}
+                          onClick={() => handleViewPrescription(selectedProfileAppointment?._id)}
+                          title="View Patient Prescriptions & Clinical Summary"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/>
+                            <path d="m8.5 8.5 7 7"/>
+                          </svg>
+                          Prescriptions
+                        </button>
+
+                        <button 
+                          className="btn" 
+                          style={{
+                            background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+                            border: '1.5px solid #BFDBFE',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            color: '#1D4ED8',
+                            padding: '7px 14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '12px',
+                            fontWeight: 850,
+                            boxShadow: '0 2px 6px rgba(37, 99, 235, 0.12)',
+                            transition: 'all 0.15s'
+                          }}
+                          onClick={() => handleDirectSharePrescription(selectedProfileAppointment?._id, selectedPatient)}
+                          title="Share Prescription via Branded Email"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <rect width="20" height="16" x="2" y="4" rx="2"/>
+                            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                          </svg>
+                          Share Rx
                         </button>
 
                         <button 
@@ -8379,6 +8650,33 @@ const ReceptionistDashboard = () => {
                               style={{ 
                                 width: '100%', 
                                 height: '34px', 
+                                background: '#EFF6FF', 
+                                color: '#1D4ED8', 
+                                border: '1.5px solid #BFDBFE', 
+                                borderRadius: '8px', 
+                                fontWeight: 800, 
+                                fontSize: '12.5px', 
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px',
+                                transition: 'all 0.15s'
+                              }}
+                              onClick={() => handleDirectSharePrescription(selectedProfileAppointment._id, selectedPatient)}
+                              title="Share Prescription via Email"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect width="20" height="16" x="2" y="4" rx="2"/>
+                                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                              </svg>
+                              Share Prescription
+                            </button>
+                            <button 
+                              className="btn"
+                              style={{ 
+                                width: '100%', 
+                                height: '34px', 
                                 background: '#FFFFFF', 
                                 color: '#2563EB', 
                                 border: '1.5px solid #BFDBFE', 
@@ -8852,43 +9150,728 @@ const ReceptionistDashboard = () => {
               </div>
             </div>
 
-            {/* View Prescription Modal */}
-            {prescriptionModalOpen && selectedPrescription && (
-              <div onClick={() => setPrescriptionModalOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px' }}>
-                <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: '20px', padding: '32px', width: '100%', maxWidth: '600px', boxShadow: '0 24px 64px rgba(0,0,0,0.15)', animation: 'slideUp 0.3s ease-out' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <div>
-                      <div style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A' }}>Prescription Details</div>
-                      <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>Issued by {selectedPrescription.doctorId?.name || 'Dr. Julian Vance'}</div>
-                    </div>
-                    <button onClick={() => setPrescriptionModalOpen(false)} style={{ background: '#F1F5F9', border: 'none', borderRadius: '2px', width: '32px', height: '22px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: '14px', fontWeight: 'bold' }}>✕</button>
-                  </div>
+            {/* View Prescription Modal: Full Clinical Encounter Summary with Multi-Date Picker & Letterhead Print */}
+            {prescriptionModalOpen && selectedPrescription && (() => {
+              const currentRx = selectedPrescription;
+              const pAppId = currentRx.appointmentId?._id || currentRx.appointmentId;
+              const linkedApp = appointments.find(a => String(a._id) === String(pAppId)) 
+                || (typeof currentRx.appointmentId === 'object' && currentRx.appointmentId ? currentRx.appointmentId : null) 
+                || selectedProfileAppointment 
+                || {};
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '2px solid #F1F5F9' }}>
-                          <th style={{ padding: '10px 12px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>Medicine</th>
-                          <th style={{ padding: '10px 12px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>Dosage</th>
-                          <th style={{ padding: '10px 12px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>Duration</th>
-                          <th style={{ padding: '10px 12px', fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>Instructions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedPrescription.items && selectedPrescription.items.map((item, idx) => (
-                          <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <td style={{ padding: '12px', fontSize: '12px', fontWeight: 850, color: '#0F172A' }}>{item.medicine}</td>
-                            <td style={{ padding: '12px', fontSize: '13px', fontWeight: 700, color: '#475569' }}>{item.dosage}</td>
-                            <td style={{ padding: '12px', fontSize: '13px', fontWeight: 700, color: '#475569' }}>{item.duration}</td>
-                            <td style={{ padding: '12px', fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>{item.instructions || 'After meals'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+              const linkedDoctor = currentRx.doctorId 
+                || linkedApp.doctorId 
+                || {};
+
+              const docName = linkedDoctor.name ? (linkedDoctor.name.startsWith('Dr.') ? linkedDoctor.name : `Dr. ${linkedDoctor.name}`) : 'Dr. Assigned Physician';
+              const docDept = linkedDoctor.specialty || linkedDoctor.role || linkedDoctor.department || 'General Medicine';
+              const docDesignation = linkedDoctor.designation || 'MBBS, MD';
+              const docReg = linkedDoctor.staff_id ? (linkedDoctor.staff_id.match(/^\d+$/) ? linkedDoctor.staff_id.slice(-5) : linkedDoctor.staff_id.toUpperCase()) : '44442';
+
+              const rxDateObj = currentRx.date || currentRx.createdAt || linkedApp.date;
+              const rxDateFormatted = rxDateObj ? new Date(rxDateObj).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+              const linkedLabs = (patientLabTests || []).filter(l => {
+                const lAppId = l.appointmentId?._id || l.appointmentId;
+                return pAppId && String(lAppId) === String(pAppId);
+              });
+
+              // Process Vitals
+              const rawVitals = linkedApp.vitals 
+                || (patientVitals && patientVitals.length > 0 ? patientVitals[0] : null) 
+                || selectedPatient?.vitals;
+
+              let vitalsArr = [];
+              if (typeof rawVitals === 'string' && rawVitals.trim()) {
+                vitalsArr = rawVitals.split('|').map(v => v.trim()).filter(Boolean);
+              } else if (rawVitals && typeof rawVitals === 'object') {
+                if (rawVitals.bpSys) vitalsArr.push(`BP: ${rawVitals.bpSys}/${rawVitals.bpDia || ''} mmHg`);
+                if (rawVitals.pulse) vitalsArr.push(`Pulse: ${rawVitals.pulse} bpm`);
+                if (rawVitals.temperature || rawVitals.temp) vitalsArr.push(`Temp: ${rawVitals.temperature || rawVitals.temp} °F`);
+                if (rawVitals.weight) vitalsArr.push(`Weight: ${rawVitals.weight} kg`);
+              }
+
+              const diagnosisText = currentRx.diagnosis || linkedApp.diagnosis || '';
+              const notesText = currentRx.notes || linkedApp.notes || '';
+              const items = currentRx.items || [];
+
+              const handlePrintClick = () => {
+                const selectedTpl = adminTemplates.find(t => t._id === printSettings.template) || adminTemplates.find(t => t.isStandard) || adminTemplates[0];
+                const finalSettings = {
+                  ...printSettings,
+                  letterheadMode: letterheadMode || 'hospital',
+                  hospitalLetterhead: customLetterhead,
+                  doctorCustomLetterhead: linkedDoctor.customLetterhead || null,
+                  topSpacer: selectedTpl ? selectedTpl.yTop : (printSettings.topSpacer || 38),
+                  bottomSpacer: selectedTpl ? selectedTpl.yBottom : (printSettings.bottomSpacer || 28),
+                  xLeft: selectedTpl ? selectedTpl.xLeft : 15,
+                  xRight: selectedTpl ? selectedTpl.xRight : 15,
+                  fontSize: printSettings.fontSize || 100
+                };
+
+                triggerPrintPrescriptionDocument({
+                  patient: selectedPatient,
+                  doctor: linkedDoctor,
+                  appointment: linkedApp,
+                  prescription: currentRx,
+                  labs: linkedLabs,
+                  settings: finalSettings,
+                  clinicName: currentUser?.tenantName || 'Quroxa Healthcare'
+                });
+              };
+
+              return (
+                <div id="print-clinical-summary-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.75)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+                  <div className="glass-card" style={{ width: '100%', maxWidth: '900px', background: 'white', padding: '0', borderRadius: '20px', maxHeight: '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 60px -15px rgba(15, 23, 42, 0.3)', border: '1px solid #E2E8F0', position: 'relative', zIndex: 10 }}>
+                    
+                    {/* Modal Header */}
+                    <div className="no-print" style={{ background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)', padding: '18px 24px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.1)', flexWrap: 'wrap', gap: '12px' }}>
+                      <div>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34D399', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '5px' }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981', display: 'inline-block' }}></span>
+                          Clinical Prescription Record
+                        </div>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.01em' }}>
+                          Clinical Encounter Summary
+                        </h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#94A3B8', marginTop: '4px', flexWrap: 'wrap' }}>
+                          <span>Patient: <strong style={{ color: '#F1F5F9' }}>{selectedPatient?.name || 'N/A'}</strong></span>
+                          <span style={{ opacity: 0.4 }}>•</span>
+                          <span>UHID: <strong style={{ color: '#60A5FA', fontFamily: 'monospace' }}>{selectedPatient?.uhid || selectedPatient?.patientId || 'N/A'}</strong></span>
+                          <span style={{ opacity: 0.4 }}>•</span>
+                          <span>Date: <strong style={{ color: '#F1F5F9' }}>{rxDateFormatted}</strong></span>
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          setPrescriptionModalOpen(false);
+                          setSelectedPrescription(null);
+                          setShowSummaryLetterheadPopover(false);
+                        }} 
+                        className="no-print"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', fontSize: '15px', fontWeight: 700 }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.transform = 'scale(1)'; }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {/* Date Selector Sub-header: Easily switch to other date's prescriptions */}
+                    <div className="no-print" style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', padding: '10px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                          <span>Consultation Date:</span>
+                        </div>
+                        <select
+                          value={currentRx._id}
+                          onChange={(e) => {
+                            const found = patientPrescriptionHistory.find(r => r._id === e.target.value);
+                            if (found) setSelectedPrescription(found);
+                          }}
+                          style={{
+                            padding: '6px 14px',
+                            borderRadius: '10px',
+                            border: '1.5px solid #CBD5E1',
+                            background: '#FFFFFF',
+                            color: '#0F172A',
+                            fontSize: '12.5px',
+                            fontWeight: 750,
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                            outline: 'none'
+                          }}
+                        >
+                          {patientPrescriptionHistory.map((rx, idx) => {
+                            const rDate = rx.date || rx.createdAt;
+                            const formatted = rDate ? new Date(rDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : `Prescription #${idx + 1}`;
+                            const dName = rx.doctorId?.name ? (rx.doctorId.name.startsWith('Dr.') ? rx.doctorId.name : `Dr. ${rx.doctorId.name}`) : 'Doctor';
+                            const dSpec = rx.doctorId?.specialty || rx.doctorId?.role || '';
+                            return (
+                              <option key={rx._id} value={rx._id}>
+                                {formatted} — {dName} {dSpec ? `(${dSpec})` : ''} {idx === 0 ? '• (Latest)' : ''}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        {patientPrescriptionHistory.length > 1 && (
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563EB', background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '3px 9px', borderRadius: '12px' }}>
+                            {patientPrescriptionHistory.length} Visits Recorded
+                          </span>
+                        )}
+                      </div>
+
+                      {patientPrescriptionHistory.length > 1 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>
+                            Visit {patientPrescriptionHistory.findIndex(r => r._id === currentRx._id) + 1} of {patientPrescriptionHistory.length}
+                          </span>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button
+                              type="button"
+                              disabled={patientPrescriptionHistory.findIndex(r => r._id === currentRx._id) >= patientPrescriptionHistory.length - 1}
+                              onClick={() => {
+                                const idx = patientPrescriptionHistory.findIndex(r => r._id === currentRx._id);
+                                if (idx < patientPrescriptionHistory.length - 1) setSelectedPrescription(patientPrescriptionHistory[idx + 1]);
+                              }}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                border: '1px solid #CBD5E1',
+                                background: '#FFFFFF',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                opacity: patientPrescriptionHistory.findIndex(r => r._id === currentRx._id) >= patientPrescriptionHistory.length - 1 ? 0.4 : 1
+                              }}
+                            >
+                              ← Older
+                            </button>
+                            <button
+                              type="button"
+                              disabled={patientPrescriptionHistory.findIndex(r => r._id === currentRx._id) <= 0}
+                              onClick={() => {
+                                const idx = patientPrescriptionHistory.findIndex(r => r._id === currentRx._id);
+                                if (idx > 0) setSelectedPrescription(patientPrescriptionHistory[idx - 1]);
+                              }}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                border: '1px solid #CBD5E1',
+                                background: '#FFFFFF',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                opacity: patientPrescriptionHistory.findIndex(r => r._id === currentRx._id) <= 0 ? 0.4 : 1
+                              }}
+                            >
+                              Newer →
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Modal Body: Document Sheet Container */}
+                    <div data-lenis-prevent style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', background: '#F8FAFC', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <div style={{ background: '#ffffff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '28px 32px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        
+                        {/* Executive Patient & Encounter Banner */}
+                        <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '16px 20px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '1px solid #E2E8F0', paddingBottom: '12px', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '17px', fontWeight: 900, color: '#0F172A', textTransform: 'capitalize' }}>
+                                {selectedPatient?.name || 'Anonymous Patient'}
+                              </span>
+                              {(selectedPatient?.uhid || selectedPatient?.patientId) && (
+                                <span style={{ fontSize: '11px', fontWeight: 800, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: '6px', fontFamily: 'monospace' }}>
+                                  UHID: {selectedPatient?.uhid || selectedPatient?.patientId}
+                                </span>
+                              )}
+                              <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#475569', background: '#F1F5F9', padding: '2px 8px', borderRadius: '6px' }}>
+                                {selectedPatient?.age ? `${selectedPatient.age} Yrs` : '—'} • {selectedPatient?.gender || '—'}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12px', color: '#64748B', flexWrap: 'wrap' }}>
+                              <span>Consultation: <strong style={{ color: '#0F172A' }}>{rxDateFormatted}</strong></span>
+                              <span>Attending: <strong style={{ color: '#0F172A' }}>{docName}</strong> ({docDept})</span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: '#475569', flexWrap: 'wrap', gap: '8px 16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                              {selectedPatient?.contact && (
+                                <div><span style={{ color: '#64748B', fontWeight: 600 }}>Mobile: </span><strong style={{ color: '#1E293B' }}>{selectedPatient.contact}</strong></div>
+                              )}
+                              {selectedPatient?.address && (
+                                <div><span style={{ color: '#64748B', fontWeight: 600 }}>Address: </span><strong style={{ color: '#1E293B' }}>{selectedPatient.address}</strong></div>
+                              )}
+                              <div><span style={{ color: '#64748B', fontWeight: 600 }}>Doctor Reg: </span><strong style={{ color: '#1E293B' }}>DMC-{docReg}</strong></div>
+                            </div>
+
+                            {/* Vitals Micro-badges */}
+                            {vitalsArr.length > 0 && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#0284C7', background: '#F0F9FF', border: '1px solid #BAE6FD', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>Vitals</span>
+                                {vitalsArr.map((v, vIdx) => (
+                                  <span key={vIdx} style={{ fontSize: '11px', fontWeight: 700, color: '#0F172A', background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '2px 7px', borderRadius: '4px' }}>
+                                    {v}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Diagnosis Box */}
+                        {diagnosisText && (
+                          <div style={{ border: '1px solid #FDE68A', borderRadius: '12px', overflow: 'hidden', background: '#FFFBEB' }}>
+                            <div style={{ background: '#FEF3C7', padding: '10px 16px', borderBottom: '1px solid #FDE68A', fontFamily: "'Outfit', sans-serif", fontSize: '11.5px', fontWeight: 800, color: '#92400E', letterSpacing: '0.05em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></svg>
+                              Clinical Diagnosis & Observation
+                            </div>
+                            <div style={{ padding: '14px 16px', fontSize: '13px', color: '#78350F', lineHeight: '1.6', fontWeight: 600 }}>
+                              {diagnosisText.includes('<') ? (
+                                <div dangerouslySetInnerHTML={{ __html: diagnosisText }} />
+                              ) : (
+                                diagnosisText.split('\n').map((line, lidx) => (
+                                  <div key={lidx} style={{ display: 'flex', gap: '8px', marginBottom: '4px', alignItems: 'flex-start' }}>
+                                    <span style={{ color: '#D97706', fontSize: '10px', marginTop: '3px' }}>•</span>
+                                    <span>{line.trim()}</span>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* SOAP Notes if present */}
+                        {notesText && (
+                          <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', background: '#F8FAFC' }}>
+                            <div style={{ background: '#F1F5F9', padding: '10px 16px', borderBottom: '1px solid #E2E8F0', fontFamily: "'Outfit', sans-serif", fontSize: '11.5px', fontWeight: 800, color: '#475569', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                              Clinical SOAP Notes & Advice
+                            </div>
+                            <div style={{ padding: '14px 16px', fontSize: '13px', color: '#334155', lineHeight: '1.6', fontWeight: 500, whiteSpace: 'pre-wrap' }}>
+                              {notesText.includes('<') ? (
+                                <div dangerouslySetInnerHTML={{ __html: notesText }} />
+                              ) : (
+                                notesText
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Prescribed Medicines Section */}
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ width: '26px', height: '26px', borderRadius: '7px', background: '#ECFDF5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>
+                              </div>
+                              <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Prescribed Medicines</span>
+                              <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#059669', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '12px' }}>
+                                {items.length} Items
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
+                              <thead>
+                                <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                                  <th style={{ padding: '10px 12px', color: '#64748B', fontWeight: 700, width: '40px', textAlign: 'center' }}>#</th>
+                                  <th style={{ padding: '10px 12px', color: '#64748B', fontWeight: 700 }}>Medicine Name</th>
+                                  <th style={{ padding: '10px 12px', color: '#64748B', fontWeight: 700, width: '90px', textAlign: 'center' }}>Dosage</th>
+                                  <th style={{ padding: '10px 12px', color: '#64748B', fontWeight: 700, width: '90px', textAlign: 'center' }}>Duration</th>
+                                  <th style={{ padding: '10px 12px', color: '#64748B', fontWeight: 700, width: '120px', textAlign: 'center' }}>Frequency</th>
+                                  <th style={{ padding: '10px 12px', color: '#64748B', fontWeight: 700 }}>Instructions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {items.length > 0 ? (
+                                  items.map((m, idx) => {
+                                    let freq = 'Once a Day';
+                                    let inst = 'After Food';
+                                    if (m.instructions) {
+                                      const parts = m.instructions.split('(');
+                                      if (parts[0]) freq = parts[0].trim();
+                                      if (parts[1]) inst = parts[1].replace(')', '').trim();
+                                    }
+                                    return (
+                                      <tr key={idx} style={{ borderBottom: idx === items.length - 1 ? 'none' : '1px solid #E2E8F0', background: idx % 2 === 0 ? '#ffffff' : '#FBFDFF' }}>
+                                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#64748B' }}>{idx + 1}</td>
+                                        <td style={{ padding: '10px 12px', fontWeight: 700, color: '#0F172A', fontSize: '13px' }}>{m.medicine || m.name}</td>
+                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                          <span style={{ background: '#F1F5F9', color: '#1E293B', padding: '3px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>{m.dosage || m.dose || '—'}</span>
+                                        </td>
+                                        <td style={{ padding: '10px 12px', textAlign: 'center', color: '#475569', fontWeight: 600 }}>{m.duration || '—'}</td>
+                                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                          <span style={{ background: '#EFF6FF', color: '#2563EB', border: '1px solid #DBEAFE', padding: '3px 9px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700 }}>{freq}</span>
+                                        </td>
+                                        <td style={{ padding: '10px 12px', color: '#475569', fontWeight: 500 }}>{inst}</td>
+                                      </tr>
+                                    );
+                                  })
+                                ) : (
+                                  <tr>
+                                    <td colSpan="6" style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontWeight: 600 }}>No medications prescribed for this visit.</td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Prescribed Lab Tests Section */}
+                        {linkedLabs && linkedLabs.length > 0 && (
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                              <div style={{ width: '26px', height: '26px', borderRadius: '7px', background: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg>
+                              </div>
+                              <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Prescribed Lab Tests</span>
+                              <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#2563EB', background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: '12px' }}>
+                                {linkedLabs.length} Ordered
+                              </span>
+                            </div>
+
+                            <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
+                                <thead>
+                                  <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                                    <th style={{ padding: '10px 14px', color: '#64748B', fontWeight: 700, width: '40px', textAlign: 'center' }}>#</th>
+                                    <th style={{ padding: '10px 14px', color: '#64748B', fontWeight: 700 }}>Test Name</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {linkedLabs.map((test, idx) => (
+                                    <tr key={idx} style={{ borderBottom: idx === linkedLabs.length - 1 ? 'none' : '1px solid #E2E8F0', background: idx % 2 === 0 ? '#ffffff' : '#FBFDFF' }}>
+                                      <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#64748B' }}>{idx + 1}</td>
+                                      <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0F172A' }}>{test.testName || test.name || test}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Instructions & Verified Doctor Signature */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '24px', paddingTop: '20px', borderTop: '1.5px solid #E2E8F0' }}>
+                          <div style={{ maxWidth: '60%' }}>
+                            <div style={{ color: '#0F172A', fontWeight: 800, fontSize: '12px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              Patient Instructions:
+                            </div>
+                            <ul style={{ paddingLeft: '16px', margin: 0, color: '#475569', fontWeight: 500, fontSize: '12px', lineHeight: '1.6' }}>
+                              <li>Take all medicines strictly as prescribed with correct timing.</li>
+                              <li>Complete the entire course of medication without interruption.</li>
+                              <li>Maintain adequate hydration, avoid cold foods and rest well.</li>
+                            </ul>
+                          </div>
+                          
+                          <div style={{ textAlign: 'center', width: '220px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px 16px' }}>
+                            <div style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1.5px dashed #CBD5E1', marginBottom: '8px' }}>
+                              <span style={{ fontFamily: "'Brush Script MT', 'Lucida Handwriting', cursive, sans-serif", fontSize: '26px', color: '#1E3A8A', fontWeight: 600 }}>
+                                {docName.replace(/^Dr\.?\s*/i, '')}
+                              </span>
+                            </div>
+                            <div style={{ color: '#0F172A', fontWeight: 800, fontSize: '13.5px' }}>{docName}</div>
+                            <div style={{ color: '#64748B', fontWeight: 600, fontSize: '11px', marginTop: '2px' }}>{docDesignation}</div>
+                            <div style={{ color: '#64748B', fontWeight: 600, fontSize: '11px' }}>Reg. No. DMC - {docReg}</div>
+                            <div style={{ color: '#059669', fontWeight: 700, fontSize: '10.5px', marginTop: '6px', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '3px 8px', borderRadius: '6px', display: 'inline-block' }}>
+                              ✓ Digitally Signed Record
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+
+                    {/* Modal Footer: Matching Doctor Portal with split print button & letterhead popover */}
+                    <div style={{ padding: '16px 28px', background: '#ffffff', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }} className="no-print">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '24px', height: '24px', borderRadius: '7px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+                        </div>
+                        <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+                          Official Encounter Summary • Safe Margins Kept
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {/* Share via Email Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenShareModal({
+                            patient: selectedPatient,
+                            doctor: linkedDoctor,
+                            appointment: linkedApp,
+                            prescription: currentRx,
+                            labs: linkedLabs
+                          })}
+                          title="Share Prescription via Email"
+                          style={{
+                            padding: '10px 18px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '7px',
+                            background: '#EFF6FF',
+                            border: '1.5px solid #BFDBFE',
+                            borderRadius: '12px',
+                            color: '#1D4ED8',
+                            fontSize: '13.5px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#DBEAFE'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <rect width="20" height="16" x="2" y="4" rx="2"/>
+                            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                          </svg>
+                          <span>Share via Email</span>
+                        </button>
+
+                        {/* Blue Print Button with Split Letterhead Selector */}
+                        <div style={{ position: 'relative' }}>
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'stretch',
+                            background: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 60%, #3B82F6 100%)',
+                            borderRadius: '12px',
+                            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+                            overflow: 'visible'
+                          }}>
+                            {/* Primary Print Button */}
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                setShowSummaryLetterheadPopover(false);
+                                handlePrintClick();
+                              }} 
+                              style={{ 
+                                padding: '11px 20px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '8px', 
+                                background: 'transparent',
+                                border: 'none',
+                                borderTopLeftRadius: '12px',
+                                borderBottomLeftRadius: '12px',
+                                color: '#ffffff',
+                                fontSize: '13.5px',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                transition: 'background 0.15s ease'
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+                              <span>Print Summary ({letterheadMode === 'custom' ? 'Doctor Custom' : letterheadMode === 'none' ? 'No Letterhead' : 'Hospital Letterhead'})</span>
+                            </button>
+
+                            {/* Separator */}
+                            <div style={{ width: '1px', background: 'rgba(255,255,255,0.25)' }} />
+
+                            {/* Split Dropdown Trigger */}
+                            <button 
+                              type="button" 
+                              onClick={() => setShowSummaryLetterheadPopover(!showSummaryLetterheadPopover)}
+                              title="Letterhead & Layout Options"
+                              style={{ 
+                                padding: '11px 12px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                background: 'transparent',
+                                border: 'none',
+                                borderTopRightRadius: '12px',
+                                borderBottomRightRadius: '12px',
+                                color: '#ffffff',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                transition: 'background 0.15s ease'
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.18)'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                              ▼
+                            </button>
+                          </div>
+
+                          {showSummaryLetterheadPopover && (
+                            <>
+                              <div 
+                                onClick={() => setShowSummaryLetterheadPopover(false)} 
+                                style={{ position: 'fixed', inset: 0, zIndex: 999 }} 
+                              />
+                              <div style={{
+                                position: 'absolute',
+                                bottom: 'calc(100% + 8px)',
+                                right: 0,
+                                zIndex: 1000,
+                                width: '320px',
+                                background: '#ffffff',
+                                border: '1.5px solid #CBD5E1',
+                                borderRadius: '14px',
+                                boxShadow: '0 12px 36px rgba(15, 23, 42, 0.2)',
+                                padding: '14px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '12px'
+                              }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
+                                  <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                    Print Letterhead Selection
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowSummaryLetterheadPopover(false)}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '14px', fontWeight: 700 }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+
+                                {/* Letterhead Modes */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  {/* Option 1: Hospital Letterhead */}
+                                  <div
+                                    onClick={() => setLetterheadMode('hospital')}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '10px',
+                                      padding: '8px 10px',
+                                      borderRadius: '8px',
+                                      border: `1.5px solid ${letterheadMode === 'hospital' ? '#2563EB' : '#E2E8F0'}`,
+                                      background: letterheadMode === 'hospital' ? '#EFF6FF' : '#F8FAFC',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                  >
+                                    <input 
+                                      type="radio" 
+                                      name="recpSummaryLetterhead" 
+                                      checked={letterheadMode === 'hospital'} 
+                                      onChange={() => setLetterheadMode('hospital')}
+                                      style={{ accentColor: '#2563EB', cursor: 'pointer' }}
+                                    />
+                                    <div>
+                                      <div style={{ fontSize: '12px', fontWeight: 800, color: letterheadMode === 'hospital' ? '#1D4ED8' : '#1E293B' }}>
+                                        Hospital Letterhead {customLetterhead ? '✓ Ready' : '(Default Safe Margin)'}
+                                      </div>
+                                      <div style={{ fontSize: '10.5px', color: '#64748B' }}>
+                                        Includes verified hospital letterhead header and safe margins.
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Option 2: Doctor Custom Letterhead */}
+                                  <div
+                                    onClick={() => setLetterheadMode('custom')}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '10px',
+                                      padding: '8px 10px',
+                                      borderRadius: '8px',
+                                      border: `1.5px solid ${letterheadMode === 'custom' ? '#2563EB' : '#E2E8F0'}`,
+                                      background: letterheadMode === 'custom' ? '#EFF6FF' : '#F8FAFC',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                  >
+                                    <input 
+                                      type="radio" 
+                                      name="recpSummaryLetterhead" 
+                                      checked={letterheadMode === 'custom'} 
+                                      onChange={() => setLetterheadMode('custom')}
+                                      style={{ accentColor: '#2563EB', cursor: 'pointer' }}
+                                    />
+                                    <div>
+                                      <div style={{ fontSize: '12px', fontWeight: 800, color: letterheadMode === 'custom' ? '#1D4ED8' : '#1E293B' }}>
+                                        Doctor Custom Letterhead
+                                      </div>
+                                      <div style={{ fontSize: '10.5px', color: '#64748B' }}>
+                                        Uses attending physician's custom clinic branding.
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Option 3: No Letterhead / Pre-printed Stationary */}
+                                  <div
+                                    onClick={() => setLetterheadMode('none')}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '10px',
+                                      padding: '8px 10px',
+                                      borderRadius: '8px',
+                                      border: `1.5px solid ${letterheadMode === 'none' ? '#2563EB' : '#E2E8F0'}`,
+                                      background: letterheadMode === 'none' ? '#EFF6FF' : '#F8FAFC',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                  >
+                                    <input 
+                                      type="radio" 
+                                      name="recpSummaryLetterhead" 
+                                      checked={letterheadMode === 'none'} 
+                                      onChange={() => setLetterheadMode('none')}
+                                      style={{ accentColor: '#2563EB', cursor: 'pointer' }}
+                                    />
+                                    <div>
+                                      <div style={{ fontSize: '12px', fontWeight: 800, color: letterheadMode === 'none' ? '#1D4ED8' : '#1E293B' }}>
+                                        No Letterhead (Pre-Printed Paper)
+                                      </div>
+                                      <div style={{ fontSize: '10.5px', color: '#64748B' }}>
+                                        Leaves top safe blank margin to feed physical clinic letterhead sheets.
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Direct Print Button Inside Popover */}
+                                <div style={{ marginTop: '2px', paddingTop: '10px', borderTop: '1px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setShowSummaryLetterheadPopover(false);
+                                      handlePrintClick();
+                                    }}
+                                    style={{
+                                      width: '100%',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: '8px',
+                                      background: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 60%, #3B82F6 100%)',
+                                      color: '#ffffff',
+                                      border: 'none',
+                                      borderRadius: '10px',
+                                      padding: '11px 16px',
+                                      fontSize: '13px',
+                                      fontWeight: 800,
+                                      cursor: 'pointer',
+                                      boxShadow: '0 3px 10px rgba(37, 99, 235, 0.25)',
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+                                    <span>Print Summary ({letterheadMode === 'custom' ? 'Doctor Custom' : letterheadMode === 'none' ? 'No Letterhead' : 'Hospital Letterhead'})</span>
+                                  </button>
+                                  {(() => {
+                                    const selectedTpl = adminTemplates.find(t => t._id === printSettings.template) || adminTemplates.find(t => t.isStandard) || adminTemplates[0];
+                                    const aTop = selectedTpl ? selectedTpl.yTop : (printSettings.topSpacer || 38);
+                                    return (
+                                      <div style={{ textAlign: 'center', fontSize: '10px', color: '#64748B', fontWeight: 600 }}>
+                                        Prints with exact {aTop}mm top safe margin applied
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
              {/* View Lab Report Modal is now rendered globally at the end of the file */}
 
@@ -10862,7 +11845,7 @@ const ReceptionistDashboard = () => {
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '3px', flexWrap: 'wrap', fontSize: '11px' }}>
                                       {(primary.rawItem?.patientId?.uhId || primary.patientId?.uhId || getFormattedUhid(primary.patientId?._id || primary.patientId)) && (
-                                        <span style={{ fontWeight: 750, color: '#0369A1', background: '#F0F9FF', padding: '1px 5px', borderRadius: '4px', border: '1px solid #BAE6FD' }} title="Global Curoxa Patient UH-ID">
+                                        <span style={{ fontWeight: 750, color: '#0369A1', background: '#F0F9FF', padding: '1px 5px', borderRadius: '4px', border: '1px solid #BAE6FD' }} title="Global Quroxa Patient UH-ID">
                                           {primary.rawItem?.patientId?.uhId || primary.patientId?.uhId || getFormattedUhid(primary.patientId?._id || primary.patientId)}
                                         </span>
                                       )}
@@ -11025,8 +12008,38 @@ const ReceptionistDashboard = () => {
                                   </button>
 
                                   {(() => {
-                                    if (primary.type !== 'Appointment' || primary.status === 'Completed') {
+                                    if (primary.type !== 'Appointment') {
                                       return null;
+                                    }
+                                    if (primary.status === 'Completed' || primary.rawItem?.status === 'Completed') {
+                                      return (
+                                        <button 
+                                          type="button" 
+                                          style={{ 
+                                            padding: '0 10px', 
+                                            height: '30px', 
+                                            fontSize: '11.5px', 
+                                            fontWeight: 700, 
+                                            borderRadius: '8px', 
+                                            border: '1px solid #BFDBFE', 
+                                            background: '#EFF6FF', 
+                                            color: '#1D4ED8', 
+                                            cursor: 'pointer', 
+                                            whiteSpace: 'nowrap',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                          }} 
+                                          onClick={() => handleDirectSharePrescription(primary.rawItem?._id || primary._id, primary.rawItem?.patientId || primary.patientId)}
+                                          title="Share Prescription via Branded Email"
+                                        >
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <rect width="20" height="16" x="2" y="4" rx="2"/>
+                                            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                                          </svg>
+                                          Share Rx
+                                        </button>
+                                      );
                                     }
                                     const isExpired = isApptExpired24h(primary.date, primary.time);
                                     if (primary.status === 'Cancelled') {
@@ -11555,8 +12568,37 @@ const ReceptionistDashboard = () => {
                                     >
                                       View Details
                                     </button>
-                                    {(() => {
-                                      if (addOn.status === 'Completed') return null;
+                                     {(() => {
+                                       if (addOn.status === 'Completed' || addOn.rawItem?.status === 'Completed') {
+                                         return (
+                                           <button 
+                                             type="button" 
+                                             style={{ 
+                                               padding: '0 8px', 
+                                               height: '28px', 
+                                               fontSize: '11px', 
+                                               fontWeight: 700, 
+                                               borderRadius: '6px', 
+                                               border: '1px solid #BFDBFE', 
+                                               background: '#EFF6FF', 
+                                               color: '#1D4ED8', 
+                                               cursor: 'pointer', 
+                                               whiteSpace: 'nowrap',
+                                               display: 'inline-flex',
+                                               alignItems: 'center',
+                                               gap: '4px'
+                                             }} 
+                                             onClick={() => handleDirectSharePrescription(addOn.rawItem?._id || addOn._id, addOn.rawItem?.patientId || addOn.patientId)}
+                                             title="Share Prescription via Branded Email"
+                                           >
+                                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                               <rect width="20" height="16" x="2" y="4" rx="2"/>
+                                               <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                                             </svg>
+                                             Share Rx
+                                           </button>
+                                         );
+                                       }
                                       const isExpired = isApptExpired24h(addOn.date, addOn.time);
                                       if (addOn.status === 'Cancelled') {
                                         return isExpired ? (
@@ -12030,7 +13072,7 @@ const ReceptionistDashboard = () => {
                                             <td style={{ fontWeight: 600 }}>{doc.specialty || ''}</td>
                                             <td>
                                                 <div style={{ fontSize: '13px', fontWeight: 700 }}>ID: {doc.staff_id || 'N/A'}</div>
-                                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{doc.name ? `${doc.name.split(' ')[0].toLowerCase()}@curoxa.com` : 'Contact Required'}</div>
+                                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{doc.name ? `${doc.name.split(' ')[0].toLowerCase()}@quroxa.com` : 'Contact Required'}</div>
                                             </td>
                                             <td>
                                                 <span className={`status-badge ${isWeeklyOffToday ? 'cancelled' : 'available'}`}>
@@ -14517,8 +15559,8 @@ const ReceptionistDashboard = () => {
                                     </div>
                                   </td>
                                   <td>
-                                    <div style={{ fontWeight: 700, color: '#475569', fontSize: '12px' }}>{item.reason || 'Routine Checkup'}</div>
-                                    {item.notes && <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>{item.notes}</div>}
+                                    <div style={{ fontWeight: 700, color: '#475569', fontSize: '12px' }}>{cleanHtmlText(item.reason, 'Routine Checkup')}</div>
+                                    {item.notes && <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>{cleanHtmlText(item.notes)}</div>}
                                   </td>
                                   <td>
                                     <span className="badge-pill" style={{
@@ -15756,7 +16798,35 @@ const ReceptionistDashboard = () => {
                             
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '16px' }}>
                               <div>
-                                <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>Prescribed Medicines</div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Prescribed Medicines</span>
+                                  {selectedAppointmentDetails.prescriptions.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDirectSharePrescription(selectedAppointment._id, selectedAppointment.patientId)}
+                                      style={{
+                                        border: '1px solid #BFDBFE',
+                                        background: '#EFF6FF',
+                                        color: '#1D4ED8',
+                                        borderRadius: '6px',
+                                        padding: '2px 8px',
+                                        fontSize: '11px',
+                                        fontWeight: 750,
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                      title="Share prescription via branded email"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <rect width="20" height="16" x="2" y="4" rx="2"/>
+                                        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                                      </svg>
+                                      Share Email
+                                    </button>
+                                  )}
+                                </div>
                                 {selectedAppointmentDetails.prescriptions.length === 0 ? (
                                   <div style={{ fontSize: '13px', color: '#64748B', fontStyle: 'italic' }}>No active prescription.</div>
                                 ) : (
@@ -16108,7 +17178,7 @@ const ReceptionistDashboard = () => {
                           2. Clinical Symptoms & History
                         </h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
-                          <div><span style={{ color: '#64748B', fontWeight: 600 }}>Reported Symptoms:</span> <b style={{ color: '#EA580C' }}>{selectedOnlineRequest.reason || 'General Consultation'}</b></div>
+                          <div><span style={{ color: '#64748B', fontWeight: 600 }}>Reported Symptoms:</span> <b style={{ color: '#EA580C' }}>{cleanHtmlText(selectedOnlineRequest.reason, 'General Consultation')}</b></div>
                           <div><span style={{ color: '#64748B', fontWeight: 600 }}>Allergies:</span> <b style={{ color: pat.allergies && pat.allergies !== 'None' ? '#DC2626' : '#16A34A' }}>{pat.allergies || 'None'}</b></div>
                           <div><span style={{ color: '#64748B', fontWeight: 600 }}>Current Medications:</span> <b style={{ color: '#0F172A' }}>{pat.currentMedications || 'None'}</b></div>
                           <div><span style={{ color: '#64748B', fontWeight: 600 }}>Medical History:</span> <b style={{ color: '#0F172A' }}>{Array.isArray(pat.medicalHistory) ? pat.medicalHistory.join(', ') : (pat.medicalHistory || 'None')}</b></div>
@@ -17226,7 +18296,7 @@ const ReceptionistDashboard = () => {
               </svg>
             </button>
             
-            {/* Massive Diagonal Watermark - CUROXA (Optimized for PDF Print) */}
+            {/* Massive Diagonal Watermark - QUROXA (Optimized for PDF Print) */}
             <div 
               className="print-diagonal-watermark"
               style={{ 
@@ -17246,7 +18316,7 @@ const ReceptionistDashboard = () => {
               }}
             >
               <div className="print-diagonal-watermark-text" style={{ fontSize: '110px', fontWeight: 900, color: '#64748B', letterSpacing: '24px', textTransform: 'uppercase', fontFamily: "'Outfit', sans-serif", lineHeight: 1 }}>
-                CUROXA
+                QUROXA
               </div>
               <div className="print-diagonal-watermark-subtext" style={{ fontSize: '22px', fontWeight: 800, color: '#64748B', letterSpacing: '12px', textTransform: 'uppercase', marginTop: '12px' }}>
                 HEALTHCARE • MEDICAL RECEIPT
@@ -17264,7 +18334,7 @@ const ReceptionistDashboard = () => {
                   </div>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <h2 style={{ margin: 0, fontSize: '21px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif" }}>{activeSlipData.hospitalName || 'Curoxa Medical Center'}</h2>
+                      <h2 style={{ margin: 0, fontSize: '21px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif" }}>{activeSlipData.hospitalName || 'Quroxa Medical Center'}</h2>
                       {slipLetterheadConfig?.hasLetterhead && (
                         <span className="no-print" style={{ fontSize: '10.5px', background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: '12px', fontWeight: 800 }}>
                           Letterhead Active
@@ -17393,7 +18463,7 @@ const ReceptionistDashboard = () => {
                   <line x1="2" y1="12" x2="22" y2="12"/>
                   <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                 </svg>
-                <span style={{ color: '#2563EB', fontWeight: 800 }}>www.curoxa-healthcare.com</span>
+                <span style={{ color: '#2563EB', fontWeight: 800 }}>www.quroxa-healthcare.com</span>
               </div>
               <div style={{ fontSize: '10.5px', color: '#94A3B8', fontWeight: 600 }}>
                 Official Computer Generated Receipt • Valid Without Physical Signature
@@ -17460,7 +18530,7 @@ const ReceptionistDashboard = () => {
                   const rawNumber = activeSlipData.contact || '';
                   const cleanNumber = rawNumber.replace(/\D/g, '');
                   const phoneWithCountry = cleanNumber.length === 10 ? `91${cleanNumber}` : cleanNumber;
-                  const message = `Hello, here is your payment receipt & clinical service order slip from ${activeSlipData.hospitalName || 'Curoxa Medical Center'}.\n\nReceipt No: ${activeSlipData.receiptNo}\nTotal Amount: ₹${activeSlipData.totalAmount}\nUHID: ${activeSlipData.patientId}\n\nThank you!`;
+                  const message = `Hello, here is your payment receipt & clinical service order slip from ${activeSlipData.hospitalName || 'Quroxa Medical Center'}.\n\nReceipt No: ${activeSlipData.receiptNo}\nTotal Amount: ₹${activeSlipData.totalAmount}\nUHID: ${activeSlipData.patientId}\n\nThank you!`;
                   const url = `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(message)}`;
                   window.open(url, '_blank');
                 }}
@@ -17674,11 +18744,11 @@ const ReceptionistDashboard = () => {
                   const val = e.target.value;
                   setBatchSmsTemplate(val);
                   if (val === 'reminder') {
-                    setBatchSmsMessage('Dear Patient, this is an official reminder for your clinical visit at Curoxa Medical Center. Please arrive 10 mins early.');
+                    setBatchSmsMessage('Dear Patient, this is an official reminder for your clinical visit at Quroxa Medical Center. Please arrive 10 mins early.');
                   } else if (val === 'lab') {
-                    setBatchSmsMessage('Dear Patient, your diagnostic lab test results are ready at Curoxa Medical Center. You can collect your report at counter 2.');
+                    setBatchSmsMessage('Dear Patient, your diagnostic lab test results are ready at Quroxa Medical Center. You can collect your report at counter 2.');
                   } else if (val === 'general') {
-                    setBatchSmsMessage('Dear Valued Patient, Curoxa Medical Center wishes you good health! Our specialized OPD clinics are open Mon-Sat 9 AM - 8 PM.');
+                    setBatchSmsMessage('Dear Valued Patient, Quroxa Medical Center wishes you good health! Our specialized OPD clinics are open Mon-Sat 9 AM - 8 PM.');
                   }
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '2px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: 700, color: '#0F172A', background: '#FFFFFF', outline: 'none' }}
@@ -18313,6 +19383,177 @@ const ReceptionistDashboard = () => {
             style={{ maxWidth: '90vw', maxHeight: '82vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}
             onClick={e => e.stopPropagation()}
           />
+        </div>
+      )}
+
+      {/* Modern Share Prescription via Email Modal (Global) */}
+      {showShareEmailModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000, padding: '20px' }}>
+          <div style={{ width: '100%', maxWidth: '480px', background: '#FFFFFF', borderRadius: '20px', boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            
+            {/* Header */}
+            <div style={{ background: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%)', padding: '20px 24px', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="20" height="16" x="2" y="4" rx="2"/>
+                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16.5px', fontWeight: 800, color: '#FFFFFF' }}>Share Prescription</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: 'rgba(255,255,255,0.85)' }}>Direct branded email delivery to patient</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => { if (!isSharingEmail) setShowShareEmailModal(false); }}
+                style={{ background: 'rgba(255,255,255,0.12)', border: 'none', color: '#FFFFFF', width: '30px', height: '30px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isSharingEmail ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 700 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {/* Patient Badge */}
+              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', textTransform: 'capitalize' }}>
+                    {sharePrescriptionData?.patient?.name || 'Patient'}
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                    UHID: <strong style={{ color: '#2563EB', fontFamily: 'monospace' }}>{sharePrescriptionData?.patient?.uhid || sharePrescriptionData?.patient?.patientId || '—'}</strong> • {sharePrescriptionData?.prescription?.items?.length || 0} Meds
+                  </div>
+                </div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#059669', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '3px 8px', borderRadius: '6px' }}>
+                  Ready to Dispatch
+                </div>
+              </div>
+
+              {/* Recipient Email */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 800, color: '#334155', marginBottom: '6px' }}>
+                  Recipient Email Address <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="email"
+                    value={shareEmailRecipient}
+                    onChange={(e) => setShareEmailRecipient(e.target.value)}
+                    placeholder="e.g. patient@gmail.com"
+                    disabled={isSharingEmail}
+                    style={{
+                      width: '100%',
+                      padding: '11px 14px 11px 38px',
+                      borderRadius: '10px',
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: '13.5px',
+                      color: '#0F172A',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                    onFocus={e => e.target.style.borderColor = '#2563EB'}
+                    onBlur={e => e.target.style.borderColor = '#CBD5E1'}
+                  />
+                  <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94A3B8' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                  </div>
+                </div>
+                <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '4px' }}>
+                  Enter or verify the patient's email address to receive the prescription.
+                </span>
+              </div>
+
+              {/* Custom Note */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 800, color: '#334155', marginBottom: '6px' }}>
+                  Custom Message / Instructions <span style={{ color: '#94A3B8', fontWeight: 500 }}>(Optional)</span>
+                </label>
+                <textarea
+                  value={shareCustomNote}
+                  onChange={(e) => setShareCustomNote(e.target.value)}
+                  placeholder="e.g. Follow instructions carefully and contact clinic if needed."
+                  rows={2}
+                  disabled={isSharingEmail}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '13px',
+                    color: '#0F172A',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    resize: 'vertical',
+                    fontFamily: 'inherit'
+                  }}
+                  onFocus={e => e.target.style.borderColor = '#2563EB'}
+                  onBlur={e => e.target.style.borderColor = '#CBD5E1'}
+                />
+              </div>
+
+              {/* Hospital Sender Info Note */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F1F5F9', padding: '10px 14px', borderRadius: '8px', fontSize: '11.5px', color: '#475569' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+                <span>Sent from <strong>{currentUser?.tenantName || 'Hospital'}</strong> with official hospital branding & digital verification.</span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '16px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px' }}>
+              <button
+                type="button"
+                disabled={isSharingEmail}
+                onClick={() => setShowShareEmailModal(false)}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  border: '1px solid #CBD5E1',
+                  background: '#FFFFFF',
+                  color: '#475569',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: isSharingEmail ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={isSharingEmail}
+                onClick={handleSendShareEmail}
+                style={{
+                  padding: '10px 22px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: isSharingEmail ? '#93C5FD' : 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%)',
+                  color: '#FFFFFF',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  cursor: isSharingEmail ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)'
+                }}
+              >
+                {isSharingEmail ? (
+                  <>
+                    <svg style={{ animation: 'spin 1s linear infinite', width: '14px', height: '14px' }} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25"/><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"/></svg>
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+                    <span>Send Email</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
     </>

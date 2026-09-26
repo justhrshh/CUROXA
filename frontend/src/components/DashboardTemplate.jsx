@@ -13,7 +13,7 @@ const DashboardTemplate = ({ title, role }) => {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#F8FAFC' }}>
       <div className="sidebar" style={{ width: '220px', background: '#0F172A', color: 'white', padding: '20px' }}>
-        <h2 style={{ marginBottom: '32px' }}>Curoxa {role}</h2>
+        <h2 style={{ marginBottom: '32px' }}>Quroxa {role}</h2>
         <div style={{ marginTop: 'auto', marginBottom: '20px' }}>
           Welcome, {user.name}
         </div>

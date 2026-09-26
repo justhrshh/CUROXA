@@ -1,7 +1,9 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const GoodsReceipt = require('../models/GoodsReceipt');
 const Medicine = require('../models/Medicine');
 const MedicineBatch = require('../models/MedicineBatch');
+const ItemMaster = require('../models/ItemMaster');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const AuditLog = require('../models/AuditLog');
 const { verifyToken } = require('../middleware/authMiddleware');
@@ -10,15 +12,22 @@ const router = express.Router();
 router.use(verifyToken);
 
 /**
- * Authoritative financial calculator for a single GRN item row
+ * Authoritative financial & packaging calculator for a single GRN item row
+ * Separates physical received quantity vs rejected quantity.
+ * Inventory conversion = acceptedPurchasedQty * converterFactor.
  */
 function calculateItemFinancials(item) {
   const qtyReceived = Math.max(0, Number(item.qtyReceived) || 0);
   const rejectedQty = Math.max(0, Number(item.rejectedQty) || 0);
+  const acceptedPurchasedQty = Math.max(0, qtyReceived - rejectedQty);
+  const converterFactor = Number(item.converterFactor) > 0 ? Number(item.converterFactor) : 1;
+  const convertedQuantity = acceptedPurchasedQty * converterFactor;
+
   const purchaseRate = Math.max(0, Number(item.purchaseRate !== undefined && item.purchaseRate !== null ? item.purchaseRate : (item.price || 0)));
   const discountPercent = Math.max(0, Math.min(100, Number(item.discountPercent) || 0));
   const gstRate = Math.max(0, Number(item.gst !== undefined && item.gst !== null ? item.gst : 12));
 
+  // Invoice calculations are based on physical received goods
   const grossAmount = qtyReceived * purchaseRate;
   const discountAmount = Math.round((grossAmount * (discountPercent / 100)) * 100) / 100;
   const taxableAmount = Math.max(0, Math.round((grossAmount - discountAmount) * 100) / 100);
@@ -30,14 +39,18 @@ function calculateItemFinancials(item) {
 
   return {
     itemType: item.itemType || 'Medicine',
+    itemMasterId: item.itemMasterId || null,
     itemCode: item.itemCode || item.sku || '',
     sku: item.sku,
     name: item.name,
-    unit: item.unit || 'Strip',
-    barcode: item.barcode || '',
-    batchNumber: item.batchNumber || '',
-    mfgDate: item.mfgDate ? new Date(item.mfgDate) : null,
-    expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
+    genericName: item.genericName || item.name || '',
+    brandName: item.brandName || '',
+    manufacturer: item.manufacturer || '',
+    unit: item.unit || item.purchasedUnit || 'Strip',
+    purchasedUnit: item.purchasedUnit || item.unit || 'Strip',
+    packSize: item.packSize || '',
+    converterFactor,
+    consumptionUnit: item.consumptionUnit || 'Unit',
     qtyOrdered,
     orderedQty: qtyOrdered,
     previouslyReceivedQty: Number(item.previouslyReceivedQty || 0),
@@ -45,6 +58,14 @@ function calculateItemFinancials(item) {
     qtyReceived,
     rejectedQty,
     rejectionReason: item.rejectionReason || '',
+    acceptedPurchasedQty,
+    convertedQuantity,
+    convertedReceivedQty: convertedQuantity, // backward compatibility
+    mrp: Number(item.mrp || 0),
+    barcode: item.barcode || '',
+    batchNumber: item.batchNumber || '',
+    mfgDate: item.mfgDate ? new Date(item.mfgDate) : null,
+    expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
     price: purchaseRate,
     purchaseRate,
     discountPercent,
@@ -57,7 +78,8 @@ function calculateItemFinancials(item) {
 }
 
 /**
- * Calculates cumulative quantities received across all non-draft GRNs for a given PO
+ * Calculates cumulative ACCEPTED quantities received across all non-draft GRNs for a given PO
+ * Note: Rejected units do not consume the remaining receivable PO quantity.
  */
 async function getPOCumulativeReceived(tenantId, poId, excludeGrnId = null) {
   const query = {
@@ -73,7 +95,13 @@ async function getPOCumulativeReceived(tenantId, poId, excludeGrnId = null) {
   for (const grn of priorGrns) {
     for (const it of (grn.items || [])) {
       const key = it.sku;
-      receivedMap[key] = (receivedMap[key] || 0) + (Number(it.qtyReceived) || 0);
+      const accepted = it.acceptedPurchasedQty !== undefined
+        ? Number(it.acceptedPurchasedQty)
+        : Math.max(0, (Number(it.qtyReceived) || 0) - (Number(it.rejectedQty) || 0));
+      receivedMap[key] = (receivedMap[key] || 0) + accepted;
+      if (it.itemCode && it.itemCode !== key) {
+        receivedMap[it.itemCode] = (receivedMap[it.itemCode] || 0) + accepted;
+      }
     }
   }
   return receivedMap;
@@ -82,7 +110,34 @@ async function getPOCumulativeReceived(tenantId, poId, excludeGrnId = null) {
 // Get all GRNs (scoped to tenant)
 router.get('/', async (req, res) => {
   try {
-    const grns = await GoodsReceipt.find({ tenantId: req.tenantId }).sort({ receivedDate: -1, createdAt: -1 });
+    const filter = { tenantId: req.tenantId };
+    if (req.query.status) filter.status = req.query.status;
+    if (req.query.vendorId) filter.vendorId = req.query.vendorId;
+    if (req.query.poId) filter.poId = req.query.poId;
+
+    const isPaginationRequested = req.query.page !== undefined || req.query.limit !== undefined || req.query.paginated === 'true';
+    if (isPaginationRequested) {
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20));
+      const skip = (page - 1) * limit;
+
+      const [total, grns] = await Promise.all([
+        GoodsReceipt.countDocuments(filter),
+        GoodsReceipt.find(filter).sort({ receivedDate: -1, createdAt: -1 }).skip(skip).limit(limit)
+      ]);
+
+      return res.json({
+        data: grns,
+        pagination: {
+          total,
+          page,
+          limit,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    }
+
+    const grns = await GoodsReceipt.find(filter).sort({ receivedDate: -1, createdAt: -1 });
     res.json(grns);
   } catch (error) {
     console.error("Get GRNs error:", error);
@@ -137,9 +192,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'At least one item is required' });
     }
 
-    // 1. Validate manufacturing and expiry dates
+    const currentStatus = status || 'Verified/Completed';
     const todayStr = new Date().toISOString().split('T')[0];
-    for (const item of items) {
+
+    // 1. Validate Item Master, Expiry Cutoff, and Dates
+    for (let idx = 0; idx < items.length; idx++) {
+      const item = items[idx];
+
       if (item.mfgDate && String(item.mfgDate).substring(0, 10) > todayStr) {
         return res.status(400).json({ error: `Manufacturing date for ${item.name} cannot be in the future!` });
       }
@@ -150,13 +209,97 @@ router.post('/', async (req, res) => {
           return res.status(400).json({ error: `Expiry date for ${item.name} must be after manufacturing date!` });
         }
       }
+
+      let itemMaster = null;
+
+      if (item.itemMasterId) {
+        // Step 1: Verify Item Master exists (hospital-scoped or global catalog)
+        itemMaster = await ItemMaster.findOne({
+          _id: item.itemMasterId,
+          $or: [{ tenantId: req.tenantId }, { scope: 'GLOBAL' }]
+        });
+        if (!itemMaster) {
+          return res.status(400).json({ error: `Item Master not found or belongs to another hospital for line #${idx + 1}` });
+        }
+
+        // Step 2: Verify Item Master is Active
+        if (itemMaster.status !== 'Active') {
+          return res.status(400).json({ error: `Item Master '${itemMaster.brandName || itemMaster.genericName}' (${itemMaster.itemCode}) is Inactive and cannot be received` });
+        }
+
+        // Step 3: Enforce packaging consistency (converterFactor, purchasedUnit, consumptionUnit)
+        if (item.converterFactor && Math.abs(Number(item.converterFactor) - itemMaster.converterFactor) > 0.001) {
+          return res.status(400).json({
+            error: `Converter factor mismatch for '${item.name}': received ${item.converterFactor}, canonical is ${itemMaster.converterFactor}`
+          });
+        }
+
+        item.converterFactor = itemMaster.converterFactor;
+        item.purchasedUnit = itemMaster.purchasedUnit;
+        item.consumptionUnit = itemMaster.consumptionUnit;
+        item.packSize = item.packSize || itemMaster.packSizeDescription || '';
+        item.brandName = item.brandName || itemMaster.brandName || '';
+        item.manufacturer = itemMaster.manufacturer || item.manufacturer || '';
+        item.itemCode = itemMaster.itemCode;
+        item.genericName = itemMaster.genericName;
+      } else {
+        // Legacy fallback: check if SKU exists in canonical Item Master catalog (tenant or global)
+        const cleanSku = String(item.sku || '').trim().toUpperCase();
+        itemMaster = await ItemMaster.findOne({
+          $or: [{ tenantId: req.tenantId }, { scope: 'GLOBAL' }],
+          itemCode: cleanSku
+        });
+
+        if (itemMaster) {
+          if (itemMaster.status !== 'Active') {
+            return res.status(400).json({ error: `Item Master '${itemMaster.brandName || itemMaster.genericName}' (${itemMaster.itemCode}) is Inactive and cannot be received` });
+          }
+          item.itemMasterId = itemMaster._id;
+          item.converterFactor = itemMaster.converterFactor;
+          item.purchasedUnit = itemMaster.purchasedUnit;
+          item.consumptionUnit = itemMaster.consumptionUnit;
+          item.itemCode = itemMaster.itemCode;
+          item.genericName = itemMaster.genericName;
+          item.brandName = item.brandName || itemMaster.brandName || '';
+          item.manufacturer = itemMaster.manufacturer || item.manufacturer || '';
+        } else {
+          // Check if existing medicine exists in legacy inventory
+          const existingMed = await Medicine.findOne({ tenantId: req.tenantId, sku: item.sku });
+          if (!existingMed) {
+            // UNKNOWN ITEM REJECTION: Do NOT allow unknown uncataloged items to automatically create stock
+            return res.status(400).json({
+              error: `Unknown item '${item.name}' (SKU: ${item.sku}) is not registered in the Item Master catalog. Unregistered items cannot be received.`
+            });
+          }
+        }
+      }
+
+      // Step 4: Shelf Life Cutoff Validation from Item Master
+      if (itemMaster && currentStatus !== 'Draft') {
+        if (itemMaster.isExpirable) {
+          if (!item.expiryDate) {
+            return res.status(400).json({ error: `Expiry date is required for expirable item '${item.name}'` });
+          }
+          const expTime = new Date(item.expiryDate).getTime();
+          if (expTime < Date.now()) {
+            return res.status(400).json({ error: `Item '${item.name}' has already expired!` });
+          }
+          if (itemMaster.expiryCutoffDays > 0) {
+            const cutoffTime = Date.now() + (itemMaster.expiryCutoffDays * 24 * 60 * 60 * 1000);
+            if (expTime < cutoffTime) {
+              return res.status(400).json({
+                error: `Item '${item.name}' does not meet shelf life requirement: must have at least ${itemMaster.expiryCutoffDays} days remaining before expiry.`
+              });
+            }
+          }
+        }
+      }
     }
 
-    const currentStatus = status || 'Verified/Completed';
+    // 2. Validate PO-linked quantities cumulatively against PO order
     let poDoc = null;
     let cumulativePriorRecv = {};
 
-    // 2. Validate PO-linked quantities cumulatively against PO order
     if (poId) {
       poDoc = await PurchaseOrder.findOne({ _id: poId, tenantId: req.tenantId });
       if (!poDoc) {
@@ -166,16 +309,24 @@ router.post('/', async (req, res) => {
       cumulativePriorRecv = await getPOCumulativeReceived(req.tenantId, poDoc._id);
 
       for (const item of items) {
-        const poItem = (poDoc.items || []).find(pi => pi.sku === item.sku) || (poDoc.items || []).find(pi => pi.name === item.name);
+        const poItem = (poDoc.items || []).find(pi => 
+          pi.sku === item.sku || 
+          pi.itemCode === item.sku ||
+          (item.itemMasterId && pi.itemMasterId && String(pi.itemMasterId) === String(item.itemMasterId))
+        ) || (poDoc.items || []).find(pi => pi.name === item.name);
+
         const qtyOrdered = poItem ? (Number(poItem.requiredQty) || Number(poItem.qty) || 0) : (Number(item.qtyOrdered) || 0);
-        const previouslyReceived = cumulativePriorRecv[item.sku] || 0;
+        const previouslyReceived = cumulativePriorRecv[item.sku] || (poItem?.itemCode ? cumulativePriorRecv[poItem.itemCode] : 0) || 0;
         const remaining = Math.max(0, qtyOrdered - previouslyReceived);
+
         const qtyReceived = Math.max(0, Number(item.qtyReceived) || 0);
+        const rejectedQty = Math.max(0, Number(item.rejectedQty) || 0);
+        const acceptedPurchasedQty = Math.max(0, qtyReceived - rejectedQty);
 
         if (currentStatus !== 'Draft') {
-          if (qtyReceived > remaining) {
+          if (acceptedPurchasedQty > remaining) {
             return res.status(400).json({
-              error: `Received quantity (${qtyReceived}) exceeds remaining order quantity (${remaining}) for ${item.name}!`
+              error: `Accepted quantity (${acceptedPurchasedQty}) exceeds remaining order quantity (${remaining}) for ${item.name}!`
             });
           }
         }
@@ -184,7 +335,8 @@ router.post('/', async (req, res) => {
         item.qtyOrdered = qtyOrdered;
         item.orderedQty = qtyOrdered;
         item.previouslyReceivedQty = previouslyReceived;
-        item.remainingQty = Math.max(0, remaining - (currentStatus !== 'Draft' ? qtyReceived : 0));
+        item.acceptedPurchasedQty = acceptedPurchasedQty;
+        item.remainingQty = Math.max(0, remaining - (currentStatus !== 'Draft' ? acceptedPurchasedQty : 0));
       }
     }
 
@@ -207,6 +359,8 @@ router.post('/', async (req, res) => {
       vendorId,
       vendorName,
       status: currentStatus,
+      inventoryPosted: false,
+      inventoryPostedAt: null,
       invoiceNumber: invoiceNumber || '',
       invoiceDate: invoiceDate ? new Date(invoiceDate) : null,
       invoiceAmount: Number(invoiceAmount) || 0,
@@ -219,14 +373,153 @@ router.post('/', async (req, res) => {
       receivedBy: req.user ? req.user.name : 'Pharmacy Staff'
     });
 
-    // 5. Update PO status using cumulative receipts across all GRNs for that PO
+    // 5. Update inventory/stock & MedicineBatch (ONLY accepted quantity converted to consumption units)
+    if (currentStatus === 'Verified/Completed') {
+      let session = null;
+      let useTransaction = false;
+      try {
+        session = await mongoose.startSession();
+        session.startTransaction();
+        useTransaction = true;
+      } catch (sessionErr) {
+        session = null;
+        useTransaction = false;
+      }
+      const sessionOpt = useTransaction && session ? { session } : {};
+
+      try {
+        for (const item of processedItems) {
+          const acceptedPurchased = Number(item.acceptedPurchasedQty) || 0;
+          if (acceptedPurchased <= 0) continue;
+
+          const converter = Number(item.converterFactor) > 0 ? Number(item.converterFactor) : 1;
+          const convertedQuantity = acceptedPurchased * converter;
+          const cleanSku = String(item.sku || '').trim().toUpperCase();
+          const cleanBatchNumber = String(item.batchNumber || '').trim().toUpperCase() || 'DEFAULT';
+
+          // A. Atomic update on MedicineBatch ($inc)
+          const batchFilter = {
+            tenantId: req.tenantId,
+            sku: cleanSku,
+            batchNumber: cleanBatchNumber
+          };
+          if (item.itemMasterId) {
+            batchFilter.itemMasterId = item.itemMasterId;
+          }
+
+          let batchDoc = await MedicineBatch.findOneAndUpdate(
+            batchFilter,
+            {
+              $inc: {
+                availableQuantity: convertedQuantity,
+                receivedQuantity: convertedQuantity
+              },
+              $set: {
+                status: 'Active',
+                expiryDate: item.expiryDate || null,
+                mfgDate: item.mfgDate || null,
+                brandName: item.brandName || '',
+                manufacturer: item.manufacturer || '',
+                consumptionUnit: item.consumptionUnit || 'Unit',
+                grnId: grn.grnId,
+                vendorName: grn.vendorName,
+                purchaseRate: Number(item.purchaseRate || item.price || 0),
+                mrp: Number(item.mrp || 0)
+              }
+            },
+            { returnDocument: 'after', ...sessionOpt }
+          );
+
+          if (!batchDoc) {
+            const newBatch = await MedicineBatch.create([{
+              tenantId: req.tenantId,
+              itemMasterId: item.itemMasterId || null,
+              sku: cleanSku,
+              name: item.name,
+              brandName: item.brandName || '',
+              manufacturer: item.manufacturer || '',
+              storageTemperature: 'Normal',
+              consumptionUnit: item.consumptionUnit || 'Unit',
+              batchNumber: cleanBatchNumber,
+              mfgDate: item.mfgDate || null,
+              expiryDate: item.expiryDate || null,
+              receivedQuantity: convertedQuantity,
+              availableQuantity: convertedQuantity,
+              purchaseRate: Number(item.purchaseRate || item.price || 0),
+              mrp: Number(item.mrp || 0),
+              grnId: grn.grnId,
+              vendorName: grn.vendorName,
+              status: 'Active'
+            }], sessionOpt);
+            batchDoc = newBatch[0];
+          }
+
+          // B. Atomic update on Medicine aggregate stock ($inc)
+          let medicine = await Medicine.findOneAndUpdate(
+            { tenantId: req.tenantId, sku: cleanSku },
+            {
+              $inc: { stock: convertedQuantity },
+              $set: {
+                expiry: item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' }) : '--'
+              }
+            },
+            { returnDocument: 'after', ...sessionOpt }
+          );
+
+          if (medicine) {
+            const newStock = medicine.stock;
+            const stockStatus = newStock === 0 ? 'Out of Stock' : (newStock <= 20 ? 'Low Stock' : 'In Stock');
+            await Medicine.updateOne({ _id: medicine._id }, { $set: { status: stockStatus } }, sessionOpt);
+            if (batchDoc && !batchDoc.medicineId) {
+              await MedicineBatch.updateOne({ _id: batchDoc._id }, { $set: { medicineId: medicine._id } }, sessionOpt);
+            }
+          } else {
+            // Anchor aggregate record for canonical Item Master items
+            const stockStatus = convertedQuantity === 0 ? 'Out of Stock' : (convertedQuantity <= 20 ? 'Low Stock' : 'In Stock');
+            const createdMed = await Medicine.create([{
+              tenantId: req.tenantId,
+              name: item.name,
+              sku: cleanSku,
+              stock: convertedQuantity,
+              unit: item.consumptionUnit || 'Unit',
+              mrp: Number(item.mrp || (Number(item.purchaseRate || 0) * 1.25)),
+              category: item.itemType || 'Medicine',
+              status: stockStatus,
+              expiry: item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' }) : '--'
+            }], sessionOpt);
+
+            if (batchDoc && !batchDoc.medicineId) {
+              await MedicineBatch.updateOne({ _id: batchDoc._id }, { $set: { medicineId: createdMed[0]._id } }, sessionOpt);
+            }
+          }
+        }
+
+        // C. Mark GRN as inventoryPosted (Idempotency protection)
+        grn.inventoryPosted = true;
+        grn.inventoryPostedAt = new Date();
+        await grn.save(sessionOpt);
+
+        if (useTransaction && session) {
+          await session.commitTransaction();
+          session.endSession();
+        }
+      } catch (mutationErr) {
+        if (useTransaction && session) {
+          await session.abortTransaction();
+          session.endSession();
+        }
+        throw mutationErr;
+      }
+    }
+
+    // 6. Update PO status using cumulative receipts across all GRNs for that PO
     if (poDoc && currentStatus !== 'Draft') {
       const updatedCumulativeRecv = await getPOCumulativeReceived(req.tenantId, poDoc._id);
       let allFullyReceived = true;
       let anyReceived = false;
 
       for (const poItem of (poDoc.items || [])) {
-        const totalRecv = updatedCumulativeRecv[poItem.sku] || 0;
+        const totalRecv = updatedCumulativeRecv[poItem.sku] || (poItem.itemCode ? updatedCumulativeRecv[poItem.itemCode] : 0) || 0;
         const required = Number(poItem.requiredQty) || Number(poItem.qty) || 0;
 
         if (totalRecv < required) {
@@ -243,144 +536,25 @@ router.post('/', async (req, res) => {
         poDoc.status = 'Partially Received';
       }
       await poDoc.save();
-    }
 
-    // 6. Update inventory/stock & MedicineBatch (ONLY accepted qtyReceived enters stock, rejectedQty is excluded!)
-    if (currentStatus === 'Verified/Completed') {
-      for (const item of processedItems) {
-        const acceptedQuantity = Number(item.qtyReceived) || 0;
-        if (acceptedQuantity <= 0) continue;
-
-        const cleanSku = String(item.sku || '').trim().toUpperCase();
-        let medicine = await Medicine.findOne({
-          tenantId: req.tenantId,
-          $or: [
-            { sku: item.sku },
-            { sku: cleanSku },
-            { sku: String(item.sku || '').trim().toLowerCase() }
-          ]
-        });
-
-        if (!medicine && item.name) {
-          medicine = await Medicine.findOne({
-            tenantId: req.tenantId,
-            name: new RegExp(`^${item.name.trim()}$`, 'i')
-          });
-        }
-        
-        let priorStock = 0;
-        if (medicine) {
-          priorStock = Number(medicine.stock) || 0;
-          const newStock = priorStock + acceptedQuantity;
-          medicine.stock = newStock;
-          if (item.expiryDate) {
-            medicine.expiry = new Date(item.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' });
+      // If child PO, synchronize parent Master PO
+      if (poDoc.parentPOId) {
+        const allChildren = await PurchaseOrder.find({ parentPOId: poDoc.parentPOId, tenantId: req.tenantId });
+        const parentPO = await PurchaseOrder.findOne({ poId: poDoc.parentPOId, tenantId: req.tenantId });
+        if (parentPO) {
+          const allFully = allChildren.every(c => (c._id.toString() === poDoc._id.toString() ? poDoc.status : c.status) === 'Fully Received');
+          const anyRec = allChildren.some(c => ['Partially Received', 'Fully Received'].includes(c._id.toString() === poDoc._id.toString() ? poDoc.status : c.status));
+          if (allFully) {
+            parentPO.status = 'Fully Received';
+          } else if (anyRec) {
+            parentPO.status = 'Partially Received';
           }
-          
-          if (newStock === 0) {
-            medicine.status = 'Out of Stock';
-          } else if (newStock <= 20) {
-            medicine.status = 'Low Stock';
-          } else {
-            medicine.status = 'In Stock';
+          if (Array.isArray(parentPO.vendorOrders)) {
+            parentPO.vendorOrders.forEach(vo => {
+              if (vo.poId === poDoc.poId) vo.status = poDoc.status;
+            });
           }
-          await medicine.save();
-        } else {
-          let stockStatus = 'In Stock';
-          if (acceptedQuantity === 0) {
-            stockStatus = 'Out of Stock';
-          } else if (acceptedQuantity <= 20) {
-            stockStatus = 'Low Stock';
-          }
-
-          medicine = await Medicine.create({
-            tenantId: req.tenantId,
-            name: item.name,
-            sku: item.sku,
-            stock: acceptedQuantity,
-            unit: item.unit || 'Strip',
-            mrp: Number(item.purchaseRate || item.price || 0) * 1.25,
-            category: item.itemType || 'General',
-            status: stockStatus,
-            expiry: item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' }) : '--'
-          });
-        }
-
-        // Check if there was existing unbatched legacy stock for this medicine
-        const existingBatchesForMed = await MedicineBatch.find({
-          tenantId: req.tenantId,
-          $or: [
-            { medicineId: medicine._id },
-            { sku: cleanSku }
-          ]
-        });
-        const totalBatchedPrior = existingBatchesForMed.reduce((sum, b) => sum + (Number(b.availableQuantity) || 0), 0);
-        const unbatchedLegacyQty = priorStock - totalBatchedPrior;
-        if (unbatchedLegacyQty > 0) {
-          let legacyExp = null;
-          if (medicine.expiry && medicine.expiry !== '--') {
-            const parts = medicine.expiry.split('/');
-            if (parts.length === 2) {
-              legacyExp = new Date(parseInt(parts[1], 10), parseInt(parts[0], 10) - 1, 28);
-            }
-          }
-          if (!legacyExp || isNaN(legacyExp.getTime())) {
-            legacyExp = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-          }
-
-          await MedicineBatch.create({
-            tenantId: req.tenantId,
-            medicineId: medicine._id,
-            sku: cleanSku,
-            name: medicine.name,
-            batchNumber: 'INITIAL-STOCK',
-            mfgDate: null,
-            expiryDate: legacyExp,
-            receivedQuantity: unbatchedLegacyQty,
-            availableQuantity: unbatchedLegacyQty,
-            purchaseRate: Number(medicine.mrp ? medicine.mrp * 0.7 : 0),
-            mrp: Number(medicine.mrp || 0),
-            grnId: 'LEGACY-STOCK',
-            vendorName: 'Existing Inventory',
-            status: 'Active'
-          });
-        }
-
-        // Phase 1 MedicineBatch integration for received item
-        const cleanBatchNumber = String(item.batchNumber || '').trim().toUpperCase() || 'DEFAULT';
-
-        let batchDoc = await MedicineBatch.findOne({
-          tenantId: req.tenantId,
-          sku: cleanSku,
-          batchNumber: cleanBatchNumber
-        });
-
-        if (batchDoc) {
-          batchDoc.receivedQuantity += acceptedQuantity;
-          batchDoc.availableQuantity += acceptedQuantity;
-          if (item.expiryDate) batchDoc.expiryDate = item.expiryDate;
-          if (item.mfgDate) batchDoc.mfgDate = item.mfgDate;
-          if (item.purchaseRate || item.price) batchDoc.purchaseRate = Number(item.purchaseRate || item.price);
-          if (item.mrp) batchDoc.mrp = Number(item.mrp);
-          batchDoc.status = batchDoc.availableQuantity > 0 ? 'Active' : 'Depleted';
-          await batchDoc.save();
-        } else {
-          await MedicineBatch.create({
-            tenantId: req.tenantId,
-            medicineId: medicine._id,
-            sku: cleanSku,
-            name: item.name,
-            batchNumber: cleanBatchNumber,
-            mfgDate: item.mfgDate || null,
-            expiryDate: item.expiryDate || null,
-            receivedQuantity: acceptedQuantity,
-            availableQuantity: acceptedQuantity,
-            purchaseRate: Number(item.purchaseRate || item.price || 0),
-            mrp: Number(item.mrp || (Number(item.purchaseRate || item.price || 0) * 1.25)),
-            grnId: grn.grnId,
-            vendorName: grn.vendorName,
-            status: 'Active'
-          });
+          await parentPO.save();
         }
       }
     }
@@ -392,7 +566,7 @@ router.post('/', async (req, res) => {
         actor: req.user?.staff_id || req.user?.id || 'system',
         actorName: req.user?.name || 'Pharmacy Staff',
         actorRole: req.user?.role || 'Pharmacy',
-        action: 'goods_receipt_created',
+        action: currentStatus === 'Verified/Completed' ? 'goods_receipt_inventory_posted' : 'goods_receipt_created',
         target: grn.grnId,
         metadata: {
           grnId: grn.grnId,
@@ -401,7 +575,9 @@ router.post('/', async (req, res) => {
           grandTotal: grn.grandTotal,
           itemCount: grn.items.length,
           status: grn.status,
-          totalRejected: processedItems.reduce((acc, it) => acc + (it.rejectedQty || 0), 0)
+          totalAcceptedPurchased: processedItems.reduce((acc, it) => acc + (it.acceptedPurchasedQty || 0), 0),
+          totalRejectedPurchased: processedItems.reduce((acc, it) => acc + (it.rejectedQty || 0), 0),
+          totalConvertedConsumptionQty: processedItems.reduce((acc, it) => acc + (it.convertedQuantity || 0), 0)
         }
       });
     } catch (auditErr) {
@@ -423,7 +599,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update an existing GRN and update stock/PO variance (scoped to tenant)
+// Update an existing GRN and update stock/PO variance using exact delta logic (scoped to tenant)
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
   const {
@@ -458,13 +634,12 @@ router.put('/:id', async (req, res) => {
 
     const currentStatus = status || oldGrn.status;
     const targetPoId = poId !== undefined ? poId : oldGrn.poId;
-    let poDoc = null;
-    let cumulativePriorRecv = {};
+    const todayStr = new Date().toISOString().split('T')[0];
 
     // Validate manufacturing and expiry dates
     if (items && Array.isArray(items)) {
-      const todayStr = new Date().toISOString().split('T')[0];
-      for (const item of items) {
+      for (let idx = 0; idx < items.length; idx++) {
+        const item = items[idx];
         if (item.mfgDate && String(item.mfgDate).substring(0, 10) > todayStr) {
           return res.status(400).json({ error: `Manufacturing date for ${item.name} cannot be in the future!` });
         }
@@ -475,26 +650,50 @@ router.put('/:id', async (req, res) => {
             return res.status(400).json({ error: `Expiry date for ${item.name} must be after manufacturing date!` });
           }
         }
+
+        // Validate Item Master if present (tenant or global catalog)
+        if (item.itemMasterId) {
+          const im = await ItemMaster.findOne({
+            _id: item.itemMasterId,
+            $or: [{ tenantId: req.tenantId }, { scope: 'GLOBAL' }]
+          });
+          if (!im) {
+            return res.status(400).json({ error: `Item Master not found or belongs to another hospital for line #${idx + 1}` });
+          }
+          if (im.status !== 'Active') {
+            return res.status(400).json({ error: `Item Master '${im.brandName || im.genericName}' (${im.itemCode}) is Inactive and cannot be received` });
+          }
+          item.converterFactor = im.converterFactor;
+          item.purchasedUnit = im.purchasedUnit;
+          item.consumptionUnit = im.consumptionUnit;
+        }
       }
     }
 
     // Validate PO items if linked
+    let poDoc = null;
+    let cumulativePriorRecv = {};
     if (targetPoId) {
       poDoc = await PurchaseOrder.findOne({ _id: targetPoId, tenantId: req.tenantId });
       if (poDoc) {
         cumulativePriorRecv = await getPOCumulativeReceived(req.tenantId, poDoc._id, oldGrn._id);
         if (items) {
           for (const item of items) {
-            const poItem = (poDoc.items || []).find(pi => pi.sku === item.sku) || (poDoc.items || []).find(pi => pi.name === item.name);
+            const poItem = (poDoc.items || []).find(pi => 
+              pi.sku === item.sku || 
+              pi.itemCode === item.sku ||
+              (item.itemMasterId && pi.itemMasterId && String(pi.itemMasterId) === String(item.itemMasterId))
+            ) || (poDoc.items || []).find(pi => pi.name === item.name);
+
             const qtyOrdered = poItem ? (Number(poItem.requiredQty) || Number(poItem.qty) || 0) : (Number(item.qtyOrdered) || 0);
             const previouslyReceived = cumulativePriorRecv[item.sku] || 0;
             const remaining = Math.max(0, qtyOrdered - previouslyReceived);
-            const qtyReceived = Math.max(0, Number(item.qtyReceived) || 0);
+            const curAccepted = Math.max(0, (Number(item.qtyReceived) || 0) - (Number(item.rejectedQty) || 0));
 
             if (currentStatus !== 'Draft') {
-              if (qtyReceived > remaining) {
+              if (curAccepted > remaining) {
                 return res.status(400).json({
-                  error: `Received quantity (${qtyReceived}) exceeds remaining order quantity (${remaining}) for ${item.name}!`
+                  error: `Accepted quantity (${curAccepted}) exceeds remaining order quantity (${remaining}) for ${item.name}!`
                 });
               }
             }
@@ -502,56 +701,72 @@ router.put('/:id', async (req, res) => {
             item.qtyOrdered = qtyOrdered;
             item.orderedQty = qtyOrdered;
             item.previouslyReceivedQty = previouslyReceived;
-            item.remainingQty = Math.max(0, remaining - (currentStatus !== 'Draft' ? qtyReceived : 0));
+            item.acceptedPurchasedQty = curAccepted;
+            item.remainingQty = Math.max(0, remaining - (currentStatus !== 'Draft' ? curAccepted : 0));
           }
         }
       }
     }
 
-    // 1. If old status was verified/completed, revert old accepted stock additions
-    if (oldGrn.status === 'Verified/Completed') {
-      for (const item of oldGrn.items) {
-        const quantity = Number(item.qtyReceived) || 0;
-        if (quantity <= 0) continue;
-
-        const medicine = await Medicine.findOne({ sku: item.sku, tenantId: req.tenantId });
-        if (medicine) {
-          medicine.stock = Math.max(0, medicine.stock - quantity);
-          if (medicine.stock === 0) {
-            medicine.status = 'Out of Stock';
-          } else if (medicine.stock <= 20) {
-            medicine.status = 'Low Stock';
-          } else {
-            medicine.status = 'In Stock';
-          }
-          await medicine.save();
-        }
-
-        // Revert from MedicineBatch
-        const cleanBatchNumber = String(item.batchNumber || '').trim().toUpperCase() || 'DEFAULT';
-        const cleanSku = String(item.sku).trim().toUpperCase();
-        const batchDoc = await MedicineBatch.findOne({
-          tenantId: req.tenantId,
-          sku: cleanSku,
-          batchNumber: cleanBatchNumber
-        });
-        if (batchDoc) {
-          batchDoc.receivedQuantity = Math.max(0, batchDoc.receivedQuantity - quantity);
-          batchDoc.availableQuantity = Math.max(0, batchDoc.availableQuantity - quantity);
-          batchDoc.status = batchDoc.availableQuantity > 0 ? 'Active' : 'Depleted';
-          await batchDoc.save();
-        }
-      }
-    }
-
-    // 2. Process Authoritative Financials on items
+    // Process Authoritative Financials
     const rawItems = items || oldGrn.items;
     const processedItems = rawItems.map(calculateItemFinancials);
     const totalDiscount = Math.round(processedItems.reduce((acc, it) => acc + (it.discountAmount || 0), 0) * 100) / 100;
     const totalGst = Math.round(processedItems.reduce((acc, it) => acc + (it.gstAmount || 0), 0) * 100) / 100;
     const grandTotal = Math.round(processedItems.reduce((acc, it) => acc + (it.netAmount || 0), 0) * 100) / 100;
 
-    // 3. Update GRN details
+    // Delta-Based Inventory Reconciliation
+    // Maps each SKU/Item to old accepted converted qty vs new accepted converted qty
+    const oldQtyMap = {};
+    if (oldGrn.inventoryPosted || oldGrn.status === 'Verified/Completed') {
+      for (const it of (oldGrn.items || [])) {
+        const factor = Number(it.converterFactor) > 0 ? Number(it.converterFactor) : 1;
+        const accepted = it.acceptedPurchasedQty !== undefined
+          ? Number(it.acceptedPurchasedQty)
+          : Math.max(0, (Number(it.qtyReceived) || 0) - (Number(it.rejectedQty) || 0));
+        const conv = it.convertedQuantity !== undefined ? Number(it.convertedQuantity) : (accepted * factor);
+        const key = String(it.sku).trim().toUpperCase();
+        oldQtyMap[key] = (oldQtyMap[key] || 0) + conv;
+      }
+    }
+
+    const newQtyMap = {};
+    if (currentStatus === 'Verified/Completed') {
+      for (const it of processedItems) {
+        const conv = Number(it.convertedQuantity) || 0;
+        const key = String(it.sku).trim().toUpperCase();
+        newQtyMap[key] = (newQtyMap[key] || 0) + conv;
+      }
+    }
+
+    // Calculate union of SKUs involved in inventory delta
+    const allSkus = new Set([...Object.keys(oldQtyMap), ...Object.keys(newQtyMap)]);
+    for (const sku of allSkus) {
+      const oldVal = oldQtyMap[sku] || 0;
+      const newVal = newQtyMap[sku] || 0;
+      const delta = newVal - oldVal;
+
+      if (delta !== 0) {
+        // Atomic update on Medicine aggregate stock
+        await Medicine.findOneAndUpdate(
+          { tenantId: req.tenantId, sku },
+          { $inc: { stock: delta } }
+        );
+
+        // Atomic update on MedicineBatch
+        // Find matching item in processedItems or oldGrn.items
+        const matchedItem = processedItems.find(it => String(it.sku).trim().toUpperCase() === sku) ||
+          oldGrn.items.find(it => String(it.sku).trim().toUpperCase() === sku);
+        const batchNum = String(matchedItem?.batchNumber || '').trim().toUpperCase() || 'DEFAULT';
+
+        await MedicineBatch.findOneAndUpdate(
+          { tenantId: req.tenantId, sku, batchNumber: batchNum },
+          { $inc: { availableQuantity: delta, receivedQuantity: delta } }
+        );
+      }
+    }
+
+    // Update GRN details
     oldGrn.grnLocation = grnLocation || oldGrn.grnLocation || 'Main Pharmacy Store';
     oldGrn.poId = targetPoId || null;
     oldGrn.poNumber = poNumber !== undefined ? poNumber : oldGrn.poNumber;
@@ -559,6 +774,8 @@ router.put('/:id', async (req, res) => {
     oldGrn.vendorId = vendorId || oldGrn.vendorId;
     oldGrn.vendorName = vendorName || oldGrn.vendorName;
     oldGrn.status = currentStatus;
+    oldGrn.inventoryPosted = currentStatus === 'Verified/Completed';
+    oldGrn.inventoryPostedAt = currentStatus === 'Verified/Completed' ? (oldGrn.inventoryPostedAt || new Date()) : null;
     oldGrn.invoiceNumber = invoiceNumber !== undefined ? invoiceNumber : oldGrn.invoiceNumber;
     if (invoiceDate !== undefined) oldGrn.invoiceDate = invoiceDate ? new Date(invoiceDate) : null;
     if (invoiceAmount !== undefined) oldGrn.invoiceAmount = Number(invoiceAmount) || 0;
@@ -573,96 +790,14 @@ router.put('/:id', async (req, res) => {
 
     const updatedGrn = await oldGrn.save();
 
-    // 4. If new status is Verified/Completed, apply new accepted stock addition (rejectedQty excluded)
-    if (updatedGrn.status === 'Verified/Completed') {
-      for (const item of processedItems) {
-        const acceptedQuantity = Number(item.qtyReceived) || 0;
-        if (acceptedQuantity <= 0) continue;
-
-        let medicine = await Medicine.findOne({ sku: item.sku, tenantId: req.tenantId });
-        if (medicine) {
-          const newStock = medicine.stock + acceptedQuantity;
-          medicine.stock = newStock;
-          if (item.expiryDate) {
-            medicine.expiry = new Date(item.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' });
-          }
-          if (newStock === 0) {
-            medicine.status = 'Out of Stock';
-          } else if (newStock <= 20) {
-            medicine.status = 'Low Stock';
-          } else {
-            medicine.status = 'In Stock';
-          }
-          await medicine.save();
-        } else {
-          let stockStatus = 'In Stock';
-          if (acceptedQuantity === 0) {
-            stockStatus = 'Out of Stock';
-          } else if (acceptedQuantity <= 20) {
-            stockStatus = 'Low Stock';
-          }
-
-          medicine = await Medicine.create({
-            tenantId: req.tenantId,
-            name: item.name,
-            sku: item.sku,
-            stock: acceptedQuantity,
-            unit: item.unit || 'Strip',
-            mrp: Number(item.purchaseRate || item.price || 0) * 1.25,
-            category: item.itemType || 'General',
-            status: stockStatus,
-            expiry: item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' }) : '--'
-          });
-        }
-
-        // Phase 1 MedicineBatch integration on edit
-        const cleanBatchNumber = String(item.batchNumber || '').trim().toUpperCase() || 'DEFAULT';
-        const cleanSku = String(item.sku).trim().toUpperCase();
-
-        let batchDoc = await MedicineBatch.findOne({
-          tenantId: req.tenantId,
-          sku: cleanSku,
-          batchNumber: cleanBatchNumber
-        });
-
-        if (batchDoc) {
-          batchDoc.receivedQuantity += acceptedQuantity;
-          batchDoc.availableQuantity += acceptedQuantity;
-          if (item.expiryDate) batchDoc.expiryDate = item.expiryDate;
-          if (item.mfgDate) batchDoc.mfgDate = item.mfgDate;
-          if (item.purchaseRate || item.price) batchDoc.purchaseRate = Number(item.purchaseRate || item.price);
-          if (item.mrp) batchDoc.mrp = Number(item.mrp);
-          batchDoc.status = batchDoc.availableQuantity > 0 ? 'Active' : 'Depleted';
-          await batchDoc.save();
-        } else {
-          await MedicineBatch.create({
-            tenantId: req.tenantId,
-            medicineId: medicine._id,
-            sku: cleanSku,
-            name: item.name,
-            batchNumber: cleanBatchNumber,
-            mfgDate: item.mfgDate || null,
-            expiryDate: item.expiryDate || null,
-            receivedQuantity: acceptedQuantity,
-            availableQuantity: acceptedQuantity,
-            purchaseRate: Number(item.purchaseRate || item.price || 0),
-            mrp: Number(item.mrp || (Number(item.purchaseRate || item.price || 0) * 1.25)),
-            grnId: updatedGrn.grnId,
-            vendorName: updatedGrn.vendorName,
-            status: 'Active'
-          });
-        }
-      }
-    }
-
-    // 5. Re-evaluate PO status using cumulative receipts
+    // Re-evaluate PO status using cumulative receipts
     if (poDoc) {
       const updatedCumulativeRecv = await getPOCumulativeReceived(req.tenantId, poDoc._id);
       let allFullyReceived = true;
       let anyReceived = false;
 
       for (const poItem of (poDoc.items || [])) {
-        const totalRecv = updatedCumulativeRecv[poItem.sku] || 0;
+        const totalRecv = updatedCumulativeRecv[poItem.sku] || (poItem.itemCode ? updatedCumulativeRecv[poItem.itemCode] : 0) || 0;
         const required = Number(poItem.requiredQty) || Number(poItem.qty) || 0;
 
         if (totalRecv < required) {
@@ -679,9 +814,29 @@ router.put('/:id', async (req, res) => {
         poDoc.status = 'Partially Received';
       }
       await poDoc.save();
+
+      if (poDoc.parentPOId) {
+        const allChildren = await PurchaseOrder.find({ parentPOId: poDoc.parentPOId, tenantId: req.tenantId });
+        const parentPO = await PurchaseOrder.findOne({ poId: poDoc.parentPOId, tenantId: req.tenantId });
+        if (parentPO) {
+          const allFully = allChildren.every(c => (c._id.toString() === poDoc._id.toString() ? poDoc.status : c.status) === 'Fully Received');
+          const anyRec = allChildren.some(c => ['Partially Received', 'Fully Received'].includes(c._id.toString() === poDoc._id.toString() ? poDoc.status : c.status));
+          if (allFully) {
+            parentPO.status = 'Fully Received';
+          } else if (anyRec) {
+            parentPO.status = 'Partially Received';
+          }
+          if (Array.isArray(parentPO.vendorOrders)) {
+            parentPO.vendorOrders.forEach(vo => {
+              if (vo.poId === poDoc.poId) vo.status = poDoc.status;
+            });
+          }
+          await parentPO.save();
+        }
+      }
     }
 
-    // 6. Audit Log
+    // Write Audit Log
     try {
       await AuditLog.create({
         tenantId: req.tenantId,
@@ -696,16 +851,15 @@ router.put('/:id', async (req, res) => {
           status: updatedGrn.status,
           previousGrandTotal: oldGrn.grandTotal,
           updatedGrandTotal: updatedGrn.grandTotal,
-          previousItems: (oldGrn.items || []).map(it => ({ sku: it.sku, qtyReceived: it.qtyReceived, rejectedQty: it.rejectedQty })),
-          updatedItems: processedItems.map(it => ({ sku: it.sku, qtyReceived: it.qtyReceived, rejectedQty: it.rejectedQty })),
-          totalRejected: processedItems.reduce((acc, it) => acc + (it.rejectedQty || 0), 0)
+          totalAcceptedPurchased: processedItems.reduce((acc, it) => acc + (it.acceptedPurchasedQty || 0), 0),
+          totalRejectedPurchased: processedItems.reduce((acc, it) => acc + (it.rejectedQty || 0), 0)
         }
       });
     } catch (auditErr) {
       console.warn("AuditLog update error (non-fatal):", auditErr);
     }
 
-    // 7. Socket.io broadcast
+    // Socket.io broadcast
     const io = req.app.get("io");
     if (io && req.tenantId) {
       io.to(req.tenantId).emit("data_changed", { type: "goods_receipts" });
@@ -721,5 +875,3 @@ router.put('/:id', async (req, res) => {
 });
 
 module.exports = router;
-
-

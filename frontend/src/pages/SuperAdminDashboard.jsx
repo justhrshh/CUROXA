@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { socket } from '../utils/socket';
 import { handleAutoLogout, clearPortalAuthContext, performLogout } from '../utils/api';
-import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import quroxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import { exportHospitalValidationReportPdf, generateExcelFile, generateCsvFile, generatePdfFile } from '../utils/exportEngine';
 
 const originalFetch = window.fetch;
@@ -768,9 +768,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
   // Current user details
   const [currentUser, setCurrentUser] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('user')) || { name: 'Super Admin', email: 'super.admin@curoxa.com', role: 'superadmin' };
+      return JSON.parse(localStorage.getItem('user')) || { name: 'Super Admin', email: 'super.admin@quroxa.com', role: 'superadmin' };
     } catch (_) {
-      return { name: 'Super Admin', email: 'super.admin@curoxa.com', role: 'superadmin' };
+      return { name: 'Super Admin', email: 'super.admin@quroxa.com', role: 'superadmin' };
     }
   });
 
@@ -779,7 +779,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
     if (!user) return 'Onboarding Manager';
     const staffId = (user.staff_id || '').toLowerCase().trim();
     const email = (user.email || '').toLowerCase().trim();
-    if (staffId === 'superadmin' || email === 'super.admin@curoxa.com' || user.isRootAdmin) {
+    const userRole = (user.role || '').toLowerCase().trim();
+    if (staffId === 'superadmin' || email === 'super.admin@quroxa.com' || email === 'super.admin@curoxa.com' || user.isRootAdmin || userRole === 'superadmin' || userRole === 'admin') {
       return 'Super Admin';
     }
     let role = user.platformRole || user.specialty || '';
@@ -800,7 +801,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   // RBAC Configuration: exactly 3 internal manager roles + root master Super Admin
   const ROLE_ACCESS_MAP = {
-    'Super Admin': ['dashboard', 'hospital-onboarding', 'hospitals', 'subscription-mgmt', 'customer-support', 'broadcast-center', 'finance', 'employees', 'reports', 'settings'],
+    'Super Admin': ['dashboard', 'hospital-onboarding', 'hospitals', 'subscription-mgmt', 'customer-support', 'broadcast-center', 'finance', 'employees', 'reports', 'settings', 'global-item-master', 'item-requests'],
     'Onboarding Manager': ['hospital-onboarding', 'hospitals'],
     'Ticket Manager': ['customer-support', 'broadcast-center'],
     'Finance Manager': ['subscription-mgmt', 'finance', 'reports']
@@ -846,7 +847,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
   };
   
   // Super Admin is never restricted across any module
-  const isTabAllowed = isSuperAdmin ? true : allowedTabs.includes(getBaseTabId(activeTab));
+  const isTabAllowed = isSuperAdmin ? true : (allowedTabs.includes(getBaseTabId(activeTab)) || activeTab === 'global-item-master' || activeTab === 'item-requests');
 
   // Automatically normalize any legacy or search tab aliases
   useEffect(() => {
@@ -1084,7 +1085,131 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [biSubTab, setBiSubTab] = useState('bi-dashboard'); 
   const [drillDownPath, setDrillDownPath] = useState(['Revenue']);
   const [customReportForm, setCustomReportForm] = useState({ source: 'Invoices', groupField: 'Hospital', aggType: 'Sum', calcField: 'Amount', reportName: 'New Hospital Ingress Report' });
-  const [scheduleReportForm, setScheduleReportForm] = useState({ reportType: 'Weekly Revenue Summary', frequency: 'Weekly', format: 'PDF', recipientEmail: 'ceo@curoxa.com' });
+  const [scheduleReportForm, setScheduleReportForm] = useState({ reportType: 'Weekly Revenue Summary', frequency: 'Weekly', format: 'PDF', recipientEmail: 'ceo@quroxa.com' });
+
+  // Global Item Master and Item Requests state
+  const [globalItems, setGlobalItems] = useState([]);
+  const [itemRequests, setItemRequests] = useState([]);
+  const [globalItemsPagination, setGlobalItemsPagination] = useState({ page: 1, limit: 25, total: 0 });
+  const [itemRequestsPagination, setItemRequestsPagination] = useState({ page: 1, limit: 25, total: 0 });
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [itemForm, setItemForm] = useState({});
+  const [globalItemSearch, setGlobalItemSearch] = useState('');
+  const [globalItemTypeFilter, setGlobalItemTypeFilter] = useState('All');
+  const [globalItemStatusFilter, setGlobalItemStatusFilter] = useState('All');
+  const [requestSearch, setRequestSearch] = useState('');
+  const [requestStatusFilter, setRequestStatusFilter] = useState('All');
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [duplicateCheckResult, setDuplicateCheckResult] = useState(null);
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [isRejecting, setIsRejecting] = useState(false);
+
+  const fetchGlobalItems = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const query = new URLSearchParams({
+        page: globalItemsPagination.page,
+        limit: globalItemsPagination.limit,
+        ...(globalItemSearch && { search: globalItemSearch }),
+        ...(globalItemTypeFilter !== 'All' && { itemType: globalItemTypeFilter }),
+        ...(globalItemStatusFilter !== 'All' && { status: globalItemStatusFilter })
+      });
+      const res = await fetch(`/api/superadmin/global-items?${query}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGlobalItems(data.data || data.items || []);
+        setGlobalItemsPagination(prev => ({
+          ...prev,
+          total: data.pagination?.total !== undefined ? data.pagination.total : (data.total || 0)
+        }));
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchItemRequests = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const query = new URLSearchParams({
+        page: itemRequestsPagination.page,
+        limit: itemRequestsPagination.limit,
+        ...(requestSearch && { search: requestSearch }),
+        ...(requestStatusFilter !== 'All' && { status: requestStatusFilter.toUpperCase().replace(' ', '_') })
+      });
+      const res = await fetch(`/api/superadmin/item-requests?${query}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setItemRequests(data.data || data.requests || []);
+        setItemRequestsPagination(prev => ({
+          ...prev,
+          total: data.pagination?.total !== undefined ? data.pagination.total : (data.total || 0)
+        }));
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchPendingRequestsCount = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/superadmin/item-requests?status=SUBMITTED&limit=1', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPendingRequestsCount(data.pagination?.total || 0);
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  const handleExportGlobalItemsCSV = () => {
+    if (!globalItems || globalItems.length === 0) return;
+    const headers = ['Item Code', 'Generic Name', 'Brand Name', 'Manufacturer', 'Type', 'Category', 'Purchased Unit', 'Consumption Unit', 'Converter Factor', 'Status'];
+    const rows = globalItems.map(item => [
+      item.itemCode || '',
+      `"${(item.genericName || '').replace(/"/g, '""')}"`,
+      `"${(item.brandName || '').replace(/"/g, '""')}"`,
+      `"${(item.manufacturer || '').replace(/"/g, '""')}"`,
+      item.itemType || '',
+      item.categoryType || '',
+      item.packaging?.purchasedUnit || '',
+      item.packaging?.consumptionUnit || '',
+      item.packaging?.converterFactor || 1,
+      item.status || 'Active'
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Quroxa_Global_Item_Master_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  useEffect(() => {
+    fetchPendingRequestsCount();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'global-item-master') {
+      fetchGlobalItems();
+      fetchPendingRequestsCount();
+    }
+  }, [activeTab, globalItemsPagination.page, globalItemSearch, globalItemTypeFilter, globalItemStatusFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'item-requests') {
+      fetchItemRequests();
+      fetchPendingRequestsCount();
+    }
+  }, [activeTab, itemRequestsPagination.page, requestSearch, requestStatusFilter]);
 
   // Platform Control & Administration sub-view state (Step 10)
   const [ctrlSubTab, setCtrlSubTab] = useState('platform-dashboard'); // platform-dashboard, roles-engine, task-engine, approval-engine, notification-engine, api-integration, white-labeling, feature-flags, storage-mgmt, audit-logs, activity-logs, security-center, background-jobs, backup-restore, system-health, global-settings, developer-center
@@ -1136,8 +1261,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [brandSettings, setBrandSettings] = useState({
     themeColor: '#2563EB',
     fontFamily: 'Outfit',
-    customDomain: 'admin.curoxa.com',
-    companyName: 'Curoxa SaaS'
+    customDomain: 'admin.quroxa.com',
+    companyName: 'Quroxa SaaS'
   });
 
   const [backups, setBackups] = useState([]);
@@ -1960,7 +2085,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '14.5px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.3px' }}>Curoxa Hospital Admin Portal</span>
+                <span style={{ fontSize: '14.5px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.3px' }}>Quroxa Hospital Admin Portal</span>
                 <span style={{ fontSize: '9px', background: '#EF4444', color: '#FFFFFF', padding: '2px 6px', borderRadius: '4px', fontWeight: 900, letterSpacing: '0.5px' }}>IMPERSONATING ACTIVE SESSION</span>
               </div>
               <span style={{ fontSize: '11px', color: '#94A3B8' }}>Connected Tenant: <strong>{hosp.name}</strong> (Code: {hosp.code})</span>
@@ -2768,7 +2893,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [profileForm, setProfileForm] = useState({
     name: currentUser.name || 'Platform Admin',
-    email: currentUser.email || 'super.admin@curoxa.com',
+    email: currentUser.email || 'super.admin@quroxa.com',
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
@@ -4727,7 +4852,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             </strong>
                           </div>
                           <p style={{ margin: 0, fontSize: '11px', color: '#64748B', lineHeight: 1.45, paddingLeft: '22px' }}>
-                            Doctors use Curoxa for digital clinical consultations, prescriptions and clinical workflows.
+                            Doctors use Quroxa for digital clinical consultations, prescriptions and clinical workflows.
                           </p>
                         </div>
 
@@ -4756,7 +4881,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             </strong>
                           </div>
                           <p style={{ margin: 0, fontSize: '11px', color: '#64748B', lineHeight: 1.45, paddingLeft: '22px' }}>
-                            Doctors use Curoxa for HR/self-service only. Clinical consultation and handwritten prescriptions are handled through the hospital's offline workflow.
+                            Doctors use Quroxa for HR/self-service only. Clinical consultation and handwritten prescriptions are handled through the hospital's offline workflow.
                           </p>
                         </div>
                       </div>
@@ -6464,8 +6589,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
         {/* Logo Group */}
         <div style={{ padding: '16px 20px 14px', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid #F1F5F9' }}>
           <img 
-            src={curoxaSidebarLogo} 
-            alt="CUROXA" 
+            src={quroxaSidebarLogo} 
+            alt="QUROXA" 
             style={{
               width: '42px',
               height: '42px',
@@ -6476,7 +6601,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           />
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <span style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif", fontWeight: 900, fontSize: '17px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1 }}>
-              CUROXA
+              QUROXA
             </span>
             <span style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.6px', marginTop: '3px', lineHeight: 1 }}>
               Enterprise Admin
@@ -6513,7 +6638,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               Production
             </span>
           </div>
-          <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.2px' }}>Curoxa Global</div>
+          <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.2px' }}>Quroxa Global</div>
           <div style={{ fontSize: '10px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>Enterprise Master License</div>
         </div>
 
@@ -6588,6 +6713,20 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     >
                       <LucideIcon name={item.icon} style={{ width: '15px', height: '15px', color: isActive ? '#FFFFFF' : '#64748B' }} />
                       <span>{item.label}</span>
+                      {item.id === 'item-requests' && pendingRequestsCount > 0 && !isSidebarCollapsed && (
+                        <span style={{
+                          marginLeft: 'auto',
+                          background: isActive ? '#FFFFFF' : '#EF4444',
+                          color: isActive ? '#DC2626' : '#FFFFFF',
+                          fontSize: '10px',
+                          fontWeight: 800,
+                          padding: '1px 6px',
+                          borderRadius: '10px',
+                          lineHeight: '1.2'
+                        }}>
+                          {pendingRequestsCount}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -6660,7 +6799,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
               <h1 style={{ fontSize: '15px', fontWeight: 850, color: '#0F172A', margin: 0, letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>
-                Curoxa Global Platform Command Center
+                Quroxa Global Platform Command Center
               </h1>
               <span style={{
                 fontSize: '9px',
@@ -6743,7 +6882,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   }}>
                     <div style={{ padding: '14px 16px', borderBottom: '1px solid #F1F5F9' }}>
                       <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>{currentUser.name}</div>
-                      <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>{currentUser.email || 'super.admin@curoxa.com'}</div>
+                      <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>{currentUser.email || 'super.admin@quroxa.com'}</div>
                       <div style={{ fontSize: '9px', fontWeight: 700, color: '#2563EB', marginTop: '4px', textTransform: 'uppercase' }}>{currentUserPlatformRole}</div>
                     </div>
                     <div style={{ padding: '6px' }}>
@@ -6751,7 +6890,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         onClick={() => {
                           setProfileForm({
                             name: currentUser.name || 'Super Admin',
-                            email: currentUser.email || 'super.admin@curoxa.com',
+                            email: currentUser.email || 'super.admin@quroxa.com',
                             currentPassword: '',
                             newPassword: '',
                             confirmPassword: ''
@@ -10186,11 +10325,11 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           <div style={{ fontSize: '11px', lineHeight: 1.4, color: '#64748B' }}>
                             {(hosp.doctorClinicalMode || 'ONLINE') === 'ONLINE' ? (
                               <div>
-                                <strong style={{ color: '#1E293B' }}>ONLINE Mode:</strong> Doctors use Curoxa's digital clinical consultation and prescription workflow.
+                                <strong style={{ color: '#1E293B' }}>ONLINE Mode:</strong> Doctors use Quroxa's digital clinical consultation and prescription workflow.
                               </div>
                             ) : (
                               <div>
-                                <strong style={{ color: '#1E293B' }}>OFFLINE Mode:</strong> Doctors use Curoxa for HR/self-service only. Prescriptions are written physically and uploaded by Reception.
+                                <strong style={{ color: '#1E293B' }}>OFFLINE Mode:</strong> Doctors use Quroxa for HR/self-service only. Prescriptions are written physically and uploaded by Reception.
                               </div>
                             )}
                           </div>
@@ -12218,7 +12357,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     rows: getExportRows(),
                     columns: invoiceExportColumns,
                     dateRangeText: 'All Financial Records',
-                    fileName: `Curoxa_SaaS_Invoices_${timestamp}.xlsx`
+                    fileName: `Quroxa_SaaS_Invoices_${timestamp}.xlsx`
                   });
                   showToast(`Successfully exported ${filteredInvoices.length} invoices to Excel!`, 'success');
                 } catch (err) {
@@ -12242,7 +12381,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     dataset: 'SaaS Invoices',
                     rows: getExportRows(),
                     columns: invoiceExportColumns,
-                    fileName: `Curoxa_SaaS_Invoices_${timestamp}.csv`
+                    fileName: `Quroxa_SaaS_Invoices_${timestamp}.csv`
                   });
                   showToast(`Successfully exported ${filteredInvoices.length} invoices to CSV!`, 'success');
                 } catch (err) {
@@ -12289,8 +12428,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     rows: pdfRows,
                     columns: pdfColumns,
                     dateRangeText: 'Active Financial Overview',
-                    clinicName: 'CUROXA ENTERPRISE SAAS PLATFORM',
-                    fileName: `Curoxa_Billing_Report_${timestamp}.pdf`
+                    clinicName: 'QUROXA ENTERPRISE SAAS PLATFORM',
+                    fileName: `Quroxa_Billing_Report_${timestamp}.pdf`
                   });
                   showToast(`Official PDF report generated for ${filteredInvoices.length} invoices!`, 'success');
                 } catch (err) {
@@ -13248,7 +13387,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               </div>
                               <div>
                                 <div style={{ fontSize: '14px', fontWeight: 800, letterSpacing: '0.2px' }}>OFFICIAL TAX INVOICE</div>
-                                <div style={{ fontSize: '11px', color: '#94A3B8' }}>Curoxa Global Healthcare SaaS Gateway</div>
+                                <div style={{ fontSize: '11px', color: '#94A3B8' }}>Quroxa Global Healthcare SaaS Gateway</div>
                               </div>
                             </div>
                             <button
@@ -13300,13 +13439,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                             {/* Two-Column Bill From & Bill To */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                              {/* Bill From (Curoxa) */}
+                              {/* Bill From (Quroxa) */}
                               <div style={{ background: '#F8FAFC', padding: '14px 16px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
                                 <div style={{ fontSize: '11px', fontWeight: 700, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
                                   BILLED BY (PROVIDER)
                                 </div>
                                 <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>
-                                  CUROXA HEALTHCARE TECHNOLOGIES PVT. LTD.
+                                  QUROXA HEALTHCARE TECHNOLOGIES PVT. LTD.
                                 </div>
                                 <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '4px', lineHeight: '1.4' }}>
                                   Enterprise Command Center, Connaught Place<br />
@@ -13346,7 +13485,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
                                     <td style={{ padding: '12px 14px' }}>
                                       <div style={{ fontWeight: 700, fontSize: '13px', color: '#0F172A' }}>
-                                        Curoxa Hospital Management Platform — {inv.subscription}
+                                        Quroxa Hospital Management Platform — {inv.subscription}
                                       </div>
                                       <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
                                         Software-as-a-Service monthly subscription license & multi-tenant cloud operations
@@ -13386,7 +13525,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                             {/* Compliance & Remittance Note */}
                             <div style={{ padding: '10px 14px', background: '#EFF6FF', borderRadius: '8px', border: '1px solid #DBEAFE', fontSize: '11px', color: '#1E40AF', lineHeight: '1.4' }}>
-                              <strong>Remittance Note:</strong> This is a digitally generated electronic tax invoice issued under Rule 46 of the CGST Rules, 2017. No physical signature is required. All payments should be remitted to the official Curoxa corporate bank account.
+                              <strong>Remittance Note:</strong> This is a digitally generated electronic tax invoice issued under Rule 46 of the CGST Rules, 2017. No physical signature is required. All payments should be remitted to the official Quroxa corporate bank account.
                             </div>
                           </div>
 
@@ -13571,7 +13710,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h2 style={styles.cardHeaderTitle}>Curoxa SaaS Team Directory</h2>
+                    <h2 style={styles.cardHeaderTitle}>Quroxa SaaS Team Directory</h2>
                     <p style={styles.cardHeaderSub}>Manage team members, assign platform roles, and track workforce distribution across departments.</p>
                   </div>
                   <button
@@ -13719,7 +13858,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       <div style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>{editingEmployee ? 'Edit Team Member' : 'Add Team Member'}</h3>
-                          <p style={{ margin: '2px 0 0 0', fontSize: '11.5px', color: '#64748B' }}>{editingEmployee ? 'Update employee details and role assignment.' : 'Add a new member to the Curoxa operations team.'}</p>
+                          <p style={{ margin: '2px 0 0 0', fontSize: '11.5px', color: '#64748B' }}>{editingEmployee ? 'Update employee details and role assignment.' : 'Add a new member to the Quroxa operations team.'}</p>
                         </div>
                         <button onClick={() => { setIsAddEmployeeOpen(false); setEditingEmployee(null); }} style={{ background: '#F1F5F9', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <LucideIcon name="x" style={{ width: '16px', height: '16px', color: '#64748B' }} />
@@ -13735,7 +13874,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <label style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.3px' }}>WORK EMAIL *</label>
-                            <input type="email" value={employeeForm.email} onChange={e => setEmployeeForm(p => ({ ...p, email: e.target.value }))} style={styles.formInput} placeholder="e.g. john@curoxa.com" />
+                            <input type="email" value={employeeForm.email} onChange={e => setEmployeeForm(p => ({ ...p, email: e.target.value }))} style={styles.formInput} placeholder="e.g. john@quroxa.com" />
                           </div>
                         </div>
 
@@ -13752,7 +13891,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: '1 / -1' }}>
-                            <label style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.3px' }}>ACCOUNT PASSWORD (LEAVE BLANK FOR DEFAULT: Curoxa@2026)</label>
+                            <label style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.3px' }}>ACCOUNT PASSWORD (LEAVE BLANK FOR DEFAULT: Quroxa@2026)</label>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
                               <input 
                                 type={showPasswords['employeeForm'] ? 'text' : 'password'} 
@@ -14475,6 +14614,887 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         </div>
                       </div>
                     </div>
+                </div>
+              );
+            })()}
+
+            {/* GLOBAL ITEM MASTER MODULE (FULL PAGE VIEW) */}
+            {isTabAllowed && activeTab === 'global-item-master' && (() => {
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, paddingBottom: '60px' }}>
+                  {/* Page Header & Module Navigation */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                        <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.4px' }}>
+                          Global Item Master
+                        </h2>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#16A34A', background: '#DCFCE7', padding: '3px 8px', borderRadius: '6px' }}>
+                          Canonical Enterprise Catalog
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
+                        Canonical catalog shared across all Quroxa hospitals · Centrally managed by Super Admin
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={handleExportGlobalItemsCSV}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          border: '1px solid #CBD5E1',
+                          background: '#FFFFFF',
+                          color: '#334155',
+                          fontSize: '12.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <LucideIcon name="download" style={{ width: '14px', height: '14px' }} />
+                        <span>Export CSV</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setEditingItem(null);
+                          setItemForm({ itemType: 'Medicine', status: 'Active' });
+                          setIsItemModalOpen(true);
+                        }}
+                        style={{ ...styles.btnPrimary, display: 'flex', alignItems: 'center', gap: '6px', height: '38px', padding: '0 16px', fontSize: '12.5px' }}
+                      >
+                        <LucideIcon name="plus" style={{ width: '14px', height: '14px' }} />
+                        <span>Add Global Item</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Inter-Module Relationship Navigation Pills */}
+                  <div style={{ display: 'flex', background: '#F1F5F9', padding: '4px', borderRadius: '10px', gap: '4px', width: 'fit-content' }}>
+                    <button
+                      onClick={() => setActiveTab('global-item-master')}
+                      style={{
+                        border: 'none',
+                        background: '#FFFFFF',
+                        color: '#2563EB',
+                        fontWeight: 800,
+                        fontSize: '12.5px',
+                        padding: '7px 16px',
+                        borderRadius: '7px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                      }}
+                    >
+                      <LucideIcon name="package" style={{ width: '14px', height: '14px' }} />
+                      <span>Global Item Master ({globalItemsPagination.total})</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('item-requests')}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#64748B',
+                        fontWeight: 600,
+                        fontSize: '12.5px',
+                        padding: '7px 16px',
+                        borderRadius: '7px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <LucideIcon name="clipboard-list" style={{ width: '14px', height: '14px' }} />
+                      <span>Hospital Item Requests</span>
+                      {pendingRequestsCount > 0 && (
+                        <span style={{ fontSize: '10.5px', background: '#FEF2F2', color: '#DC2626', fontWeight: 800, padding: '1px 6px', borderRadius: '10px' }}>
+                          {pendingRequestsCount} pending
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Filter & Search Bar */}
+                  <div style={{ background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', padding: '16px 20px', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', width: '100%', boxSizing: 'border-box' }}>
+                    <div style={{ position: 'relative', flex: 1, minWidth: '240px', maxWidth: '420px' }}>
+                      <LucideIcon name="search" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: '15px', height: '15px', color: '#94A3B8' }} />
+                      <input
+                        type="text"
+                        placeholder="Search by Item Code, Generic Name, Brand, Manufacturer..."
+                        value={globalItemSearch}
+                        onChange={e => setGlobalItemSearch(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px 8px 36px', fontSize: '12.5px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#F8FAFC', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <select value={globalItemTypeFilter} onChange={e => setGlobalItemTypeFilter(e.target.value)} style={styles.filterSelect}>
+                      <option value="All">All Types</option>
+                      <option value="Medicine">Medicine</option>
+                      <option value="Consumable">Consumable</option>
+                      <option value="Reagent">Reagent</option>
+                      <option value="Asset">Asset</option>
+                      <option value="Non-Consumable">Non-Consumable</option>
+                    </select>
+                    <select value={globalItemStatusFilter} onChange={e => setGlobalItemStatusFilter(e.target.value)} style={styles.filterSelect}>
+                      <option value="All">All Statuses</option>
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                    <button
+                      onClick={() => fetchGlobalItems()}
+                      style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '7px 12px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <LucideIcon name="refresh-cw" style={{ width: '13px', height: '13px' }} />
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+
+                  {/* Full-Width Enterprise Catalog Table */}
+                  <div style={{ background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', overflowX: 'auto', width: '100%', boxSizing: 'border-box' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                          <th style={styles.tableTh}>Item Code</th>
+                          <th style={styles.tableTh}>Generic Name & Specs</th>
+                          <th style={styles.tableTh}>Brand</th>
+                          <th style={styles.tableTh}>Manufacturer</th>
+                          <th style={styles.tableTh}>Type</th>
+                          <th style={styles.tableTh}>Packaging Hierarchy</th>
+                          <th style={styles.tableTh}>Consumption Unit</th>
+                          <th style={styles.tableTh}>Status</th>
+                          <th style={{ ...styles.tableTh, textAlign: 'right' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {globalItems.length === 0 ? (
+                          <tr>
+                            <td colSpan="9" style={{ textAlign: 'center', padding: '40px', color: '#94A3B8', fontSize: '13px' }}>
+                              No items found matching the current search/filter.
+                            </td>
+                          </tr>
+                        ) : (
+                          globalItems.map(item => (
+                            <tr key={item._id} style={styles.tableRow}>
+                              <td style={styles.tableTd}>
+                                <div style={{ fontWeight: 800, fontFamily: 'monospace', color: '#2563EB', fontSize: '12.5px' }}>{item.itemCode}</div>
+                                <span style={{ fontSize: '9px', fontWeight: 750, background: '#DCFCE7', color: '#16A34A', padding: '2px 6px', borderRadius: '4px', marginTop: '3px', display: 'inline-block' }}>Canonical Global</span>
+                              </td>
+                              <td style={styles.tableTd}>
+                                <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#0F172A' }}>{item.genericName}</div>
+                                {item.itemType === 'Medicine' && (item.composition || item.strength) && (
+                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                                    {item.composition} {item.strength ? `· ${item.strength} ${item.strengthUnit || ''}` : ''} {item.dosageForm ? `(${item.dosageForm})` : ''}
+                                  </div>
+                                )}
+                                {item.itemType === 'Consumable' && item.sizeDimensions && (
+                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                                    Size: {item.sizeDimensions} {item.sterility ? `· ${item.sterility}` : ''}
+                                  </div>
+                                )}
+                              </td>
+                              <td style={styles.tableTd}><span style={{ fontSize: '12.5px', color: '#475569' }}>{item.brandName || '-'}</span></td>
+                              <td style={styles.tableTd}><span style={{ fontSize: '12.5px', color: '#475569', fontWeight: 500 }}>{item.manufacturer || '-'}</span></td>
+                              <td style={styles.tableTd}>
+                                <span style={{
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  background: item.itemType === 'Medicine' ? '#F3E8FF' : item.itemType === 'Consumable' ? '#EFF6FF' : item.itemType === 'Reagent' ? '#FEF3C7' : '#F1F5F9',
+                                  color: item.itemType === 'Medicine' ? '#7E22CE' : item.itemType === 'Consumable' ? '#1D4ED8' : item.itemType === 'Reagent' ? '#B45309' : '#475569'
+                                }}>
+                                  {item.itemType}
+                                </span>
+                              </td>
+                              <td style={styles.tableTd}>
+                                <span style={{ fontSize: '12px', color: '#334155', fontWeight: 600 }}>
+                                  {item.packaging && item.packaging.levels && item.packaging.levels.length > 0 ? 
+                                    `${item.packaging.purchasedUnit} → ${item.packaging.levels.map(l => l.containsQty + ' ' + l.unit).join(' → ')}`
+                                    : (item.packaging?.purchasedUnit ? `1 ${item.packaging.purchasedUnit} = ${item.packaging.converterFactor || 1} ${item.packaging.consumptionUnit || 'Unit'}` : '-')}
+                                </span>
+                              </td>
+                              <td style={styles.tableTd}>
+                                <span style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A', background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '3px 8px', borderRadius: '6px' }}>
+                                  {item.packaging?.consumptionUnit || '-'}
+                                </span>
+                              </td>
+                              <td style={styles.tableTd}>
+                                <span style={{ fontSize: '10px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: item.status === 'Active' ? '#DCFCE7' : '#FEE2E2', color: item.status === 'Active' ? '#16A34A' : '#DC2626' }}>
+                                  {item.status}
+                                </span>
+                              </td>
+                              <td style={{ ...styles.tableTd, textAlign: 'right' }}>
+                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                  <button
+                                    onClick={() => {
+                                      setEditingItem(item);
+                                      setItemForm({ ...item });
+                                      setIsItemModalOpen(true);
+                                    }}
+                                    style={{ background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '5px 10px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, color: '#334155' }}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      const token = localStorage.getItem('token');
+                                      await fetch(`/api/superadmin/global-items/${item._id}/toggle-status`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
+                                      fetchGlobalItems();
+                                    }}
+                                    style={{ background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '5px 10px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, color: '#64748B' }}
+                                  >
+                                    Toggle
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <span style={{ fontSize: '12px', color: '#64748B' }}>
+                      Showing page {globalItemsPagination.page} ({globalItems.length} of {globalItemsPagination.total} items)
+                    </span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        disabled={globalItemsPagination.page === 1}
+                        onClick={() => setGlobalItemsPagination(p => ({ ...p, page: p.page - 1 }))}
+                        style={styles.btnSecondary}
+                      >Previous</button>
+                      <button
+                        disabled={globalItems.length < globalItemsPagination.limit}
+                        onClick={() => setGlobalItemsPagination(p => ({ ...p, page: p.page + 1 }))}
+                        style={styles.btnSecondary}
+                      >Next</button>
+                    </div>
+                  </div>
+
+                  {/* Create / Edit Modal */}
+                  {isItemModalOpen && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', zIndex: 9999, display: 'flex', justifyContent: 'flex-end' }}>
+                      <div style={{ width: '600px', height: '100%', background: '#FFFFFF', display: 'flex', flexDirection: 'column', animation: 'slideInRight 0.25s ease' }}>
+                        <div style={{ padding: '20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800 }}>{editingItem ? 'Edit Global Item' : 'Create Global Item'}</h3>
+                          <button onClick={() => setIsItemModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                            <LucideIcon name="x" style={{ width: '16px', height: '16px' }} />
+                          </button>
+                        </div>
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          <div style={styles.formCol}>
+                            <label style={styles.formLabel}>Item Type</label>
+                            <select value={itemForm.itemType || 'Medicine'} onChange={e => setItemForm({ ...itemForm, itemType: e.target.value })} style={styles.filterSelect}>
+                              <option value="Medicine">Medicine</option>
+                              <option value="Consumable">Consumable</option>
+                              <option value="Reagent">Reagent</option>
+                              <option value="Asset">Asset</option>
+                              <option value="Non-Consumable">Non-Consumable</option>
+                            </select>
+                          </div>
+                          <div style={styles.formRow}>
+                            <div style={styles.formCol}>
+                              <label style={styles.formLabel}>Generic Name *</label>
+                              <input type="text" value={itemForm.genericName || ''} onChange={e => setItemForm({ ...itemForm, genericName: e.target.value })} style={styles.formInput} />
+                            </div>
+                            <div style={styles.formCol}>
+                              <label style={styles.formLabel}>Brand Name</label>
+                              <input type="text" value={itemForm.brandName || ''} onChange={e => setItemForm({ ...itemForm, brandName: e.target.value })} style={styles.formInput} />
+                            </div>
+                          </div>
+                          <div style={styles.formRow}>
+                            <div style={styles.formCol}>
+                              <label style={styles.formLabel}>Manufacturer *</label>
+                              <input type="text" value={itemForm.manufacturer || ''} onChange={e => setItemForm({ ...itemForm, manufacturer: e.target.value })} style={styles.formInput} />
+                            </div>
+                            <div style={styles.formCol}>
+                              <label style={styles.formLabel}>HSN Code</label>
+                              <input type="text" value={itemForm.hsnCode || ''} onChange={e => setItemForm({ ...itemForm, hsnCode: e.target.value })} style={styles.formInput} />
+                            </div>
+                          </div>
+
+                          {itemForm.itemType === 'Medicine' && (
+                            <>
+                              <div style={styles.formRow}>
+                                <div style={styles.formCol}>
+                                  <label style={styles.formLabel}>Composition</label>
+                                  <input type="text" value={itemForm.composition || ''} onChange={e => setItemForm({ ...itemForm, composition: e.target.value })} style={styles.formInput} />
+                                </div>
+                                <div style={styles.formCol}>
+                                  <label style={styles.formLabel}>Dosage Form</label>
+                                  <input type="text" value={itemForm.dosageForm || ''} onChange={e => setItemForm({ ...itemForm, dosageForm: e.target.value })} style={styles.formInput} placeholder="e.g. Tablet" />
+                                </div>
+                              </div>
+                              <div style={styles.formRow}>
+                                <div style={styles.formCol}>
+                                  <label style={styles.formLabel}>Strength</label>
+                                  <input type="text" value={itemForm.strength || ''} onChange={e => setItemForm({ ...itemForm, strength: e.target.value })} style={styles.formInput} placeholder="e.g. 500" />
+                                </div>
+                                <div style={styles.formCol}>
+                                  <label style={styles.formLabel}>Strength Unit</label>
+                                  <input type="text" value={itemForm.strengthUnit || ''} onChange={e => setItemForm({ ...itemForm, strengthUnit: e.target.value })} style={styles.formInput} placeholder="e.g. mg" />
+                                </div>
+                              </div>
+                            </>
+                          )}
+
+                          <div style={styles.formRow}>
+                            <div style={styles.formCol}>
+                              <label style={styles.formLabel}>Purchased Unit</label>
+                              <input type="text" value={itemForm.packaging?.purchasedUnit || ''} onChange={e => setItemForm({ ...itemForm, packaging: { ...itemForm.packaging, purchasedUnit: e.target.value } })} style={styles.formInput} placeholder="e.g. Box" />
+                            </div>
+                            <div style={styles.formCol}>
+                              <label style={styles.formLabel}>Consumption Unit</label>
+                              <input type="text" value={itemForm.packaging?.consumptionUnit || ''} onChange={e => setItemForm({ ...itemForm, packaging: { ...itemForm.packaging, consumptionUnit: e.target.value } })} style={styles.formInput} placeholder="e.g. Tablet" />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                            <button onClick={() => setIsItemModalOpen(false)} style={styles.btnSecondary}>Cancel</button>
+                            <button
+                              onClick={async () => {
+                                const token = localStorage.getItem('token');
+                                const method = editingItem ? 'PUT' : 'POST';
+                                const url = editingItem ? `/api/superadmin/global-items/${editingItem._id}` : '/api/superadmin/global-items';
+                                try {
+                                  const res = await fetch(url, {
+                                    method,
+                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                    body: JSON.stringify(itemForm)
+                                  });
+                                  if (res.ok) {
+                                    fetchGlobalItems();
+                                    setIsItemModalOpen(false);
+                                  }
+                                } catch (err) { console.error(err); }
+                              }}
+                              style={styles.btnPrimary}
+                            >
+                              {editingItem ? 'Save Changes' : 'Create Item'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ITEM REQUESTS MODULE (FULL PAGE VIEW) */}
+            {isTabAllowed && activeTab === 'item-requests' && (() => {
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, paddingBottom: '60px' }}>
+                  {/* Page Header & Module Navigation */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                        <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.4px' }}>
+                          Item Requests
+                        </h2>
+                        {pendingRequestsCount > 0 && (
+                          <span style={{ fontSize: '11px', fontWeight: 800, color: '#DC2626', background: '#FEE2E2', padding: '3px 8px', borderRadius: '6px' }}>
+                            {pendingRequestsCount} Pending Review
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
+                        Hospital requests to add items to the Global Item Master · Review, deduplicate, and link or approve
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => setActiveTab('global-item-master')}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          border: '1px solid #CBD5E1',
+                          background: '#FFFFFF',
+                          color: '#334155',
+                          fontSize: '12.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <LucideIcon name="package" style={{ width: '14px', height: '14px', color: '#2563EB' }} />
+                        <span>View Global Catalog</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          fetchItemRequests();
+                          fetchPendingRequestsCount();
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          border: '1px solid #CBD5E1',
+                          background: '#FFFFFF',
+                          color: '#334155',
+                          fontSize: '12.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <LucideIcon name="refresh-cw" style={{ width: '13px', height: '13px' }} />
+                        <span>Refresh</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Inter-Module Relationship Navigation Pills */}
+                  <div style={{ display: 'flex', background: '#F1F5F9', padding: '4px', borderRadius: '10px', gap: '4px', width: 'fit-content' }}>
+                    <button
+                      onClick={() => setActiveTab('global-item-master')}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#64748B',
+                        fontWeight: 600,
+                        fontSize: '12.5px',
+                        padding: '7px 16px',
+                        borderRadius: '7px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <LucideIcon name="package" style={{ width: '14px', height: '14px' }} />
+                      <span>Global Item Master ({globalItemsPagination.total})</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('item-requests')}
+                      style={{
+                        border: 'none',
+                        background: '#FFFFFF',
+                        color: '#2563EB',
+                        fontWeight: 800,
+                        fontSize: '12.5px',
+                        padding: '7px 16px',
+                        borderRadius: '7px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                      }}
+                    >
+                      <LucideIcon name="clipboard-list" style={{ width: '14px', height: '14px' }} />
+                      <span>Hospital Item Requests ({itemRequestsPagination.total})</span>
+                      {pendingRequestsCount > 0 && (
+                        <span style={{ fontSize: '10.5px', background: '#FEF2F2', color: '#DC2626', fontWeight: 800, padding: '1px 6px', borderRadius: '10px' }}>
+                          {pendingRequestsCount}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Status Tabs and Search Controls */}
+                  <div style={{ background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', width: '100%', boxSizing: 'border-box' }}>
+                    <div style={{ display: 'flex', background: '#F1F5F9', padding: '4px', borderRadius: '8px', gap: '4px', flexWrap: 'wrap' }}>
+                      {['All', 'Submitted', 'Under Review', 'Approved', 'Rejected'].map(status => (
+                        <button
+                          key={status}
+                          onClick={() => setRequestStatusFilter(status)}
+                          style={{
+                            border: 'none',
+                            background: requestStatusFilter === status ? '#FFFFFF' : 'transparent',
+                            color: requestStatusFilter === status ? '#0F172A' : '#64748B',
+                            fontWeight: requestStatusFilter === status ? 800 : 550,
+                            fontSize: '12px',
+                            padding: '6px 14px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            boxShadow: requestStatusFilter === status ? '0 1px 2px rgba(0,0,0,0.06)' : 'none'
+                          }}
+                        >
+                          {status}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div style={{ position: 'relative', width: '320px' }}>
+                      <LucideIcon name="search" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: '15px', height: '15px', color: '#94A3B8' }} />
+                      <input
+                        type="text"
+                        placeholder="Search Request No, Item Name, Hospital..."
+                        value={requestSearch}
+                        onChange={e => setRequestSearch(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px 8px 36px', fontSize: '12.5px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#F8FAFC', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Full-Width Enterprise Requests Table */}
+                  <div style={{ background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', overflowX: 'auto', width: '100%', boxSizing: 'border-box' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                          <th style={styles.tableTh}>Request No</th>
+                          <th style={styles.tableTh}>Hospital</th>
+                          <th style={styles.tableTh}>Requested Item & Specs</th>
+                          <th style={styles.tableTh}>Type</th>
+                          <th style={styles.tableTh}>Requested By</th>
+                          <th style={styles.tableTh}>Status</th>
+                          <th style={styles.tableTh}>Date</th>
+                          <th style={{ ...styles.tableTh, textAlign: 'right' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {itemRequests.length === 0 ? (
+                          <tr>
+                            <td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: '#94A3B8', fontSize: '13px' }}>
+                              No item requests found for the selected status filter.
+                            </td>
+                          </tr>
+                        ) : (
+                          itemRequests.map(req => {
+                            let statusColor = '#64748B'; let statusBg = '#F1F5F9';
+                            if (req.status === 'SUBMITTED') { statusColor = '#2563EB'; statusBg = '#DBEAFE'; }
+                            if (req.status === 'UNDER_REVIEW') { statusColor = '#D97706'; statusBg = '#FEF3C7'; }
+                            if (req.status === 'APPROVED') { statusColor = '#16A34A'; statusBg = '#DCFCE7'; }
+                            if (req.status === 'REJECTED') { statusColor = '#DC2626'; statusBg = '#FEE2E2'; }
+
+                            const p = req.proposedItem || req.proposedItemDetails || {};
+
+                            return (
+                              <tr key={req._id} style={styles.tableRow}>
+                                <td style={styles.tableTd}>
+                                  <span style={{ fontSize: '12px', fontWeight: 800, fontFamily: 'monospace', color: '#2563EB' }}>
+                                    {req.requestNo || req.requestNumber}
+                                  </span>
+                                </td>
+                                <td style={styles.tableTd}>
+                                  <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#334155' }}>
+                                    {req.hospitalName || req.hospitalId?.name || req.tenantId || 'Hospital'}
+                                  </div>
+                                </td>
+                                <td style={styles.tableTd}>
+                                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#0F172A' }}>
+                                    {p.genericName}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                                    {p.brandName ? `Brand: ${p.brandName} · ` : ''}Mfg: {p.manufacturer || '-'}
+                                    {p.strength ? ` · ${p.strength} ${p.strengthUnit || ''}` : ''}
+                                  </div>
+                                </td>
+                                <td style={styles.tableTd}>
+                                  <span style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    background: p.itemType === 'Medicine' ? '#F3E8FF' : p.itemType === 'Consumable' ? '#EFF6FF' : itemRequests.itemType === 'Reagent' ? '#FEF3C7' : '#F1F5F9',
+                                    color: p.itemType === 'Medicine' ? '#7E22CE' : p.itemType === 'Consumable' ? '#1D4ED8' : p.itemType === 'Reagent' ? '#B45309' : '#475569'
+                                  }}>
+                                    {p.itemType}
+                                  </span>
+                                </td>
+                                <td style={styles.tableTd}>
+                                  <span style={{ fontSize: '12px', color: '#475569' }}>
+                                    {req.requestedBy?.name || req.requestedBy || 'Hospital Staff'}
+                                  </span>
+                                </td>
+                                <td style={styles.tableTd}>
+                                  <span style={{ fontSize: '10px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: statusBg, color: statusColor }}>
+                                    {req.status.replace('_', ' ')}
+                                  </span>
+                                  {req.approvedItemCode && (
+                                    <div style={{ marginTop: '4px' }}>
+                                      <span style={{ fontSize: '9.5px', fontWeight: 800, fontFamily: 'monospace', color: '#16A34A', background: '#DCFCE7', padding: '1px 5px', borderRadius: '4px' }}>
+                                        {req.approvedItemCode}
+                                      </span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={styles.tableTd}><span style={{ fontSize: '12px', color: '#64748B' }}>{new Date(req.createdAt).toLocaleDateString()}</span></td>
+                                <td style={{ ...styles.tableTd, textAlign: 'right' }}>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedRequest(req);
+                                      setIsRequestModalOpen(true);
+                                      setDuplicateCheckResult(null);
+                                    }}
+                                    style={{ background: '#2563EB', border: 'none', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700, color: '#FFFFFF' }}
+                                  >
+                                    Review
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <span style={{ fontSize: '12px', color: '#64748B' }}>
+                      Showing page {itemRequestsPagination.page} ({itemRequests.length} of {itemRequestsPagination.total} requests)
+                    </span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        disabled={itemRequestsPagination.page === 1}
+                        onClick={() => setItemRequestsPagination(p => ({ ...p, page: p.page - 1 }))}
+                        style={styles.btnSecondary}
+                      >Previous</button>
+                      <button
+                        disabled={itemRequests.length < itemRequestsPagination.limit}
+                        onClick={() => setItemRequestsPagination(p => ({ ...p, page: p.page + 1 }))}
+                        style={styles.btnSecondary}
+                      >Next</button>
+                    </div>
+                  </div>
+
+                  {/* Review Detail Modal / Panel */}
+                  {isRequestModalOpen && selectedRequest && (() => {
+                    const p = selectedRequest.proposedItem || selectedRequest.proposedItemDetails || {};
+                    return (
+                      <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', zIndex: 9999, display: 'flex', justifyContent: 'flex-end' }}>
+                        <div style={{ width: '640px', height: '100%', background: '#FFFFFF', display: 'flex', flexDirection: 'column', animation: 'slideInRight 0.25s ease', boxShadow: '-10px 0 25px rgba(0,0,0,0.1)' }}>
+                          <div style={{ padding: '20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Review Item Request</h3>
+                              <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                                <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#2563EB' }}>{selectedRequest.requestNo || selectedRequest.requestNumber}</span> from <strong>{selectedRequest.hospitalName || selectedRequest.tenantId}</strong>
+                              </div>
+                            </div>
+                            <button onClick={() => setIsRequestModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
+                              <LucideIcon name="x" style={{ width: '18px', height: '18px', color: '#64748B' }} />
+                            </button>
+                          </div>
+                          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            
+                            {/* PROPOSED ITEM DETAILS */}
+                            <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                              <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '8px' }}>PROPOSED ITEM DETAILS</div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Generic Name</span><div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>{p.genericName || '-'}</div></div>
+                                <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Item Type</span><div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>{p.itemType || '-'}</div></div>
+                                <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Brand Name</span><div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>{p.brandName || '-'}</div></div>
+                                <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Manufacturer</span><div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>{p.manufacturer || '-'}</div></div>
+                                <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Category / Department</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.categoryType || '-'} / {p.departmentType || '-'}</div></div>
+                                <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>HSN Code</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.hsnCode || '-'}</div></div>
+                              </div>
+
+                              {/* Category Specific Fields */}
+                              {p.itemType === 'Medicine' && (p.composition || p.strength || p.dosageForm) && (
+                                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #E2E8F0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                  <div style={{ gridColumn: 'span 2' }}><span style={{ fontSize: '10px', color: '#94A3B8' }}>Composition</span><div style={{ fontSize: '12px', fontWeight: 600, color: '#5B21B6' }}>{p.composition || '-'}</div></div>
+                                  <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Strength</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.strength} {p.strengthUnit}</div></div>
+                                  <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Dosage Form / Route</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.dosageForm} ({p.routeOfAdministration || 'Oral'})</div></div>
+                                  {p.scheduleClassification && <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Schedule</span><div style={{ fontSize: '12px', fontWeight: 600, color: '#DC2626' }}>{p.scheduleClassification}</div></div>}
+                                </div>
+                              )}
+
+                              {p.itemType === 'Consumable' && (p.material || p.sizeDimensions || p.sterility) && (
+                                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #E2E8F0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                  <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Material</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.material || '-'}</div></div>
+                                  <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Size / Dimensions</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.sizeDimensions || '-'}</div></div>
+                                  <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Sterility</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.sterility || '-'}</div></div>
+                                  <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Disposal</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.disposalType || '-'}</div></div>
+                                </div>
+                              )}
+
+                              {p.itemType === 'Reagent' && (p.machineCompatibility || p.catalogNo || p.testPackVolume) && (
+                                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #E2E8F0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                  <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Compatible Machine</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.machineCompatibility || '-'}</div></div>
+                                  <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Catalog / Part No</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.catalogNo || '-'}</div></div>
+                                  <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Test Volume</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.testPackVolume || '-'}</div></div>
+                                  <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Storage Temp</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.storageTemperature || '-'}</div></div>
+                                </div>
+                              )}
+
+                              {p.itemType === 'Asset' && (p.makeModelNo || p.itemSpecification) && (
+                                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #E2E8F0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                  <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Make / Model</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.makeModelNo || '-'}</div></div>
+                                  <div><span style={{ fontSize: '10px', color: '#94A3B8' }}>Warranty</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.warrantyMonths || 0} Months</div></div>
+                                  <div style={{ gridColumn: 'span 2' }}><span style={{ fontSize: '10px', color: '#94A3B8' }}>Technical Spec</span><div style={{ fontSize: '12px', fontWeight: 600 }}>{p.itemSpecification || '-'}</div></div>
+                                </div>
+                              )}
+
+                              {/* Proposed Packaging */}
+                              <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #E2E8F0' }}>
+                                <span style={{ fontSize: '10px', color: '#94A3B8' }}>Proposed Packaging</span>
+                                <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#166534' }}>
+                                  1 {p.purchasedUnit || 'Box'} = {p.converterFactor || 1} {p.consumptionUnit || 'Unit'}{Number(p.converterFactor) !== 1 ? 's' : ''}
+                                  {p.packSizeDescription ? ` (${p.packSizeDescription})` : ''}
+                                </div>
+                              </div>
+
+                              {/* Justification */}
+                              {selectedRequest.reason && (
+                                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #E2E8F0' }}>
+                                  <span style={{ fontSize: '10px', color: '#94A3B8' }}>Clinical / Departmental Justification</span>
+                                  <div style={{ fontSize: '12px', color: '#334155', fontStyle: 'italic', marginTop: '2px' }}>
+                                    "{selectedRequest.reason}"
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* MARK UNDER REVIEW BUTTON */}
+                            {selectedRequest.status === 'SUBMITTED' && (
+                              <button
+                                onClick={async () => {
+                                  const token = localStorage.getItem('token');
+                                  await fetch(`/api/item-requests/admin/${selectedRequest._id}/review`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
+                                  fetchItemRequests();
+                                  fetchPendingRequestsCount();
+                                  setIsRequestModalOpen(false);
+                                }}
+                                style={{ ...styles.btnSecondary, background: '#FEF3C7', color: '#D97706', borderColor: '#FDE68A', fontWeight: 750 }}
+                              >
+                                Mark Under Review
+                              </button>
+                            )}
+
+                            {/* ACTIONS & DUPLICATE DETECTION */}
+                            {(selectedRequest.status === 'UNDER_REVIEW' || selectedRequest.status === 'SUBMITTED') && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <button
+                                  onClick={async () => {
+                                    setIsCheckingDuplicates(true);
+                                    const token = localStorage.getItem('token');
+                                    const q = new URLSearchParams({
+                                      genericName: p.genericName || '',
+                                      manufacturer: p.manufacturer || '',
+                                      brandName: p.brandName || '',
+                                      itemType: p.itemType || '',
+                                      strength: p.strength || '',
+                                      dosageForm: p.dosageForm || '',
+                                      catalogNo: p.catalogNo || '',
+                                      makeModelNo: p.makeModelNo || ''
+                                    });
+                                    const res = await fetch(`/api/item-requests/admin/duplicate-check?${q}`, { headers: { Authorization: `Bearer ${token}` } });
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      setDuplicateCheckResult(data.duplicates || []);
+                                    }
+                                    setIsCheckingDuplicates(false);
+                                  }}
+                                  style={styles.btnSecondary}
+                                >
+                                  {isCheckingDuplicates ? 'Checking Existing Global Items...' : '🔍 Check for Duplicates in Global Catalog'}
+                                </button>
+
+                                {/* DUPLICATE DETECTION RESULTS */}
+                                {duplicateCheckResult && duplicateCheckResult.length > 0 && (
+                                  <div style={{ background: '#FEF2F2', padding: '14px', borderRadius: '10px', border: '1px solid #FECACA' }}>
+                                    <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#DC2626', marginBottom: '4px' }}>
+                                      ⚠️ Possible matching canonical item(s) found in Global Catalog:
+                                    </div>
+                                    <div style={{ fontSize: '11.5px', color: '#7F1D1D', marginBottom: '8px' }}>
+                                      To avoid catalog pollution, link this hospital request to the existing canonical item:
+                                    </div>
+                                    {duplicateCheckResult.map(dup => (
+                                      <div key={dup._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', background: '#FFFFFF', padding: '8px 12px', borderRadius: '8px', border: '1px solid #FECACA' }}>
+                                        <div>
+                                          <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#2563EB' }}>{dup.itemCode}</span> — <strong style={{ color: '#0F172A' }}>{dup.genericName}</strong> {dup.brandName ? `(${dup.brandName})` : ''}
+                                          <div style={{ fontSize: '11px', color: '#64748B' }}>Mfg: {dup.manufacturer} | {dup.packSizeDescription || 'Canonical Item'}</div>
+                                        </div>
+                                        <button
+                                          onClick={async () => {
+                                            const token = localStorage.getItem('token');
+                                            await fetch(`/api/item-requests/admin/${selectedRequest._id}/approve`, {
+                                              method: 'PUT',
+                                              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                              body: JSON.stringify({ linkToExistingId: dup._id, note: `Linked to existing canonical item ${dup.itemCode}` })
+                                            });
+                                            fetchItemRequests();
+                                            fetchPendingRequestsCount();
+                                            setIsRequestModalOpen(false);
+                                          }}
+                                          style={{ background: '#2563EB', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                        >
+                                          Link to {dup.itemCode}
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {duplicateCheckResult && duplicateCheckResult.length === 0 && (
+                                  <div style={{ background: '#F0FDF4', padding: '10px 14px', borderRadius: '8px', border: '1px solid #BBF7D0', color: '#166534', fontSize: '12px', fontWeight: 700 }}>
+                                    ✓ No duplicate found. Safe to approve as a new canonical Global Item.
+                                  </div>
+                                )}
+
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                  <button
+                                    onClick={async () => {
+                                      const token = localStorage.getItem('token');
+                                      await fetch(`/api/item-requests/admin/${selectedRequest._id}/approve`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
+                                      fetchItemRequests();
+                                      fetchPendingRequestsCount();
+                                      setIsRequestModalOpen(false);
+                                    }}
+                                    style={{ ...styles.btnPrimary, background: '#10B981', flex: 1 }}
+                                  >
+                                    Approve & Create Global Item
+                                  </button>
+                                  
+                                  <button
+                                    onClick={() => setIsRejecting(true)}
+                                    style={{ ...styles.btnPrimary, background: '#DC2626', flex: 1 }}
+                                  >
+                                    Reject Request
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* REJECTION REASON SECTION */}
+                            {isRejecting && (
+                              <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <textarea
+                                  placeholder="Reason for rejection..."
+                                  value={rejectionReason}
+                                  onChange={e => setRejectionReason(e.target.value)}
+                                  style={{ ...styles.formInput, minHeight: '80px', resize: 'vertical' }}
+                                />
+                                <button
+                                  onClick={async () => {
+                                    const token = localStorage.getItem('token');
+                                    await fetch(`/api/item-requests/admin/${selectedRequest._id}/reject`, {
+                                      method: 'PUT',
+                                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                      body: JSON.stringify({ rejectionReason })
+                                    });
+                                    setIsRejecting(false);
+                                    fetchItemRequests();
+                                    fetchPendingRequestsCount();
+                                    setIsRequestModalOpen(false);
+                                  }}
+                                  style={{ ...styles.btnPrimary, background: '#DC2626' }}
+                                >
+                                  Confirm Rejection
+                                </button>
+                              </div>
+                            )}
+
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })()}
@@ -15805,7 +16825,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         </div>
                       </div>
                       <div style={{ borderTop: '1px dashed #E2E8F0', paddingTop: '10px', marginTop: '10px', fontSize: '11px', color: '#64748B', fontStyle: 'italic', textAlign: 'center' }}>
-                        This is a system-generated document verified via the Curoxa Tax Registry API connector.
+                        This is a system-generated document verified via the Quroxa Tax Registry API connector.
                       </div>
                     </div>
                   </div>
@@ -16170,6 +17190,13 @@ const menuGroups = [
       { id: 'hospital-onboarding', label: 'Hospital Onboarding', icon: 'user-plus' },
       { id: 'hospitals', label: 'Hospitals', icon: 'building-2' },
       { id: 'subscription-mgmt', label: 'Subscription Management', icon: 'credit-card' }
+    ]
+  },
+  {
+    group: 'Catalog & Procurement',
+    items: [
+      { id: 'global-item-master', label: 'Global Item Master', icon: 'package' },
+      { id: 'item-requests', label: 'Item Requests', icon: 'clipboard-list' }
     ]
   },
   {

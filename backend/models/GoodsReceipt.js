@@ -2,10 +2,22 @@ const mongoose = require('mongoose');
 
 const goodsReceiptItemSchema = new mongoose.Schema({
   itemType: { type: String, default: 'Medicine' },
+  itemMasterId: { type: mongoose.Schema.Types.ObjectId, ref: 'ItemMaster', default: null },
   itemCode: { type: String, default: '' },
   sku: { type: String, required: true },
   name: { type: String, required: true },
+  genericName: { type: String, default: '' },
+  brandName: { type: String, default: '' },
+  manufacturer: { type: String, default: '' },
   unit: { type: String, default: 'Strip' },
+  purchasedUnit: { type: String, default: 'Strip' },
+  packSize: { type: String, default: '' },
+  converterFactor: { type: Number, default: 1 },
+  consumptionUnit: { type: String, default: 'Unit' },
+  convertedReceivedQty: { type: Number, default: 0 },
+  acceptedPurchasedQty: { type: Number, default: 0 },
+  convertedQuantity: { type: Number, default: 0 },
+  mrp: { type: Number, default: 0 },
   barcode: { type: String, default: '' },
   
   batchNumber: { type: String, default: '' },
@@ -48,7 +60,9 @@ const goodsReceiptSchema = new mongoose.Schema({
   vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true },
   vendorName: { type: String, required: true },
   
-  status: { type: String, enum: ['Draft', 'Submitted', 'Verified/Completed'], default: 'Draft' },
+  status: { type: String, enum: ['Draft', 'Submitted', 'Verified/Completed'], default: 'Draft', index: true },
+  inventoryPosted: { type: Boolean, default: false, index: true },
+  inventoryPostedAt: { type: Date, default: null },
   
   // Supplier Invoice Metadata
   invoiceNumber: { type: String, default: '' },

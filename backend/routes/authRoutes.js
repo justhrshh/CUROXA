@@ -14,6 +14,7 @@ const { isPatientProfileComplete } = require("../utils/patientProfileHelper");
 const { resolveTrustedHospitalBranding, buildBrandedOtpEmail, validateHospitalLoginAccess } = require("../utils/hospitalBrandingHelper");
 const { getHospitalSubscriptionStatus, checkAndDispatchExpiryNotifications } = require("../utils/subscriptionHelper");
 const { sendEmail } = require("../utils/emailService");
+const { getCanonicalLogoUrl } = require("../config/urls");
 const router = express.Router();
 
 // Generate a unique, non-guessable placeholder hash for OAuth-created users.
@@ -2094,12 +2095,15 @@ router.post('/test-email', async (req, res) => {
     const { sendEmail } = require('../utils/emailService');
     const result = await sendEmail({
       to: targetEmail,
-      subject: "Curoxa Healthcare System — Email Diagnostic Verification",
-      text: "This is a diagnostic verification email sent by the Curoxa Platform. If you received this, your email system is fully operational.",
+      subject: "Quroxa Healthcare System — Email Diagnostic Verification",
+      text: "This is a diagnostic verification email sent by the Quroxa Platform. If you received this, your email system is fully operational.",
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #E2E8F0; border-radius: 12px; background: #FFFFFF;">
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #E2E8F0; border-radius: 12px; background: #FFFFFF;">
           <div style="text-align: center; margin-bottom: 20px;">
-            <h2 style="color: #2563EB; margin: 0; font-size: 20px;">Curoxa Email System Verified</h2>
+            <div style="margin-bottom: 14px;">
+              <img src="${getCanonicalLogoUrl()}" alt="Quroxa" width="160" border="0" style="max-height: 48px; max-width: 180px; width: auto; height: auto; object-fit: contain; display: inline-block; outline: none; text-decoration: none;" />
+            </div>
+            <h2 style="color: #2563EB; margin: 0; font-size: 20px; font-weight: 800;">Quroxa Email System Verified</h2>
             <p style="color: #64748B; font-size: 13px; margin: 6px 0 0 0;">System Diagnostic Test</p>
           </div>
           <div style="background: #F0FDF4; border: 1px solid #DCFCE7; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
@@ -2108,13 +2112,14 @@ router.post('/test-email', async (req, res) => {
             </p>
           </div>
           <p style="color: #475569; font-size: 13px; line-height: 1.5;">
-            Your Curoxa deployment is configured with multi-tier failover (Gmail SMTP, Brevo API, Resend API). Patient OTPs, hospital invites, and staff alerts will now be dispatched automatically.
+            Your Quroxa deployment is configured with multi-tier failover (Gmail SMTP, Brevo API, Resend API). Patient OTPs, hospital invites, and staff alerts will now be dispatched automatically.
           </p>
           <div style="border-top: 1px solid #E2E8F0; padding-top: 12px; margin-top: 20px; text-align: center; color: #94A3B8; font-size: 11px;">
-            Timestamp: ${new Date().toISOString()} • Curoxa Platform
+            Timestamp: ${new Date().toISOString()} • Quroxa Platform
           </div>
         </div>
-      `
+      `,
+      senderName: 'Quroxa System'
     });
 
     return res.json({

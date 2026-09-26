@@ -3,9 +3,11 @@ const mongoose = require('mongoose');
 const inventoryWriteOffSchema = new mongoose.Schema({
   tenantId: { type: String, required: true, default: 'city_hospital', index: true },
   writeOffId: { type: String, required: true, trim: true },
-  medicineId: { type: mongoose.Schema.Types.ObjectId, ref: 'Medicine', required: true },
+  medicineId: { type: mongoose.Schema.Types.ObjectId, ref: 'Medicine', required: false },
+  itemMasterId: { type: mongoose.Schema.Types.ObjectId, ref: 'ItemMaster', required: false, index: true },
   sku: { type: String, required: true, uppercase: true, trim: true },
   medicineName: { type: String, required: true, trim: true },
+  consumptionUnit: { type: String, default: 'Unit', trim: true },
   batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'MedicineBatch', required: true },
   batchNumber: { type: String, required: true, uppercase: true, trim: true },
   expiryDate: { type: Date, default: null },

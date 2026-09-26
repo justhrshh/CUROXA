@@ -1013,27 +1013,27 @@ export default function EmployeeDirectoryView({
               </div>
 
               {/* Status / Guidance Sub-bar */}
-              <div className="px-6 py-2.5 bg-white border-b border-slate-200/80 flex items-center justify-between text-xs text-slate-600 flex-wrap gap-2 shrink-0">
+              <div className="px-6 py-2.5 bg-white border-b border-slate-200/80 flex items-center justify-between text-xs sm:text-[12.5px] text-slate-600 flex-wrap gap-2 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md shadow-2xs">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md shadow-2xs">
                       <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
                       Required
                     </span>
-                    <span className="text-slate-500 font-medium text-[11px]">Compulsory for registration</span>
+                    <span className="text-slate-600 font-medium text-xs sm:text-[12.5px]">Compulsory for registration</span>
                   </div>
                   <span className="text-slate-300 hidden sm:inline">•</span>
                   <div className="flex items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
                       Optional
                     </span>
-                    <span className="text-slate-400 font-medium text-[11px]">Can be skipped or filled later</span>
+                    <span className="text-slate-500 font-medium text-xs sm:text-[12.5px]">Can be skipped or filled later</span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-[11px] text-blue-700 font-semibold bg-blue-50/80 border border-blue-200/60 px-2.5 py-0.5 rounded-md">
+                <div className="flex items-center gap-1.5 text-xs text-blue-700 font-semibold bg-blue-50/80 border border-blue-200/60 px-2.5 py-1 rounded-md">
                   <span>Press</span>
-                  <kbd className="px-1.5 py-0.2 text-[10px] font-mono bg-white border border-blue-200 rounded shadow-2xs text-blue-900 font-bold">Enter ↵</kbd>
+                  <kbd className="px-1.5 py-0.5 text-xs font-mono bg-white border border-blue-200 rounded shadow-2xs text-blue-900 font-bold">Enter ↵</kbd>
                   <span>for next field</span>
                 </div>
               </div>
@@ -1041,7 +1041,7 @@ export default function EmployeeDirectoryView({
               {/* Modal Body with Logical Cards */}
               <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5" style={{ maxHeight: 'calc(92vh - 180px)' }}>
                 {error && (
-                  <div id="staff-form-error" className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 text-rose-800 text-xs font-semibold flex items-center gap-2.5 shadow-xs">
+                  <div id="staff-form-error" className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 text-rose-800 text-xs sm:text-sm font-semibold flex items-center gap-2.5 shadow-xs">
                     <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
                     <span>{error}</span>
                   </div>
@@ -1051,15 +1051,15 @@ export default function EmployeeDirectoryView({
                 <div className="bg-white border border-blue-100 rounded-2xl p-4.5 shadow-sm space-y-4">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-xs">
-                        <Lock className="w-3.5 h-3.5" />
+                      <div className="w-7.5 h-7.5 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-xs text-xs sm:text-sm">
+                        <Lock className="w-4 h-4" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">1. Account Credentials & Security</h4>
-                        <p className="text-[11px] text-slate-400 font-medium">Used for staff authentication into CUROXA</p>
+                        <h4 className="text-[13px] sm:text-sm font-black uppercase tracking-wider text-slate-800">1. Account Credentials & Security</h4>
+                        <p className="text-xs text-slate-500 font-medium">Used for staff authentication into QUROXA</p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200/80">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200/80">
                       Compulsory
                     </span>
                   </div>
@@ -1068,10 +1068,10 @@ export default function EmployeeDirectoryView({
                     {/* Full Name */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                           Full Name
                         </label>
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                        <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                           Required
                         </span>
                       </div>
@@ -1083,7 +1083,7 @@ export default function EmployeeDirectoryView({
                           placeholder="e.g. Dr. Allison House"
                           value={newEmp.name}
                           onChange={(e) => setNewEmp({...newEmp, name: e.target.value})}
-                          className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                          className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                           autoComplete="off"
                         />
                       </div>
@@ -1092,10 +1092,10 @@ export default function EmployeeDirectoryView({
                     {/* Phone Number */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                           Phone Number (10 Digits)
                         </label>
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                        <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                           Required
                         </span>
                       </div>
@@ -1111,11 +1111,11 @@ export default function EmployeeDirectoryView({
                             const val = e.target.value.replace(/\D/g, '').slice(0, 10);
                             setNewEmp({...newEmp, phone: val, staff_id: val});
                           }}
-                          className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                          className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                           autoComplete="off"
                         />
                       </div>
-                      <span className="text-[10.5px] text-slate-400 font-medium mt-1 block">
+                      <span className="text-xs text-slate-500 font-medium mt-1.5 block">
                         Used as login username & for SMS/OTP notifications
                       </span>
                     </div>
@@ -1123,10 +1123,10 @@ export default function EmployeeDirectoryView({
                     {/* Username (Staff ID / Phone Number) */}
                     <div className="md:col-span-2">
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                          Username (Staff ID)
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
+                          System Login ID <span className="text-xs text-slate-500 font-normal">(Login Username)</span>
                         </label>
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
                           Auto-Populated
                         </span>
                       </div>
@@ -1138,7 +1138,7 @@ export default function EmployeeDirectoryView({
                           disabled
                           placeholder="Auto-populated from Phone Number"
                           value={newEmp.phone ? `Username: ${newEmp.phone}` : ''}
-                          className="w-full h-10 pl-10 pr-3.5 bg-emerald-50/60 border border-emerald-200/80 rounded-xl text-xs font-mono font-bold text-emerald-900 cursor-not-allowed shadow-2xs"
+                          className="w-full h-10 pl-10 pr-3.5 bg-emerald-50/60 border border-emerald-200/80 rounded-xl text-sm font-mono font-bold text-emerald-900 cursor-not-allowed shadow-2xs"
                         />
                       </div>
                     </div>
@@ -1146,19 +1146,19 @@ export default function EmployeeDirectoryView({
                     {/* Login Password */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                           Login Password
                         </label>
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={generateRandomPassword}
-                            className="inline-flex items-center gap-1 text-[10.5px] bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-blue-700 px-2 py-0.5 rounded-md border border-blue-200/80 font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+                            className="inline-flex items-center gap-1 text-xs bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-blue-700 px-2 py-0.5 rounded-md border border-blue-200/80 font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
                           >
-                            <Sparkles className="w-3 h-3 text-blue-600" />
+                            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
                             <span>Generate</span>
                           </button>
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                          <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                             Required
                           </span>
                         </div>
@@ -1171,7 +1171,9 @@ export default function EmployeeDirectoryView({
                           placeholder="••••••••"
                           value={newEmp.password}
                           onChange={(e) => setNewEmp({...newEmp, password: e.target.value})}
-                          className="w-full h-10 pl-10 pr-10 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                          className={`w-full h-10 pl-10 pr-10 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs font-semibold ${
+                            !showPassword && newEmp.password ? 'text-base tracking-[0.18em]' : 'text-sm tracking-normal'
+                          }`}
                           autoComplete="new-password"
                         />
                         <button 
@@ -1194,7 +1196,7 @@ export default function EmployeeDirectoryView({
                               'w-full bg-emerald-500'
                             }`} />
                           </div>
-                          <span className="text-[10.5px] font-bold" style={{ color: getPasswordStrength(newEmp.password).color }}>
+                          <span className="text-xs font-bold" style={{ color: getPasswordStrength(newEmp.password).color }}>
                             {getPasswordStrength(newEmp.password).label}
                           </span>
                         </div>
@@ -1204,10 +1206,10 @@ export default function EmployeeDirectoryView({
                     {/* Confirm Password */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                           Confirm Password
                         </label>
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                        <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                           Required
                         </span>
                       </div>
@@ -1219,7 +1221,9 @@ export default function EmployeeDirectoryView({
                           placeholder="••••••••"
                           value={newEmp.confirmPassword}
                           onChange={(e) => setNewEmp({...newEmp, confirmPassword: e.target.value})}
-                          className={`w-full h-10 pl-10 pr-10 bg-slate-50/70 hover:bg-white focus:bg-white border rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 transition-all shadow-2xs ${
+                          className={`w-full h-10 pl-10 pr-10 bg-slate-50/70 hover:bg-white focus:bg-white border rounded-xl font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 transition-all shadow-2xs ${
+                            !showConfirmPassword && newEmp.confirmPassword ? 'text-base tracking-[0.18em]' : 'text-sm tracking-normal'
+                          } ${
                             newEmp.confirmPassword 
                               ? (newEmp.password === newEmp.confirmPassword ? 'border-emerald-400 focus:border-emerald-500 focus:ring-emerald-500/15' : 'border-rose-400 focus:border-rose-500 focus:ring-rose-500/15')
                               : 'border-slate-200 hover:border-slate-300 focus:border-blue-500 focus:ring-blue-500/15'
@@ -1238,12 +1242,12 @@ export default function EmployeeDirectoryView({
                       {newEmp.confirmPassword && (
                         <div className="mt-1 flex items-center gap-1">
                           {newEmp.password === newEmp.confirmPassword ? (
-                            <span className="text-[10.5px] font-bold text-emerald-600 flex items-center gap-1">
-                              <Check className="w-3 h-3 text-emerald-600" /> Passwords match
+                            <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                              <Check className="w-3.5 h-3.5 text-emerald-600" /> Passwords match
                             </span>
                           ) : (
-                            <span className="text-[10.5px] font-bold text-rose-600 flex items-center gap-1">
-                              <X className="w-3 h-3 text-rose-600" /> Passwords do not match
+                            <span className="text-xs font-bold text-rose-600 flex items-center gap-1">
+                              <X className="w-3.5 h-3.5 text-rose-600" /> Passwords do not match
                             </span>
                           )}
                         </div>
@@ -1256,15 +1260,15 @@ export default function EmployeeDirectoryView({
                 <div className="bg-white border border-indigo-100 rounded-2xl p-4.5 shadow-sm space-y-4">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-xs">
-                        <Briefcase className="w-3.5 h-3.5" />
+                      <div className="w-7.5 h-7.5 rounded-lg bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-xs">
+                        <Briefcase className="w-4 h-4" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">2. Role & Department Assignment</h4>
-                        <p className="text-[11px] text-slate-400 font-medium">Access permissions and operational routing</p>
+                        <h4 className="text-[13px] sm:text-sm font-black uppercase tracking-wider text-slate-800">2. Role & Department Assignment</h4>
+                        <p className="text-xs text-slate-500 font-medium">Access permissions and operational routing</p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200/80">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200/80">
                       Compulsory
                     </span>
                   </div>
@@ -1273,17 +1277,17 @@ export default function EmployeeDirectoryView({
                     {/* Access Role */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                           Access Role
                         </label>
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                        <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                           Required
                         </span>
                       </div>
                       <div className="relative flex items-center group">
                         <Shield className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
                         <select 
-                          className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
+                          className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
                           style={{ paddingLeft: '44px', paddingRight: '36px' }}
                           value={newEmp.role} 
                           onChange={(e) => setNewEmp({...newEmp, role: e.target.value})}
@@ -1299,10 +1303,10 @@ export default function EmployeeDirectoryView({
                     {/* Hospital Email */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                           Hospital Email
                         </label>
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                        <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                           Required
                         </span>
                       </div>
@@ -1314,7 +1318,7 @@ export default function EmployeeDirectoryView({
                           placeholder="e.g. allison.house@hospital.com"
                           value={newEmp.email}
                           onChange={(e) => setNewEmp({...newEmp, email: e.target.value})}
-                          className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                          className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                           autoComplete="off"
                         />
                       </div>
@@ -1327,15 +1331,15 @@ export default function EmployeeDirectoryView({
                   <div className="bg-gradient-to-br from-white to-teal-50/20 border border-teal-200/80 rounded-2xl p-4.5 shadow-sm space-y-4">
                     <div className="flex items-center justify-between pb-3 border-b border-teal-100">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-teal-600 to-emerald-600 text-white flex items-center justify-center shadow-xs">
-                          <Stethoscope className="w-3.5 h-3.5" />
+                        <div className="w-7.5 h-7.5 rounded-lg bg-gradient-to-tr from-teal-600 to-emerald-600 text-white flex items-center justify-center shadow-xs">
+                          <Stethoscope className="w-4 h-4" />
                         </div>
                         <div>
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">3. Doctor Clinical Configuration</h4>
-                          <p className="text-[11px] text-teal-700 font-medium">Specialization, appointment fees, and OPD schedule</p>
+                          <h4 className="text-[13px] sm:text-sm font-black uppercase tracking-wider text-slate-800">3. Doctor Clinical Configuration</h4>
+                          <p className="text-xs text-teal-700 font-medium">Specialization, appointment fees, and OPD schedule</p>
                         </div>
                       </div>
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200">
                         Doctor Setup
                       </span>
                     </div>
@@ -1344,10 +1348,10 @@ export default function EmployeeDirectoryView({
                       {/* Specialization */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                             Medical Specialization
                           </label>
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200">
+                          <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                             Required
                           </span>
                         </div>
@@ -1356,7 +1360,7 @@ export default function EmployeeDirectoryView({
                           <select 
                             value={newEmp.specialty}
                             onChange={(e) => setNewEmp({...newEmp, specialty: e.target.value})}
-                            className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-teal-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
+                            className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-teal-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
                             style={{ paddingLeft: '44px', paddingRight: '36px' }}
                           >
                             <option value="">-- Select Specialization --</option>
@@ -1371,22 +1375,22 @@ export default function EmployeeDirectoryView({
                       {/* Doctor Consultation Fee */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            Consultation Fee (₹ INR)
+                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
+                            Consultation Fee <span className="text-xs text-slate-500 font-normal">(₹ INR)</span>
                           </label>
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                          <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                             Default: ₹500
                           </span>
                         </div>
                         <div className="relative flex items-center group">
-                          <span className="absolute left-3.5 font-bold text-sm text-slate-500 pointer-events-none group-focus-within:text-teal-600 transition-colors">₹</span>
+                          <span className="absolute left-3.5 font-bold text-base text-slate-500 pointer-events-none group-focus-within:text-teal-600 transition-colors">₹</span>
                           <input 
                             type="number" 
                             min="0"
                             placeholder="e.g. 500"
                             value={newEmp.consultationFee !== undefined ? newEmp.consultationFee : 500}
                             onChange={(e) => setNewEmp({...newEmp, consultationFee: e.target.value !== '' ? Number(e.target.value) : ''})}
-                            className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-teal-500/15 transition-all shadow-2xs"
+                            className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-teal-500/15 transition-all shadow-2xs"
                           />
                         </div>
                       </div>
@@ -1395,10 +1399,10 @@ export default function EmployeeDirectoryView({
                       <div className="md:col-span-2 space-y-2.5">
                         <div className="flex items-center justify-between flex-wrap gap-2">
                           <div className="flex items-center gap-2">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                               Attending OPD Time Slots
                             </label>
-                            <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs">
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs">
                               {(newEmp.doctorSlots || []).length} Active
                             </span>
                           </div>
@@ -1417,7 +1421,7 @@ export default function EmployeeDirectoryView({
                                 ];
                                 setNewEmp({ ...newEmp, doctorSlots: Array.from(new Set(allBase)) });
                               }}
-                              className="text-[11px] font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
+                              className="text-xs font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
                             >
                               Select All
                             </button>
@@ -1425,11 +1429,11 @@ export default function EmployeeDirectoryView({
                             <button
                               type="button"
                               onClick={() => setNewEmp({ ...newEmp, doctorSlots: [] })}
-                              className="text-[11px] font-bold text-slate-500 hover:text-rose-600 underline cursor-pointer"
+                              className="text-xs font-bold text-slate-500 hover:text-rose-600 underline cursor-pointer"
                             >
                               Clear All
                             </button>
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200 ml-1">
+                            <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200 ml-1">
                               Required (≥ 1)
                             </span>
                           </div>
@@ -1444,7 +1448,7 @@ export default function EmployeeDirectoryView({
                               placeholder="Add custom slot (e.g. 10:00 AM - 11:00 AM)" 
                               value={customSlotInput}
                               onChange={e => setCustomSlotInput(e.target.value)}
-                              className="w-full h-9 pl-9 pr-3 bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-lg text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-3 focus:ring-teal-500/15 transition-all"
+                              className="w-full h-10 pl-9 pr-3 bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-lg text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-3 focus:ring-teal-500/15 transition-all"
                             />
                           </div>
                           <button
@@ -1461,15 +1465,15 @@ export default function EmployeeDirectoryView({
                               }
                               setCustomSlotInput('');
                             }}
-                            className="px-3.5 h-9 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 flex items-center gap-1"
+                            className="px-4 h-10 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-lg text-xs sm:text-[13px] font-bold transition-all shadow-xs cursor-pointer active:scale-95 flex items-center gap-1.5"
                           >
-                            <Plus className="w-3.5 h-3.5" />
+                            <Plus className="w-4 h-4" />
                             <span>Add Slot</span>
                           </button>
                         </div>
 
                         {/* Visual Legend */}
-                        <div className="flex items-center justify-between text-[11px] px-1 text-slate-500 pt-0.5">
+                        <div className="flex items-center justify-between text-xs px-1 text-slate-500 pt-0.5">
                           <div className="flex items-center gap-3">
                             <span className="inline-flex items-center gap-1.5 font-bold text-blue-700">
                               <span className="w-4 h-4 rounded bg-blue-600 text-white inline-flex items-center justify-center text-[10px] shadow-2xs">✓</span>
@@ -1480,7 +1484,7 @@ export default function EmployeeDirectoryView({
                               Deselected (Click to enable)
                             </span>
                           </div>
-                          <span className="text-[10.5px] text-slate-400 hidden sm:inline">Click slot to toggle</span>
+                          <span className="text-xs text-slate-400 hidden sm:inline">Click slot to toggle</span>
                         </div>
 
                         {/* Slots Pill Stack */}
@@ -1507,7 +1511,7 @@ export default function EmployeeDirectoryView({
                                   }
                                   setNewEmp({...newEmp, doctorSlots: currentSlots});
                                 }}
-                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer select-none active:scale-95 ${
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer select-none active:scale-95 ${
                                   isSelected
                                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs shadow-blue-500/25 border border-blue-600'
                                     : 'bg-white hover:bg-blue-50/50 text-slate-600 border border-dashed border-slate-300 hover:border-blue-400 hover:text-blue-700'
@@ -1534,14 +1538,14 @@ export default function EmployeeDirectoryView({
                       <div className="md:col-span-2 space-y-1.5">
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-2">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                               Weekly Off Days
                             </label>
-                            <span className="text-[10.5px] text-slate-500 font-medium">
+                            <span className="text-xs text-slate-500 font-medium">
                               (Mark which days doctor does NOT attend clinic)
                             </span>
                           </div>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                             Optional
                           </span>
                         </div>
@@ -1565,14 +1569,14 @@ export default function EmployeeDirectoryView({
                                   }
                                   setNewEmp({...newEmp, weeklyOff: currentOffs});
                                 }}
-                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer select-none active:scale-95 ${
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-[13px] font-bold border transition-all cursor-pointer select-none active:scale-95 ${
                                   isSelected
                                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-transparent shadow-xs shadow-blue-500/25'
                                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                                 }`}
                                 title={isSelected ? `${day} marked as OFF (Click to mark Working)` : `${day} is Working (Click to mark OFF)`}
                               >
-                                {isSelected && <Check className="w-3 h-3 text-white stroke-[3]" />}
+                                {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
                                 <span>{day.slice(0, 3)}</span>
                               </button>
                             );
@@ -1590,21 +1594,21 @@ export default function EmployeeDirectoryView({
                     onClick={() => setShowOptionalDetails(!showOptionalDetails)}
                   >
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-slate-600 to-blue-600 text-white flex items-center justify-center shadow-xs">
-                        <FileText className="w-3.5 h-3.5" />
+                      <div className="w-7.5 h-7.5 rounded-lg bg-gradient-to-tr from-slate-600 to-blue-600 text-white flex items-center justify-center shadow-xs">
+                        <FileText className="w-4 h-4" />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">4. Personal, Statutory & Emergency Details</h4>
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.2 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                          <h4 className="text-[13px] sm:text-sm font-extrabold uppercase tracking-wider text-slate-800">4. Personal, Statutory & Emergency Details</h4>
+                          <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                             All Optional
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-400 font-medium">Demographics, Aadhaar/PAN, Address & Emergency Contact</p>
+                        <p className="text-xs text-slate-500 font-medium">Demographics, Aadhaar/PAN, Address & Emergency Contact</p>
                       </div>
                     </div>
                     <button 
-                      type="button"
+                      type="button" 
                       className="p-1 rounded-lg hover:bg-slate-200/60 text-slate-500 transition-colors"
                     >
                       {showOptionalDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -1617,21 +1621,21 @@ export default function EmployeeDirectoryView({
                         {/* Annual CTC */}
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                              Annual CTC (₹ INR)
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
+                              Annual CTC <span className="text-xs text-slate-500 font-normal">(₹ INR)</span>
                             </label>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                               Optional
                             </span>
                           </div>
                           <div className="relative flex items-center group">
-                            <span className="absolute left-3.5 font-bold text-sm text-slate-400 pointer-events-none group-focus-within:text-blue-600 transition-colors">₹</span>
+                            <span className="absolute left-3.5 font-bold text-base text-slate-400 pointer-events-none group-focus-within:text-blue-600 transition-colors">₹</span>
                             <input 
                               type="number" 
                               placeholder="e.g. 480000"
                               value={newEmp.ctcAnnual}
                               onChange={(e) => setNewEmp({...newEmp, ctcAnnual: e.target.value})}
-                              className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                              className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                             />
                           </div>
                         </div>
@@ -1639,10 +1643,10 @@ export default function EmployeeDirectoryView({
                         {/* Date of Birth */}
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                               Date of Birth
                             </label>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                               Optional
                             </span>
                           </div>
@@ -1652,7 +1656,7 @@ export default function EmployeeDirectoryView({
                               type="date" 
                               value={newEmp.dob} 
                               onChange={e => setNewEmp({...newEmp, dob: e.target.value})} 
-                              className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                              className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                               style={{ paddingLeft: '44px' }}
                             />
                           </div>
@@ -1661,10 +1665,10 @@ export default function EmployeeDirectoryView({
                         {/* Gender */}
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                               Gender
                             </label>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                               Optional
                             </span>
                           </div>
@@ -1673,7 +1677,7 @@ export default function EmployeeDirectoryView({
                             <select 
                               value={newEmp.gender} 
                               onChange={e => setNewEmp({...newEmp, gender: e.target.value})} 
-                              className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
+                              className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
                               style={{ paddingLeft: '44px', paddingRight: '36px' }}
                             >
                               <option value="">-- Select Gender --</option>
@@ -1688,10 +1692,10 @@ export default function EmployeeDirectoryView({
                         {/* Blood Group */}
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                               Blood Group
                             </label>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                               Optional
                             </span>
                           </div>
@@ -1700,7 +1704,7 @@ export default function EmployeeDirectoryView({
                             <select 
                               value={newEmp.bloodGroup} 
                               onChange={e => setNewEmp({...newEmp, bloodGroup: e.target.value})} 
-                              className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
+                              className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
                               style={{ paddingLeft: '44px', paddingRight: '36px' }}
                             >
                               <option value="">-- Select Blood Group --</option>
@@ -1713,10 +1717,10 @@ export default function EmployeeDirectoryView({
                         {/* Aadhaar Number */}
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                               Aadhaar Card (12 Digits)
                             </label>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                               Optional
                             </span>
                           </div>
@@ -1727,7 +1731,7 @@ export default function EmployeeDirectoryView({
                               placeholder="e.g. 1234-5678-9012" 
                               value={newEmp.aadhaar} 
                               onChange={e => setNewEmp({...newEmp, aadhaar: e.target.value})} 
-                              className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-mono font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                              className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-mono font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                             />
                           </div>
                         </div>
@@ -1735,10 +1739,10 @@ export default function EmployeeDirectoryView({
                         {/* PAN Number */}
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                               PAN Card
                             </label>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                               Optional
                             </span>
                           </div>
@@ -1749,7 +1753,7 @@ export default function EmployeeDirectoryView({
                               placeholder="e.g. ABCDE1234F" 
                               value={newEmp.pan} 
                               onChange={e => setNewEmp({...newEmp, pan: e.target.value.toUpperCase()})} 
-                              className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-mono font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
+                              className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-mono font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
                             />
                           </div>
                         </div>
@@ -1757,10 +1761,10 @@ export default function EmployeeDirectoryView({
                         {/* Residential Address */}
                         <div className="md:col-span-2">
                           <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
                               Residential Address
                             </label>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
                               Optional
                             </span>
                           </div>
@@ -1771,7 +1775,7 @@ export default function EmployeeDirectoryView({
                               placeholder="e.g. Staff Quarters, Building B, Room 402" 
                               value={newEmp.address} 
                               onChange={e => setNewEmp({...newEmp, address: e.target.value})} 
-                              className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs resize-none"
+                              className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs resize-none"
                             />
                           </div>
                         </div>
@@ -1781,11 +1785,11 @@ export default function EmployeeDirectoryView({
                           <div className="flex items-center gap-2 mb-3">
                             <HeartPulse className="w-4 h-4 text-rose-500" />
                             <span className="text-xs font-bold uppercase tracking-wider text-slate-700">Emergency Contact Person</span>
-                            <span className="text-[10px] font-semibold px-2 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200">Optional</span>
+                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">Optional</span>
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
-                              <label className="text-[11px] font-semibold text-slate-600 mb-1 block">Contact Name</label>
+                              <label className="text-xs font-bold text-slate-600 mb-1 block">Contact Name</label>
                               <div className="relative flex items-center group">
                                 <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
                                 <input 
@@ -1793,12 +1797,12 @@ export default function EmployeeDirectoryView({
                                   placeholder="e.g. Jane Doe" 
                                   value={newEmp.emergencyContactName} 
                                   onChange={e => setNewEmp({...newEmp, emergencyContactName: e.target.value})} 
-                                  className="w-full h-9 pl-8.5 pr-2.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-lg text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-3 focus:ring-blue-500/15 transition-all"
+                                  className="w-full h-9 pl-8.5 pr-2.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-lg text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-3 focus:ring-blue-500/15 transition-all"
                                 />
                               </div>
                             </div>
                             <div>
-                              <label className="text-[11px] font-semibold text-slate-600 mb-1 block">Relationship</label>
+                              <label className="text-xs font-bold text-slate-600 mb-1 block">Relationship</label>
                               <div className="relative flex items-center group">
                                 <Users className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
                                 <input 
@@ -1806,12 +1810,12 @@ export default function EmployeeDirectoryView({
                                   placeholder="e.g. Spouse / Parent" 
                                   value={newEmp.emergencyContactRelation} 
                                   onChange={e => setNewEmp({...newEmp, emergencyContactRelation: e.target.value})} 
-                                  className="w-full h-9 pl-8.5 pr-2.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-lg text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-3 focus:ring-blue-500/15 transition-all"
+                                  className="w-full h-9 pl-8.5 pr-2.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-lg text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-3 focus:ring-blue-500/15 transition-all"
                                 />
                               </div>
                             </div>
                             <div>
-                              <label className="text-[11px] font-semibold text-slate-600 mb-1 block">Contact Phone</label>
+                              <label className="text-xs font-bold text-slate-600 mb-1 block">Contact Phone</label>
                               <div className="relative flex items-center group">
                                 <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
                                 <input 
@@ -1823,7 +1827,7 @@ export default function EmployeeDirectoryView({
                                     const val = e.target.value.replace(/\D/g, '').slice(0, 10);
                                     setNewEmp({...newEmp, emergencyContactPhone: val});
                                   }} 
-                                  className="w-full h-9 pl-8.5 pr-2.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-lg text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-3 focus:ring-blue-500/15 transition-all"
+                                  className="w-full h-9 pl-8.5 pr-2.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-lg text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-3 focus:ring-blue-500/15 transition-all"
                                 />
                               </div>
                             </div>
@@ -1839,7 +1843,7 @@ export default function EmployeeDirectoryView({
               <div className="flex items-center justify-between p-4 sm:px-6 border-t border-slate-200/90 bg-white shrink-0">
                 <div className="text-xs text-slate-500 font-medium hidden sm:flex items-center gap-1.5">
                   <span className="text-slate-400">Shortcut:</span>
-                  <kbd className="px-2 py-0.5 text-[10.5px] font-mono bg-slate-100 border border-slate-200 rounded text-slate-700 font-bold shadow-2xs">Enter ↵</kbd>
+                  <kbd className="px-2 py-0.5 text-xs font-mono bg-slate-100 border border-slate-200 rounded text-slate-700 font-bold shadow-2xs">Enter ↵</kbd>
                   <span className="text-slate-500">advances fields & submits</span>
                 </div>
 
@@ -1848,14 +1852,14 @@ export default function EmployeeDirectoryView({
                     type="button" 
                     disabled={isSubmitting}
                     onClick={() => { setIsAdding(false); resetForm(); }}
-                    className="h-10 px-5 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                    className="h-10 px-5 border border-slate-200 hover:border-slate-300 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button 
                     type="submit"
                     disabled={isSubmitting}
-                    className="h-10 px-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-500/25 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60"
+                    className="h-10 px-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 text-white rounded-xl font-extrabold text-sm shadow-md shadow-blue-500/25 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60"
                   >
                     {isSubmitting ? (
                       <>
@@ -1887,7 +1891,7 @@ export default function EmployeeDirectoryView({
             status: selectedStatus,
             type: selectedType
           }}
-          clinicName="CUROXA HEALTHCARE"
+          clinicName="QUROXA HEALTHCARE"
           onClose={() => setShowExportModal(false)}
         />
       )}

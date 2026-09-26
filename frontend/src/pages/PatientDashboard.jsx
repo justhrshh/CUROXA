@@ -5,7 +5,7 @@ import { joinTenantRoom } from '../utils/socket';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import curoxaHero3D from '../assets/curoxa_hero_3d.png';
 import curoxaMobileHero3D from '../assets/curoxa_mobile_hero_3d.png';
-import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import curoxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import HospitalLoadingTransition from '../components/patient/hospital/HospitalLoadingTransition';
 import HospitalTopNav from '../components/patient/hospital/HospitalTopNav';
 import HospitalBottomNav from '../components/patient/hospital/HospitalBottomNav';
@@ -1844,7 +1844,7 @@ const PatientDashboard = () => {
     let htmlContent = `
       <html>
       <head>
-        <title>Curoxa Clinical Dossier - \${patientName}</title>
+        <title>Quroxa Clinical Dossier - \${patientName}</title>
         <style>
           body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 40px; color: #1E293B; line-height: 1.6; }
           .header { border-bottom: 3px solid #2563EB; padding-bottom: 20px; margin-bottom: 30px; }
@@ -1866,7 +1866,7 @@ const PatientDashboard = () => {
       </head>
       <body>
         <div class="header">
-          <div class="title">Curoxa Hospital Group</div>
+          <div class="title">Quroxa Hospital Group</div>
           <div class="subtitle">Official Electronic Medical Record & Clinical Dossier</div>
         </div>
 
@@ -1962,7 +1962,7 @@ const PatientDashboard = () => {
     htmlContent += `
         </div>
         <div class="footer">
-          Curoxa HIPAA-inspired & DPDP-compliant Secure Patient Vault.<br/>
+          Quroxa HIPAA-inspired & DPDP-compliant Secure Patient Vault.<br/>
           Downloaded by patient on \${new Date().toLocaleString()} from IP: \${consent?.ipAddress || 'Self-Session'}.
         </div>
       </body>
@@ -2108,10 +2108,10 @@ const PatientDashboard = () => {
           <div className="onboarding-card">
             <div style={{ textAlign: 'center', marginBottom: '32px' }}>
               <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '14px', background: '#2563EB', color: '#FFFFFF', fontWeight: 900, fontSize: '24px', marginBottom: '16px', boxShadow: '0 8px 20px rgba(59, 113, 254, 0.15)' }}>
-                C
+                Q
               </div>
               <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: '0 0 8px 0', fontFamily: "'Outfit', sans-serif" }}>Complete Your Profile</h2>
-              <p style={{ fontSize: '14px', color: '#64748B', margin: 0, fontWeight: 500 }}>Welcome to Curoxa! Please fill in your details to set up your patient account.</p>
+              <p style={{ fontSize: '14px', color: '#64748B', margin: 0, fontWeight: 500 }}>Welcome to Quroxa! Please fill in your details to set up your patient account.</p>
             </div>
 
             {profileMsg.text && (
@@ -3108,7 +3108,7 @@ const PatientDashboard = () => {
         <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative', width: '100%' }}>
           <img 
             src={curoxaSidebarLogo} 
-            alt="CUROXA" 
+            alt="QUROXA" 
             style={{
               width: '42px',
               height: '42px',
@@ -3126,7 +3126,7 @@ const PatientDashboard = () => {
               letterSpacing: '0.03em',
               lineHeight: 1.1
             }}>
-              CUROXA
+              QUROXA
             </span>
             <span style={{
               fontSize: '11px',
@@ -3290,7 +3290,7 @@ const PatientDashboard = () => {
             </p>
             <button
               type="button"
-              onClick={() => showToast("Support desk: support@curoxa.com | Helpline: 1800-CUROXA", "info")}
+              onClick={() => showToast("Support desk: support@quroxa.com | Helpline: 1800-QUROXA", "info")}
               style={{
                 width: '100%',
                 padding: '8px 12px',
@@ -3492,7 +3492,7 @@ const PatientDashboard = () => {
                 </span>
               </div>
               <div className="desktop-only-block" style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '1px' }}>
-                {selectedHospital.address || selectedHospital.location || 'Healthcare Provider on Curoxa Network'}
+                {selectedHospital.address || selectedHospital.location || 'Healthcare Provider on Quroxa Network'}
               </div>
             </div>
           </div>
@@ -3502,7 +3502,7 @@ const PatientDashboard = () => {
             <div className="curoxa-top-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
               <img 
                 src={curoxaSidebarLogo} 
-                alt="CUROXA" 
+                alt="QUROXA" 
                 style={{
                   width: '42px',
                   height: '42px',
@@ -3520,7 +3520,7 @@ const PatientDashboard = () => {
                   letterSpacing: '0.03em',
                   lineHeight: 1.1
                 }}>
-                  CUROXA
+                  QUROXA
                 </span>
                 <span style={{
                   fontSize: '11px',
@@ -3944,7 +3944,7 @@ const PatientDashboard = () => {
                   marginBottom: '16px'
                 }}>
                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B981' }} />
-                  CUROXA HEALTH
+                  QUROXA HEALTH
                 </div>
 
                 <h1 style={{
@@ -3993,7 +3993,7 @@ const PatientDashboard = () => {
                   margin: '0 0 28px 0',
                   fontWeight: 500
                 }}>
-                  Discover healthcare providers connected with Curoxa and manage your care in one place.
+                  Discover healthcare providers connected with Quroxa and manage your care in one place.
                 </p>
 
                 {/* 3 Trust Chips Row matching media_1788166650528.png */}
@@ -4099,7 +4099,7 @@ const PatientDashboard = () => {
               }}>
                 <img 
                   src={curoxaHero3D} 
-                  alt="Curoxa Healthcare Connected" 
+                  alt="Quroxa Healthcare Connected" 
                   style={{
                     width: '100%',
                     maxWidth: '520px',
@@ -4143,7 +4143,7 @@ const PatientDashboard = () => {
                 marginBottom: '14px'
               }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B981' }} />
-                CUROXA HEALTH
+                QUROXA HEALTH
               </div>
 
               {/* Greeting */}
@@ -4193,7 +4193,7 @@ const PatientDashboard = () => {
                 margin: '0 0 20px 0',
                 fontWeight: 550
               }}>
-                Discover healthcare providers connected with Curoxa and manage your care in one place.
+                Discover healthcare providers connected with Quroxa and manage your care in one place.
               </p>
 
               {/* Artwork on the right side of the card (Larger, prominent display) */}
@@ -4332,8 +4332,8 @@ const PatientDashboard = () => {
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <img src={curoxaSidebarLogo} alt="Curoxa" style={{ width: '26px', height: '26px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
-                        <span style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.04em' }}>CUROXA</span>
+                        <img src={curoxaSidebarLogo} alt="Quroxa" style={{ width: '26px', height: '26px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+                        <span style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.04em' }}>QUROXA</span>
                       </div>
                     </div>
 
@@ -4637,7 +4637,7 @@ const PatientDashboard = () => {
                     Unable to load healthcare providers.
                   </h3>
                   <p style={{ fontSize: '13.5px', color: '#64748B', margin: '0 0 18px 0' }}>
-                    Could not connect to the Curoxa healthcare network.
+                    Could not connect to the Quroxa healthcare network.
                   </p>
                   <button onClick={() => fetchData()} type="button" style={{ padding: '10px 22px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}>
                     Try Again
@@ -4652,7 +4652,7 @@ const PatientDashboard = () => {
                     Healthcare providers are not available right now.
                   </h3>
                   <p style={{ fontSize: '13.5px', color: '#64748B', maxWidth: '420px', margin: '0 auto' }}>
-                    Curoxa will show hospitals as they become available.
+                    Quroxa will show hospitals as they become available.
                   </p>
                 </div>
               ) : (() => {
@@ -4986,7 +4986,7 @@ const PatientDashboard = () => {
                   </div>
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>Choose</div>
-                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 500 }}>Select a Curoxa-connected provider.</div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 500 }}>Select a Quroxa-connected provider.</div>
                   </div>
                 </div>
 
@@ -6653,7 +6653,7 @@ const PatientDashboard = () => {
                     <i data-lucide="mail" style={{ color: '#2563EB' }}></i> DPDP Rights Center
                   </h3>
                   <p style={{ fontSize: '12.5px', color: '#64748B', lineHeight: 1.5, marginBottom: '20px' }}>
-                    Submit an official notice to the Curoxa Data Protection Officer (DPO) to correct erroneous clinical records or file an erasure mandate.
+                    Submit an official notice to the Quroxa Data Protection Officer (DPO) to correct erroneous clinical records or file an erasure mandate.
                   </p>
 
                   <form onSubmit={handleSubmitDpdpRequest}>
@@ -7253,7 +7253,7 @@ const PatientDashboard = () => {
                     </h2>
                     <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <span>🏥</span>
-                      <span>{hospitalInfo.name || 'Curoxa Healthcare'}</span>
+                      <span>{hospitalInfo.name || 'Quroxa Healthcare'}</span>
                     </div>
                   </div>
                 </div>
@@ -7397,7 +7397,7 @@ const PatientDashboard = () => {
                     {[
                       { label: 'Reason / Concern', value: selectedAppointment.reason || 'General Health Consultation', valueColor: '#0F172A' },
                       { label: 'Settlement Status', value: selectedAppointment.billingStatus === 'Paid' ? 'Paid ✓' : 'Pay at Front Desk', valueColor: selectedAppointment.billingStatus === 'Paid' ? '#16A34A' : '#D97706' },
-                      { label: 'Booking Origin', value: selectedAppointment.source || 'Curoxa Patient Portal', valueColor: '#475569' },
+                      { label: 'Booking Origin', value: selectedAppointment.source || 'Quroxa Patient Portal', valueColor: '#475569' },
                     ].map(({ label, value, valueColor }, idx, arr) => (
                       <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 16px', borderBottom: idx < arr.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
                         <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>{label}</span>
@@ -8321,7 +8321,7 @@ const PatientDashboard = () => {
                       <div class="nha">National Health Authority • ABDM</div>
                       <div class="title">ABHA • Digital Health ID</div>
                     </div>
-                    <div class="brand">● CUROXA</div>
+                    <div class="brand">● QUROXA</div>
                   </div>
                   <div class="mid-row">
                     <div class="chip"><div class="chip-inner"></div></div>
@@ -8342,7 +8342,7 @@ const PatientDashboard = () => {
                     </div>
                   </div>
                 </div>
-                <div class="footer">Issued by Curoxa Health Management • Powered by ABDM, National Health Authority of India</div>
+                <div class="footer">Issued by Quroxa Health Management • Powered by ABDM, National Health Authority of India</div>
               </div>
             </body>
             </html>
@@ -8417,8 +8417,8 @@ const PatientDashboard = () => {
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '7px', background: 'rgba(255,255,255,0.1)', borderRadius: '8px', padding: '5px 10px' }}>
-                      <img src={curoxaSidebarLogo} alt="Curoxa" style={{ width: '22px', height: '22px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
-                      <span style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.05em' }}>CUROXA</span>
+                      <img src={curoxaSidebarLogo} alt="Quroxa" style={{ width: '22px', height: '22px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+                      <span style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.05em' }}>QUROXA</span>
                     </div>
                   </div>
 
@@ -8521,7 +8521,7 @@ const PatientDashboard = () => {
                   </button>
                 </div>
                 <p style={{ fontSize: '11px', color: '#94A3B8', marginTop: '12px', margin: '12px 0 0 0', lineHeight: 1.5 }}>
-                  🏛️ Issued by Curoxa Health Management · Powered by Ayushman Bharat Digital Mission (ABDM), National Health Authority of India. Governed by the Digital Personal Data Protection Act (DPDP), 2023.
+                  🏛️ Issued by Quroxa Health Management · Powered by Ayushman Bharat Digital Mission (ABDM), National Health Authority of India. Governed by the Digital Personal Data Protection Act (DPDP), 2023.
                 </p>
               </div>
             </div>

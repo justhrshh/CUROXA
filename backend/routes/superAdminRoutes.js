@@ -18,6 +18,9 @@ const SuperAdminBroadcast = require('../models/SuperAdminBroadcast');
 const User = require('../models/User');
 const SuperAdminPlan = require('../models/SuperAdminPlan');
 const SuperAdminEmployee = require('../models/SuperAdminEmployee');
+const ItemMaster = require('../models/ItemMaster');
+const ItemMasterRequest = require('../models/ItemMasterRequest');
+const Counter = require('../models/Counter');
 const multer = require('multer');
 const path = require('path');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -27,15 +30,10 @@ const r2 = require('../config/r2');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB limit
 
-// Helper to resolve frontend base URL dynamically (Render / Production / Staging / Localhost)
-const getFrontendBaseUrl = () => {
-  const rawUrl = process.env.FRONTEND_URL || 
-                 process.env.CLIENT_URL || 
-                 process.env.APP_URL || 
-                 (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',')[0].trim() : null) || 
-                 (process.env.NODE_ENV === 'production' ? 'https://curoxa.onrender.com' : 'http://localhost:3000');
-  return rawUrl.replace(/\/+$/, '');
-};
+const { getPublicAppUrl, getCanonicalLogoUrl } = require('../config/urls');
+
+// Helper to resolve frontend base URL dynamically (via centralized config)
+const getFrontendBaseUrl = getPublicAppUrl;
 
 // Helper to write audit logs
 const writeAudit = async (req, action, details) => {
@@ -1062,9 +1060,12 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
 
       // Email to Hospital Admin
       const adminMailHtml = `
-        <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; background: #FFFFFF;">
+        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; background: #FFFFFF;">
           <div style="text-align: center; margin-bottom: 24px;">
-            <h2 style="color: #4F46E5; margin: 0; font-size: 22px; font-weight: 800;">Welcome to Curoxa EMR</h2>
+            <div style="margin-bottom: 16px;">
+              <img src="${getCanonicalLogoUrl()}" alt="Quroxa" width="160" border="0" style="max-height: 48px; max-width: 180px; width: auto; height: auto; object-fit: contain; display: inline-block; outline: none; text-decoration: none;" />
+            </div>
+            <h2 style="color: #4F46E5; margin: 0; font-size: 22px; font-weight: 800;">Welcome to Quroxa EMR</h2>
             <p style="color: #64748B; font-size: 13px; margin: 4px 0 0 0;">Your healthcare tenant node has been provisioned successfully</p>
           </div>
           <div style="background: #F8FAFC; border-radius: 8px; padding: 16px; margin-bottom: 20px; border: 1px solid #F1F5F9;">
@@ -1084,6 +1085,9 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
           <div style="text-align: center;">
             <a href="${portalUrl}" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Hospital Portal</a>
           </div>
+          <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #F1F5F9; text-align: center; font-size: 11px; color: #94A3B8;">
+            &copy; 2026 Quroxa Healthcare Systems. All rights reserved.
+          </div>
         </div>
       `;
 
@@ -1091,9 +1095,10 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
 
       sendEmail({
         to: adminEmail,
-        subject: `Welcome to Curoxa! Your Hospital Onboarding is Approved`,
-        text: `Your Curoxa Hospital Admin Account is ready.\nTenant: ${hospital.name} (${hospital.code})\nPortal URL: ${portalUrl}\nUsername: ${adminPhone}\nPassword: ${adminPassword}`,
-        html: adminMailHtml
+        subject: `Welcome to Quroxa! Your Hospital Onboarding is Approved`,
+        text: `Your Quroxa Hospital Admin Account is ready.\nTenant: ${hospital.name} (${hospital.code})\nPortal URL: ${portalUrl}\nUsername: ${adminPhone}\nPassword: ${adminPassword}`,
+        html: adminMailHtml,
+        senderName: 'Quroxa Onboarding'
       }).catch(err => console.error("Error sending onboarding admin email:", err));
     } catch (emailErr) {
       console.error("Failed to trigger onboarding email sending:", emailErr);
@@ -1245,10 +1250,13 @@ router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req
 
       // Email to Hospital Admin
       const credentialsMailHtml = `
-        <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; background: #FFFFFF;">
+        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; background: #FFFFFF;">
           <div style="text-align: center; margin-bottom: 24px;">
+            <div style="margin-bottom: 16px;">
+              <img src="${getCanonicalLogoUrl()}" alt="Quroxa" width="160" border="0" style="max-height: 48px; max-width: 180px; width: auto; height: auto; object-fit: contain; display: inline-block; outline: none; text-decoration: none;" />
+            </div>
             <h2 style="color: #D97706; margin: 0; font-size: 20px; font-weight: 800;">Login Credentials Updated</h2>
-            <p style="color: #64748B; font-size: 13px; margin: 4px 0 0 0;">An administrator has updated your login credentials for Curoxa</p>
+            <p style="color: #64748B; font-size: 13px; margin: 4px 0 0 0;">An administrator has updated your login credentials for Quroxa</p>
           </div>
           <div style="background: #FEF3C7; border-radius: 8px; padding: 16px; margin-bottom: 24px; border: 1px solid #FCD34D;">
             <h3 style="margin-top: 0; font-size: 15px; color: #B45309; font-weight: 700;">Your Updated Login Credentials</h3>
@@ -1261,6 +1269,9 @@ router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req
           <div style="text-align: center;">
             <a href="${portalUrl}" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Hospital Portal</a>
           </div>
+          <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #F1F5F9; text-align: center; font-size: 11px; color: #94A3B8;">
+            &copy; 2026 Quroxa Healthcare Systems. All rights reserved.
+          </div>
         </div>
       `;
 
@@ -1268,9 +1279,10 @@ router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req
 
       sendEmail({
         to: adminUser.email,
-        subject: `Your Curoxa Admin Credentials Have Been Updated`,
-        text: `Your Curoxa Admin login credentials were updated.\nUsername: ${adminUser.staff_id}\nPortal URL: ${portalUrl}\nPassword Status: ${adminPassword ? 'Updated' : 'Unchanged'}`,
-        html: credentialsMailHtml
+        subject: `Your Quroxa Admin Credentials Have Been Updated`,
+        text: `Your Quroxa Admin login credentials were updated.\nUsername: ${adminUser.staff_id}\nPortal URL: ${portalUrl}\nPassword Status: ${adminPassword ? 'Updated' : 'Unchanged'}`,
+        html: credentialsMailHtml,
+        senderName: 'Quroxa Security'
       }).catch(err => console.error("Error sending admin update email:", err));
     } catch (emailErr) {
       console.error("Failed to trigger credentials update email:", emailErr);
@@ -2319,9 +2331,12 @@ router.post('/employees', requireRole(), async (req, res) => {
     try {
       const { sendEmail } = require('../utils/emailService');
       const employeeMailHtml = `
-        <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; background: #FFFFFF;">
+        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; background: #FFFFFF;">
           <div style="text-align: center; margin-bottom: 24px;">
-            <h2 style="color: #4F46E5; margin: 0; font-size: 22px; font-weight: 800;">Welcome to Curoxa Team</h2>
+            <div style="margin-bottom: 16px;">
+              <img src="${getCanonicalLogoUrl()}" alt="Quroxa" width="160" border="0" style="max-height: 48px; max-width: 180px; width: auto; height: auto; object-fit: contain; display: inline-block; outline: none; text-decoration: none;" />
+            </div>
+            <h2 style="color: #4F46E5; margin: 0; font-size: 22px; font-weight: 800;">Welcome to Quroxa Team</h2>
             <p style="color: #64748B; font-size: 13px; margin: 4px 0 0 0;">Your admin account has been provisioned successfully</p>
           </div>
           <div style="background: #EEF2FF; border-radius: 8px; padding: 16px; margin-bottom: 24px; border: 1px solid #E0E7FF;">
@@ -2333,14 +2348,18 @@ router.post('/employees', requireRole(), async (req, res) => {
           <div style="text-align: center;">
             <a href="${getFrontendBaseUrl()}/login" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Dashboard</a>
           </div>
+          <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #F1F5F9; text-align: center; font-size: 11px; color: #94A3B8;">
+            &copy; 2026 Quroxa Healthcare Systems. All rights reserved.
+          </div>
         </div>
       `;
 
       sendEmail({
         to: employee.email,
-        subject: `Welcome to Curoxa! Your Admin Account is Ready`,
-        text: `Your Curoxa Admin Account is ready.\nUsername: ${employee.email}\nPassword: ${providedPassword}`,
-        html: employeeMailHtml
+        subject: `Welcome to Quroxa! Your Admin Account is Ready`,
+        text: `Your Quroxa Admin Account is ready.\nUsername: ${employee.email}\nPassword: ${providedPassword}`,
+        html: employeeMailHtml,
+        senderName: 'Quroxa Team'
       }).catch(err => console.error("Error sending employee email:", err));
     } catch (emailErr) {
       console.error("Failed to trigger employee email sending:", emailErr);
@@ -2416,10 +2435,13 @@ router.put('/employees/:id', requireRole(), async (req, res) => {
         try {
           const { sendEmail } = require('../utils/emailService');
           const employeeUpdateHtml = `
-            <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; background: #FFFFFF;">
+            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; background: #FFFFFF;">
               <div style="text-align: center; margin-bottom: 24px;">
+                <div style="margin-bottom: 16px;">
+                  <img src="${getCanonicalLogoUrl()}" alt="Quroxa" width="160" border="0" style="max-height: 48px; max-width: 180px; width: auto; height: auto; object-fit: contain; display: inline-block; outline: none; text-decoration: none;" />
+                </div>
                 <h2 style="color: #D97706; margin: 0; font-size: 20px; font-weight: 800;">Login Credentials Updated</h2>
-                <p style="color: #64748B; font-size: 13px; margin: 4px 0 0 0;">An administrator has updated your login credentials for Curoxa</p>
+                <p style="color: #64748B; font-size: 13px; margin: 4px 0 0 0;">An administrator has updated your login credentials for Quroxa</p>
               </div>
               <div style="background: #FEF3C7; border-radius: 8px; padding: 16px; margin-bottom: 24px; border: 1px solid #FCD34D;">
                 <h3 style="margin-top: 0; font-size: 15px; color: #B45309; font-weight: 700;">Your Updated Login Credentials</h3>
@@ -2429,14 +2451,18 @@ router.put('/employees/:id', requireRole(), async (req, res) => {
               <div style="text-align: center;">
                 <a href="${getFrontendBaseUrl()}/login" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Dashboard</a>
               </div>
+              <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #F1F5F9; text-align: center; font-size: 11px; color: #94A3B8;">
+                &copy; 2026 Quroxa Healthcare Systems. All rights reserved.
+              </div>
             </div>
           `;
 
           sendEmail({
             to: user.email,
-            subject: `Your Curoxa Admin Credentials Have Been Updated`,
-            text: `Your Curoxa Admin login credentials were updated.\nUsername: ${user.staff_id}\nNew Password: ${req.body.password.trim()}`,
-            html: employeeUpdateHtml
+            subject: `Your Quroxa Admin Credentials Have Been Updated`,
+            text: `Your Quroxa Admin login credentials were updated.\nUsername: ${user.staff_id}\nNew Password: ${req.body.password.trim()}`,
+            html: employeeUpdateHtml,
+            senderName: 'Quroxa Security'
           }).catch(err => console.error("Error sending employee update email:", err));
         } catch (emailErr) {
           console.error("Failed to trigger employee update email:", emailErr);
@@ -2553,6 +2579,162 @@ router.put('/change-password', async (req, res) => {
   } catch (err) {
     console.error('Superadmin password update error:', err);
     res.status(500).json({ error: err.message || 'Failed to update superadmin password.' });
+  }
+});
+
+
+// ==================== GLOBAL ITEM MASTER (Super Admin) ====================
+
+// Helper: generate next global item code
+async function getNextGlobalItemCode(year = new Date().getFullYear()) {
+  const key = `item_master_global_${year}`;
+  let counter = await Counter.findOne({ key });
+  if (!counter) {
+    const highest = await ItemMaster.findOne({ tenantId: '__global__', itemCode: new RegExp(`^ITM-${year}-`) }).sort({ itemCode: -1 }).lean();
+    let init = 0;
+    if (highest && highest.itemCode) { const p = highest.itemCode.split('-'); if (p.length === 3) { const n = parseInt(p[2], 10); if (!isNaN(n)) init = n; } }
+    await Counter.findOneAndUpdate({ key }, { $setOnInsert: { seq: init } }, { upsert: true });
+  }
+  for (let i = 0; i < 20; i++) {
+    const c = await Counter.findOneAndUpdate({ key }, { $inc: { seq: 1 } }, { upsert: true, returnDocument: 'after' });
+    const candidate = `ITM-${year}-${String(c.seq).padStart(4, '0')}`;
+    const exists = await ItemMaster.findOne({ tenantId: '__global__', itemCode: candidate }).lean();
+    if (!exists) return candidate;
+  }
+  return `ITM-${year}-${Date.now().toString().slice(-4)}`;
+}
+
+// GET /api/superadmin/global-items
+router.get('/global-items', async (req, res) => {
+  try {
+    const { search, status, itemType, categoryType } = req.query;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const query = { scope: 'GLOBAL' };
+    if (status && status !== 'All') query.status = status;
+    if (itemType && itemType !== 'All') query.itemType = itemType;
+    if (categoryType && categoryType !== 'All') query.categoryType = categoryType;
+    if (search && search.trim()) {
+      const r = new RegExp(search.trim().replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'), 'i');
+      query.$or = [{ itemCode: r }, { genericName: r }, { brandName: r }, { manufacturer: r }, { composition: r }];
+    }
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      ItemMaster.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      ItemMaster.countDocuments(query)
+    ]);
+    res.json({ success: true, data, pagination: { total, page, limit, pages: Math.ceil(total / limit) || 1 } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/superadmin/global-items
+router.post('/global-items', async (req, res) => {
+  try {
+    const { genericName, brandName, manufacturer, categoryType, departmentType, itemType, hsnCode, itemDescription,
+      composition, strength, strengthUnit, dosageForm, routeOfAdministration, scheduleClassification,
+      purchasedUnit, consumptionUnit, converterFactor, packSizeDescription, packagingHierarchy,
+      storageTemperature, isExpirable, defaultGst, inventoryRule, status, itemCode: providedCode } = req.body;
+
+    if (!genericName || !genericName.trim()) return res.status(400).json({ error: 'Generic Name is required' });
+    if (!manufacturer || !manufacturer.trim()) return res.status(400).json({ error: 'Manufacturer is required' });
+    if (!categoryType || !categoryType.trim()) return res.status(400).json({ error: 'Category Type is required' });
+
+    const finalCode = providedCode ? providedCode.trim().toUpperCase() : await getNextGlobalItemCode();
+    const exists = await ItemMaster.findOne({ tenantId: '__global__', itemCode: finalCode }).lean();
+    if (exists) return res.status(400).json({ error: `Item Code '${finalCode}' already exists in Global Catalog` });
+
+    const pUnit = (purchasedUnit || 'Box').trim();
+    const cUnit = (consumptionUnit || 'Unit').trim();
+    const convFactor = Number(converterFactor) >= 1 ? Number(converterFactor) : 1;
+    const ph = packagingHierarchy || (convFactor > 1 && pUnit !== cUnit ? { isBrokenDown: true, levels: [{ levelIndex: 0, parentUnit: pUnit, quantity: convFactor, childUnit: cUnit }] } : { isBrokenDown: false, levels: [] });
+
+    const item = await ItemMaster.create({
+      scope: 'GLOBAL', tenantId: '__global__', itemCode: finalCode,
+      genericName: genericName.trim(), brandName: (brandName || genericName).trim(),
+      manufacturer: manufacturer.trim(), categoryType: categoryType.trim(),
+      departmentType: (departmentType || 'General').trim(), itemType: itemType || 'Medicine',
+      hsnCode: hsnCode || '', itemDescription: itemDescription || '',
+      composition: composition || '', strength: strength || '', strengthUnit: strengthUnit || '',
+      dosageForm: dosageForm || '', routeOfAdministration: routeOfAdministration || '',
+      scheduleClassification: scheduleClassification || '',
+      purchasedUnit: pUnit, consumptionUnit: cUnit, converterFactor: convFactor,
+      packSizeDescription: packSizeDescription || (convFactor > 1 ? `1 ${pUnit} = ${convFactor} ${cUnit}s` : pUnit),
+      packagingHierarchy: ph, storageTemperature: storageTemperature || 'Room Temperature',
+      isExpirable: isExpirable !== false, defaultGst: Number(defaultGst) || 12,
+      inventoryRule: inventoryRule || 'FEFO',
+      manufacturers: [{ manufacturer: manufacturer.trim(), purchasedUnit: pUnit, converterFactor: convFactor, consumptionUnit: cUnit, isActive: true }],
+      status: status || 'Active', createdByAdmin: req.user?.name || 'Super Admin'
+    });
+
+    await writeAudit(req, 'GLOBAL_ITEM_CREATED', `Created global item ${finalCode}: ${genericName}`);
+    res.status(201).json({ success: true, data: item });
+  } catch (err) {
+    if (err.code === 11000) return res.status(400).json({ error: 'Duplicate Item Code' });
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// PUT /api/superadmin/global-items/:id
+router.put('/global-items/:id', async (req, res) => {
+  try {
+    const item = await ItemMaster.findOne({ _id: req.params.id, scope: 'GLOBAL' });
+    if (!item) return res.status(404).json({ error: 'Global item not found' });
+    const allowed = ['genericName','brandName','manufacturer','categoryType','departmentType','itemType','hsnCode',
+      'itemDescription','composition','strength','strengthUnit','dosageForm','routeOfAdministration',
+      'scheduleClassification','purchasedUnit','consumptionUnit','converterFactor','packSizeDescription',
+      'packagingHierarchy','storageTemperature','isExpirable','defaultGst','inventoryRule','status'];
+    const update = {};
+    for (const key of allowed) { if (req.body[key] !== undefined) update[key] = req.body[key]; }
+    update.lastModifiedByAdmin = req.user?.name || 'Super Admin';
+    const updated = await ItemMaster.findByIdAndUpdate(req.params.id, update, { returnDocument: 'after' });
+    await writeAudit(req, 'GLOBAL_ITEM_UPDATED', `Updated global item ${item.itemCode}: ${Object.keys(update).join(', ')}`);
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// PUT /api/superadmin/global-items/:id/toggle-status
+router.put('/global-items/:id/toggle-status', async (req, res) => {
+  try {
+    const item = await ItemMaster.findOne({ _id: req.params.id, scope: 'GLOBAL' });
+    if (!item) return res.status(404).json({ error: 'Global item not found' });
+    item.status = item.status === 'Active' ? 'Inactive' : 'Active';
+    item.lastModifiedByAdmin = req.user?.name || 'Super Admin';
+    await item.save();
+    await writeAudit(req, 'GLOBAL_ITEM_STATUS_CHANGED', `${item.itemCode} set to ${item.status}`);
+    res.json({ success: true, data: item });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ==================== ITEM REQUESTS (Super Admin view) ====================
+
+// GET /api/superadmin/item-requests
+router.get('/item-requests', async (req, res) => {
+  try {
+    const { status, search, tenantId } = req.query;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
+    const query = {};
+    if (status && status !== 'all') query.status = status;
+    if (tenantId) query.tenantId = tenantId;
+    if (search && search.trim()) {
+      const r = new RegExp(search.trim().replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'), 'i');
+      query.$or = [{ requestNo: r }, { 'proposedItem.genericName': r }, { hospitalName: r }];
+    }
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      ItemMasterRequest.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit)
+        .populate('approvedItemMasterId', 'itemCode genericName').lean(),
+      ItemMasterRequest.countDocuments(query)
+    ]);
+    res.json({ success: true, data, pagination: { total, page, limit, pages: Math.ceil(total / limit) || 1 } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

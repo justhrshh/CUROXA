@@ -22,6 +22,9 @@ const indentRoutes = require("./routes/indentRoutes");
 const permissionRoutes = require("./routes/permissions");
 const approvalRoutes = require("./routes/approvals");
 const auditLogRoutes = require("./routes/auditLogs");
+const itemMasterRoutes = require("./routes/itemMasterRoutes");
+const itemMasterRequestRoutes = require("./routes/itemMasterRequestRoutes");
+const vendorQuotationRoutes = require("./routes/vendorQuotationRoutes");
 const vendorRoutes = require("./routes/vendorRoutes");
 const purchaseOrderRoutes = require("./routes/purchaseOrderRoutes");
 const goodsReceiptRoutes = require("./routes/goodsReceiptRoutes");
@@ -181,6 +184,7 @@ app.use(express.json({ limit: "2mb" }));
 
 const path = require("path");
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Lightweight cache hints for safe GET endpoints (per-tenant data)
 app.use((req, res, next) => {
@@ -211,6 +215,9 @@ app.use("/api/indents", checkModule(["reception", "pharmacy", "doctor", "invento
 app.use("/api/permissions", permissionRoutes);
 app.use("/api/approvals", approvalRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
+app.use("/api/item-master", checkModule(["pharmacy", "inventory"]), itemMasterRoutes);
+app.use("/api/item-requests", itemMasterRequestRoutes);
+app.use("/api/vendor-quotations", checkModule(["pharmacy", "inventory"]), vendorQuotationRoutes);
 app.use("/api/vendors", checkModule(["pharmacy", "inventory"]), vendorRoutes);
 app.use("/api/purchase-orders", checkModule(["pharmacy", "inventory"]), purchaseOrderRoutes);
 app.use("/api/goods-receipts", checkModule(["pharmacy", "inventory"]), goodsReceiptRoutes);

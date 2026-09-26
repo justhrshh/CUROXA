@@ -2,9 +2,14 @@ const mongoose = require('mongoose');
 
 const medicineBatchSchema = new mongoose.Schema({
   tenantId: { type: String, required: true, default: 'city_hospital', index: true },
-  medicineId: { type: mongoose.Schema.Types.ObjectId, ref: 'Medicine', required: true, index: true },
+  medicineId: { type: mongoose.Schema.Types.ObjectId, ref: 'Medicine', required: false, index: true },
+  itemMasterId: { type: mongoose.Schema.Types.ObjectId, ref: 'ItemMaster', required: false, index: true },
   sku: { type: String, required: true, uppercase: true, trim: true },
   name: { type: String, required: true, trim: true },
+  brandName: { type: String, default: '', trim: true },
+  manufacturer: { type: String, default: '', trim: true },
+  storageTemperature: { type: String, default: 'Normal', trim: true },
+  consumptionUnit: { type: String, default: 'Unit', trim: true },
   batchNumber: { type: String, required: true, uppercase: true, trim: true },
   
   mfgDate: { type: Date, default: null },
@@ -31,6 +36,7 @@ const medicineBatchSchema = new mongoose.Schema({
 medicineBatchSchema.index({ tenantId: 1, sku: 1, batchNumber: 1 }, { unique: true });
 
 // Query indexes for expiry tracking and FEFO operations
+medicineBatchSchema.index({ tenantId: 1, itemMasterId: 1, batchNumber: 1 });
 medicineBatchSchema.index({ tenantId: 1, sku: 1, status: 1, expiryDate: 1 });
 medicineBatchSchema.index({ tenantId: 1, expiryDate: 1, availableQuantity: 1 });
 

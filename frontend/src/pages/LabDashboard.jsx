@@ -1853,11 +1853,11 @@ const LabDashboard = () => {
             />
           ) : (
             <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary)', color: '#FFFFFF', fontWeight: 900, fontSize: '16px', boxShadow: '0 0 15px rgba(59, 113, 254, 0.15)', flexShrink: 0 }}>
-              C
+              Q
             </div>
           )}
           <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 900, color: '#2563EB', letterSpacing: '-0.02em' }}>
-            {getActivePortalBranding()?.name || 'Curoxa'}
+            {getActivePortalBranding()?.name || 'QUROXA'}
           </span>
           <button 
             className="sidebar-collapse-toggle desktop-only-flex"

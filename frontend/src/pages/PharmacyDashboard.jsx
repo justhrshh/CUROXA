@@ -6,8 +6,9 @@ import SearchableDropdown from '../components/SearchableDropdown';
 import ExpiryManagementPanel from '../components/ExpiryManagementPanel';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import { printPO, printGRN } from '../utils/printDocHelper';
-import curoxaSidebarLogo from '../assets/curoxa_sidebar_logo.png';
+import curoxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import { HospitalBrandLogo, getActivePortalBranding, restoreActivePortalDocumentMetadata } from '../context/PortalBrandingContext';
+import { cleanHtmlText } from '../utils/textHelper';
 import ExportModal from '../components/export/ExportModal';
 import { 
   inventoryExportColumns, 
@@ -96,7 +97,7 @@ const PharmacyDashboard = () => {
   };
   
   // Real logged-in user or premium default fallback
-  const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{"name":"Ankit Sharma","role":"Pharmacy","email":"ankit.sharma@curoxa.com"}'));
+  const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{"name":"Ankit Sharma","role":"Pharmacy","email":"ankit.sharma@quroxa.com"}'));
   const user = currentUser;
 
   const [showProfileEditModal, setShowProfileEditModal] = useState(false);
@@ -1422,6 +1423,12 @@ const PharmacyDashboard = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Dedicated Prescription Review & Dispense workspace states
+  const [reviewPrescription, setReviewPrescription] = useState(null);
+  const [reviewItems, setReviewItems] = useState([]);
+  const [reviewReturnTab, setReviewReturnTab] = useState('dash');
+  const [isSubmittingReviewDispense, setIsSubmittingReviewDispense] = useState(false);
+
   // Modal states for inventory operations
   const [showMedicineModal, setShowMedicineModal] = useState(false);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
@@ -2028,7 +2035,7 @@ const PharmacyDashboard = () => {
       '<style>@page { margin: 15mm; } body { font-family: "Plus Jakarta Sans", sans-serif; color: #0F172A; margin: 0; padding: 20px; font-size: 13px; } table { width: 100%; border-collapse: collapse; margin-top: 15px; } th { background: #F8FAFC; padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; color: #475569; border-bottom: 2px solid #CBD5E1; }</style>' +
       '</head><body>' +
       '<div style="text-align: center; border-bottom: 2px solid #E2E8F0; padding-bottom: 16px; margin-bottom: 20px;">' +
-        '<h2 style="margin: 0; font-size: 22px; font-weight: 800; color: #2563EB;">CUROXA PHARMACY</h2>' +
+        '<h2 style="margin: 0; font-size: 22px; font-weight: 800; color: #2563EB;">QUROXA PHARMACY</h2>' +
         '<div style="font-size: 12px; color: #64748B; margin-top: 4px;">Main Pharmacy Dispensary • Tax Invoice / Cash Receipt</div>' +
       '</div>' +
       '<div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 12.5px;">' +
@@ -2057,7 +2064,7 @@ const PharmacyDashboard = () => {
           (sale.paymentMethod === 'Cash' ? '<div style="display: flex; justify-content: space-between; font-size: 12px; color: #475569;"><span>Received:</span><span>₹' + (sale.amountReceived || sale.grandTotal).toFixed(2) + '</span></div><div style="display: flex; justify-content: space-between; font-size: 12px; color: #475569;"><span>Change:</span><span>₹' + (sale.changeReturned || 0).toFixed(2) + '</span></div>' : '') +
         '</div>' +
       '</div>' +
-      '<div style="margin-top: 40px; text-align: center; color: #94A3B8; font-size: 11px; border-top: 1px solid #E2E8F0; padding-top: 12px;">Thank you for choosing Curoxa Healthcare. Get well soon!</div>' +
+      '<div style="margin-top: 40px; text-align: center; color: #94A3B8; font-size: 11px; border-top: 1px solid #E2E8F0; padding-top: 12px;">Thank you for choosing Quroxa Healthcare. Get well soon!</div>' +
       '</body></html>';
 
     printWindow.document.write(receiptHtml);
@@ -2628,7 +2635,7 @@ const PharmacyDashboard = () => {
             `
           ) : `
           <div class="print-only" style="position: fixed; top: 0; left: 0; width: 210mm; height: 25mm; background: #0F172A; color: white; padding: 5mm 15mm; box-sizing: border-box; z-index: -1;">
-            <h1 style="margin: 0; font-size: 20px; font-weight: 900;">CUROXA PHARMACY</h1>
+            <h1 style="margin: 0; font-size: 20px; font-weight: 900;">QUROXA PHARMACY</h1>
             <p style="margin: 0; font-size: 10px; opacity: 0.8;">Premium Healthcare EMR System</p>
           </div>
           `}
@@ -2636,7 +2643,7 @@ const PharmacyDashboard = () => {
             ${!customPharmacyLetterhead ? `
             <div class="header">
               <div>
-                <div class="title">Curoxa Pharmacy</div>
+                <div class="title">Quroxa Pharmacy</div>
                 <p style="margin: 4px 0 0 0; font-size: 14px; color: #64748B;">Premium Healthcare EMR System</p>
               </div>
               <div class="meta">
@@ -2853,6 +2860,272 @@ const PharmacyDashboard = () => {
       const qty = item.quantity || 1;
       return { ...item, unitPrice, quantity: qty, lineTotal: unitPrice * qty };
     });
+  };
+
+  // Open the dedicated full-page Review & Dispense workspace
+  const handleOpenReview = (p, fromTab = 'dash') => {
+    if (!p) return;
+    setReviewPrescription(p);
+    setReviewReturnTab(fromTab);
+
+    // Retrieve items from enriched itemsList or rawObj
+    const rawItems = (p.itemsList && p.itemsList.length > 0)
+      ? p.itemsList
+      : (p.rawObj?.items || []);
+
+    const mappedItems = rawItems.map((it, idx) => {
+      const parsedDays = parseInt(it.duration, 10);
+      const origDays = (!isNaN(parsedDays) && parsedDays > 0) ? parsedDays : 5;
+      const origQty = Math.max(1, parseInt(it.quantity, 10) || 1);
+
+      // Match inventory record for stock and live MRP
+      const medName = String(it.medicine || it.name || '').trim().toLowerCase();
+      const matchedInv = (inventory || []).find(inv =>
+        inv.name && inv.name.trim().toLowerCase() === medName
+      );
+
+      const unitPrice = Number(it.unitPrice || it.price || resolveItemPrice(it.medicine) || (matchedInv?.mrp || 0));
+      const lineTotal = Math.round((unitPrice * origQty) * 100) / 100;
+
+      return {
+        id: it._id || `item-${idx}`,
+        medicine: it.medicine || it.name || 'Medicine',
+        medicineId: matchedInv?._id || it.medicineId || it._id,
+        sku: matchedInv?.sku || it.sku || '',
+        dosage: it.dosage || '',
+        frequency: it.frequency || '',
+        instructions: it.instructions || '',
+        originalDays: origDays,
+        days: origDays,
+        originalQty: origQty,
+        quantity: origQty,
+        unitPrice: unitPrice,
+        lineTotal: lineTotal,
+        availableStock: matchedInv ? Number(matchedInv.stock || 0) : 100,
+        hasInvMatch: !!matchedInv,
+        excluded: false
+      };
+    });
+
+    setReviewItems(mappedItems);
+    setSelectedPaymentMode('Cash');
+    setCashReceived('');
+    setActiveTab('review-dispense');
+  };
+
+  // Adjust course duration (days) and proportionally update quantity
+  const handleReviewDaysChange = (index, newDaysVal) => {
+    const newDays = Math.max(1, parseInt(newDaysVal, 10) || 1);
+    setReviewItems(prev => {
+      const copy = [...prev];
+      const item = copy[index];
+      if (!item) return prev;
+
+      // dailyRate = originalQty / originalDays
+      const dailyRate = item.originalDays > 0 ? (item.originalQty / item.originalDays) : 1;
+      const calculatedQty = Math.max(1, Math.round(dailyRate * newDays));
+
+      copy[index] = {
+        ...item,
+        days: newDays,
+        quantity: calculatedQty,
+        lineTotal: Math.round((calculatedQty * item.unitPrice) * 100) / 100
+      };
+      return copy;
+    });
+  };
+
+  // Adjust quantity directly (+ / - buttons or manual input)
+  const handleReviewQuantityChange = (index, newQtyVal) => {
+    const newQty = Math.max(1, parseInt(newQtyVal, 10) || 1);
+    setReviewItems(prev => {
+      const copy = [...prev];
+      const item = copy[index];
+      if (!item) return prev;
+
+      copy[index] = {
+        ...item,
+        quantity: newQty,
+        lineTotal: Math.round((newQty * item.unitPrice) * 100) / 100
+      };
+      return copy;
+    });
+  };
+
+  // Toggle medicine inclusion in this dispensing transaction
+  const handleReviewToggleExclude = (index) => {
+    setReviewItems(prev => {
+      const copy = [...prev];
+      if (!copy[index]) return prev;
+      copy[index] = {
+        ...copy[index],
+        excluded: !copy[index].excluded
+      };
+      return copy;
+    });
+  };
+
+  // Reset medicine back to original doctor prescribed values
+  const handleReviewResetItem = (index) => {
+    setReviewItems(prev => {
+      const copy = [...prev];
+      const item = copy[index];
+      if (!item) return prev;
+      copy[index] = {
+        ...item,
+        days: item.originalDays,
+        quantity: item.originalQty,
+        lineTotal: Math.round((item.originalQty * item.unitPrice) * 100) / 100,
+        excluded: false
+      };
+      return copy;
+    });
+  };
+
+  // Active items and financial totals for review workspace
+  const activeReviewItems = useMemo(() => {
+    return reviewItems.filter(it => !it.excluded);
+  }, [reviewItems]);
+
+  const reviewTotals = useMemo(() => {
+    const subtotal = activeReviewItems.reduce((acc, it) => acc + (it.lineTotal || 0), 0);
+    const totalItems = activeReviewItems.length;
+    const totalUnits = activeReviewItems.reduce((acc, it) => acc + (it.quantity || 0), 0);
+    const grandTotal = Math.round(subtotal * 100) / 100;
+    return { subtotal, totalItems, totalUnits, grandTotal };
+  }, [activeReviewItems]);
+
+  // Execute dispensing & payment collection from Review workspace
+  const handleReviewDispenseSubmit = async () => {
+    if (!reviewPrescription) return;
+
+    const isHandwritten = reviewPrescription.rawObj?.prescriptionType === 'offline_handwritten';
+
+    if (!isHandwritten) {
+      if (activeReviewItems.length === 0) {
+        setErrorMessage('Please select at least one medicine item to dispense.');
+        setTimeout(() => setErrorMessage(''), 4000);
+        return;
+      }
+
+      if (selectedPaymentMode === 'Cash' && cashReceived) {
+        if (Number(cashReceived) < reviewTotals.grandTotal) {
+          setErrorMessage(`Cash received (₹${cashReceived}) is less than total bill amount (₹${reviewTotals.grandTotal.toFixed(2)})`);
+          setTimeout(() => setErrorMessage(''), 4000);
+          return;
+        }
+      }
+    }
+
+    setIsSubmittingReviewDispense(true);
+    try {
+      const raw = reviewPrescription.rawObj;
+      const rxId = raw._id;
+
+      if (isHandwritten) {
+        // For handwritten prescriptions, update status
+        await api.put(`/prescriptions/${rxId}`, { status: 'Dispensed', paymentMode: selectedPaymentMode });
+      } else {
+        // 1. Prepare updated items with edited quantities and course days
+        const updatedPrescriptionItems = activeReviewItems.map(it => ({
+          medicine: it.medicine,
+          dosage: it.dosage,
+          frequency: it.frequency,
+          duration: `${it.days} Days`,
+          instructions: it.instructions,
+          quantity: it.quantity,
+          price: it.unitPrice
+        }));
+
+        // 2. Update prescription: Backend automatically runs validateAndPlanFEFO & commitFEFOConsumption!
+        await api.put(`/prescriptions/${rxId}`, {
+          items: updatedPrescriptionItems,
+          status: 'Dispensed',
+          paymentMode: selectedPaymentMode
+        });
+
+        // 3. Record authoritative Pharmacy Sale in the revenue ledger
+        try {
+          const patientIdVal = reviewPrescription.patientIdVal ||
+                               (raw.patientId?._id || raw.patientId);
+
+          await api.post('/pharmacy-sales', {
+            saleType: 'PRESCRIPTION',
+            prescriptionId: rxId,
+            patientId: patientIdVal || undefined,
+            customerName: reviewPrescription.name || raw.patientId?.name || 'Registered Patient',
+            customerMobile: reviewPrescription.phone || raw.patientId?.contact || '',
+            doctorName: reviewPrescription.docName || raw.doctorId?.name || 'Consulting Doctor',
+            items: activeReviewItems.map(it => ({
+              medicineId: it.medicineId,
+              sku: it.sku,
+              medicineName: it.medicine,
+              quantity: it.quantity,
+              mrp: it.unitPrice,
+              unitPrice: it.unitPrice
+            })),
+            paymentMethod: selectedPaymentMode,
+            amountReceived: selectedPaymentMode === 'Cash' && cashReceived ? Number(cashReceived) : reviewTotals.grandTotal,
+            notes: `Dispensed via Prescription Review (${activeReviewItems.length} items)`
+          });
+        } catch (saleErr) {
+          console.warn("Pharmacy sale ledger notice:", saleErr.response?.data?.error || saleErr.message);
+        }
+
+        // 4. Create patient billing record
+        try {
+          const patientIdVal = reviewPrescription.patientIdVal ||
+                               (raw.patientId?._id || raw.patientId);
+          await api.post('/billing', {
+            patientId: patientIdVal,
+            items: activeReviewItems.map(it => ({
+              description: `Medicine: ${it.medicine} (${it.dosage || ''}, ${it.days} Days, Qty: ${it.quantity})`,
+              amount: it.lineTotal
+            })),
+            totalAmount: reviewTotals.grandTotal,
+            paymentMethod: selectedPaymentMode,
+            status: 'Paid'
+          });
+        } catch (billingErr) {
+          console.error("Billing record creation error:", billingErr);
+        }
+
+        // 5. Trigger invoice printing with updated items
+        const printGroup = {
+          ...reviewPrescription,
+          itemsList: activeReviewItems.map(it => ({
+            ...it,
+            duration: `${it.days} Days`
+          })),
+          amountVal: reviewTotals.grandTotal
+        };
+        handlePrintInvoice(printGroup);
+      }
+
+      // 6. Refresh data (prescriptions, sales ledger, stock)
+      await fetchData();
+      await fetchSales();
+      await fetchInventory();
+
+      const successNotice = isHandwritten
+        ? 'Handwritten prescription dispensed successfully.'
+        : `Payment of ₹${reviewTotals.grandTotal.toFixed(2)} collected via ${selectedPaymentMode}. Prescription dispensed & inventory deducted.`;
+
+      setSuccessMessage(successNotice);
+      setTimeout(() => setSuccessMessage(''), 4500);
+
+      // Return to previous tab
+      setActiveTab(reviewReturnTab || 'dash');
+      setReviewPrescription(null);
+      setReviewItems([]);
+      setCashReceived('');
+    } catch (err) {
+      console.error("Dispense error:", err);
+      setErrorMessage(err.response?.data?.error || 'Failed to dispense prescription. Please check stock availability.');
+      setTimeout(() => setErrorMessage(''), 5000);
+    } finally {
+      setIsSubmittingReviewDispense(false);
+    }
   };
 
   // High fidelity default data lists matching the design screenshot
@@ -4130,7 +4403,7 @@ const PharmacyDashboard = () => {
               ) : (
                 <img 
                   src={curoxaSidebarLogo} 
-                  alt="CUROXA" 
+                  alt="QUROXA" 
                   style={{
                     width: '44px',
                     height: '44px',
@@ -4142,7 +4415,7 @@ const PharmacyDashboard = () => {
               )}
               <div className="sidebar-brand-text-group" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                 <span className="sidebar-brand-text" style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif", fontWeight: 900, fontSize: '18px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isSidebarCollapsed ? '0px' : '160px' }}>
-                  {getActivePortalBranding()?.name || 'CUROXA'}
+                  {getActivePortalBranding()?.name || 'QUROXA'}
                 </span>
                 <span className="sidebar-brand-subtitle" style={{ fontSize: '11px', color: '#64748B', fontWeight: 500, letterSpacing: '-0.01em', marginTop: '3px', lineHeight: 1 }}>
                   {getActivePortalBranding() ? `${getActivePortalBranding()?.hospitalId} • Pharmacy` : 'Health Management'}
@@ -4608,7 +4881,7 @@ const PharmacyDashboard = () => {
             </button>
             <div className="top-nav-left">
               <div className="top-nav-page-title">
-                {activeTab === 'dash' ? 'Pharmacy Overview' : activeTab === 'prescriptions' ? 'Prescriptions' : activeTab === 'sales' ? 'Pharmacy Sales' : activeTab === 'inventory' ? 'Inventory Management' : 'Pharmacy Workspace'}
+                {activeTab === 'dash' ? 'Pharmacy Overview' : activeTab === 'prescriptions' ? 'Prescriptions' : activeTab === 'sales' ? 'Pharmacy Sales' : activeTab === 'inventory' ? 'Inventory Management' : activeTab === 'review-dispense' ? 'Review & Dispense Prescription' : 'Pharmacy Workspace'}
               </div>
               <div className="top-nav-greeting">
                 Good morning, {currentUser.name || 'Pharmacy-1'} 👋
@@ -5378,11 +5651,7 @@ const PharmacyDashboard = () => {
                                   <div>
                                     <div 
                                       style={{ fontWeight: 750, fontSize: '13.5px', color: '#2563EB', cursor: 'pointer' }}
-                                      onClick={() => {
-                                        setSelectedPrescriptionGroup(p);
-                                        setPrescriptionModalStep('details');
-                                        setShowPrescriptionModal(true);
-                                      }}
+                                      onClick={() => handleOpenReview(p, 'dash')}
                                     >
                                       {p.name}
                                     </div>
@@ -5401,11 +5670,7 @@ const PharmacyDashboard = () => {
                               <td style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
                                 <span 
                                   style={{ color: '#2563EB', cursor: 'pointer', textDecoration: 'underline' }}
-                                  onClick={() => {
-                                    setSelectedPrescriptionGroup(p);
-                                    setPrescriptionModalStep('details');
-                                    setShowPrescriptionModal(true);
-                                  }}
+                                  onClick={() => handleOpenReview(p, 'dash')}
                                 >
                                   {p.rawObj?.prescriptionType === 'offline_handwritten' ? (
                                     <span style={{ background: '#F0FDFA', color: '#0D9488', border: '1px solid #99F6E4', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 }}>
@@ -5426,14 +5691,10 @@ const PharmacyDashboard = () => {
                                 {p.status === 'Pending' && p.rawObj && (
                                   <button 
                                     className="btn btn-primary" 
-                                    style={{ padding: '6px 14px', fontSize: '12px', borderRadius: '8px', background: p.rawObj?.prescriptionType === 'offline_handwritten' ? 'linear-gradient(135deg, #0D9488 0%, #0F766E 100%)' : 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px rgba(13, 148, 136, 0.25)' }}
-                                    onClick={() => {
-                                      setSelectedPrescriptionGroup(p);
-                                      setPrescriptionModalStep(p.rawObj?.prescriptionType === 'offline_handwritten' ? 'details' : 'payment');
-                                      setShowPrescriptionModal(true);
-                                    }}
+                                    style={{ padding: '6px 16px', fontSize: '12.5px', borderRadius: '8px', background: p.rawObj?.prescriptionType === 'offline_handwritten' ? 'linear-gradient(135deg, #0D9488 0%, #0F766E 100%)' : 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)' }}
+                                    onClick={() => handleOpenReview(p, 'dash')}
                                   >
-                                    {p.rawObj?.prescriptionType === 'offline_handwritten' ? 'View & Dispense' : 'Dispense'}
+                                    Review
                                   </button>
                                 )}
                               </td>
@@ -5921,6 +6182,713 @@ const PharmacyDashboard = () => {
           </div>
         )}
 
+        {/* TAB: REVIEW & DISPENSE PRESCRIPTION WORKSPACE (FULL PAGE) */}
+        {activeTab === 'review-dispense' && (
+          <div style={{ animation: 'slideUp 0.25s ease-out' }}>
+            {!reviewPrescription ? (
+              <div className="glass-card" style={{ padding: '60px 20px', textAlign: 'center', borderRadius: '20px' }}>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: '0 0 8px 0' }}>No Prescription Selected</h3>
+                <p style={{ color: '#64748B', fontSize: '14px', maxWidth: '420px', margin: '0 auto 20px auto' }}>
+                  Please return to the Prescriptions Queue and click <strong>Review</strong> on any pending prescription.
+                </p>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={() => setActiveTab(reviewReturnTab || 'dash')}
+                  style={{ padding: '10px 22px', borderRadius: '10px', fontWeight: 700 }}
+                >
+                  ← Return to {reviewReturnTab === 'prescriptions' ? 'Prescriptions List' : 'Overview Queue'}
+                </button>
+              </div>
+            ) : (
+              <div>
+                {/* Top Action & Breadcrumb Navigation Bar */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px', flexWrap: 'wrap', gap: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(reviewReturnTab || 'dash');
+                        setReviewPrescription(null);
+                        setReviewItems([]);
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '9px 16px',
+                        background: '#FFFFFF',
+                        border: '1.5px solid #CBD5E1',
+                        borderRadius: '12px',
+                        color: '#334155',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                      Back to {reviewReturnTab === 'prescriptions' ? 'Prescriptions List' : 'Overview'}
+                    </button>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <h2 style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', margin: 0, letterSpacing: '-0.3px' }}>
+                          Review & Dispense Prescription
+                        </h2>
+                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#2563EB', background: '#EFF6FF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #DBEAFE' }}>
+                          {reviewPrescription.id || `#RX-${reviewPrescription.rawObj?._id?.slice(-6).toUpperCase()}`}
+                        </span>
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          padding: '4px 10px',
+                          borderRadius: '8px',
+                          background: reviewPrescription.status === 'Pending' ? '#FFF7ED' : '#ECFDF5',
+                          color: reviewPrescription.status === 'Pending' ? '#EA580C' : '#10B981',
+                          textTransform: 'uppercase'
+                        }}>
+                          {reviewPrescription.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12.5px', color: '#64748B', marginTop: '3px' }}>
+                        Pharmacist clinical verification, duration adjustment, live inventory stock deduction & billing.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => handlePrintInvoice(reviewPrescription)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '9px 16px',
+                        background: '#FFFFFF',
+                        border: '1px solid #CBD5E1',
+                        borderRadius: '10px',
+                        color: '#334155',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                      Print Preview
+                    </button>
+                  </div>
+                </div>
+
+                {/* Patient & Doctor Context Banner Card */}
+                <div className="glass-card" style={{ padding: '20px 24px', marginBottom: '24px', border: '1px solid #E2E8F0', borderRadius: '18px', background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', alignItems: 'center' }}>
+                    {/* Patient Info */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      <div style={{ width: '46px', height: '46px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '18px', flexShrink: 0, border: '2px solid #DBEAFE' }}>
+                        {reviewPrescription.name ? reviewPrescription.name[0].toUpperCase() : 'P'}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Patient Details</div>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', marginTop: '1px' }}>{reviewPrescription.name}</div>
+                        <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px', fontWeight: 600 }}>
+                          {reviewPrescription.age ? `${reviewPrescription.age} Y` : ''} • {reviewPrescription.gender} • 📞 {reviewPrescription.phone || 'N/A'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Doctor Info */}
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Consulting Doctor</div>
+                      <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>{reviewPrescription.docName}</div>
+                      <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px', fontWeight: 600 }}>
+                        {reviewPrescription.specialty} • {reviewPrescription.dateStr || 'Today'}, {reviewPrescription.time}
+                      </div>
+                    </div>
+
+                    {/* Clinical Context / Sanitized Symptoms */}
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Clinical Symptoms / Chief Complaint</div>
+                      <div style={{ fontSize: '12.5px', color: '#1E293B', marginTop: '3px', fontWeight: 600, background: '#F1F5F9', padding: '6px 12px', borderRadius: '8px', display: 'inline-block', maxWidth: '100%', wordBreak: 'break-word', border: '1px solid #E2E8F0' }}>
+                        {cleanHtmlText(reviewPrescription.rawObj?.soap?.subjective || reviewPrescription.rawObj?.appointmentId?.reason || reviewPrescription.rawObj?.appointmentId?.notes || reviewPrescription.rawObj?.symptoms, 'General Consultation')}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Main Two-Column Layout Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 390px', gap: '24px', alignItems: 'start' }}>
+                  {/* Left Column: Medicine Review & Adjustments */}
+                  <div>
+                    {reviewPrescription.rawObj?.prescriptionType === 'offline_handwritten' ? (
+                      /* Handwritten Prescription Flow */
+                      <div className="glass-card" style={{ padding: '24px', borderRadius: '18px', border: '1.5px solid #99F6E4', background: '#F0FDFA' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                          <span style={{ background: '#0D9488', color: '#FFFFFF', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>
+                            OFFLINE HANDWRITTEN RX
+                          </span>
+                          <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#0F766E' }}>
+                            Physical Doctor Prescription Scan
+                          </h4>
+                        </div>
+                        <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#134E4A', lineHeight: '1.5' }}>
+                          This consultation was recorded on physical paper and uploaded. Review the pages below and acknowledge dispensing.
+                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+                          {(reviewPrescription.rawObj?.images || []).map((img, i) => (
+                            <div key={i} style={{ border: '1px solid #CBD5E1', borderRadius: '12px', overflow: 'hidden', background: '#FFFFFF' }}>
+                              <div style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 800, color: '#334155', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Page {img.pageNumber || i + 1}</span>
+                                <a href={img.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0D9488', fontSize: '11.5px', textDecoration: 'none', fontWeight: 700 }}>Open Fullscreen ↗</a>
+                              </div>
+                              <a href={img.url} target="_blank" rel="noopener noreferrer">
+                                <img src={img.url} alt={`Page ${img.pageNumber || i + 1}`} style={{ width: '100%', height: '220px', objectFit: 'contain', background: '#0F172A', display: 'block' }} />
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      /* Digital Prescription Items List & Duration Controls */
+                      <div>
+                        {/* Clinical Adjustment Info Banner */}
+                        <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '14px', padding: '14px 18px', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#DBEAFE', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 900 }}>
+                            💡
+                          </div>
+                          <div style={{ fontSize: '12.5px', color: '#1E40AF', lineHeight: '1.45' }}>
+                            <strong>Flexible Dispensing:</strong> If the patient requests medication for a different number of days (e.g. 3 days instead of 5), click the duration pill or change days. Required quantities and bill totals automatically update proportionally.
+                          </div>
+                        </div>
+
+                        {/* List of Medicine Cards */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          {reviewItems && reviewItems.length > 0 ? (
+                            reviewItems.map((item, idx) => {
+                              const isModified = item.days !== item.originalDays || item.quantity !== item.originalQty;
+                              const isLowStock = item.availableStock < item.quantity;
+                              return (
+                                <div 
+                                  key={item.id || idx} 
+                                  className="glass-card" 
+                                  style={{ 
+                                    padding: '18px 20px', 
+                                    borderRadius: '16px', 
+                                    border: item.excluded ? '1.5px dashed #CBD5E1' : (isLowStock ? '1.5px solid #FCA5A5' : '1px solid #E2E8F0'), 
+                                    background: item.excluded ? '#F8FAFC' : '#FFFFFF',
+                                    opacity: item.excluded ? 0.65 : 1,
+                                    transition: 'all 0.2s ease',
+                                    boxShadow: item.excluded ? 'none' : '0 2px 8px rgba(0,0,0,0.02)'
+                                  }}
+                                >
+                                  {/* Item Header */}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+                                    <div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                        <span style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
+                                          {item.medicine}
+                                        </span>
+                                        {item.dosage && (
+                                          <span style={{ background: '#F1F5F9', color: '#475569', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+                                            {item.dosage}
+                                          </span>
+                                        )}
+                                        {item.frequency && (
+                                          <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+                                            {item.frequency}
+                                          </span>
+                                        )}
+                                        <span style={{ background: '#FEF3C7', color: '#B45309', padding: '2px 8px', borderRadius: '6px', fontSize: '10.5px', fontWeight: 800 }}>
+                                          Dr. Rx: {item.originalDays} Days ({item.originalQty} Qty)
+                                        </span>
+                                      </div>
+                                      {item.instructions && (
+                                        <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px', fontWeight: 600 }}>
+                                          Instructions: {item.instructions}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Exclude / Include Toggle */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      {isModified && !item.excluded && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleReviewResetItem(idx)}
+                                          style={{
+                                            padding: '4px 10px',
+                                            fontSize: '11px',
+                                            fontWeight: 700,
+                                            color: '#64748B',
+                                            background: '#F1F5F9',
+                                            border: '1px solid #CBD5E1',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer'
+                                          }}
+                                          title="Reset to doctor's prescribed days and quantity"
+                                        >
+                                          ↺ Reset
+                                        </button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => handleReviewToggleExclude(idx)}
+                                        style={{
+                                          padding: '4px 10px',
+                                          fontSize: '11.5px',
+                                          fontWeight: 700,
+                                          color: item.excluded ? '#047857' : '#DC2626',
+                                          background: item.excluded ? '#ECFDF5' : '#FEF2F2',
+                                          border: `1px solid ${item.excluded ? '#A7F3D0' : '#FECACA'}`,
+                                          borderRadius: '6px',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        {item.excluded ? '+ Include Medicine' : '✕ Exclude'}
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {!item.excluded ? (
+                                    <>
+                                      {/* Controls Row: Days Editor & Quantity Editor */}
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: '16px', background: '#F8FAFC', padding: '12px 14px', borderRadius: '12px', border: '1px solid #F1F5F9', marginBottom: '12px' }}>
+                                        {/* Duration (Days) Editor */}
+                                        <div>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                            <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                              Course Duration (Days)
+                                            </label>
+                                            <span style={{ fontSize: '11px', fontWeight: 700, color: isModified ? '#2563EB' : '#64748B' }}>
+                                              {item.days} Day{item.days > 1 ? 's' : ''} {isModified ? '(Edited)' : ''}
+                                            </span>
+                                          </div>
+                                          {/* Duration Quick Pills */}
+                                          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                                            {[1, 3, 5, 7, 10, 14, 30].map(d => (
+                                              <button
+                                                key={d}
+                                                type="button"
+                                                onClick={() => handleReviewDaysChange(idx, d)}
+                                                style={{
+                                                  padding: '3px 8px',
+                                                  borderRadius: '6px',
+                                                  fontSize: '11px',
+                                                  fontWeight: 800,
+                                                  cursor: 'pointer',
+                                                  border: item.days === d ? '1.5px solid #2563EB' : '1px solid #CBD5E1',
+                                                  background: item.days === d ? '#EFF6FF' : '#FFFFFF',
+                                                  color: item.days === d ? '#2563EB' : '#475569',
+                                                  transition: 'all 0.15s'
+                                                }}
+                                              >
+                                                {d}D
+                                              </button>
+                                            ))}
+                                          </div>
+                                          {/* Custom Days Input */}
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <input 
+                                              type="number" 
+                                              min="1" 
+                                              max="180"
+                                              value={item.days} 
+                                              onChange={(e) => handleReviewDaysChange(idx, e.target.value)}
+                                              style={{
+                                                width: '65px',
+                                                height: '32px',
+                                                borderRadius: '8px',
+                                                border: '1px solid #CBD5E1',
+                                                textAlign: 'center',
+                                                fontWeight: 800,
+                                                fontSize: '13px',
+                                                outline: 'none',
+                                                color: '#0F172A',
+                                                background: '#FFFFFF'
+                                              }}
+                                            />
+                                            <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>
+                                              days (auto-scales quantity to {item.quantity})
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* Dispense Quantity (Units) Editor */}
+                                        <div>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                            <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                              Dispense Quantity (Units)
+                                            </label>
+                                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>
+                                              Units to dispense
+                                            </span>
+                                          </div>
+                                          {/* Quantity Stepper & Direct Input */}
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleReviewQuantityChange(idx, item.quantity - 1)}
+                                              disabled={item.quantity <= 1}
+                                              style={{
+                                                width: '32px',
+                                                height: '32px',
+                                                borderRadius: '8px',
+                                                border: '1px solid #CBD5E1',
+                                                background: '#FFFFFF',
+                                                fontSize: '16px',
+                                                fontWeight: 800,
+                                                color: '#475569',
+                                                cursor: item.quantity <= 1 ? 'not-allowed' : 'pointer',
+                                                opacity: item.quantity <= 1 ? 0.4 : 1,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center'
+                                              }}
+                                            >
+                                              -
+                                            </button>
+                                            <input 
+                                              type="number" 
+                                              min="1"
+                                              value={item.quantity} 
+                                              onChange={(e) => handleReviewQuantityChange(idx, e.target.value)}
+                                              style={{
+                                                width: '75px',
+                                                height: '32px',
+                                                borderRadius: '8px',
+                                                border: '1px solid #CBD5E1',
+                                                textAlign: 'center',
+                                                fontWeight: 800,
+                                                fontSize: '14px',
+                                                outline: 'none',
+                                                color: '#0F172A',
+                                                background: '#FFFFFF'
+                                              }}
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => handleReviewQuantityChange(idx, item.quantity + 1)}
+                                              style={{
+                                                width: '32px',
+                                                height: '32px',
+                                                borderRadius: '8px',
+                                                border: '1px solid #CBD5E1',
+                                                background: '#FFFFFF',
+                                                fontSize: '16px',
+                                                fontWeight: 800,
+                                                color: '#475569',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center'
+                                              }}
+                                            >
+                                              +
+                                            </button>
+                                            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, marginLeft: '4px' }}>
+                                              tablets/units
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Item Bottom Row: Stock Badge + Price Breakdown */}
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', paddingTop: '4px' }}>
+                                        <div>
+                                          {item.availableStock >= item.quantity ? (
+                                            <span style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', padding: '3px 9px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>
+                                              ✓ In Stock ({item.availableStock} available)
+                                            </span>
+                                          ) : (
+                                            <span style={{ background: '#FEF2F2', color: '#DC2626', border: '1px solid #FCA5A5', padding: '3px 9px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>
+                                              ⚠️ Low Stock: Only {item.availableStock} in inventory (Short by {item.quantity - item.availableStock})
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                          <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+                                            Rate: ₹{item.unitPrice.toFixed(2)} / unit
+                                          </div>
+                                          <div style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A' }}>
+                                            ₹{item.lineTotal.toFixed(2)}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div style={{ padding: '8px 0', fontSize: '12px', color: '#94A3B8', fontStyle: 'italic' }}>
+                                      This medicine will not be dispensed in this transaction. Patient opted out.
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div style={{ padding: '30px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+                              No items in prescription.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Column: Billing & Payment Collection Sticky Card */}
+                  <div style={{ position: 'sticky', top: '24px' }}>
+                    <div className="glass-card" style={{ padding: '24px', borderRadius: '20px', border: '1px solid #E2E8F0', background: '#FFFFFF', boxShadow: '0 8px 24px rgba(0,0,0,0.04)' }}>
+                      <h3 style={{ fontSize: '17px', fontWeight: 900, color: '#0F172A', margin: '0 0 16px 0', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+                        Payment & Dispense Settlement
+                      </h3>
+
+                      {/* Items Summary Table */}
+                      <div style={{ marginBottom: '18px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748B', marginBottom: '8px', fontWeight: 600 }}>
+                          <span>Prescription Items:</span>
+                          <span style={{ fontWeight: 800, color: '#0F172A' }}>{reviewItems.length} items</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748B', marginBottom: '8px', fontWeight: 600 }}>
+                          <span>Active to Dispense:</span>
+                          <span style={{ fontWeight: 800, color: '#2563EB' }}>{activeReviewItems.length} items</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748B', marginBottom: '8px', fontWeight: 600 }}>
+                          <span>Total Units:</span>
+                          <span style={{ fontWeight: 800, color: '#0F172A' }}>{reviewTotals.totalUnits} units</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748B', marginBottom: '8px', fontWeight: 600 }}>
+                          <span>Subtotal:</span>
+                          <span style={{ fontWeight: 800, color: '#0F172A' }}>₹{reviewTotals.subtotal.toFixed(2)}</span>
+                        </div>
+                        
+                        <div style={{ height: '1px', background: '#E2E8F0', margin: '14px 0' }} />
+
+                        {/* Grand Total Callout */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC', padding: '14px 16px', borderRadius: '12px', border: '1.5px solid #E2E8F0' }}>
+                          <div>
+                            <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Grand Total Due
+                            </div>
+                            <div style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', marginTop: '2px' }}>
+                              ₹{reviewTotals.grandTotal.toFixed(2)}
+                            </div>
+                          </div>
+                          <span style={{ background: '#EFF6FF', color: '#2563EB', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 800 }}>
+                            {activeReviewItems.length} Items
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Payment Method Selector */}
+                      <div style={{ marginBottom: '18px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                          Payment Method
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                          {['Cash', 'UPI', 'Card'].map(mode => {
+                            const isSel = selectedPaymentMode === mode;
+                            return (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedPaymentMode(mode);
+                                  setCashReceived('');
+                                }}
+                                style={{
+                                  padding: '10px 4px',
+                                  borderRadius: '10px',
+                                  border: isSel ? '2px solid #2563EB' : '1px solid #CBD5E1',
+                                  background: isSel ? '#EFF6FF' : '#FFFFFF',
+                                  color: isSel ? '#2563EB' : '#475569',
+                                  fontWeight: 800,
+                                  fontSize: '13px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  transition: 'all 0.15s'
+                                }}
+                              >
+                                {mode === 'Cash' && <span>💵 Cash</span>}
+                                {mode === 'UPI' && <span>📱 UPI</span>}
+                                {mode === 'Card' && <span>💳 Card</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Mode Specific Payment Fields */}
+                      {selectedPaymentMode === 'Cash' && (
+                        <div style={{ marginBottom: '18px', background: '#F8FAFC', padding: '14px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                          <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>
+                            Cash Received (₹)
+                          </label>
+                          <input 
+                            type="number"
+                            min="0"
+                            placeholder="Enter amount handed by patient"
+                            value={cashReceived}
+                            onChange={(e) => setCashReceived(e.target.value)}
+                            style={{
+                              width: '100%',
+                              height: '42px',
+                              padding: '0 12px',
+                              borderRadius: '8px',
+                              border: '1px solid #CBD5E1',
+                              fontSize: '15px',
+                              fontWeight: 800,
+                              outline: 'none',
+                              color: '#0F172A',
+                              background: '#FFFFFF',
+                              marginBottom: '8px'
+                            }}
+                          />
+                          {/* Quick Denominations */}
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setCashReceived(String(Math.ceil(reviewTotals.grandTotal)))}
+                              style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: '#FFFFFF', border: '1px solid #CBD5E1', cursor: 'pointer' }}
+                            >
+                              Exact
+                            </button>
+                            {[100, 500, 1000, 2000].map(amt => (
+                              <button
+                                key={amt}
+                                type="button"
+                                onClick={() => setCashReceived(String(amt))}
+                                style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: '#FFFFFF', border: '1px solid #CBD5E1', cursor: 'pointer' }}
+                              >
+                                ₹{amt}
+                              </button>
+                            ))}
+                          </div>
+                          {cashReceived && (
+                            <div style={{ 
+                              padding: '8px 12px', 
+                              borderRadius: '8px', 
+                              fontSize: '12.5px', 
+                              fontWeight: 800,
+                              background: Number(cashReceived) >= reviewTotals.grandTotal ? '#ECFDF5' : '#FEF2F2',
+                              color: Number(cashReceived) >= reviewTotals.grandTotal ? '#047857' : '#DC2626',
+                              border: `1px solid ${Number(cashReceived) >= reviewTotals.grandTotal ? '#A7F3D0' : '#FECACA'}`
+                            }}>
+                              {Number(cashReceived) >= reviewTotals.grandTotal ? (
+                                <span>Change to Return: ₹{(Number(cashReceived) - reviewTotals.grandTotal).toFixed(2)}</span>
+                              ) : (
+                                <span>Short by: ₹{(reviewTotals.grandTotal - Number(cashReceived)).toFixed(2)}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {selectedPaymentMode === 'UPI' && (
+                        <div style={{ marginBottom: '18px', background: '#F8FAFC', padding: '14px', borderRadius: '12px', border: '1px solid #E2E8F0', textAlign: 'center' }}>
+                          <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', marginBottom: '4px' }}>
+                            Scan Hospital UPI QR
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                            Patient can pay ₹{reviewTotals.grandTotal.toFixed(2)} via GPay, PhonePe, Paytm, or BHIM.
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedPaymentMode === 'Card' && (
+                        <div style={{ marginBottom: '18px', background: '#F8FAFC', padding: '14px', borderRadius: '12px', border: '1px solid #E2E8F0', textAlign: 'center' }}>
+                          <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', marginBottom: '4px' }}>
+                            POS Card Terminal
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                            Swipe or tap patient Debit/Credit card for ₹{reviewTotals.grandTotal.toFixed(2)}.
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Letterhead Upload Shortcut */}
+                      <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <label 
+                          htmlFor="upload-pharm-letterhead" 
+                          style={{ fontSize: '11.5px', color: '#2563EB', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                          {customPharmacyLetterhead ? 'Change Invoice Letterhead' : 'Add Hospital Letterhead'}
+                        </label>
+                        {customPharmacyLetterhead && (
+                          <span style={{ fontSize: '10.5px', color: '#047857', fontWeight: 800 }}>Custom Active</span>
+                        )}
+                      </div>
+
+                      {/* Primary Dispense & Collect Money Button */}
+                      <button
+                        type="button"
+                        onClick={handleReviewDispenseSubmit}
+                        disabled={isSubmittingReviewDispense || (reviewPrescription.rawObj?.prescriptionType !== 'offline_handwritten' && activeReviewItems.length === 0)}
+                        style={{
+                          width: '100%',
+                          height: '50px',
+                          borderRadius: '12px',
+                          border: 'none',
+                          background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                          color: '#FFFFFF',
+                          fontSize: '15px',
+                          fontWeight: 900,
+                          cursor: (isSubmittingReviewDispense || (reviewPrescription.rawObj?.prescriptionType !== 'offline_handwritten' && activeReviewItems.length === 0)) ? 'not-allowed' : 'pointer',
+                          opacity: (isSubmittingReviewDispense || (reviewPrescription.rawObj?.prescriptionType !== 'offline_handwritten' && activeReviewItems.length === 0)) ? 0.6 : 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                          transition: 'all 0.2s ease',
+                          marginBottom: '10px'
+                        }}
+                      >
+                        {isSubmittingReviewDispense ? (
+                          <span>Processing & Deducting Stock...</span>
+                        ) : (
+                          <>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                            <span>Collect ₹{reviewTotals.grandTotal.toFixed(2)} & Dispense</span>
+                          </>
+                        )}
+                      </button>
+
+                      <div style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab(reviewReturnTab || 'dash');
+                            setReviewPrescription(null);
+                            setReviewItems([]);
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#64748B',
+                            fontSize: '12.5px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            padding: '4px 8px'
+                          }}
+                        >
+                          Cancel and Return
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* TAB 2: PRESCRIPTIONS LIST */}
         {activeTab === 'prescriptions' && (
           <div style={{ animation: 'slideUp 0.3s ease-out' }}>
@@ -6060,11 +7028,7 @@ const PharmacyDashboard = () => {
                           <td style={{ padding: '16px', verticalAlign: 'middle' }}>
                             <div 
                               style={{ fontWeight: 800, fontSize: '13.5px', color: '#2563EB', cursor: 'pointer', textDecoration: 'underline' }}
-                              onClick={() => {
-                                setSelectedPrescriptionGroup(p);
-                                setPrescriptionModalStep('details');
-                                setShowPrescriptionModal(true);
-                              }}
+                              onClick={() => handleOpenReview(p, 'prescriptions')}
                             >
                               {p.name}
                             </div>
@@ -6084,11 +7048,7 @@ const PharmacyDashboard = () => {
                           <td style={{ padding: '16px', textAlign: 'center', verticalAlign: 'middle', fontWeight: 700, fontSize: '13.5px', color: '#0F172A' }}>
                             <span 
                               style={{ color: '#2563EB', cursor: 'pointer', textDecoration: 'underline' }}
-                              onClick={() => {
-                                setSelectedPrescriptionGroup(p);
-                                setPrescriptionModalStep('details');
-                                setShowPrescriptionModal(true);
-                              }}
+                              onClick={() => handleOpenReview(p, 'prescriptions')}
                             >
                               {p.items}
                             </span>
@@ -6138,13 +7098,9 @@ const PharmacyDashboard = () => {
                                   e.currentTarget.style.background = 'white';
                                   e.currentTarget.style.color = '#2563EB';
                                 }}
-                                onClick={() => {
-                                  setSelectedPrescriptionGroup(p);
-                                  setPrescriptionModalStep('payment');
-                                  setShowPrescriptionModal(true);
-                                }}
+                                onClick={() => handleOpenReview(p, 'prescriptions')}
                               >
-                                Dispense
+                                Review
                               </button>
                             ) : (
                               <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 700 }}>
@@ -6239,7 +7195,7 @@ const PharmacyDashboard = () => {
                   search: prescriptionsSearchQuery,
                   calendarDate: prescriptionsDateFilter
                 }}
-                clinicName="CUROXA HEALTHCARE"
+                clinicName="QUROXA HEALTHCARE"
                 onClose={() => setShowPrescriptionExportModal(false)}
                 onSuccess={(result) => {
                   showToast(`Exported ${result.recordCount} prescription(s) to ${result.fileName}!`, 'success');
@@ -7278,7 +8234,7 @@ const PharmacyDashboard = () => {
                   category: inventoryCategoryFilter,
                   status: inventoryStatusFilter
                 }}
-                clinicName="CUROXA HEALTHCARE"
+                clinicName="QUROXA HEALTHCARE"
                 onClose={() => setShowInventoryExportModal(false)}
                 onSuccess={(result) => {
                   showToast(`Exported ${result.recordCount} inventory items to ${result.fileName}!`, 'success');
@@ -8318,7 +9274,7 @@ const PharmacyDashboard = () => {
                   paymentMethod: salesFilterPaymentMethod,
                   search: salesSearchQuery
                 }}
-                clinicName={localStorage.getItem('tenantName') || 'CUROXA HEALTHCARE'}
+                clinicName={localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE'}
                 onClose={() => setShowSalesExportModal(false)}
                 onSuccess={(result) => {
                   showToast(`Exported ${result.recordCount} sales records to ${result.fileName}!`, 'success');
@@ -8515,7 +9471,7 @@ const PharmacyDashboard = () => {
                 <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>{user.name}</h3>
                 <p style={{ margin: '4px 0 12px', fontSize: '13px', color: '#64748B', fontWeight: 700 }}>Pharmacy Operations Manager</p>
                 <div style={{ fontSize: '13px', color: '#334155', fontWeight: 600 }}>
-                  <div>Email: <b>{user.email || 'ankit.sharma@curoxa.com'}</b></div>
+                  <div>Email: <b>{user.email || 'ankit.sharma@quroxa.com'}</b></div>
                   <div style={{ marginTop: '4px' }}>Shift Status: <span style={{ color: '#10B981', fontWeight: 800 }}>Active Shift</span></div>
                 </div>
               </div>
@@ -8826,7 +9782,7 @@ const PharmacyDashboard = () => {
                                 )}
                                 <button 
                                   style={{ padding: '5px 10px', minWidth: '65px', height: '30px', fontSize: '11.5px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px', whiteSpace: 'nowrap' }}
-                                  onClick={() => printPO(po, currentUser?.tenantName || 'CUROXA HEALTHCARE')}
+                                  onClick={() => printPO(po, currentUser?.tenantName || 'QUROXA HEALTHCARE')}
                                   title="Print / PDF"
                                 >
                                   📄 PDF
@@ -8974,7 +9930,7 @@ const PharmacyDashboard = () => {
                                 })()}
                                 <button 
                                   style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer', background: '#10B981', border: 'none', color: 'white', borderRadius: '4px', fontWeight: 700 }}
-                                  onClick={() => printGRN(grn, currentUser?.tenantName || 'CUROXA HEALTHCARE')}
+                                  onClick={() => printGRN(grn, currentUser?.tenantName || 'QUROXA HEALTHCARE')}
                                 >
                                   📄 PDF
                                 </button>
@@ -13553,7 +14509,7 @@ const PharmacyDashboard = () => {
                 <button 
                   type="button" 
                   style={{ padding: '8px 20px', borderRadius: '8px', background: '#10B981', color: 'white', fontWeight: 800, cursor: 'pointer', border: 'none' }} 
-                  onClick={() => printGRN(selectedGrnDetails, currentUser?.tenantName || 'CUROXA HEALTHCARE')}
+                  onClick={() => printGRN(selectedGrnDetails, currentUser?.tenantName || 'QUROXA HEALTHCARE')}
                 >
                   Download PDF
                 </button>

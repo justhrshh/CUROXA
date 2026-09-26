@@ -1,8 +1,9 @@
 const Medicine = require('../models/Medicine');
 const MedicineBatch = require('../models/MedicineBatch');
+const ItemMaster = require('../models/ItemMaster');
 
 /**
- * FEFO (First Expiry, First Out) Inventory Engine
+ * FEFO (First Expiry, First Out) Inventory Engine with ItemMaster & Brand-aware support
  */
 
 /**
@@ -21,6 +22,12 @@ async function validateAndPlanFEFO(tenantId, itemsRequested) {
     if (!rawItem) continue;
     const qty = Math.max(1, parseInt(rawItem.quantity, 10) || 1);
 
+    // 0. Locate ItemMaster if reference provided
+    let itemMasterDoc = null;
+    if (rawItem.itemMasterId) {
+      itemMasterDoc = await ItemMaster.findOne({ _id: rawItem.itemMasterId, tenantId });
+    }
+
     // 1. Locate Medicine record
     let medicineDoc = null;
     if (rawItem.medicineId || rawItem._id) {
@@ -30,15 +37,15 @@ async function validateAndPlanFEFO(tenantId, itemsRequested) {
       });
     }
 
-    if (!medicineDoc && rawItem.sku) {
+    if (!medicineDoc && (rawItem.sku || itemMasterDoc?.itemCode)) {
       medicineDoc = await Medicine.findOne({
-        sku: String(rawItem.sku).trim().toUpperCase(),
+        sku: String(rawItem.sku || itemMasterDoc.itemCode).trim().toUpperCase(),
         tenantId
       });
     }
 
     if (!medicineDoc) {
-      const nameCand = String(rawItem.medicineName || rawItem.medicine || rawItem.name || '').trim();
+      const nameCand = String(rawItem.medicineName || rawItem.medicine || rawItem.name || itemMasterDoc?.genericName || '').trim();
       if (nameCand) {
         medicineDoc = await Medicine.findOne({ name: nameCand, tenantId });
         if (!medicineDoc) {
@@ -53,28 +60,55 @@ async function validateAndPlanFEFO(tenantId, itemsRequested) {
       }
     }
 
+    if (!medicineDoc && itemMasterDoc) {
+      medicineDoc = await Medicine.create({
+        tenantId,
+        name: itemMasterDoc.genericName,
+        sku: itemMasterDoc.itemCode,
+        stock: 0,
+        unit: itemMasterDoc.consumptionUnit || 'Unit',
+        mrp: 0,
+        category: itemMasterDoc.categoryType || 'Drugs',
+        status: 'Out of Stock'
+      });
+    }
+
     if (!medicineDoc) {
       const medLabel = rawItem.medicineName || rawItem.medicine || rawItem.name || 'Unknown';
       throw new Error('Medicine "' + medLabel + '" is not found in pharmacy inventory.');
     }
 
-    // 2. Query all MedicineBatch records for this medicine/SKU
+    // 2. Query all MedicineBatch records for this medicine/SKU/ItemMaster
     const cleanSku = String(medicineDoc.sku).trim().toUpperCase();
-    const allBatchesForMed = await MedicineBatch.find({
+    const batchQuery = {
       tenantId,
       $or: [
+        ...(itemMasterDoc ? [{ itemMasterId: itemMasterDoc._id }] : []),
         { medicineId: medicineDoc._id },
         { sku: cleanSku }
       ]
-    });
+    };
+    const allBatchesForMed = await MedicineBatch.find(batchQuery);
 
-    // Filter eligible, non-expired, active batches sorted by earliest expiry (FEFO)
+    const preferredBrand = String(rawItem.brandName || itemMasterDoc?.brandName || '').trim().toLowerCase();
+
+    // Filter eligible, non-expired, active batches sorted by preferred brand then FEFO
     const eligibleBatches = allBatchesForMed.filter(b => {
       if (b.availableQuantity <= 0) return false;
       if (b.status === 'Expired' || b.status === 'Depleted') return false;
       if (b.expiryDate && new Date(b.expiryDate) <= now) return false;
+      // Strict ItemMaster and Brand isolation:
+      if (itemMasterDoc && b.itemMasterId && String(b.itemMasterId) !== String(itemMasterDoc._id)) return false;
+      if (preferredBrand && b.brandName && String(b.brandName).trim().toLowerCase() !== preferredBrand) return false;
       return true;
     }).sort((a, b) => {
+      // Prioritize brand match if requested
+      if (preferredBrand) {
+        const aBrandMatch = String(a.brandName || '').toLowerCase() === preferredBrand;
+        const bBrandMatch = String(b.brandName || '').toLowerCase() === preferredBrand;
+        if (aBrandMatch && !bBrandMatch) return -1;
+        if (!aBrandMatch && bBrandMatch) return 1;
+      }
       if (!a.expiryDate) return 1;
       if (!b.expiryDate) return -1;
       return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
@@ -100,6 +134,9 @@ async function validateAndPlanFEFO(tenantId, itemsRequested) {
         allocations.push({
           batchId: batch._id,
           batchNumber: batch.batchNumber,
+          brandName: batch.brandName || '',
+          manufacturer: batch.manufacturer || '',
+          consumptionUnit: batch.consumptionUnit || 'Unit',
           expiryDate: batch.expiryDate,
           quantity: take
         });
@@ -109,6 +146,7 @@ async function validateAndPlanFEFO(tenantId, itemsRequested) {
       plans.push({
         rawItem,
         medicineDoc,
+        itemMasterDoc,
         quantity: qty,
         allocations,
         totalValidBatchStock

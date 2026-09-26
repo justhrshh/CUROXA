@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { usePortalBranding } from '../context/PortalBrandingContext';
 import Login from './Login';
 import { AlertTriangle, ShieldAlert, ArrowLeft, RefreshCw } from 'lucide-react';
-import curoxaLogo from '../assets/curoxa_logo_transparent.png';
+import quroxaLogo from '../assets/quroxa_new_logo.png';
 
 const HospitalPortal = () => {
   const { hospitalId } = useParams();
@@ -48,7 +48,7 @@ const HospitalPortal = () => {
             Retry
           </button>
           <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-center gap-2">
-            <img src={curoxaLogo} alt="Curoxa" className="h-6 w-auto opacity-70" />
+            <img src={quroxaLogo} alt="Quroxa" className="h-6 w-auto opacity-70" />
             <span className="text-xs text-slate-400 font-medium">Healthcare Cloud Platform</span>
           </div>
         </div>
@@ -78,12 +78,12 @@ const HospitalPortal = () => {
               className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition"
             >
               <ArrowLeft className="w-4 h-4" />
-              Return to Curoxa Login
+              Return to Quroxa Login
             </Link>
           </div>
 
           <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-center gap-2">
-            <img src={curoxaLogo} alt="Curoxa" className="h-6 w-auto opacity-70" />
+            <img src={quroxaLogo} alt="Quroxa" className="h-6 w-auto opacity-70" />
             <span className="text-xs text-slate-400 font-medium">Healthcare Cloud Platform</span>
           </div>
         </div>
@@ -104,7 +104,7 @@ const HospitalPortal = () => {
           </h1>
 
           <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-            Access to <strong className="text-slate-900">{hospital?.name || 'this hospital portal'}</strong> has been temporarily suspended. Please contact your hospital administrator or Curoxa platform support.
+            Access to <strong className="text-slate-900">{hospital?.name || 'this hospital portal'}</strong> has been temporarily suspended. Please contact your hospital administrator or Quroxa platform support.
           </p>
 
           <Link

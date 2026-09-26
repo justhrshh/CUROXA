@@ -116,19 +116,23 @@ router.get('/', async (req, res) => {
       const rate = Number(b.purchaseRate) || 0;
       const stockValue = Math.round(avail * rate * 100) / 100;
       const mrp = Number(b.mrp || b.medicineId?.mrp || 0);
-      const unit = b.medicineId?.unit || 'Strip';
+      const unit = b.consumptionUnit || b.medicineId?.unit || 'Unit';
       const category = b.medicineId?.category || 'General';
 
       return {
         _id: b._id,
         medicineId: b.medicineId?._id || b.medicineId,
+        itemMasterId: b.itemMasterId || null,
         name: b.name,
+        brandName: b.brandName || '',
+        manufacturer: b.manufacturer || '',
         sku: b.sku,
         batchNumber: b.batchNumber,
         mfgDate: b.mfgDate,
         expiryDate: b.expiryDate,
         receivedQuantity: b.receivedQuantity,
         availableQuantity: avail,
+        consumptionUnit: b.consumptionUnit || unit,
         purchaseRate: rate,
         mrp,
         unit,
@@ -242,8 +246,15 @@ router.post('/:batchId/write-off', async (req, res) => {
     }
 
     // 2. Atomically deduct from aggregate Medicine.stock
+    const medQuery = { tenantId: req.tenantId };
+    if (batch.medicineId) {
+      medQuery._id = batch.medicineId;
+    } else if (batch.sku) {
+      medQuery.sku = batch.sku;
+    }
+
     const medicine = await Medicine.findOneAndUpdate(
-      { _id: batch.medicineId, tenantId: req.tenantId },
+      medQuery,
       { $inc: { stock: -writeOffQty } },
       { returnDocument: 'after' }
     );
@@ -269,9 +280,11 @@ router.post('/:batchId/write-off', async (req, res) => {
     const writeOffRecord = await InventoryWriteOff.create({
       tenantId: req.tenantId,
       writeOffId,
-      medicineId: batch.medicineId,
+      medicineId: batch.medicineId || null,
+      itemMasterId: batch.itemMasterId || null,
       sku: batch.sku,
       medicineName: batch.name,
+      consumptionUnit: batch.consumptionUnit || 'Unit',
       batchId: batch._id,
       batchNumber: batch.batchNumber,
       expiryDate: batch.expiryDate,
