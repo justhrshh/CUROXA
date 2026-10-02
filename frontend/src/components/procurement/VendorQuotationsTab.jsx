@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../utils/api';
 import { exportEngine, vendorQuotationExportColumns } from '../../utils/exportEngine';
-import VendorQuotationModal from './VendorQuotationModal';
+import SupplierQuotationPage from './SupplierQuotationPage';
 
 export default function VendorQuotationsTab({ vendors = [], showToast }) {
+  const [activeView, setActiveView] = useState('list'); // 'list' | 'form'
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -15,8 +16,25 @@ export default function VendorQuotationsTab({ vendors = [], showToast }) {
   const [limit, setLimit] = useState(25);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQuotation, setEditingQuotation] = useState(null);
+  const [eligibleVendors, setEligibleVendors] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    api.get('/vendor-quotations/eligible-vendors')
+      .then(res => {
+        if (res.data?.success && active) {
+          setEligibleVendors(res.data.data || []);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load eligible vendors in quotations tab:', err.message);
+      });
+    return () => { active = false; };
+  }, []);
+
+  // Combined vendors list for filter dropdown
+  const vendorOptions = eligibleVendors.length > 0 ? eligibleVendors : vendors;
 
   const showToastRef = useRef(showToast);
   useEffect(() => {
@@ -90,6 +108,25 @@ export default function VendorQuotationsTab({ vendors = [], showToast }) {
     });
   };
 
+  // IN-PAGE FORM VIEW (NO MODAL / POP-UP)
+  if (activeView === 'form') {
+    return (
+      <SupplierQuotationPage
+        editingQuotation={editingQuotation}
+        onBackToList={() => {
+          setActiveView('list');
+          setEditingQuotation(null);
+        }}
+        onSaveSuccess={() => {
+          fetchQuotations(false);
+          setActiveView('list');
+          setEditingQuotation(null);
+        }}
+        showToast={showToast}
+      />
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* TOP ACTION BAR */}
@@ -133,7 +170,7 @@ export default function VendorQuotationsTab({ vendors = [], showToast }) {
           <button
             onClick={() => {
               setEditingQuotation(null);
-              setIsModalOpen(true);
+              setActiveView('form');
             }}
             className="proc-btn proc-btn-primary"
             style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '13px', fontWeight: 700 }}
@@ -169,8 +206,8 @@ export default function VendorQuotationsTab({ vendors = [], showToast }) {
             }}
           >
             <option value="all">All Vendors</option>
-            {vendors.map(v => (
-              <option key={v._id} value={v._id}>{v.name}</option>
+            {vendorOptions.map(v => (
+              <option key={v._id} value={v._id}>{v.name} {v.code ? `(${v.code})` : ''}</option>
             ))}
           </select>
         </div>
@@ -323,7 +360,7 @@ export default function VendorQuotationsTab({ vendors = [], showToast }) {
                           <button
                             onClick={() => {
                               setEditingQuotation(q);
-                              setIsModalOpen(true);
+                              setActiveView('form');
                             }}
                             className="proc-btn"
                             style={{ background: '#F8FAFC', border: '1px solid #CBD5E1', padding: '5px 10px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer' }}
@@ -380,19 +417,6 @@ export default function VendorQuotationsTab({ vendors = [], showToast }) {
           </div>
         )}
       </div>
-
-      {/* MODAL */}
-      <VendorQuotationModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingQuotation(null);
-        }}
-        onSaveSuccess={fetchQuotations}
-        editingQuotation={editingQuotation}
-        vendors={vendors}
-        showToast={showToast}
-      />
     </div>
   );
 }

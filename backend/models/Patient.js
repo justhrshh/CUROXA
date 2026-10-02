@@ -4,6 +4,7 @@ const patientSchema = new mongoose.Schema({
   tenantId: { type: String, required: true, default: 'city_hospital', index: true },
   uhId: { type: String },
   patientId: { type: String },
+  title: { type: String, default: '' },
   name: { type: String, required: true },
   age: { type: Number, default: 0 },
   ageMonths: { type: Number, default: 0 },

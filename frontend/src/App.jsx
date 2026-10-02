@@ -383,6 +383,21 @@ function App() {
             <SuperAdminDashboard />
           </ProtectedRoute>
         } />
+        <Route path="/superadmin" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/vendor-master" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="vendor-master" />
+          </ProtectedRoute>
+        } />
+        <Route path="/super-admin/vendor-master" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="vendor-master" />
+          </ProtectedRoute>
+        } />
         <Route path="/hospital-onboarding" element={
           <ProtectedRoute targetRole="superadmin">
             <SuperAdminDashboard initialTab="hospital-onboarding" />

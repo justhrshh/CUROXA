@@ -137,7 +137,7 @@ router.get('/', async (req, res) => {
     }
 
     const appointments = await Appointment.find(query)
-      .populate('patientId', 'name contact age ageMonths ageDays gender email address bloodGroup allergies currentMedications medicalHistory avatar referredBy patientId uhId')
+      .populate('patientId', 'title name contact age ageMonths ageDays gender email address bloodGroup allergies currentMedications medicalHistory avatar referredBy patientId uhId')
       .populate('doctorId', 'name role specialty consultationFee')
       .sort({ date: 1, time: 1 });
 
@@ -247,6 +247,15 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ error: 'Doctor not found' });
     }
 
+    // Authoritative Server Validation: Reject past dates and past time slots
+    if (date && time) {
+      const { isSlotValidForRegistration } = require('../utils/dateSlotHelper');
+      const slotValidation = isSlotValidForRegistration(date, time);
+      if (!slotValidation.valid) {
+        return res.status(400).json({ error: slotValidation.reason });
+      }
+    }
+
     // Validate slot capacity limit
     if (doctorId && date && time) {
       await checkSlotCapacity(doctorId, date, time);
@@ -277,6 +286,7 @@ router.post('/', async (req, res) => {
           tenantId: resolvedTenantId,
           uhId: targetUhid,
           patientId: targetHospitalPatientId,
+          title: currentPatient.title || '',
           name: currentPatient.name,
           age: currentPatient.age,
           gender: currentPatient.gender,
@@ -449,6 +459,13 @@ router.put('/:id', async (req, res) => {
       (currentAppointment.status === 'Cancelled' && !isCancelled);
 
     if (!isCancelled && hasDetailsChanged) {
+      if (date !== undefined || time !== undefined) {
+        const { isSlotValidForRegistration } = require('../utils/dateSlotHelper');
+        const slotValidation = isSlotValidForRegistration(checkDate, checkTime);
+        if (!slotValidation.valid) {
+          return res.status(400).json({ error: slotValidation.reason });
+        }
+      }
       await checkSlotCapacity(checkDoctorId, checkDate, checkTime, req.params.id);
     }
 
@@ -681,7 +698,7 @@ router.post('/:id/check-in', async (req, res) => {
       return res.status(400).json({ error: 'Cannot check in an appointment without an assigned doctor' });
     }
 
-    // Ensure check-in is not permitted for future-dated appointments (anytime check-in allowed on scheduled appointment date)
+    // Ensure check-in is not permitted for future-dated or past-dated appointments (only allowed on scheduled appointment date)
     if (appointment.date) {
       const { normalizeDateString } = require('../utils/queueEngine');
       const todayStr = normalizeDateString(new Date());
@@ -689,6 +706,11 @@ router.post('/:id/check-in', async (req, res) => {
       if (apptDateStr > todayStr) {
         return res.status(400).json({
           error: `Check-in is only available on the scheduled appointment date (${apptDateStr}).`
+        });
+      }
+      if (apptDateStr < todayStr) {
+        return res.status(400).json({
+          error: `Check-in is not permitted for past-dated appointments (${apptDateStr}).`
         });
       }
     }

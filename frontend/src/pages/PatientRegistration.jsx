@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../utils/api';
+import { getLocalDateString, isPastSlot, isSlotValidForRegistration } from '../utils/dateSlotHelper';
 import { 
   ClipboardList, 
   Camera, 
@@ -43,14 +44,6 @@ const PatientRegistration = () => {
 
   const tempToken = location.state?.tempToken || localStorage.getItem('token');
   const initialContact = location.state?.emailOrPhone || savedEmailOrPhone || '';
-
-  const getLocalDateString = () => {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
 
   // Form states matching ReceptionistDashboard exactly
   const [formData, setFormData] = useState({
@@ -180,11 +173,19 @@ const PatientRegistration = () => {
       return;
     }
 
+    if (formData.doctorId && selectedSlot) {
+      if (!isSlotValidForRegistration(bookingDate, selectedSlot)) {
+        setError("Cannot register or book for a past date or past time slot. Please select a valid current/future time slot.");
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
       // 1. Create Patient Record in target tenant
       const patientPayload = {
+        title: formData.title || '',
         name: `${formData.title ? formData.title + ' ' : ''}${formData.name.trim()}`,
         age: parseInt(formData.age, 10) || 0,
         ageMonths: parseInt(formData.ageMonths, 10) || 0,
@@ -379,8 +380,8 @@ const PatientRegistration = () => {
                   onChange={e => {
                     const selectedTitle = e.target.value;
                     let autoGender = formData.gender;
-                    if (selectedTitle === 'Mr.') autoGender = 'Male';
-                    else if (selectedTitle === 'Mrs.' || selectedTitle === 'Miss') autoGender = 'Female';
+                    if (selectedTitle === 'Mr.' || selectedTitle === 'Master') autoGender = 'Male';
+                    else if (selectedTitle === 'Mrs.' || selectedTitle === 'Miss' || selectedTitle === 'Ms.') autoGender = 'Female';
                     else if (selectedTitle === 'Prefer not to say') autoGender = 'Other';
                     setFormData({...formData, title: selectedTitle, gender: autoGender});
                   }}
@@ -388,7 +389,10 @@ const PatientRegistration = () => {
                   <option value="">--Select--</option>
                   <option value="Mr.">Mr.</option>
                   <option value="Mrs.">Mrs.</option>
+                  <option value="Ms.">Ms.</option>
                   <option value="Miss">Miss</option>
+                  <option value="Master">Master</option>
+                  <option value="Dr.">Dr.</option>
                   <option value="Prefer not to say">Prefer not to say</option>
                 </select>
               ), true)}
@@ -664,24 +668,30 @@ const PatientRegistration = () => {
                   ) : (
                     (doctorAvailability.slots || DEFAULT_SLOTS).map(time => {
                       const cleanTime = time.split(/\(Limit:/i)[0].trim();
+                      const isPast = isPastSlot(bookingDate, time);
                       const isSelected = selectedSlot === time;
                       return (
                         <div 
                           key={time} 
-                          onClick={() => setSelectedSlot(time)} 
+                          onClick={() => { if (!isPast) setSelectedSlot(time); }} 
                           style={{ 
                             padding: '5px 10px', 
                             borderRadius: '6px', 
                             border: isSelected ? '2px solid #2563EB' : '1px solid #CBD5E1', 
                             fontSize: '11.5px', 
                             fontWeight: 600, 
-                            cursor: 'pointer', 
-                            background: isSelected ? '#EFF6FF' : 'white', 
-                            color: isSelected ? '#1D4ED8' : '#334155',
-                            transition: 'all 0.15s ease'
+                            cursor: isPast ? 'not-allowed' : 'pointer', 
+                            background: isPast ? '#F1F5F9' : (isSelected ? '#EFF6FF' : 'white'), 
+                            color: isPast ? '#94A3B8' : (isSelected ? '#1D4ED8' : '#334155'),
+                            opacity: isPast ? 0.65 : 1,
+                            transition: 'all 0.15s ease',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px'
                           }}
                         >
-                          {cleanTime}
+                          <span>{cleanTime}</span>
+                          {isPast && <span style={{ fontSize: '9px', fontWeight: 800, color: '#94A3B8' }}>(Past)</span>}
                         </div>
                       );
                     })

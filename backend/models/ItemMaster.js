@@ -29,33 +29,74 @@ const itemMasterSchema = new mongoose.Schema({
   },
   genericName: {
     type: String,
-    required: true,
-    trim: true
+    trim: true,
+    default: function() { return this.itemName || this.brandName || ''; },
+    required: function() { return !this.itemName && !this.brandName; }
   },
   brandName: {
     type: String,
-    required: true,
-    trim: true
+    trim: true,
+    default: function() { return this.itemName || this.genericName || ''; },
+    required: function() { return !this.itemName && !this.genericName; }
   },
   itemDescription: {
     type: String,
     default: ''
   },
+  // Unified category and department (mirrored with legacy categoryType / departmentType)
+  category: {
+    type: String,
+    trim: true,
+    default: function() { return this.categoryType || ''; },
+    index: true
+  },
+  department: {
+    type: String,
+    trim: true,
+    default: function() { return this.departmentType || ''; },
+    index: true
+  },
+  itemName: {
+    type: String,
+    trim: true,
+    default: function() { return this.genericName || this.brandName || ''; }
+  },
   categoryType: {
     type: String,
-    required: true,
-    trim: true
+    trim: true,
+    default: function() { return this.category || 'General'; },
+    required: function() { return !this.category; }
   },
   departmentType: {
     type: String,
-    required: true,
-    trim: true
+    trim: true,
+    default: function() { return this.department || (this.category === 'Assets' ? 'General' : ''); },
+    required: function() { return !this.department && this.category !== 'Assets'; }
   },
   itemType: {
     type: String,
     enum: ['Medicine', 'Consumable', 'Reagent', 'Asset', 'Non-Consumable'],
     default: 'Medicine'
   },
+  // Category-specific dynamic data bucket adhering to Master Schema Registry
+  categoryData: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  },
+  // Direct client fields for fast indexing and query capability
+  sNo: { type: Number },
+  sampleType: { type: String, trim: true, default: '' },
+  gender: { type: String, trim: true, default: '' },
+  sampleOption: { type: String, trim: true, default: '' },
+  doctorsName: { type: String, trim: true, default: '' },
+  doctorId: { type: String, trim: true, default: '' },
+  machineId: { type: String, trim: true, default: '' },
+  machineName: { type: String, trim: true, default: '' },
+  manufactureId: { type: String, trim: true, default: '' },
+  manufactureName: { type: String, trim: true, default: '' },
+  requiredPrescription: { type: String, trim: true, default: '' },
+  rackLocation: { type: String, trim: true, default: '' },
+  imageUrl: { type: String, trim: true, default: '' },
   hsnCode: {
     type: String,
     default: '',
@@ -271,11 +312,41 @@ const itemMasterSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ['Active', 'Inactive'],
     default: 'Active',
+    trim: true,
     index: true
   }
 }, { timestamps: true });
+
+// Pre-validation hook: Guarantee backward and forward compatibility between legacy
+// schema fields (categoryType, departmentType, genericName, brandName) and Master Schema Registry
+itemMasterSchema.pre('validate', function() {
+  if (this.category && !this.categoryType) this.categoryType = this.category;
+  if (this.categoryType && !this.category) this.category = this.categoryType;
+  if (this.department && !this.departmentType) this.departmentType = this.department;
+  if (this.departmentType && !this.department) this.department = this.departmentType;
+
+  // Categories without department (e.g. Assets)
+  if (this.category === 'Assets' && !this.departmentType) {
+    this.departmentType = 'General';
+    this.department = '';
+  }
+  if (!this.categoryType) this.categoryType = 'General';
+  if (!this.departmentType) this.departmentType = 'General';
+
+  if (this.itemName) {
+    if (!this.genericName) this.genericName = this.itemName;
+    if (!this.brandName) this.brandName = this.itemName;
+  } else if (this.genericName && !this.itemName) {
+    this.itemName = this.genericName;
+  }
+  if (!this.genericName && this.brandName) this.genericName = this.brandName;
+  if (!this.brandName && this.genericName) this.brandName = this.genericName;
+
+  if (!this.purchasedUnit) this.purchasedUnit = 'Unit';
+  if (!this.consumptionUnit) this.consumptionUnit = this.purchasedUnit || 'Unit';
+  if (!this.converterFactor) this.converterFactor = 1;
+});
 
 // =====================================================================
 // INDEXES
@@ -283,17 +354,22 @@ const itemMasterSchema = new mongoose.Schema({
 // Primary compound: tenantId + itemCode must be unique within scope
 itemMasterSchema.index({ tenantId: 1, itemCode: 1 }, { unique: true });
 itemMasterSchema.index({ scope: 1, status: 1 });
+itemMasterSchema.index({ scope: 1, category: 1, department: 1, status: 1 });
 itemMasterSchema.index({ scope: 1, genericName: 1, brandName: 1, manufacturer: 1 });
 itemMasterSchema.index({ tenantId: 1, genericName: 1, brandName: 1, manufacturer: 1 });
 itemMasterSchema.index({ tenantId: 1, status: 1 });
 itemMasterSchema.index({ tenantId: 1, categoryType: 1, departmentType: 1 });
 // Text search index for global catalog lookup
 itemMasterSchema.index({
+  itemName: 'text',
   genericName: 'text',
   brandName: 'text',
   manufacturer: 'text',
   itemCode: 'text',
-  composition: 'text'
+  composition: 'text',
+  doctorsName: 'text',
+  doctorId: 'text'
 });
 
 module.exports = mongoose.model('ItemMaster', itemMasterSchema);
+

@@ -1,6 +1,8 @@
 const express = require('express');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const Vendor = require('../models/Vendor');
+const GlobalVendor = require('../models/GlobalVendor');
+const HospitalVendorAssociation = require('../models/HospitalVendorAssociation');
 const ItemMaster = require('../models/ItemMaster');
 const VendorQuotation = require('../models/VendorQuotation');
 const { verifyToken } = require('../middleware/authMiddleware');
@@ -138,9 +140,38 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'At least one item is required to create a purchase order' });
     }
 
-    // 1. Validate Active Vendors and sanitize line items
+    // 1. Validate Active Vendors (both associated Global Vendors and tenant-specific legacy vendors)
+    const activeVendorMap = new Map();
+
+    // 1a. Load associated Global Vendors
+    const associations = await HospitalVendorAssociation.find({
+      tenantId: req.tenantId,
+      status: 'ACTIVE'
+    }).populate('vendorId');
+
+    for (const assoc of associations) {
+      if (assoc.vendorId && (assoc.vendorId.activeStatus === 'Yes' || assoc.vendorId.activeStatus === 'ACTIVE')) {
+        const gv = assoc.vendorId;
+        activeVendorMap.set(gv._id.toString(), {
+          _id: gv._id,
+          name: gv.supplierName,
+          supplierName: gv.supplierName,
+          supplierCode: gv.supplierCode,
+          email: gv.emailId,
+          phone: gv.primaryContactPersonMobileNo || gv.landline,
+          address: [gv.houseNo, gv.street, gv.stateCode, gv.pinCode].filter(Boolean).join(', '),
+          isGlobalVendor: true
+        });
+      }
+    }
+
+    // 1b. Load legacy Vendors (fallback/coexistence)
     const activeVendors = await Vendor.find({ tenantId: req.tenantId, status: 'Active' });
-    const activeVendorMap = new Map(activeVendors.map(v => [v._id.toString(), v]));
+    for (const v of activeVendors) {
+      if (!activeVendorMap.has(v._id.toString())) {
+        activeVendorMap.set(v._id.toString(), v);
+      }
+    }
 
     const vendorGroups = {};
     const sanitizedItems = [];

@@ -156,6 +156,39 @@ div.bg-white, .bg-white.rounded-2xl, .bg-white.rounded-xl {
   border: 1px solid rgba(255, 255, 255, 0.9) !important;
 }
 
+/* Login Panel - High Opacity / Less Transparent */
+.login-panel,
+div.login-panel {
+  background: rgba(255, 255, 255, 0.93) !important;
+  backdrop-filter: blur(24px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(120%) !important;
+  border-color: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 25px 70px rgba(15, 31, 61, 0.12), 0 4px 24px rgba(15, 23, 42, 0.04) !important;
+}
+
+.login-panel:hover,
+div.login-panel:hover {
+  background: rgba(255, 255, 255, 0.96) !important;
+}
+
+.login-panel input::placeholder {
+  color: #64748b !important;
+  opacity: 1 !important;
+  font-weight: 500;
+}
+
+.login-panel input::-webkit-input-placeholder {
+  color: #64748b !important;
+  opacity: 1 !important;
+  font-weight: 500;
+}
+
+.login-panel input::-moz-placeholder {
+  color: #64748b !important;
+  opacity: 1 !important;
+  font-weight: 500;
+}
+
 :root {
     --primary: #3B71FE;
     --primary-gradient: linear-gradient(135deg, #3B71FE 0%, #2A54E1 100%);

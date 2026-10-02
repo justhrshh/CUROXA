@@ -5,6 +5,12 @@ import { socket } from '../utils/socket';
 import { handleAutoLogout, clearPortalAuthContext, performLogout } from '../utils/api';
 import quroxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import { exportHospitalValidationReportPdf, generateExcelFile, generateCsvFile, generatePdfFile } from '../utils/exportEngine';
+import MasterManagementView from '../components/superadmin/masters/MasterManagementView';
+import VendorMasterView from '../components/superadmin/masters/VendorMasterView';
+import StockMasterView from '../components/superadmin/masters/StockMasterView';
+import CommonMasterUploadView from '../components/superadmin/masters/CommonMasterUploadView';
+import SuperAdminMasterApprovalsView from '../components/superadmin/masters/SuperAdminMasterApprovalsView';
+import { TopbarContext } from '../context/TopbarContext';
 
 const originalFetch = window.fetch;
 const fetch = async (url, options = {}) => {
@@ -801,7 +807,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   // RBAC Configuration: exactly 3 internal manager roles + root master Super Admin
   const ROLE_ACCESS_MAP = {
-    'Super Admin': ['dashboard', 'hospital-onboarding', 'hospitals', 'subscription-mgmt', 'customer-support', 'broadcast-center', 'finance', 'employees', 'reports', 'settings', 'global-item-master', 'item-requests'],
+    'Super Admin': ['dashboard', 'hospital-onboarding', 'hospitals', 'subscription-mgmt', 'customer-support', 'broadcast-center', 'finance', 'employees', 'reports', 'settings', 'global-item-master', 'item-requests', 'masters', 'item-master', 'vendor-master', 'stock-master', 'master-upload'],
     'Onboarding Manager': ['hospital-onboarding', 'hospitals'],
     'Ticket Manager': ['customer-support', 'broadcast-center'],
     'Finance Manager': ['subscription-mgmt', 'finance', 'reports']
@@ -847,7 +853,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
   };
   
   // Super Admin is never restricted across any module
-  const isTabAllowed = isSuperAdmin ? true : (allowedTabs.includes(getBaseTabId(activeTab)) || activeTab === 'global-item-master' || activeTab === 'item-requests');
+  const isTabAllowed = isSuperAdmin ? true : (allowedTabs.includes(getBaseTabId(activeTab)) || activeTab === 'global-item-master' || activeTab === 'item-requests' || activeTab === 'masters' || activeTab === 'item-master' || activeTab === 'vendor-master' || activeTab === 'stock-master' || activeTab === 'master-upload');
 
   // Automatically normalize any legacy or search tab aliases
   useEffect(() => {
@@ -858,6 +864,39 @@ const SuperAdminDashboard = ({ initialTab }) => {
     else if (activeTab === 'settings' || activeTab === 'backups') setActiveTab('platform-control');
     else if (activeTab === 'reports') setActiveTab('bi-reports');
   }, [activeTab]);
+
+  // Contextual Topbar slot for page-level search & controls
+  const [topbarContent, setTopbarContent] = useState(null);
+
+  useEffect(() => {
+    setTopbarContent(null);
+  }, [activeTab]);
+
+  const baseTabId = getBaseTabId(activeTab);
+  const TAB_TITLE_MAP = {
+    'dashboard': { title: 'Platform Overview', icon: 'layout-dashboard' },
+    'hospital-onboarding': { title: 'Hospital Onboarding', icon: 'user-plus' },
+    'hospitals': { title: 'Hospitals', icon: 'building-2' },
+    'subscription-mgmt': { title: 'Subscription Management', icon: 'credit-card' },
+    'item-master': { title: 'Item Master', icon: 'package' },
+    'vendor-master': { title: 'Vendor Master', icon: 'truck' },
+    'stock-master': { title: 'Stock Master', icon: 'boxes' },
+    'master-upload': { title: 'Upload', icon: 'upload-cloud' },
+    'masters': { title: 'Item Master', icon: 'package' },
+    'global-item-master': { title: 'Item Master', icon: 'package' },
+    'item-requests': { title: 'Item Requests', icon: 'clipboard-list' },
+    'customer-support': { title: 'Customer Support', icon: 'headset' },
+    'broadcast-center': { title: 'Broadcast Center', icon: 'megaphone' },
+    'finance': { title: 'Finance', icon: 'wallet' },
+    'employees': { title: 'Employees', icon: 'user-cog' },
+    'reports': { title: 'Platform Reports', icon: 'bar-chart-3' },
+    'settings': { title: 'Platform Control', icon: 'settings' }
+  };
+
+  const currentTabConfig = TAB_TITLE_MAP[baseTabId] || TAB_TITLE_MAP[activeTab] || {
+    title: activeTab.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+    icon: 'layout'
+  };
 
   // Ensure Super Admin application shell takes full 100% viewport width without 0.9 zoom shrinkage
   useEffect(() => {
@@ -6444,16 +6483,17 @@ const SuperAdminDashboard = ({ initialTab }) => {
   }
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'row',
-      height: '100vh',
-      width: '100%',
-      minWidth: 0,
-      maxWidth: '100%',
-      overflow: 'hidden',
-      background: '#F8FAFC'
-    }}>
+    <TopbarContext.Provider value={{ topbarContent, setTopbarContent }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'row',
+        height: '100vh',
+        width: '100%',
+        minWidth: 0,
+        maxWidth: '100%',
+        overflow: 'hidden',
+        background: '#F8FAFC'
+      }}>
       {/* GLOBAL VIEW RESET */}
       <style>{`
         html {
@@ -6767,65 +6807,96 @@ const SuperAdminDashboard = ({ initialTab }) => {
         overflow: 'hidden'
       }}>
         {/* TOPBAR */}
+        {/* TOPBAR */}
         <header style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          height: '60px',
+          height: '52px',
           width: '100%',
           minWidth: 0,
           boxSizing: 'border-box',
           background: '#FFFFFF',
           borderBottom: '1px solid #E2E8F0',
-          padding: '0 24px',
+          padding: '0 16px',
           flexShrink: 0,
-          zIndex: 80
+          zIndex: 80,
+          gap: '16px'
         }}>
-          {/* Left: Platform Headline & System Status */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+          {/* Left: Contextual Page Title & Icon */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '180px', flexShrink: 0 }}>
             <div style={{
-              background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+              background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
               color: '#FFFFFF',
-              width: '34px',
-              height: '34px',
-              borderRadius: '9px',
+              width: '30px',
+              height: '30px',
+              borderRadius: '7px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
-              boxShadow: '0 2px 8px rgba(79,70,229,0.25)'
+              boxShadow: '0 1px 3px rgba(37,99,235,0.2)'
             }}>
-              <LucideIcon name="shield-check" style={{ width: '18px', height: '18px', color: '#FFFFFF' }} />
+              <LucideIcon name={currentTabConfig.icon || 'layers'} style={{ width: '16px', height: '16px', color: '#FFFFFF' }} />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-              <h1 style={{ fontSize: '15px', fontWeight: 850, color: '#0F172A', margin: 0, letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>
-                Quroxa Global Platform Command Center
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <h1 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.2px', whiteSpace: 'nowrap' }}>
+                {currentTabConfig.title || 'Platform Overview'}
               </h1>
-              <span style={{
-                fontSize: '9px',
-                fontWeight: 800,
-                color: '#059669',
-                background: '#D1FAE5',
-                border: '1px solid #A7F3D0',
-                padding: '2px 8px',
-                borderRadius: '12px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                whiteSpace: 'nowrap'
-              }}>
-                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#059669', display: 'inline-block' }} />
-                System Active
-              </span>
             </div>
           </div>
 
+          {/* Center: Contextual workspace controls or TopbarContext content */}
+          <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0, justifyContent: 'center' }}>
+            {topbarContent ? (
+              topbarContent
+            ) : baseTabId === 'hospitals' ? (
+              <div style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: '420px', position: 'relative' }}>
+                <LucideIcon name="search" style={{ position: 'absolute', left: '10px', width: '14px', height: '14px', color: '#94A3B8' }} />
+                <input
+                  type="text"
+                  placeholder="Search hospitals by name, code, domain..."
+                  value={hospitalSearch}
+                  onChange={(e) => setHospitalSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: '32px',
+                    padding: '0 12px 0 32px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '12px',
+                    background: '#F8FAFC',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+            ) : baseTabId === 'finance' ? (
+              <div style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: '420px', position: 'relative' }}>
+                <LucideIcon name="search" style={{ position: 'absolute', left: '10px', width: '14px', height: '14px', color: '#94A3B8' }} />
+                <input
+                  type="text"
+                  placeholder="Search invoices, transactions, hospitals..."
+                  value={financeSearchQuery}
+                  onChange={(e) => setFinanceSearchQuery(e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: '32px',
+                    padding: '0 12px 0 32px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '12px',
+                    background: '#F8FAFC',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
+
           {/* Right Controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button style={{ ...styles.iconButtonBadge, position: 'relative' }} onClick={() => setIsNotificationOpen(true)}>
-              <LucideIcon name="bell" style={{ width: '18px', height: '18px', color: '#64748B' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <button style={{ ...styles.iconButtonBadge, width: '32px', height: '32px' }} onClick={() => setIsNotificationOpen(true)} title="Notifications">
+              <LucideIcon name="bell" style={{ width: '16px', height: '16px', color: '#64748B' }} />
               {notifications.filter(n => !n.isRead).length > 0 && (
                 <span style={{
                   position: 'absolute', top: '-2px', right: '-2px',
@@ -6836,22 +6907,22 @@ const SuperAdminDashboard = ({ initialTab }) => {
               )}
             </button>
             
-            <button style={styles.iconButtonBadge} onClick={() => setActiveTab('support-success')}>
-              <LucideIcon name="help-circle" style={{ width: '18px', height: '18px', color: '#64748B' }} />
+            <button style={{ ...styles.iconButtonBadge, width: '32px', height: '32px' }} onClick={() => setActiveTab('support-success')} title="Support & Help">
+              <LucideIcon name="help-circle" style={{ width: '16px', height: '16px', color: '#64748B' }} />
             </button>
 
             {isSuperAdmin && (
-              <button style={styles.iconButtonBadge} onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }}>
-                <LucideIcon name="layout-grid" style={{ width: '18px', height: '18px', color: '#64748B' }} />
+              <button style={{ ...styles.iconButtonBadge, width: '32px', height: '32px' }} onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }} title="Platform Control">
+                <LucideIcon name="layout-grid" style={{ width: '16px', height: '16px', color: '#64748B' }} />
               </button>
             )}
 
             <div style={{ position: 'relative' }}>
               <button style={{ ...styles.profileTrigger, border: 'none', background: 'none', padding: 0, cursor: 'pointer' }} onClick={() => setIsProfileOpen(!isProfileOpen)}>
                 <div style={{
-                  width: '32px', height: '32px', borderRadius: '50%',
+                  width: '30px', height: '30px', borderRadius: '50%',
                   background: '#2563EB', color: '#FFFFFF', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800
+                  alignItems: 'center', justifyContent: 'center', fontSize: '11.5px', fontWeight: 800
                 }}>
                   {currentUser.name ? currentUser.name.slice(0, 2).toUpperCase() : 'SU'}
                 </div>
@@ -6949,7 +7020,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
         </header>
 
         {/* WORKSPACE CENTRAL CANVAS & RIGHT SIDEBAR PANEL */}
-        <div style={{ display: 'flex', flex: 1, width: '100%', minWidth: 0, minHeight: 0, height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flex: 1, width: '100%', minWidth: 0, minHeight: 0, height: 'calc(100vh - 52px)', overflow: 'hidden' }}>
           {/* CENTRAL APP PORT */}
           <main style={{ ...styles.mainCanvas, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
 
@@ -14618,8 +14689,33 @@ const SuperAdminDashboard = ({ initialTab }) => {
               );
             })()}
 
-            {/* GLOBAL ITEM MASTER MODULE (FULL PAGE VIEW) */}
-            {isTabAllowed && activeTab === 'global-item-master' && (() => {
+            {/* SUPER ADMIN ITEM MASTER MODULE */}
+            {isTabAllowed && (activeTab === 'item-master' || activeTab === 'masters' || activeTab === 'global-item-master') && (
+              <MasterManagementView />
+            )}
+
+            {/* SUPER ADMIN VENDOR MASTER MODULE */}
+            {isTabAllowed && activeTab === 'vendor-master' && (
+              <VendorMasterView />
+            )}
+
+            {/* SUPER ADMIN STOCK MASTER MODULE */}
+            {isTabAllowed && activeTab === 'stock-master' && (
+              <StockMasterView />
+            )}
+
+            {/* SUPER ADMIN COMMON MASTER UPLOAD MODULE */}
+            {isTabAllowed && activeTab === 'master-upload' && (
+              <CommonMasterUploadView onSwitchTab={setActiveTab} />
+            )}
+
+            {/* SUPER ADMIN ITEM REQUESTS MODULE */}
+            {isTabAllowed && activeTab === 'item-requests' && (
+              <SuperAdminMasterApprovalsView />
+            )}
+
+            {/* LEGACY GLOBAL ITEM MASTER MODULE (DEPRECATED) */}
+            {false && isTabAllowed && activeTab === 'global-item-master' && (() => {
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, paddingBottom: '60px' }}>
                   {/* Page Header & Module Navigation */}
@@ -14989,8 +15085,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
               );
             })()}
 
-            {/* ITEM REQUESTS MODULE (FULL PAGE VIEW) */}
-            {isTabAllowed && activeTab === 'item-requests' && (() => {
+            {/* LEGACY ITEM REQUESTS MODULE (DEPRECATED - REPLACED BY SuperAdminMasterApprovalsView) */}
+            {false && isTabAllowed && activeTab === 'item-requests' && (() => {
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, paddingBottom: '60px' }}>
                   {/* Page Header & Module Navigation */}
@@ -15013,7 +15109,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                       <button
-                        onClick={() => setActiveTab('global-item-master')}
+                        onClick={() => setActiveTab('masters')}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -15029,7 +15125,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         }}
                       >
                         <LucideIcon name="package" style={{ width: '14px', height: '14px', color: '#2563EB' }} />
-                        <span>View Global Catalog</span>
+                        <span>View Masters Catalog</span>
                       </button>
 
                       <button
@@ -15060,7 +15156,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   {/* Inter-Module Relationship Navigation Pills */}
                   <div style={{ display: 'flex', background: '#F1F5F9', padding: '4px', borderRadius: '10px', gap: '4px', width: 'fit-content' }}>
                     <button
-                      onClick={() => setActiveTab('global-item-master')}
+                      onClick={() => setActiveTab('masters')}
                       style={{
                         border: 'none',
                         background: 'transparent',
@@ -17172,7 +17268,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </TopbarContext.Provider>
   );
 };
 
@@ -17195,7 +17292,10 @@ const menuGroups = [
   {
     group: 'Catalog & Procurement',
     items: [
-      { id: 'global-item-master', label: 'Global Item Master', icon: 'package' },
+      { id: 'item-master', label: 'Item Master', icon: 'package' },
+      { id: 'vendor-master', label: 'Vendor Master', icon: 'truck' },
+      { id: 'stock-master', label: 'Stock Master', icon: 'boxes' },
+      { id: 'master-upload', label: 'Upload', icon: 'upload-cloud' },
       { id: 'item-requests', label: 'Item Requests', icon: 'clipboard-list' }
     ]
   },
@@ -17261,7 +17361,7 @@ const styles = {
   menuItemBtn: { display: 'flex', alignItems: 'center', height: '38px', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s' },
   menuItemLabel: { fontSize: '12.5px', fontWeight: 700 },
   menuDivider: { height: '1px', background: '#F1F5F9', margin: '8px 0' },
-  mainCanvas: { flex: 1, width: '100%', minWidth: 0, minHeight: 0, height: '100%', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', padding: '24px', boxSizing: 'border-box' },
+  mainCanvas: { flex: 1, width: '100%', minWidth: 0, minHeight: 0, height: '100%', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', padding: '14px 18px', boxSizing: 'border-box' },
   pageBodyScroll: { flex: 1, width: '100%', minWidth: 0, minHeight: 0, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '24px', boxSizing: 'border-box' },
   subNavbar: { display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexShrink: 0 },
   subNavbarBtn: { border: 'none', background: 'none', fontSize: '12.5px', fontWeight: 650, color: '#64748B', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' },

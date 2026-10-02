@@ -281,7 +281,7 @@ const PatientPortalLogin = () => {
         {/* ── RIGHT LOGIN CARD ── */}
         <div className="w-full lg:w-[44%] xl:w-[42%] flex flex-col items-center lg:items-end my-auto">
 
-          <div className="w-full max-w-[500px] xl:max-w-[515px] bg-white rounded-3xl shadow-[0_25px_70px_rgba(15,31,61,0.08)] border border-slate-100/90 p-7 sm:p-8 lg:p-9 relative z-10">
+          <div className="w-full max-w-[500px] xl:max-w-[515px] bg-white rounded-3xl shadow-[0_25px_70px_rgba(15,31,61,0.08)] border border-slate-100/90 p-7 sm:p-8 lg:p-9 relative z-10 login-panel">
             
             {/* Top Bar: Back to Staff Login Navigation */}
             <div className="flex items-center justify-between mb-4 -mt-1">
@@ -354,7 +354,7 @@ const PatientPortalLogin = () => {
                     Mobile Number or Email
                   </label>
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
                       <Mail className="w-5 h-5" />
                     </div>
                     <input
@@ -363,7 +363,7 @@ const PatientPortalLogin = () => {
                       value={emailOrPhone}
                       onChange={(e) => setEmailOrPhone(e.target.value)}
                       placeholder="e.g. +44 20 7946 0192 or john@example.com"
-                      className="w-full h-12 pl-11 pr-4 bg-white rounded-xl border border-slate-200 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                      className="w-full h-12 pl-11 pr-4 bg-slate-50/70 hover:bg-slate-50 focus:bg-white rounded-xl border border-slate-300 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-500 placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition shadow-2xs"
                     />
                   </div>
                 </div>

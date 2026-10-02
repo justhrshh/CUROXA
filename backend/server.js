@@ -31,6 +31,8 @@ const goodsReceiptRoutes = require("./routes/goodsReceiptRoutes");
 const hrRoutes = require("./routes/hrRoutes");
 const returnRoutes = require("./routes/returnRoutes");
 const superAdminRoutes = require("./routes/superAdminRoutes");
+const masterManagementRoutes = require("./routes/masterManagementRoutes");
+const hospitalMasterUploadRoutes = require("./routes/hospitalMasterUploadRoutes");
 const emrRoutes = require("./routes/emrRoutes");
 const labTestRoutes = require("./routes/labTestRoutes");
 const pharmacyTicketRoutes = require("./routes/pharmacyTicketRoutes");
@@ -223,6 +225,17 @@ app.use("/api/purchase-orders", checkModule(["pharmacy", "inventory"]), purchase
 app.use("/api/goods-receipts", checkModule(["pharmacy", "inventory"]), goodsReceiptRoutes);
 app.use("/api/hr", hrRoutes);
 app.use("/api/returns", checkModule(["pharmacy", "inventory"]), returnRoutes);
+const {
+  superAdminRouter: superAdminVendorRoutes,
+  superAdminRequestRouter: superAdminVendorRequestRoutes,
+  hospitalRouter: hospitalVendorRoutes
+} = require("./routes/vendorMasterRoutes");
+
+app.use("/api/superadmin/vendors", superAdminVendorRoutes);
+app.use("/api/superadmin/vendor-requests", superAdminVendorRequestRoutes);
+app.use("/api/hospital-vendors", checkModule(["pharmacy", "inventory"]), hospitalVendorRoutes);
+app.use("/api/superadmin/masters/upload", hospitalMasterUploadRoutes);
+app.use("/api/superadmin/masters", masterManagementRoutes);
 app.use("/api/superadmin", superAdminRoutes);
 app.use("/api/emr", checkModule("doctor"), emrRoutes);
 app.use("/api/clinical-services", checkModule(["doctor", "reception"]), clinicalServiceRoutes);

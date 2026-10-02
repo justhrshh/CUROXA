@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api, { clearPortalAuthContext } from '../utils/api';
 import { joinTenantRoom } from '../utils/socket';
 import { convertPdfToImage } from '../utils/pdfHelper';
+import { isPastSlot, isSlotValidForRegistration } from '../utils/dateSlotHelper';
 import curoxaHero3D from '../assets/curoxa_hero_3d.png';
 import curoxaMobileHero3D from '../assets/curoxa_mobile_hero_3d.png';
 import curoxaSidebarLogo from '../assets/quroxa_new_logo.png';
@@ -352,13 +353,19 @@ const PatientDashboard = () => {
 
   const handleUpdateAppointment = async (app) => {
     try {
+      if (app.date && app.time && app.status !== 'Cancelled') {
+        if (!isSlotValidForRegistration(app.date, app.time)) {
+          showToast("Cannot reschedule to a past date or past time slot. Please select a valid upcoming slot.", "error");
+          return;
+        }
+      }
       await api.put(`/appointments/${app._id}`, { status: app.status, time: app.time, date: app.date });
       showToast("Appointment updated successfully", "success");
       setDetailsModalOpen(false);
       fetchData();
     } catch (error) {
       console.error(error);
-      showToast("Failed to update appointment", "error");
+      showToast(error.response?.data?.error || "Failed to update appointment", "error");
     }
   };
 
@@ -1123,6 +1130,10 @@ const PatientDashboard = () => {
 
   const confirmBooking = async () => {
     if (!selectedDoctor) return;
+    if (!isSlotValidForRegistration(appointmentDate, appointmentTime)) {
+      showToast("Cannot book a past date or past time slot. Please select a valid upcoming slot.", "error");
+      return;
+    }
     try {
       setLoading(true);
       const patientIdVal = patientProfile?._id || currentUser.id;
@@ -7071,14 +7082,15 @@ const PatientDashboard = () => {
                             }
 
                             const isFull = bookedCount >= limit;
+                            const isPast = isPastSlot(appointmentDate, time);
                             const isSelected = appointmentTime === time;
                             const displayTime = time.split(/\(Limit:/i)[0].trim();
 
                             return (
                               <div 
                                 key={time} 
-                                className={`time-chip ${isFull ? 'booked' : (isSelected ? 'selected' : 'available')}`}
-                                style={isFull ? {
+                                className={`time-chip ${isFull || isPast ? 'booked' : (isSelected ? 'selected' : 'available')}`}
+                                style={(isFull || isPast) ? {
                                   background: '#F1F5F9',
                                   color: '#94A3B8',
                                   border: '1.5px solid #CBD5E1',
@@ -7086,14 +7098,14 @@ const PatientDashboard = () => {
                                   opacity: 0.6
                                 } : {}}
                                 onClick={() => {
-                                  if (!isFull) {
+                                  if (!isFull && !isPast) {
                                     setAppointmentTime(time);
                                   }
                                 }}
                               >
                                 <div style={{ fontSize: '13px', fontWeight: 700 }}>{displayTime}</div>
                                 <div className="slot-label" style={{ fontSize: '11px', marginTop: '2px', fontWeight: 600 }}>
-                                  {isFull ? 'Fully Booked' : (isSelected ? 'Selected' : 'Available')} ({bookedCount}/{limit})
+                                  {isPast ? 'Past Slot' : (isFull ? 'Fully Booked' : (isSelected ? 'Selected' : 'Available'))} ({bookedCount}/{limit})
                                 </div>
                               </div>
                             );
@@ -7536,12 +7548,13 @@ const PatientDashboard = () => {
                         <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1E293B' }}>Select New Time Slot</label>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(95px, 1fr))', gap: '6px', maxHeight: '120px', overflowY: 'auto', paddingRight: '4px' }}>
                           {(rescheduleAvailability.slots && rescheduleAvailability.slots.length > 0 ? rescheduleAvailability.slots : DEFAULT_TIME_SLOTS).map(time => {
+                            const isPast = isPastSlot(selectedAppointment.date, time);
                             const isSelected = selectedAppointment.time === time;
                             const displayTime = time.split(/\(Limit:/i)[0].trim();
                             return (
-                              <button key={time} type="button" onClick={() => setSelectedAppointment({ ...selectedAppointment, time })}
-                                style={{ minHeight: '34px', padding: '4px 6px', borderRadius: '8px', border: isSelected ? '2px solid #2563EB' : '1px solid #CBD5E1', background: isSelected ? '#EFF6FF' : 'white', color: isSelected ? '#2563EB' : '#1E293B', fontWeight: isSelected ? 800 : 600, fontSize: '11px', cursor: 'pointer' }}>
-                                {displayTime}
+                              <button key={time} type="button" disabled={isPast} onClick={() => { if (!isPast) setSelectedAppointment({ ...selectedAppointment, time }); }}
+                                style={{ minHeight: '34px', padding: '4px 6px', borderRadius: '8px', border: isSelected ? '2px solid #2563EB' : '1px solid #CBD5E1', background: isPast ? '#F1F5F9' : (isSelected ? '#EFF6FF' : 'white'), color: isPast ? '#94A3B8' : (isSelected ? '#2563EB' : '#1E293B'), fontWeight: isSelected ? 800 : 600, fontSize: '11px', cursor: isPast ? 'not-allowed' : 'pointer', opacity: isPast ? 0.6 : 1 }}>
+                                {displayTime} {isPast && '(Past)'}
                               </button>
                             );
                           })}

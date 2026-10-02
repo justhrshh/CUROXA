@@ -1,5 +1,7 @@
 const express = require('express');
 const Vendor = require('../models/Vendor');
+const GlobalVendor = require('../models/GlobalVendor');
+const HospitalVendorAssociation = require('../models/HospitalVendorAssociation');
 const { verifyToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 
@@ -70,13 +72,77 @@ const seedDefaultVendors = async (tenantId) => {
   }
 };
 
-// Get all vendors (scoped to tenant)
+const { hospitalRouter } = require('./vendorMasterRoutes');
+router.use('/master', hospitalRouter);
+
+// Forwarding aliases for hospital vendor operations
+router.get('/hospital', (req, res, next) => {
+  req.url = '/my-vendors' + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '');
+  return hospitalRouter(req, res, next);
+});
+router.get('/global-available', (req, res, next) => {
+  req.url = '/available' + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '');
+  return hospitalRouter(req, res, next);
+});
+router.post('/associate', (req, res, next) => {
+  req.url = '/associate';
+  return hospitalRouter(req, res, next);
+});
+router.post('/request', (req, res, next) => {
+  req.url = '/request';
+  return hospitalRouter(req, res, next);
+});
+router.get('/requests', (req, res, next) => {
+  req.url = '/my-requests' + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '');
+  return hospitalRouter(req, res, next);
+});
+
+// Get all vendors (scoped to tenant - includes associated Global Vendors and tenant vendors)
 router.get('/', async (req, res) => {
   try {
-    // Disabled automatic mock vendor seeding as requested
-    // await seedDefaultVendors(req.tenantId);
-    const vendors = await Vendor.find({ tenantId: req.tenantId }).sort({ name: 1 });
-    res.json(vendors);
+    const list = [];
+    const seenIds = new Set();
+
+    // 1. Fetch associated Global Vendors
+    const associations = await HospitalVendorAssociation.find({
+      tenantId: req.tenantId,
+      status: 'ACTIVE'
+    }).populate('vendorId');
+
+    for (const assoc of associations) {
+      if (assoc.vendorId) {
+        const gv = assoc.vendorId;
+        const vid = gv._id.toString();
+        seenIds.add(vid);
+        list.push({
+          _id: gv._id,
+          name: gv.supplierName,
+          code: gv.supplierCode || gv.supplierId || '',
+          email: gv.emailId || '',
+          phone: gv.primaryContactPersonMobileNo || gv.landline || '',
+          address: [gv.houseNo, gv.street, gv.stateCode, gv.pinCode].filter(Boolean).join(', '),
+          city: gv.stateCode || '',
+          state: gv.stateCode || '',
+          type: gv.supplierType || 'Global Vendor',
+          supplierCategory: gv.supplierCategory || '',
+          organizationType: gv.organizationType || '',
+          status: (gv.activeStatus === 'Yes' || gv.activeStatus === 'ACTIVE') ? 'Active' : 'Inactive',
+          isGlobalVendor: true,
+          medicines: [],
+          purchaseHistory: []
+        });
+      }
+    }
+
+    // 2. Fetch tenant-scoped legacy vendors
+    const legacyVendors = await Vendor.find({ tenantId: req.tenantId }).sort({ name: 1 });
+    for (const lv of legacyVendors) {
+      if (!seenIds.has(lv._id.toString())) {
+        list.push(lv);
+      }
+    }
+
+    res.json(list);
   } catch (error) {
     console.error("Get vendors error:", error);
     res.status(500).json({ error: 'Internal server error' });

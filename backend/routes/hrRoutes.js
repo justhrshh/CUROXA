@@ -946,6 +946,16 @@ router.get("/doctor-availability/:doctorId", verifyToken, async (req, res) => {
     const dateStr = req.query.date; // YYYY-MM-DD
     const slots = doctor.doctorSlots && doctor.doctorSlots.length > 0 ? doctor.doctorSlots : DEFAULT_TIME_SLOTS;
 
+    // Reject past dates
+    if (dateStr) {
+      const { getAppTimezoneDateStr } = require('../utils/dateSlotHelper');
+      const todayStr = getAppTimezoneDateStr();
+      const targetDateStr = getAppTimezoneDateStr(dateStr);
+      if (targetDateStr && targetDateStr < todayStr) {
+        return res.json({ available: false, slots, reason: 'Past Date' });
+      }
+    }
+
     // Check weekly off
     if (dateStr) {
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

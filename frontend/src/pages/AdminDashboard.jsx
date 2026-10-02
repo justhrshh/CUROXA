@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api, { clearPortalAuthContext, performLogout } from '../utils/api';
 import { socket, joinTenantRoom } from '../utils/socket';
 import HRPayroll from './HRPayroll';
+import EmployeeProfileView from '../components/hr/EmployeeProfileView';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import { printPO, printGRN } from '../utils/printDocHelper';
 import curoxaSidebarLogo from '../assets/quroxa_new_logo.png';
@@ -736,6 +737,25 @@ const AdminDashboard = () => {
 
   // View & Edit staff modals state
   const [viewingStaff, setViewingStaff] = useState(null);
+  const [selectedStaffProfile, setSelectedStaffProfile] = useState(null);
+  const [hrAttendanceRecords, setHrAttendanceRecords] = useState([]);
+  const [hrAssets, setHrAssets] = useState([]);
+
+  useEffect(() => {
+    if (selectedStaffProfile) {
+      Promise.allSettled([
+        api.get('/hr/attendance'),
+        api.get('/hr/assets')
+      ]).then(([attRes, assRes]) => {
+        if (attRes.status === 'fulfilled' && Array.isArray(attRes.value?.data)) {
+          setHrAttendanceRecords(attRes.value.data);
+        }
+        if (assRes.status === 'fulfilled' && Array.isArray(assRes.value?.data)) {
+          setHrAssets(assRes.value.data);
+        }
+      }).catch(() => {});
+    }
+  }, [selectedStaffProfile]);
   const [editingStaff, setEditingStaff] = useState(null);
   const [adminCustomSlotInput, setAdminCustomSlotInput] = useState('');
   const [viewingApproval, setViewingApproval] = useState(null);
@@ -2204,7 +2224,15 @@ const AdminDashboard = () => {
     else if (activeTab === 'po-approvals') { main = "PO Approvals"; sub = "Pharmacy & medical supply purchase orders"; }
     else if (activeTab === 'appointments') { main = "Appointments"; sub = "Daily OPD clinic schedule & patient queue"; }
     else if (['patients', 'patient-details'].includes(activeTab)) { main = "Patients"; sub = "Global hospital patient registry & EMR records"; }
-    else if (activeTab === 'workforce') { main = "Workforce"; sub = "Staff directory & active employee accounts"; }
+    else if (activeTab === 'workforce') {
+      if (selectedStaffProfile) {
+        main = "Staff Profile Workspace";
+        sub = `Employee details & metrics for ${selectedStaffProfile.name}`;
+      } else {
+        main = "Workforce";
+        sub = "Staff directory & active employee accounts";
+      }
+    }
     else if (activeTab === 'financials') { main = "Revenue"; sub = "Hospital financial ledger & revenue analytics"; }
     else if (activeTab === 'audit') { main = "Audit Logs"; sub = "Security audit trail & administrative access logs"; }
     else if (activeTab === 'services-catalog') { main = "Pricing & Procedures Catalog"; sub = "Configure procedure costs & OPD fees"; }
@@ -2474,6 +2502,7 @@ const AdminDashboard = () => {
         if (user.role === 'receptionist') avatarColor = 'gold';
         if (user.role === 'hr') avatarColor = 'teal';
         return {
+          ...user,
           id: user._id || user.id,
           name: user.name,
           role: user.role,
@@ -2821,6 +2850,163 @@ const AdminDashboard = () => {
       setTimeout(() => setSuccess(''), 3000);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const formatEmployeeForProfile = (user) => {
+    if (!user) return null;
+    const userId = user._id || user.id || user.staff_id;
+    const defaultManagerName = currentUser?.name ? `${currentUser.name} (Administrator)` : 'Harsh Gupta (Administrator)';
+    const defaultManagerId = currentUser?.staff_id || currentUser?.id || 'ADMIN';
+
+    let formattedJoiningDate = '';
+    if (user.joiningDate) {
+      formattedJoiningDate = typeof user.joiningDate === 'string' && user.joiningDate.includes('T')
+        ? user.joiningDate.split('T')[0]
+        : String(user.joiningDate);
+    } else if (user.createdAt) {
+      formattedJoiningDate = new Date(user.createdAt).toISOString().split('T')[0];
+    } else {
+      formattedJoiningDate = new Date().toISOString().split('T')[0];
+    }
+
+    const roleName = user.role ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'Doctor';
+
+    return {
+      id: userId,
+      staff_id: user.staff_id || userId,
+      name: user.name,
+      email: user.email || '',
+      phone: user.phone || '',
+      photoUrl: user.avatar || user.photoUrl || '',
+      gender: user.gender || '',
+      dob: user.dob || '',
+      bloodGroup: user.bloodGroup || '',
+      address: user.address || '',
+      emergencyContact: user.emergencyContact || { name: '', relation: '', phone: '' },
+      aadhaar: user.aadhaar || '',
+      pan: user.pan || '',
+      department: user.department || user.specialty || user.dept || (user.role === 'doctor' ? 'General Medicine' : user.role === 'hr' ? 'Hospital Administration' : 'Administration'),
+      designation: user.designation || (user.role === 'doctor' ? 'Consultant Practitioner' : user.role === 'hr' ? 'HR Manager' : roleName),
+      employmentType: user.employmentType || 'Full-Time',
+      joiningDate: formattedJoiningDate,
+      reportingManagerId: user.reportingManagerId || defaultManagerId,
+      reportingManagerName: user.reportingManagerName || defaultManagerName,
+      workLocation: user.workLocation || 'Main Wing - Sunrise Clinic',
+      shiftName: user.shiftName || 'General Shift',
+      grade: user.grade || 'G1',
+      status: user.status || 'Active',
+      role: user.role || 'doctor',
+      noticePeriodDays: user.noticePeriodDays !== undefined ? user.noticePeriodDays : 30,
+      experienceYears: user.experienceYears !== undefined ? user.experienceYears : 5,
+      assignedRoles: user.assignedRoles || [roleName],
+      permissions: user.permissions || {},
+      bankDetails: user.bankDetails || {
+        accountHolder: user.name,
+        accountNumber: '',
+        bankName: '',
+        ifsc: ''
+      },
+      ctcAnnual: user.ctcAnnual !== undefined && user.ctcAnnual !== null && !isNaN(user.ctcAnnual) ? Number(user.ctcAnnual) : 0,
+      pfEnrolled: user.pfEnrolled !== undefined ? user.pfEnrolled : true,
+      esiEnrolled: user.esiEnrolled !== undefined ? user.esiEnrolled : false,
+      taxBracket: user.taxBracket || '20% Bracket',
+      leaveBalance: user.leaveBalance || {
+        sick: 12,
+        casual: 10,
+        annual: 15,
+        maternity: 90,
+        paternity: 14,
+        compOff: 5,
+        lwp: 0
+      },
+      doctorSlots: user.doctorSlots || [],
+      weeklyOff: user.weeklyOff || [],
+      carriedForwardLeaves: user.carriedForwardLeaves || 0,
+      monthlyLeaveAllocation: user.monthlyLeaveAllocation || { sick: 1, casual: 1, annual: 1.25 },
+      documents: user.documents || [],
+      consultationFee: user.consultationFee
+    };
+  };
+
+  const handleUpdateStaffFromProfile = async (id, updatedData) => {
+    try {
+      const existing = staff.find(s => s.id === id || s._id === id) || {};
+      const merged = { ...existing, ...updatedData };
+      const payload = {
+        name: merged.name,
+        email: merged.email,
+        role: merged.assignedRoles?.[0]?.toLowerCase() || merged.role?.toLowerCase() || 'doctor',
+        specialty: merged.department || merged.specialty,
+        status: merged.status,
+        phone: merged.phone,
+        avatar: merged.photoUrl,
+        gender: merged.gender,
+        dob: merged.dob,
+        bloodGroup: merged.bloodGroup,
+        address: merged.address,
+        emergencyContact: merged.emergencyContact,
+        aadhaar: merged.aadhaar,
+        pan: merged.pan,
+        department: merged.department,
+        designation: merged.designation,
+        employmentType: merged.employmentType,
+        joiningDate: merged.joiningDate,
+        reportingManagerId: merged.reportingManagerId,
+        reportingManagerName: merged.reportingManagerName,
+        workLocation: merged.workLocation,
+        shiftName: merged.shiftName,
+        grade: merged.grade,
+        noticePeriodDays: merged.noticePeriodDays,
+        experienceYears: merged.experienceYears,
+        assignedRoles: merged.assignedRoles,
+        permissions: merged.permissions,
+        bankDetails: merged.bankDetails,
+        ctcAnnual: merged.ctcAnnual,
+        pfEnrolled: merged.pfEnrolled,
+        esiEnrolled: merged.esiEnrolled,
+        taxBracket: merged.taxBracket,
+        leaveBalance: merged.leaveBalance,
+        doctorSlots: merged.doctorSlots,
+        weeklyOff: merged.weeklyOff,
+        carriedForwardLeaves: merged.carriedForwardLeaves,
+        monthlyLeaveAllocation: merged.monthlyLeaveAllocation,
+        documents: merged.documents,
+        consultationFee: merged.consultationFee !== undefined && merged.consultationFee !== '' ? Number(merged.consultationFee) : undefined
+      };
+      if (merged.password) {
+        payload.password = merged.password;
+      }
+      await api.put(`/admin/users/${id}`, payload);
+      await fetchStaff();
+      setSelectedStaffProfile(prev => prev ? { ...prev, ...merged } : null);
+    } catch (err) {
+      console.error('Failed to update employee from profile view:', err);
+      throw err;
+    }
+  };
+
+  const handleApproveLeaveFromProfile = async (id) => {
+    try {
+      const match = (serverLeaves || []).find(req => req._id === id || req.id === id);
+      if (!match) return;
+      const updatedStatus = { status: 'Approved', approvedBy: currentUser?.name || 'Administrator', approvedDate: new Date().toISOString().split('T')[0] };
+      const res = await api.put(`/hr/leaves/${match._id || id}`, updatedStatus);
+      setServerLeaves(prev => prev.map(item => ((item._id === id || item.id === id) ? res.data : item)));
+    } catch (err) {
+      console.error('Failed to approve leave from profile:', err);
+    }
+  };
+
+  const handleRejectLeaveFromProfile = async (id) => {
+    try {
+      const match = (serverLeaves || []).find(req => req._id === id || req.id === id);
+      if (!match) return;
+      const updatedStatus = { status: 'Rejected', approvedBy: currentUser?.name || 'Administrator', approvedDate: new Date().toISOString().split('T')[0] };
+      const res = await api.put(`/hr/leaves/${match._id || id}`, updatedStatus);
+      setServerLeaves(prev => prev.map(item => ((item._id === id || item.id === id) ? res.data : item)));
+    } catch (err) {
+      console.error('Failed to reject leave from profile:', err);
     }
   };
 
@@ -11290,7 +11476,7 @@ const AdminDashboard = () => {
                     )}
                     <div 
                       className={`sidebar-link ${activeTab === 'workforce' ? 'active' : ''}`}
-                      onClick={() => setActiveTab('workforce')}
+                      onClick={() => { setActiveTab('workforce'); setSelectedStaffProfile(null); }}
                     >
                       {activeTab === 'workforce' && (
                         <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
@@ -13472,7 +13658,22 @@ const AdminDashboard = () => {
 
         {/* 5. Enterprise Workforce / Staff Directory */}
         {activeTab === 'workforce' && (
-          <div className="admin-dashboard-content active" style={{ animation: 'slideUp 0.35s ease-out' }} onClick={() => setOpenStaffMoreMenuId(null)}>
+          selectedStaffProfile ? (
+            <div className="admin-dashboard-content active p-0" style={{ animation: 'adminFadeIn 0.15s ease-out' }}>
+              <EmployeeProfileView 
+                employee={formatEmployeeForProfile(selectedStaffProfile)}
+                allLeaveRequests={serverLeaves || []}
+                allAttendanceRecords={hrAttendanceRecords || []}
+                allAssets={hrAssets || []}
+                onBack={() => setSelectedStaffProfile(null)}
+                onUpdateEmployee={handleUpdateStaffFromProfile}
+                onApproveLeave={handleApproveLeaveFromProfile}
+                onRejectLeave={handleRejectLeaveFromProfile}
+                isAdminOrHR={true}
+              />
+            </div>
+          ) : (
+            <div className="admin-dashboard-content active" style={{ animation: 'slideUp 0.35s ease-out' }} onClick={() => setOpenStaffMoreMenuId(null)}>
             {(() => {
               // --- HELPERS & AGGREGATIONS ---
               const activeTodayCount = staff.filter(s => {
@@ -14099,7 +14300,7 @@ const AdminDashboard = () => {
                                       {/* View Profile */}
                                       <button
                                         className="staff-btn-view"
-                                        onClick={() => setViewingStaff(item)}
+                                        onClick={() => setSelectedStaffProfile(item)}
                                         title="View Full Staff Profile"
                                       >
                                         View Profile
@@ -14257,7 +14458,8 @@ const AdminDashboard = () => {
               );
             })()}
           </div>
-        )}
+        )
+      )}
 
         {/* 6. Enterprise-Grade Alerts & Tasks Operational Control Center */}
         {activeTab === 'supply' && (

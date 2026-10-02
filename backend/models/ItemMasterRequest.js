@@ -33,6 +33,72 @@ const itemMasterRequestSchema = new mongoose.Schema({
     trim: true
   },
 
+  // Request classification: New Global Item vs Assign Existing Global Item
+  requestType: {
+    type: String,
+    enum: ['NEW_GLOBAL_ITEM', 'ASSIGN_EXISTING_GLOBAL_ITEM'],
+    default: 'NEW_GLOBAL_ITEM',
+    index: true
+  },
+  // If requesting assignment of an existing global item
+  masterItemId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ItemMaster',
+    default: null,
+    index: true
+  },
+
+  // Category and Department for request hierarchy
+  category: {
+    type: String,
+    trim: true,
+    index: true,
+    default: ''
+  },
+  department: {
+    type: String,
+    trim: true,
+    index: true,
+    default: ''
+  },
+
+  // Hospital-specific requested pricing (immutable post-submission)
+  requestedMrp: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  requestedNetRate: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  requestedHospitalCost: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
+  // Approved pricing set by SuperAdmin (null until reviewed)
+  approvedMrp: {
+    type: Number,
+    default: null
+  },
+  approvedNetRate: {
+    type: Number,
+    default: null
+  },
+  approvedHospitalCost: {
+    type: Number,
+    default: null
+  },
+
+  // Category-specific attributes per Master Schema Registry
+  categoryData: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  },
+
   // Requester details
   requestedBy: {
     type: String,
@@ -49,60 +115,18 @@ const itemMasterRequestSchema = new mongoose.Schema({
     default: ''
   },
 
+  // Flag if converted from NEW_GLOBAL_ITEM to ASSIGN_EXISTING_GLOBAL_ITEM
+  wasConvertedFromNewItem: {
+    type: Boolean,
+    default: false
+  },
+
   // ==============================
-  // Proposed Item Details
+  // Proposed Item Details (Dynamic across all categories)
   // ==============================
   proposedItem: {
-    // Identification
-    genericName: { type: String, required: true, trim: true },
-    brandName: { type: String, default: '', trim: true },
-    manufacturer: { type: String, default: '', trim: true },
-    itemType: {
-      type: String,
-      enum: ['Medicine', 'Consumable', 'Reagent', 'Asset', 'Non-Consumable'],
-      default: 'Medicine'
-    },
-    categoryType: { type: String, default: '', trim: true },
-    departmentType: { type: String, default: '', trim: true },
-    hsnCode: { type: String, default: '', trim: true },
-    itemDescription: { type: String, default: '' },
-
-    // Medicine-specific (only used when itemType === 'Medicine')
-    composition: { type: String, default: '' },
-    strength: { type: String, default: '' },
-    strengthUnit: { type: String, default: '' },
-    dosageForm: { type: String, default: '' },
-    routeOfAdministration: { type: String, default: '' },
-    scheduleClassification: { type: String, default: '' },
-
-    // Consumable & Material specific
-    material: { type: String, default: '' },
-    sizeDimensions: { type: String, default: '' },
-    sterility: { type: String, default: '' },
-    disposalType: { type: String, default: '' },
-
-    // Reagent specific
-    machineCompatibility: { type: String, default: '' },
-    catalogNo: { type: String, default: '' },
-    testPackVolume: { type: String, default: '' },
-
-    // Asset specific
-    makeModelNo: { type: String, default: '' },
-    itemSpecification: { type: String, default: '' },
-    warrantyMonths: { type: Number, default: 0 },
-    maintenanceCycle: { type: String, default: '' },
-
-    // Packaging proposal
-    purchasedUnit: { type: String, default: 'Box' },
-    consumptionUnit: { type: String, default: 'Unit' },
-    converterFactor: { type: Number, default: 1 },
-    packSizeDescription: { type: String, default: '' },
-    packagingHierarchy: { type: mongoose.Schema.Types.Mixed, default: null },
-
-    // Storage
-    storageTemperature: { type: String, default: 'Room Temperature' },
-    isExpirable: { type: Boolean, default: true },
-    defaultGst: { type: Number, default: 12 }
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   },
 
   // Reason / justification for the request
@@ -114,8 +138,8 @@ const itemMasterRequestSchema = new mongoose.Schema({
   // Workflow status
   status: {
     type: String,
-    enum: ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED'],
-    default: 'DRAFT',
+    enum: ['DRAFT', 'SUBMITTED', 'PENDING', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED'],
+    default: 'PENDING',
     index: true
   },
 
@@ -173,5 +197,18 @@ const itemMasterRequestSchema = new mongoose.Schema({
 itemMasterRequestSchema.index({ requestNo: 1 }, { unique: true });
 itemMasterRequestSchema.index({ tenantId: 1, status: 1, createdAt: -1 });
 itemMasterRequestSchema.index({ status: 1, createdAt: -1 }); // Super Admin list view
+
+// Partial unique index: at most ONE active Path-A request per tenant + masterItemId
+itemMasterRequestSchema.index(
+  { tenantId: 1, masterItemId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      requestType: 'ASSIGN_EXISTING_GLOBAL_ITEM',
+      status: { $in: ['PENDING', 'UNDER_REVIEW', 'SUBMITTED'] }
+    },
+    name: 'unique_active_path_a_request_per_tenant_item'
+  }
+);
 
 module.exports = mongoose.model('ItemMasterRequest', itemMasterRequestSchema);

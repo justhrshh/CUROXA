@@ -11,6 +11,7 @@ import { generateReceiptSlipPdf, fetchLetterheadConfig } from '../utils/exportEn
 import { triggerPrintPrescriptionDocument } from '../utils/prescriptionPrinter';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import { cleanHtmlText } from '../utils/textHelper';
+import { getLocalDateString, isPastSlot, isSlotValidForRegistration } from '../utils/dateSlotHelper';
 
 
 const permissionNames = {
@@ -635,7 +636,7 @@ const ReceptionistDashboard = () => {
   
   const [patientPhoto, setPatientPhoto] = useState(null);
   const [formData, setFormData] = useState({
-    name: '', age: '', ageMonths: '', ageDays: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: ''
+    title: '', name: '', age: '', ageMonths: '', ageDays: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: ''
   });
 
   const [dpdpConsent, setDpdpConsent] = useState({ emrCreation: true, dataSharing: false });
@@ -649,7 +650,7 @@ const ReceptionistDashboard = () => {
   const availableSymptoms = ['Fever', 'Headache', 'Body Pain', 'Fatigue', 'Weakness', 'Cough', 'Nausea'];
   
   const [selectedSlot, setSelectedSlot] = useState('');
-  const [bookingDate, setBookingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [bookingDate, setBookingDate] = useState(getLocalDateString());
 
   // Doctor availability state for appointment booking
   const DEFAULT_RECEPTION_SLOTS = [
@@ -2176,6 +2177,7 @@ const ReceptionistDashboard = () => {
 
       if (!isExistingPatient) {
         const pRes = await api.post('/patients', {
+          title: formData.title || '',
           name: formData.name,
           age: formData.age,
           gender: formData.gender,
@@ -2284,6 +2286,7 @@ const ReceptionistDashboard = () => {
 
       if (!isExistingPatient) {
         const pRes = await api.post('/patients', {
+          title: formData.title || '',
           name: formData.name,
           age: formData.age,
           gender: formData.gender,
@@ -2874,7 +2877,7 @@ const ReceptionistDashboard = () => {
         setFormData(draftData);
         showToast("Restored unsaved draft for this number.", "info");
       } else {
-        setFormData({ name: '', age: '', gender: '', contact: contactToUse || '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: '' });
+        setFormData({ title: '', name: '', age: '', gender: '', contact: contactToUse || '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: '' });
       }
     }
     if (tabId === 'new-indent') {
@@ -3203,6 +3206,17 @@ const ReceptionistDashboard = () => {
         return;
       }
 
+      // Validate no backdated or past slots in all appointments
+      for (let i = 0; i < allApptsToBook.length; i++) {
+        const appt = allApptsToBook[i];
+        const check = isSlotValidForRegistration(appt.date, appt.time);
+        if (!check.valid) {
+          showToast(check.reason, "error");
+          setLoading(false);
+          return;
+        }
+      }
+
       if (!bookingPaymentMethod) {
         showToast("Please select a Payment Method before confirming.", "error");
         setLoading(false);
@@ -3230,6 +3244,7 @@ const ReceptionistDashboard = () => {
       let patientObj = isExistingPatient ? selectedPatient : null;
       if (!isExistingPatient) {
         const patientRes = await api.post('/patients', {
+          title: formData.title || '',
           name: formData.name,
           age: parseInt(formData.age) || 0,
           ageMonths: parseInt(formData.ageMonths) || 0,
@@ -3256,6 +3271,7 @@ const ReceptionistDashboard = () => {
       } else {
         try {
           await api.put(`/patients/${selectedPatient._id}`, {
+            title: selectedPatient.title || formData.title || '',
             name: selectedPatient.name,
             age: selectedPatient.age,
             gender: selectedPatient.gender,
@@ -3406,7 +3422,7 @@ const ReceptionistDashboard = () => {
       showToast(isAddOnProcessed ? "Add-On Appointment registered and existing visit billing updated successfully!" : `${apptsToCreate.length} Appointment(s) registered & Payment completed successfully!`, "success");
 
       // Reset Form State
-      setFormData({ name: '', age: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: '' });
+      setFormData({ title: '', name: '', age: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: '' });
       setBookingDate(getLocalDateString());
       setSelectedSlot('');
       setSelectedSymptoms([]);
@@ -3509,12 +3525,17 @@ const ReceptionistDashboard = () => {
       showToast("Please choose both date and time slot for rescheduling", "error");
       return;
     }
+    const check = isSlotValidForRegistration(bookingDate, selectedSlot);
+    if (!check.valid) {
+      showToast(check.reason, "error");
+      return;
+    }
     try {
       setLoading(true);
       await api.put(`/appointments/${apptId}`, { date: bookingDate, time: selectedSlot, status: 'Rescheduled' });
       showToast("Appointment rescheduled successfully!", "success");
       
-      setFormData({ name: '', age: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: '' });
+      setFormData({ title: '', name: '', age: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: '' });
       setSelectedSymptoms([]);
       setIsExistingPatient(null);
       setSearchPatientQuery('');
@@ -3754,7 +3775,7 @@ const ReceptionistDashboard = () => {
   };
 
   const resetRegistrationForm = () => {
-    setFormData({ name: '', age: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: '' });
+    setFormData({ title: '', name: '', age: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: '' });
     setSelectedSymptoms([]);
     setIsExistingPatient(null);
     setSearchPatientQuery('');
@@ -3765,7 +3786,7 @@ const ReceptionistDashboard = () => {
     setVerificationOtp('');
     setAdditionalApptsList([]);
     setSelectedSlot('');
-    setBookingDate(new Date().toISOString().split('T')[0]);
+    setBookingDate(getLocalDateString());
     setReschedulingAppointment(null);
     setVitalTemp('');
     setVitalPulse('');
@@ -3781,6 +3802,7 @@ const ReceptionistDashboard = () => {
     if (!selectedPatient) return;
     const pat = { ...selectedPatient };
     setFormData({
+      title: pat.title || '',
       name: pat.name,
       age: pat.age,
       gender: pat.gender,
@@ -4496,10 +4518,49 @@ const ReceptionistDashboard = () => {
           margin-left: 76px !important;
         }
 
+        .main-content.registration-fullscreen {
+          position: fixed !important;
+          top: 76px !important;
+          bottom: 0 !important;
+          left: 260px !important;
+          right: 0 !important;
+          width: auto !important;
+          height: auto !important;
+          min-height: 0 !important;
+          max-height: none !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+          background-color: #F1F5F9 !important;
+          background-image: none !important;
+          z-index: 10 !important;
+          display: flex !important;
+          flex-direction: column !important;
+        }
+
+        .main-content.registration-fullscreen.collapsed {
+          left: 76px !important;
+        }
+
+        .main-content.registration-fullscreen .tab-content {
+          padding: 0 !important;
+          margin: 0 !important;
+          height: 100% !important;
+          width: 100% !important;
+          flex: 1 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+        }
+
         @media (max-width: 1024px) {
           .main-content {
             margin-left: 0 !important;
             padding: 16px 14px 90px 14px !important;
+          }
+          .main-content.registration-fullscreen {
+            left: 0 !important;
+            padding: 0 !important;
           }
         }
 
@@ -5624,7 +5685,15 @@ const ReceptionistDashboard = () => {
 
       )}
 
-      <div className={"main-content " + (activeTab === 'hr-payroll' ? "fullscreen-portal" : (isSidebarCollapsed ? "collapsed" : ""))} data-lenis-prevent>
+      <div 
+        className={
+          "main-content" +
+          (activeTab === 'hr-payroll' ? " fullscreen-portal" : "") +
+          (activeTab === 'registration-form' ? " registration-fullscreen" : "") +
+          (isSidebarCollapsed ? " collapsed" : "")
+        } 
+        data-lenis-prevent
+      >
         {activeTab === 'hr-payroll' && (
           <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', padding: 0 }}>
             <HRPayroll onExit={() => setActiveTab('dash')} />
@@ -8086,6 +8155,7 @@ const ReceptionistDashboard = () => {
                           title="Edit Patient Info"
                           onClick={() => {
                             setFormData({
+                              title: selectedPatient.title || '',
                               name: selectedPatient.name,
                               age: selectedPatient.age,
                               gender: selectedPatient.gender,
@@ -9975,213 +10045,712 @@ const ReceptionistDashboard = () => {
 
                                                                         {/* REGISTRATION FORM TAB */}
         {activeTab === 'registration-form' && (
-          <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-              <h1 style={{ fontSize: '16px', fontWeight: 800, color: '#1A1D23', margin: 0 }}>Registration and appointment</h1>
-            </div>
+          <div className="tab-content active" style={{ height: '100%', width: '100%', padding: 0, margin: 0, overflow: 'hidden' }}>
 
             {isExistingPatient === null ? (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 120px)' }}>
-                <div style={{ width: '600px', padding: '40px', borderRadius: '16px', background: 'white', border: '1px solid #E2E8F0', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)' }}>
-                  
-                  {/* Header: User Icon + Title + Subtitle */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px' }}>
-                    <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#EFF6FF', color: '#3B82F6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <i data-lucide="user" style={{ width: '32px', height: '32px' }}></i>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                flex: 1,
+                width: '100%',
+                background: '#F8FAFC',
+                borderRadius: 0,
+                border: 'none',
+                boxShadow: 'none',
+                overflow: 'hidden'
+              }}>
+                {/* Top Command Bar */}
+                <div style={{
+                  padding: '12px 20px',
+                  background: 'linear-gradient(90deg, #FFFFFF 0%, #F8FAFC 100%)',
+                  borderBottom: '1px solid #E2E8F0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexShrink: 0
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 8px rgba(37,99,235,0.25)'
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>
+                      </svg>
                     </div>
                     <div>
-                      <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', margin: '0 0 8px 0', fontFamily: "'Inter', sans-serif" }}>Registered Patient</h2>
-                      <p style={{ fontSize: '14px', color: '#64748B', margin: 0, fontWeight: 500 }}>Search and select an existing patient to book an appointment.</p>
+                      <h1 style={{ margin: 0, fontSize: '15px', fontWeight: 850, color: '#0F172A', letterSpacing: '-0.01em' }}>
+                        Patient Intake & Appointment Dispatch
+                      </h1>
+                      <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>
+                        Search patient by 10-digit mobile number or Patient ID, or register a new walk-in patient
+                      </div>
                     </div>
                   </div>
 
-                  {/* Search Field with magnifying glass on the right */}
-                  <div style={{ position: 'relative', marginBottom: '8px' }}>
-                    <input
-                      type="text"
-                      placeholder="Search by Patient ID or Phone Number"
-                      style={{
-                        height: '56px',
-                        paddingRight: '56px',
-                        paddingLeft: '20px',
-                        borderRadius: '12px',
-                        fontSize: '16px',
-                        fontWeight: 600,
-                        border: '2px solid #CBD5E1',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        outline: 'none',
-                        transition: 'border-color 0.2s',
-                        color: '#0F172A'
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: '#475569',
+                      background: '#F1F5F9',
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #E2E8F0',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                      Total Registered: <strong style={{ color: '#0F172A' }}>{patientsList.length}</strong>
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPatient(null);
+                        const isPurePhone = /^\d{1,10}$/.test(searchPatientQuery.trim());
+                        setFormData({
+                          title: '',
+                          name: !isPurePhone ? searchPatientQuery.trim() : '',
+                          age: '',
+                          gender: '',
+                          contact: isPurePhone ? searchPatientQuery.trim() : '',
+                          email: '',
+                          doctorId: '',
+                          bloodGroup: '',
+                          address: '',
+                          medicalHistory: '',
+                          referredBy: '',
+                          allergies: 'None',
+                          currentMedications: ''
+                        });
+                        setIsExistingPatient(false);
+                        setSearchPatientQuery('');
                       }}
-                      onFocus={e => e.target.style.borderColor = '#3B82F6'}
-                      onBlur={e => e.target.style.borderColor = '#CBD5E1'}
-                      value={searchPatientQuery}
-                      onChange={e => setSearchPatientQuery(e.target.value)}
-                    />
-                    <i data-lucide="search" style={{ position: 'absolute', right: '20px', top: '18px', color: '#94A3B8', width: '20px', height: '20px' }}></i>
+                      style={{
+                        background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        borderRadius: '9px',
+                        padding: '8px 16px',
+                        fontSize: '12.5px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 2px 10px rgba(16, 185, 129, 0.25)',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseOver={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                      onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      + Register New Walk-in Patient
+                    </button>
+                  </div>
+                </div>
+
+                {/* Main 2-Column Workstation Layout */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '360px 1fr',
+                  gap: '16px',
+                  padding: '16px',
+                  flex: 1,
+                  minHeight: 0,
+                  overflow: 'hidden'
+                }}>
+                  {/* Left Column: Search & Quick Actions */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', height: '100%', overflowY: 'auto' }}>
+                    {/* Search Card */}
+                    <div style={{
+                      background: '#FFFFFF',
+                      borderRadius: '12px',
+                      border: '1px solid #E2E8F0',
+                      padding: '16px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                          Patient Quick Lookup
+                        </span>
+                        {/* Auto-detect Mode Pill */}
+                        {(() => {
+                          const val = searchPatientQuery.trim();
+                          if (!val) {
+                            return (
+                              <span style={{ fontSize: '10.5px', background: '#F1F5F9', color: '#64748B', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                                Mobile or Patient ID
+                              </span>
+                            );
+                          }
+                          const isDigits = /^\d+$/.test(val);
+                          if (isDigits) {
+                            const isComplete = val.length === 10;
+                            return (
+                              <span style={{
+                                fontSize: '10.5px',
+                                background: isComplete ? '#ECFDF5' : '#EFF6FF',
+                                color: isComplete ? '#059669' : '#2563EB',
+                                border: isComplete ? '1px solid #A7F3D0' : '1px solid #BFDBFE',
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                fontWeight: 800
+                              }}>
+                                📱 Mobile ({val.length}/10){isComplete ? ' ✓' : ''}
+                              </span>
+                            );
+                          } else {
+                            return (
+                              <span style={{
+                                fontSize: '10.5px',
+                                background: '#F5F3FF',
+                                color: '#7C3AED',
+                                border: '1px solid #DDD6FE',
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                fontWeight: 800
+                              }}>
+                                🆔 Patient ID ({val.length}/25)
+                              </span>
+                            );
+                          }
+                        })()}
+                      </div>
+
+                      {/* Strict Search Input */}
+                      <div style={{ position: 'relative', marginBottom: '8px' }}>
+                        <input
+                          type="text"
+                          placeholder="Enter 10-digit Mobile or Patient ID..."
+                          style={{
+                            height: '44px',
+                            width: '100%',
+                            paddingLeft: '14px',
+                            paddingRight: searchPatientQuery ? '68px' : '36px',
+                            borderRadius: '10px',
+                            fontSize: '13px',
+                            fontWeight: 650,
+                            border: '1.5px solid #CBD5E1',
+                            background: '#FFFFFF',
+                            color: '#0F172A',
+                            outline: 'none',
+                            boxSizing: 'border-box',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onFocus={e => {
+                            e.target.style.borderColor = '#2563EB';
+                            e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.12)';
+                          }}
+                          onBlur={e => {
+                            e.target.style.borderColor = '#CBD5E1';
+                            e.target.style.boxShadow = 'none';
+                          }}
+                          value={searchPatientQuery}
+                          onChange={e => {
+                            let val = e.target.value.trimStart();
+                            if (!val) {
+                              setSearchPatientQuery('');
+                              return;
+                            }
+                            // If first char is digit: strictly numbers only, max 10 digits
+                            if (/^\d/.test(val)) {
+                              val = val.replace(/\D/g, '').slice(0, 10);
+                            } else {
+                              // If letters/alphanumeric: patient ID format (letters, numbers, -, _, /), max 25 chars
+                              val = val.replace(/[^a-zA-Z0-9\-_/]/g, '').slice(0, 25);
+                            }
+                            setSearchPatientQuery(val);
+                          }}
+                        />
+
+                        {searchPatientQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setSearchPatientQuery('')}
+                            style={{
+                              position: 'absolute',
+                              right: '34px',
+                              top: '11px',
+                              background: '#F1F5F9',
+                              border: 'none',
+                              color: '#64748B',
+                              width: '22px',
+                              height: '22px',
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              fontWeight: 900
+                            }}
+                            title="Clear search"
+                          >
+                            ×
+                          </button>
+                        )}
+
+                        <div style={{ position: 'absolute', right: '12px', top: '13px', color: '#94A3B8', pointerEvents: 'none' }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '11px', color: '#64748B', lineHeight: '1.4' }}>
+                        <span style={{ fontWeight: 700, color: '#334155' }}>Input Rules: </span>
+                        Digits only (up to 10 numbers) for Mobile, or Alphanumeric (e.g. PAT-2026-0001) for Patient ID.
+                      </div>
+                    </div>
+
+                    {/* Direct Walk-in Intake Card */}
+                    <div style={{
+                      background: 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)',
+                      borderRadius: '12px',
+                      border: '1.5px solid #BBF7D0',
+                      padding: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: '#16A34A', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 850, color: '#166534' }}>New Walk-in Patient</div>
+                          <div style={{ fontSize: '11px', color: '#15803D' }}>Patient is visiting for the first time?</div>
+                        </div>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '11.5px', color: '#166534', lineHeight: '1.4' }}>
+                        Skip lookup and directly register demographic details, medical history, initial vitals and assign an OPD token.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPatient(null);
+                          const isPurePhone = /^\d{1,10}$/.test(searchPatientQuery.trim());
+                          setFormData({
+                            title: '',
+                            name: !isPurePhone ? searchPatientQuery.trim() : '',
+                            age: '',
+                            gender: '',
+                            contact: isPurePhone ? searchPatientQuery.trim() : '',
+                            email: '',
+                            doctorId: '',
+                            bloodGroup: '',
+                            address: '',
+                            medicalHistory: '',
+                            referredBy: '',
+                            allergies: 'None',
+                            currentMedications: ''
+                          });
+                          setIsExistingPatient(false);
+                          setSearchPatientQuery('');
+                        }}
+                        style={{
+                          background: '#16A34A',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '9px 12px',
+                          fontSize: '12px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          marginTop: '4px',
+                          boxShadow: '0 2px 6px rgba(22, 163, 74, 0.3)',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseOver={e => e.currentTarget.style.background = '#15803D'}
+                        onMouseOut={e => e.currentTarget.style.background = '#16A34A'}
+                      >
+                        Start New Patient Intake →
+                      </button>
+                    </div>
+
+                    {/* Desk Intake Guidelines */}
+                    <div style={{
+                      background: '#FFFFFF',
+                      borderRadius: '12px',
+                      border: '1px solid #E2E8F0',
+                      padding: '14px 16px',
+                      fontSize: '11.5px',
+                      color: '#475569',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{ fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        Reception Desk Instructions
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+                        <span style={{ color: '#2563EB', fontWeight: 900 }}>•</span>
+                        <span>Type 10 digits to immediately filter by patient phone number.</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+                        <span style={{ color: '#2563EB', fontWeight: 900 }}>•</span>
+                        <span>Type patient ID (e.g. PAT-XXXX) to locate existing medical records.</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+                        <span style={{ color: '#2563EB', fontWeight: 900 }}>•</span>
+                        <span>Use <strong>+ Family</strong> to register another family member sharing the same contact number.</span>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Search Autocomplete List */}
-                  {searchPatientQuery.trim().length > 0 && (
-                    <div data-lenis-prevent style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px', background: 'white', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', marginTop: '8px' }}>
-                      {patientsList.filter(p => {
-                        const q = searchPatientQuery.toLowerCase();
-                        return p.name.toLowerCase().includes(q) || p.contact.toLowerCase().includes(q) || p._id.toLowerCase().includes(q);
-                      }).length === 0 ? (
-                        <div
-                          style={{ padding: '24px', textAlign: 'center', color: '#64748B', cursor: 'pointer', transition: '0.2s', background: '#F8FAFC' }}
-                          onClick={() => {
-                            setSelectedPatient(null);
-                            const isNumeric = /^\d+$/.test(searchPatientQuery.trim());
-                            setFormData({
-                              name: !isNumeric ? searchPatientQuery : '',
-                              age: '',
-                              gender: '',
-                              contact: isNumeric ? searchPatientQuery : '',
-                              email: '',
-                              doctorId: formData.doctorId,
-                              bloodGroup: '',
-                              address: '',
-                              medicalHistory: '',
-                              referredBy: '',
-                              allergies: 'None',
-                              currentMedications: ''
-                            });
-                            setIsExistingPatient(false);
-                            setSearchPatientQuery('');
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#F0FDF4'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = '#F8FAFC'}
-                        >
-                          <div style={{ marginBottom: '8px', fontSize: '15px', fontWeight: 600 }}>No matching patients found.</div>
-                          <div style={{ color: '#10B981', fontWeight: 700, fontSize: '16px' }}>Click here to register a new patient &rarr;</div>
-                        </div>
-                      ) : (
-                        patientsList.filter(p => {
-                          const q = searchPatientQuery.toLowerCase();
-                          return p.name.toLowerCase().includes(q) || p.contact.toLowerCase().includes(q) || p._id.toLowerCase().includes(q);
-                        }).map(p => (
-                          <div
-                            key={p._id}
-                            style={{ padding: '16px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', transition: '0.2s' }}
-                            onClick={() => {
-                              setSelectedPatient(p);
-                              setFormData({
-                                name: p.name,
-                                age: p.age,
-                                gender: p.gender,
-                                contact: p.contact,
-                                email: p.email || '',
-                                bloodGroup: p.bloodGroup || 'O+',
-                                address: p.address || '',
-                                medicalHistory: p.medicalHistory ? p.medicalHistory.join(', ') : '',
-                                doctorId: formData.doctorId,
-                                allergies: p.allergies || 'None',
-                                currentMedications: p.currentMedications || ''
-                              });
-                              setIsExistingPatient(true);
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#F8FAFC'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
-                          >
-                            <div>
-                              <div style={{ fontWeight: 800, fontSize: '16px', color: '#0F172A' }}>{p.name}</div>
-                              <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginTop: '4px' }}>
-                                #{p._id.substring(18).toUpperCase()} • {p.gender} • {p.age} Yrs
-                              </div>
-                              <div
-                                style={{ fontSize: '13px', color: '#10B981', fontWeight: 800, marginTop: '6px', display: 'inline-block', cursor: 'pointer' }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedPatient(null);
-                                  setFormData({
-                                    name: '',
-                                    age: '',
-                                    gender: '',
-                                    contact: p.contact,
-                                    email: '',
-                                    doctorId: formData.doctorId,
-                                    bloodGroup: '',
-                                    address: '',
-                                    medicalHistory: '',
-                                    referredBy: '',
-                                    allergies: 'None',
-                                    currentMedications: ''
-                                  });
-                                  setIsExistingPatient(false);
-                                  setSearchPatientQuery('');
-                                }}
-                              >
-                                + Register Family
-                              </div>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: '14px', fontWeight: 800, color: '#3B82F6' }}>{p.contact}</div>
-                              <span style={{ fontSize: '12px', background: '#EFF6FF', color: '#2563EB', padding: '4px 12px', borderRadius: '6px', fontWeight: 800, display: 'inline-block', marginTop: '6px' }}>
-                                Select
+                  {/* Right Column: Patients Table / Search Results */}
+                  <div style={{
+                    background: '#FFFFFF',
+                    borderRadius: '12px',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    height: '100%',
+                    overflow: 'hidden',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                  }}>
+                    {(() => {
+                      const query = searchPatientQuery.trim().toLowerCase();
+                      const isDigits = /^\d+$/.test(query);
+
+                      const displayedPatients = !query 
+                        ? patientsList.slice(0, 30)
+                        : patientsList.filter(p => {
+                            const contact = (p.contact || '').toLowerCase();
+                            const pid = (p.patientId || '').toLowerCase();
+                            const uhid = (p.uhId || '').toLowerCase();
+                            const idStr = (p._id || '').toLowerCase();
+                            const name = (p.name || '').toLowerCase();
+                            if (isDigits) {
+                              return contact.includes(query);
+                            } else {
+                              return pid.includes(query) || uhid.includes(query) || idStr.includes(query) || name.includes(query);
+                            }
+                          });
+
+                      return (
+                        <>
+                          {/* Table Header / Sub-bar */}
+                          <div style={{
+                            padding: '12px 18px',
+                            borderBottom: '1px solid #E2E8F0',
+                            background: '#F8FAFC',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexShrink: 0
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>
+                                {query ? `Search Results for "${searchPatientQuery}"` : 'Recent Registered Patients'}
+                              </span>
+                              <span style={{
+                                fontSize: '11px',
+                                background: query ? '#EFF6FF' : '#E2E8F0',
+                                color: query ? '#2563EB' : '#475569',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontWeight: 800
+                              }}>
+                                {displayedPatients.length} {displayedPatients.length === 1 ? 'patient' : 'patients'}
                               </span>
                             </div>
+                            {!query && (
+                              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
+                                Showing latest registrations
+                              </span>
+                            )}
                           </div>
-                        ))
-                      )}
-                    </div>
-                  )}
+
+                          {/* Table Container */}
+                          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                            {displayedPatients.length === 0 ? (
+                              <div style={{
+                                padding: '48px 24px',
+                                textAlign: 'center',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                height: '100%',
+                                boxSizing: 'border-box'
+                              }}>
+                                <div style={{
+                                  width: '56px',
+                                  height: '56px',
+                                  borderRadius: '50%',
+                                  background: '#FEF2F2',
+                                  color: '#EF4444',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  marginBottom: '14px'
+                                }}>
+                                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                                </div>
+                                <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '6px' }}>
+                                  No Patient Record Found
+                                </div>
+                                <div style={{ fontSize: '12.5px', color: '#64748B', maxWidth: '380px', marginBottom: '18px', lineHeight: '1.5' }}>
+                                  No patient matches "{searchPatientQuery}". You can quickly register them as a new walk-in patient with this information prefilled.
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPatient(null);
+                                    const isPurePhone = /^\d{1,10}$/.test(searchPatientQuery.trim());
+                                    setFormData({
+                                      title: '',
+                                      name: !isPurePhone ? searchPatientQuery.trim() : '',
+                                      age: '',
+                                      gender: '',
+                                      contact: isPurePhone ? searchPatientQuery.trim() : '',
+                                      email: '',
+                                      doctorId: '',
+                                      bloodGroup: '',
+                                      address: '',
+                                      medicalHistory: '',
+                                      referredBy: '',
+                                      allergies: 'None',
+                                      currentMedications: ''
+                                    });
+                                    setIsExistingPatient(false);
+                                    setSearchPatientQuery('');
+                                  }}
+                                  style={{
+                                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    padding: '10px 20px',
+                                    fontSize: '13px',
+                                    fontWeight: 800,
+                                    cursor: 'pointer',
+                                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                  }}
+                                >
+                                  + Register New Patient with {isDigits ? `Mobile: ${searchPatientQuery}` : `ID: ${searchPatientQuery}`}
+                                </button>
+                              </div>
+                            ) : (
+                              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+                                <thead>
+                                  <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', position: 'sticky', top: 0, zIndex: 10 }}>
+                                    <th style={{ padding: '10px 14px', fontWeight: 800, color: '#475569' }}>PATIENT ID</th>
+                                    <th style={{ padding: '10px 14px', fontWeight: 800, color: '#475569' }}>PATIENT NAME</th>
+                                    <th style={{ padding: '10px 14px', fontWeight: 800, color: '#475569' }}>MOBILE NUMBER</th>
+                                    <th style={{ padding: '10px 14px', fontWeight: 800, color: '#475569' }}>GENDER / AGE</th>
+                                    <th style={{ padding: '10px 14px', fontWeight: 800, color: '#475569' }}>BLOOD GROUP</th>
+                                    <th style={{ padding: '10px 14px', fontWeight: 800, color: '#475569', textAlign: 'right' }}>ACTIONS</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {displayedPatients.map((p, idx) => {
+                                    const displayId = p.patientId || p.uhId || (`#${p._id.substring(Math.max(0, p._id.length - 6)).toUpperCase()}`);
+                                    return (
+                                      <tr
+                                        key={p._id || idx}
+                                        style={{
+                                          borderBottom: '1px solid #F1F5F9',
+                                          background: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
+                                          transition: 'background 0.15s ease'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#EFF6FF'}
+                                        onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA'}
+                                      >
+                                        <td style={{ padding: '10px 14px', fontWeight: 800, color: '#2563EB', whiteSpace: 'nowrap' }}>
+                                          {displayId}
+                                        </td>
+                                        <td style={{ padding: '10px 14px' }}>
+                                          <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '12.5px' }}>{p.name}</div>
+                                          {p.email && <div style={{ fontSize: '11px', color: '#94A3B8' }}>{p.email}</div>}
+                                        </td>
+                                        <td style={{ padding: '10px 14px', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>
+                                          {p.contact || 'N/A'}
+                                        </td>
+                                        <td style={{ padding: '10px 14px', color: '#475569', whiteSpace: 'nowrap' }}>
+                                          {p.gender || '—'} {p.age ? `• ${p.age} Yrs` : ''}
+                                        </td>
+                                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                                          {p.bloodGroup ? (
+                                            <span style={{ fontSize: '10.5px', background: '#FEE2E2', color: '#DC2626', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                                              {p.bloodGroup}
+                                            </span>
+                                          ) : (
+                                            <span style={{ color: '#94A3B8' }}>—</span>
+                                          )}
+                                        </td>
+                                        <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setSelectedPatient(null);
+                                                setFormData({
+                                                  title: '',
+                                                  name: '',
+                                                  age: '',
+                                                  gender: '',
+                                                  contact: p.contact || '',
+                                                  email: '',
+                                                  doctorId: '',
+                                                  bloodGroup: '',
+                                                  address: p.address || '',
+                                                  medicalHistory: '',
+                                                  referredBy: '',
+                                                  allergies: 'None',
+                                                  currentMedications: ''
+                                                });
+                                                setIsExistingPatient(false);
+                                                setSearchPatientQuery('');
+                                              }}
+                                              style={{
+                                                fontSize: '11px',
+                                                color: '#10B981',
+                                                background: '#ECFDF5',
+                                                border: '1px solid #A7F3D0',
+                                                borderRadius: '6px',
+                                                padding: '4px 8px',
+                                                fontWeight: 800,
+                                                cursor: 'pointer'
+                                              }}
+                                              title="Register a family member with same contact"
+                                            >
+                                              + Family
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setSelectedPatient(p);
+                                                setFormData({
+                                                  title: p.title || '',
+                                                  name: p.name || '',
+                                                  age: p.age || '',
+                                                  gender: p.gender || '',
+                                                  contact: p.contact || '',
+                                                  email: p.email || '',
+                                                  bloodGroup: p.bloodGroup || 'O+',
+                                                  address: p.address || '',
+                                                  medicalHistory: p.medicalHistory ? (Array.isArray(p.medicalHistory) ? p.medicalHistory.join(', ') : p.medicalHistory) : '',
+                                                  doctorId: '',
+                                                  allergies: p.allergies || 'None',
+                                                  currentMedications: p.currentMedications || ''
+                                                });
+                                                setIsExistingPatient(true);
+                                                setSearchPatientQuery('');
+                                              }}
+                                              style={{
+                                                fontSize: '11.5px',
+                                                background: '#2563EB',
+                                                color: '#FFFFFF',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                padding: '5px 12px',
+                                                fontWeight: 800,
+                                                cursor: 'pointer',
+                                                boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)'
+                                              }}
+                                            >
+                                              Select & Book →
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
-) : (
+            ) : (
   <>
     <style>{`
   .rx-form-card {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
-    border-radius: 14px;
-    padding: 16px 20px;
-    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.02);
-    transition: all 0.2s ease;
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
   .rx-form-card:hover {
-    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+    border-color: #CBD5E1;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  }
+  .rx-section-badge {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 900;
   }
   .rx-field-group {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 4px;
   }
   .rx-field-label {
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 750;
-    color: #475569;
-    letter-spacing: 0.02em;
+    color: #334155;
+    letter-spacing: 0.01em;
     display: flex;
     align-items: center;
     gap: 3px;
   }
   .rx-req {
     color: #EF4444;
-    font-size: 13px;
-    font-weight: 800;
+    font-size: 12px;
+    font-weight: 900;
   }
   .rx-input {
     width: 100%;
-    height: 36px;
+    height: 34px;
     font-size: 12.5px;
     font-weight: 600;
-    padding: 0 12px;
-    border-radius: 8px;
-    border: 1.5px solid #E2E8F0;
+    padding: 0 10px;
+    border-radius: 7px;
+    border: 1.5px solid #CBD5E1;
     background: #FFFFFF;
     color: #0F172A;
     outline: none;
     box-sizing: border-box;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
   }
   .rx-input:hover:not([readonly]):not(:focus) {
-    border-color: #CBD5E1;
+    border-color: #94A3B8;
   }
   .rx-input:focus:not([readonly]) {
     border-color: #2563EB !important;
-    box-shadow: 0 0 0 3.5px rgba(37, 99, 235, 0.12) !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
     background: #FFFFFF !important;
   }
   .rx-input:read-only, .rx-input:disabled {
@@ -10196,38 +10765,39 @@ const ReceptionistDashboard = () => {
   }
   .rx-select {
     width: 100%;
-    height: 36px;
+    height: 34px;
     font-size: 12.5px;
     font-weight: 600;
-    padding: 0 10px;
-    border-radius: 8px;
-    border: 1.5px solid #E2E8F0;
+    padding: 0 8px;
+    border-radius: 7px;
+    border: 1.5px solid #CBD5E1;
     background: #FFFFFF;
     color: #0F172A;
     outline: none;
     cursor: pointer;
     box-sizing: border-box;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
   }
   .rx-select:hover:not(:disabled):not(:focus) {
-    border-color: #CBD5E1;
+    border-color: #94A3B8;
   }
   .rx-select:focus:not(:disabled) {
     border-color: #2563EB !important;
-    box-shadow: 0 0 0 3.5px rgba(37, 99, 235, 0.12) !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
   }
   .rx-select:disabled {
     background: #F8FAFC;
     color: #64748B;
+    border-color: #E2E8F0;
     cursor: not-allowed;
   }
   .rx-slot-chip {
-    padding: 7px 14px;
-    border-radius: 8px;
+    padding: 6px 12px;
+    border-radius: 7px;
     font-size: 11.5px;
     font-weight: 700;
     cursor: pointer;
-    border: 1.5px solid #E2E8F0;
+    border: 1.5px solid #CBD5E1;
     background: #FFFFFF;
     color: #334155;
     transition: all 0.15s ease;
@@ -10235,8 +10805,8 @@ const ReceptionistDashboard = () => {
     align-items: center;
     gap: 6px;
   }
-  .rx-slot-chip:hover:not(.slot-full) {
-    border-color: #93C5FD;
+  .rx-slot-chip:hover:not(.slot-full):not(.slot-past):not(:disabled) {
+    border-color: #2563EB;
     background: #EFF6FF;
     color: #1D4ED8;
     transform: translateY(-1px);
@@ -10245,7 +10815,7 @@ const ReceptionistDashboard = () => {
     background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%) !important;
     color: #FFFFFF !important;
     border-color: #1D4ED8 !important;
-    box-shadow: 0 3px 10px rgba(37, 99, 235, 0.28);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
   }
   .rx-slot-chip.slot-full {
     background: #F1F5F9;
@@ -10253,25 +10823,32 @@ const ReceptionistDashboard = () => {
     border-color: #E2E8F0;
     cursor: not-allowed;
   }
+  .rx-slot-chip.slot-past, .rx-slot-chip:disabled {
+    background: #F1F5F9 !important;
+    color: #94A3B8 !important;
+    border-color: #E2E8F0 !important;
+    cursor: not-allowed !important;
+    opacity: 0.65;
+  }
   .rx-btn-register {
     background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
     color: #FFFFFF;
     font-weight: 850;
-    font-size: 13.5px;
+    font-size: 13px;
     border: none;
-    border-radius: 10px;
-    padding: 12px 18px;
+    border-radius: 8px;
+    padding: 9px 20px;
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.28);
-    transition: all 0.2s ease;
+    box-shadow: 0 3px 12px rgba(37, 99, 235, 0.28);
+    transition: all 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
   }
   .rx-btn-register:hover:not(:disabled) {
-    transform: translateY(-1.5px);
-    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.38);
+    transform: translateY(-1px);
+    box-shadow: 0 5px 16px rgba(37, 99, 235, 0.38);
     background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%);
   }
   .rx-btn-register:disabled {
@@ -10280,73 +10857,141 @@ const ReceptionistDashboard = () => {
   }
 `}</style>
 
-<div style={{ background: '#F8FAFC', borderRadius: '16px', boxShadow: '0 4px 20px rgba(15, 23, 42, 0.05)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', overflow: 'hidden', border: '1px solid #E2E8F0' }}>
+<div style={{
+  background: '#F1F5F9',
+  borderRadius: 0,
+  border: 'none',
+  boxShadow: 'none',
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100%',
+  flex: 1,
+  width: '100%',
+  overflow: 'hidden'
+}}>
   
-  {/* Header / Title Bar */}
+  {/* Header / Top Sub-Bar (Edge-to-edge, height 46px) */}
   <div style={{
-    background: 'radial-gradient(circle at 100% 0%, rgba(37, 99, 235, 0.1) 0%, transparent 60%), linear-gradient(90deg, #FFFFFF 0%, #F8FAFC 100%)',
-    padding: '12px 20px',
+    background: '#FFFFFF',
+    padding: '0 20px',
+    height: '46px',
     borderBottom: '1px solid #E2E8F0',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    flexShrink: 0
   }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(37,99,235,0.25)' }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>
-        </svg>
-      </div>
-      <div>
-        <h1 style={{ fontWeight: 850, fontSize: '15px', color: '#0F172A', margin: 0, letterSpacing: '-0.01em' }}>
-          {reschedulingAppointment ? 'Reschedule Appointment' : 'New Registration & Appointment'}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <button
+        type="button"
+        onClick={() => {
+          setSelectedPatient(null);
+          setIsExistingPatient(null);
+          setFormData({
+            title: '',
+            name: '', age: '', gender: '', contact: '', email: '', doctorId: '',
+            bloodGroup: '', address: '', medicalHistory: '', referredBy: '',
+            allergies: 'None', currentMedications: ''
+          });
+        }}
+        style={{
+          background: '#EFF6FF',
+          color: '#2563EB',
+          border: '1px solid #BFDBFE',
+          borderRadius: '6px',
+          padding: '4px 10px',
+          fontSize: '11.5px',
+          fontWeight: 800,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '5px',
+          transition: 'all 0.15s ease'
+        }}
+        title="Return to patient lookup"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to Search
+      </button>
+
+      <div style={{ width: '1px', height: '16px', background: '#CBD5E1' }}></div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <h1 style={{ fontWeight: 850, fontSize: '14px', color: '#0F172A', margin: 0 }}>
+          {reschedulingAppointment ? 'Reschedule Appointment' : (isExistingPatient ? 'Book Appointment' : 'New Walk-in Patient Registration')}
         </h1>
-        <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
-          Fast-track patient intake, slot allocation & instant OPD token generation
-        </div>
+        {isExistingPatient && (
+          <span style={{ fontSize: '10.5px', background: '#EFF6FF', color: '#1D4ED8', padding: '2px 8px', borderRadius: '5px', fontWeight: 800, border: '1px solid #BFDBFE' }}>
+            Existing Record • #{selectedPatient?.patientId || selectedPatient?.uhId || (selectedPatient?._id?.slice(-6)?.toUpperCase()) || 'ID'}
+          </span>
+        )}
       </div>
     </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <span style={{ fontSize: '11px', background: '#ECFDF5', color: '#059669', padding: '4px 10px', borderRadius: '20px', fontWeight: 800, border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <span style={{ fontSize: '11px', background: '#ECFDF5', color: '#059669', padding: '3px 10px', borderRadius: '20px', fontWeight: 800, border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
         <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B981' }}></span>
         System Online
       </span>
+      <button
+        type="button"
+        onClick={() => {
+          setFormData({
+            title: '',
+            name: '', age: '', gender: '', contact: '', email: '', doctorId: '',
+            bloodGroup: '', address: '', medicalHistory: '', referredBy: '',
+            allergies: 'None', currentMedications: ''
+          });
+        }}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#64748B',
+          fontSize: '11.5px',
+          fontWeight: 700,
+          cursor: 'pointer',
+          padding: '4px 8px'
+        }}
+        title="Reset form fields"
+      >
+        Clear Fields
+      </button>
     </div>
   </div>
 
-  <div style={{ display: 'flex', flex: 1, minHeight: 0, background: '#F8FAFC' }}>
+  {/* Scrollable Workstation Body (Edge-to-edge, fills remaining height above bottom dock) */}
+  <div style={{
+    display: 'grid',
+    gridTemplateColumns: '1.2fr 1fr',
+    gap: '14px',
+    padding: '14px 18px',
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto'
+  }}>
     
-    {/* Main Form Area (Left) */}
-    <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
+    {/* Left Column: Demographics + Doctor & Slot Selection */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       
       {/* 1. Patient Demographics Card */}
-      <div className="rx-form-card" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', paddingBottom: '10px', borderBottom: '1px solid #F1F5F9' }}>
-          <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-            </svg>
-          </div>
-          <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>Patient Demographics</span>
-          {isExistingPatient && (
-            <span style={{ marginLeft: 'auto', fontSize: '10.5px', background: '#EFF6FF', color: '#1D4ED8', padding: '2px 8px', borderRadius: '6px', fontWeight: 800, border: '1px solid #BFDBFE' }}>
-              Existing Patient
-            </span>
-          )}
+      <div className="rx-form-card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #F1F5F9' }}>
+          <span className="rx-section-badge" style={{ background: '#EFF6FF', color: '#2563EB' }}>1</span>
+          <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>Patient Information & Demographics</span>
         </div>
 
         {(() => {
           const isFormStarted = Boolean(formData.age || formData.title || formData.gender || formData.doctorId || formData.address);
 
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px 18px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px 14px' }}>
               
               {/* Mobile No. */}
               <div className="rx-field-group">
                 <label className="rx-field-label">Mobile No. <span className="rx-req">*</span></label>
                 <input 
                   type="text" 
-                  placeholder="10-digit mobile"
+                  placeholder="10-digit number"
                   className={`rx-input ${!formData.contact && isFormStarted ? 'required-empty' : ''}`} 
                   value={formData.contact} 
                   onChange={e => { 
@@ -10366,24 +11011,30 @@ const ReceptionistDashboard = () => {
                   onChange={e => {
                     const selectedTitle = e.target.value;
                     let autoGender = formData.gender;
-                    if (selectedTitle === 'Mr.') autoGender = 'Male';
-                    else if (selectedTitle === 'Mrs.' || selectedTitle === 'Miss') autoGender = 'Female';
+                    if (selectedTitle === 'Mr.' || selectedTitle === 'Master') autoGender = 'Male';
+                    else if (selectedTitle === 'Mrs.' || selectedTitle === 'Miss' || selectedTitle === 'Ms.') autoGender = 'Female';
                     else if (selectedTitle === 'Prefer not to say') autoGender = 'Other';
                     setFormData({...formData, title: selectedTitle, gender: autoGender});
                   }} 
-                  disabled={isExistingPatient}
+                  disabled={Boolean(isExistingPatient)}
                 >
-                  <option value="">-- Select Title --</option>
+                  <option value="">-- Title --</option>
                   <option value="Mr.">Mr.</option>
                   <option value="Mrs.">Mrs.</option>
+                  <option value="Ms.">Ms.</option>
                   <option value="Miss">Miss</option>
+                  <option value="Master">Master</option>
+                  <option value="Dr.">Dr.</option>
                   <option value="Prefer not to say">Prefer not to say</option>
+                  {formData.title && !['Mr.', 'Mrs.', 'Ms.', 'Miss', 'Master', 'Dr.', 'Prefer not to say'].includes(formData.title) && (
+                    <option value={formData.title}>{formData.title}</option>
+                  )}
                 </select>
               </div>
 
               {/* Patient Name */}
               <div className="rx-field-group">
-                <label className="rx-field-label">Patient Full Name <span className="rx-req">*</span></label>
+                <label className="rx-field-label">Full Name <span className="rx-req">*</span></label>
                 <input 
                   type="text" 
                   placeholder="e.g. John Doe"
@@ -10403,7 +11054,7 @@ const ReceptionistDashboard = () => {
                   onChange={e => setFormData({...formData, gender: e.target.value})} 
                   disabled={isExistingPatient}
                 >
-                  <option value="">-- Select Gender --</option>
+                  <option value="">-- Gender --</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                   <option value="Other">Other</option>
@@ -10413,20 +11064,20 @@ const ReceptionistDashboard = () => {
               {/* Age (Y / M / D) */}
               <div className="rx-field-group">
                 <label className="rx-field-label">Age <span className="rx-req">*</span></label>
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  <div style={{ position: 'relative', flex: 1 }}>
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  <div style={{ position: 'relative', flex: 1.2 }}>
                     <input 
                       type="number" 
                       min="0" 
                       max="120" 
                       placeholder="Yrs" 
                       className={`rx-input ${!formData.age && !formData.ageMonths && !formData.ageDays && isFormStarted ? 'required-empty' : ''}`} 
-                      style={{ paddingRight: '22px', textAlign: 'center' }} 
+                      style={{ paddingRight: '20px', textAlign: 'center' }} 
                       value={formData.age} 
                       onChange={e => setFormData({...formData, age: e.target.value})} 
                       readOnly={isExistingPatient} 
                     />
-                    <span style={{ position: 'absolute', right: '6px', top: '9px', fontSize: '10.5px', color: '#94A3B8', fontWeight: 800 }}>Y</span>
+                    <span style={{ position: 'absolute', right: '5px', top: '8px', fontSize: '10px', color: '#94A3B8', fontWeight: 800 }}>Y</span>
                   </div>
 
                   <div style={{ position: 'relative', flex: 1 }}>
@@ -10436,12 +11087,12 @@ const ReceptionistDashboard = () => {
                       max="11" 
                       placeholder="M" 
                       className="rx-input" 
-                      style={{ paddingRight: '22px', textAlign: 'center' }} 
+                      style={{ paddingRight: '18px', textAlign: 'center' }} 
                       value={formData.ageMonths || ''} 
                       onChange={e => setFormData({...formData, ageMonths: e.target.value})} 
                       readOnly={isExistingPatient} 
                     />
-                    <span style={{ position: 'absolute', right: '6px', top: '9px', fontSize: '10.5px', color: '#94A3B8', fontWeight: 800 }}>M</span>
+                    <span style={{ position: 'absolute', right: '4px', top: '8px', fontSize: '9.5px', color: '#94A3B8', fontWeight: 800 }}>M</span>
                   </div>
 
                   <div style={{ position: 'relative', flex: 1 }}>
@@ -10451,12 +11102,12 @@ const ReceptionistDashboard = () => {
                       max="30" 
                       placeholder="D" 
                       className="rx-input" 
-                      style={{ paddingRight: '22px', textAlign: 'center' }} 
+                      style={{ paddingRight: '18px', textAlign: 'center' }} 
                       value={formData.ageDays || ''} 
                       onChange={e => setFormData({...formData, ageDays: e.target.value})} 
                       readOnly={isExistingPatient} 
                     />
-                    <span style={{ position: 'absolute', right: '6px', top: '9px', fontSize: '10.5px', color: '#94A3B8', fontWeight: 800 }}>D</span>
+                    <span style={{ position: 'absolute', right: '4px', top: '8px', fontSize: '9.5px', color: '#94A3B8', fontWeight: 800 }}>D</span>
                   </div>
                 </div>
               </div>
@@ -10464,10 +11115,10 @@ const ReceptionistDashboard = () => {
               {/* Email with Verify Button */}
               <div className="rx-field-group">
                 <label className="rx-field-label">Email Address</label>
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                   <input 
                     type="email" 
-                    placeholder="patient@example.com"
+                    placeholder="patient@email.com"
                     className="rx-input" 
                     value={formData.email} 
                     onChange={e => setFormData({...formData, email: e.target.value})} 
@@ -10477,7 +11128,7 @@ const ReceptionistDashboard = () => {
                     <button 
                       type="button" 
                       onClick={handleSendOtp} 
-                      style={{ height: '36px', fontSize: '11px', background: '#EFF6FF', color: '#2563EB', border: '1.5px solid #BFDBFE', borderRadius: '8px', padding: '0 12px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      style={{ height: '34px', fontSize: '11px', background: '#EFF6FF', color: '#2563EB', border: '1.5px solid #BFDBFE', borderRadius: '7px', padding: '0 10px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
                       Verify
                     </button>
@@ -10491,7 +11142,7 @@ const ReceptionistDashboard = () => {
                 {bookingType === 'lab' ? (
                   <input 
                     type="text" 
-                    placeholder="Referred Doctor / Clinic"
+                    placeholder="Referred Doctor"
                     className="rx-input" 
                     value={formData.referredBy || ''} 
                     onChange={e => setFormData({...formData, referredBy: e.target.value})} 
@@ -10504,7 +11155,7 @@ const ReceptionistDashboard = () => {
                     onChange={e => setFormData({...formData, bloodGroup: e.target.value})} 
                     disabled={isExistingPatient}
                   >
-                    <option value="">-- Select Blood Group --</option>
+                    <option value="">-- Blood Group --</option>
                     <option value="O+">O+</option>
                     <option value="O-">O-</option>
                     <option value="A+">A+</option>
@@ -10535,7 +11186,7 @@ const ReceptionistDashboard = () => {
                 <label className="rx-field-label">Medical History</label>
                 <input 
                   type="text" 
-                  placeholder="e.g. Hypertension, Diabetes"
+                  placeholder="e.g. Hypertension"
                   className="rx-input" 
                   value={formData.medicalHistory} 
                   onChange={e => setFormData({...formData, medicalHistory: e.target.value})} 
@@ -10548,7 +11199,7 @@ const ReceptionistDashboard = () => {
                 <label className="rx-field-label">Known Allergies</label>
                 <input 
                   type="text" 
-                  placeholder="e.g. Penicillin, Peanuts"
+                  placeholder="e.g. None"
                   className="rx-input" 
                   value={formData.allergies} 
                   onChange={e => setFormData({...formData, allergies: e.target.value})} 
@@ -10574,16 +11225,12 @@ const ReceptionistDashboard = () => {
 
       {/* 2. Appointment & Consultation Card */}
       {bookingType === 'opd' && (
-        <div className="rx-form-card" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #FAF5FF 100%)', borderColor: '#E9D5FF' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', paddingBottom: '10px', borderBottom: '1px solid #F3E8FF' }}>
+        <div className="rx-form-card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #F1F5F9' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: '#F3E8FF', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
-              </div>
+              <span className="rx-section-badge" style={{ background: '#FAF5FF', color: '#7C3AED' }}>2</span>
               <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>
-                {additionalApptsList.length > 0 ? 'Appointment 1 (Primary)' : 'Appointment & Consultation'}
+                {additionalApptsList.length > 0 ? 'Appointment 1 (Primary Consultation)' : 'Doctor Consultation & Time Slot'}
               </span>
             </div>
 
@@ -10594,13 +11241,13 @@ const ReceptionistDashboard = () => {
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  padding: '5px 12px',
+                  gap: '4px',
+                  padding: '4px 10px',
                   background: '#FAF5FF',
                   color: '#7C3AED',
                   border: '1.5px solid #DDD6FE',
-                  borderRadius: '8px',
-                  fontSize: '12px',
+                  borderRadius: '6px',
+                  fontSize: '11px',
                   fontWeight: 800,
                   cursor: 'pointer',
                   transition: 'all 0.15s ease'
@@ -10609,16 +11256,12 @@ const ReceptionistDashboard = () => {
                 onMouseOut={e => { e.currentTarget.style.background = '#FAF5FF'; e.currentTarget.style.color = '#7C3AED'; }}
                 title="Add another doctor consultation for this same visit episode"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
                 + Add Appointment
               </button>
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px 18px', marginBottom: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px 14px', marginBottom: '12px' }}>
             
             {/* Symptoms */}
             <div className="rx-field-group">
@@ -10637,16 +11280,16 @@ const ReceptionistDashboard = () => {
                     alignItems: 'center', 
                     justifyContent: 'space-between', 
                     cursor: reschedulingAppointment ? 'not-allowed' : 'pointer', 
-                    padding: '4px 10px', 
+                    padding: '2px 8px', 
                     height: 'auto', 
-                    minHeight: '36px', 
+                    minHeight: '34px', 
                     opacity: reschedulingAppointment ? 0.6 : 1 
                   }}
                 >
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
                     {selectedSymptoms.length > 0 ? (
                       selectedSymptoms.map(s => (
-                        <div key={s} style={{ background: '#EDE9FE', color: '#6D28D9', padding: '2px 8px', fontSize: '11px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid #DDD6FE', fontWeight: 700 }}>
+                        <div key={s} style={{ background: '#EDE9FE', color: '#6D28D9', padding: '1px 6px', fontSize: '10.5px', borderRadius: '5px', display: 'flex', alignItems: 'center', gap: '3px', border: '1px solid #DDD6FE', fontWeight: 700 }}>
                           {s}
                           <span 
                             onClick={(e) => { e.stopPropagation(); !reschedulingAppointment && toggleSymptom(s); }}
@@ -10660,11 +11303,11 @@ const ReceptionistDashboard = () => {
                       <span style={{ color: '#94A3B8', fontSize: '12px', fontWeight: 500 }}>Select symptoms...</span>
                     )}
                   </div>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transition: '0.2s', transform: symptomDropdownOpen ? 'rotate(180deg)' : 'none' }}><polyline points="6 9 12 15 18 9"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transition: '0.2s', transform: symptomDropdownOpen ? 'rotate(180deg)' : 'none' }}><polyline points="6 9 12 15 18 9"/></svg>
                 </div>
 
                 {symptomDropdownOpen && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1.5px solid #CBD5E1', borderRadius: '8px', marginTop: '4px', maxHeight: '160px', overflowY: 'auto', zIndex: 100, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)' }}>
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1.5px solid #CBD5E1', borderRadius: '8px', marginTop: '4px', maxHeight: '150px', overflowY: 'auto', zIndex: 100, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)' }}>
                     <div style={{ padding: '6px', position: 'sticky', top: 0, background: 'white', borderBottom: '1px solid #F1F5F9' }}>
                       <input 
                         type="text" 
@@ -10680,7 +11323,7 @@ const ReceptionistDashboard = () => {
                             setSymptomDropdownOpen(false); 
                           } 
                         }} 
-                        style={{ width: '100%', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '6px 8px', fontSize: '12px', outline: 'none', background: '#F8FAFC' }} 
+                        style={{ width: '100%', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '5px 8px', fontSize: '11.5px', outline: 'none', background: '#F8FAFC' }} 
                       />
                     </div>
                     {(() => {
@@ -10691,7 +11334,7 @@ const ReceptionistDashboard = () => {
                             <div 
                               key={s} 
                               onClick={() => { toggleSymptom(s); setSymptomDropdownOpen(false); }} 
-                              style={{ padding: '7px 12px', fontSize: '12px', cursor: 'pointer', borderBottom: '1px solid #F8FAFC', fontWeight: 600, color: '#334155' }} 
+                              style={{ padding: '6px 10px', fontSize: '11.5px', cursor: 'pointer', borderBottom: '1px solid #F8FAFC', fontWeight: 600, color: '#334155' }} 
                               onMouseOver={e => e.target.style.background = '#FAF5FF'} 
                               onMouseOut={e => e.target.style.background = 'white'}
                             >
@@ -10701,7 +11344,7 @@ const ReceptionistDashboard = () => {
                           {filtered.length === 0 && symptomSearchQuery.trim() !== '' && (
                             <div 
                               onClick={() => { toggleSymptom(symptomSearchQuery.trim()); setSymptomSearchQuery(''); setSymptomDropdownOpen(false); }} 
-                              style={{ padding: '8px 12px', fontSize: '12px', cursor: 'pointer', color: '#7C3AED', fontWeight: 700, fontStyle: 'italic' }}
+                              style={{ padding: '6px 10px', fontSize: '11.5px', cursor: 'pointer', color: '#7C3AED', fontWeight: 700, fontStyle: 'italic' }}
                             >
                               + Press Enter to add "{symptomSearchQuery}"
                             </div>
@@ -10719,8 +11362,8 @@ const ReceptionistDashboard = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <label className="rx-field-label">Consulting Doctor <span className="rx-req">*</span></label>
                 {addOnOriginAppt && (
-                  <span style={{ fontSize: '11px', color: '#7C3AED', fontWeight: 800 }}>
-                    ↳ Add-On Episode Mode
+                  <span style={{ fontSize: '10px', color: '#7C3AED', fontWeight: 800 }}>
+                    ↳ Add-On
                   </span>
                 )}
               </div>
@@ -10736,16 +11379,11 @@ const ReceptionistDashboard = () => {
                   const isSelectedInAddon = additionalApptsList.some(a => String(a.doctorId) === String(doc._id));
                   return (
                     <option key={doc._id} value={doc._id} disabled={isOriginDoctor || isSelectedInAddon}>
-                      {doc.name} {doc.role ? `(${doc.role})` : ''} {isSelectedInAddon ? '— (Selected in Add-On)' : (isOriginDoctor ? '— (Already booked for this visit episode)' : '')}
+                      {doc.name} {doc.role ? `(${doc.role})` : ''} {isSelectedInAddon ? '— (Selected)' : (isOriginDoctor ? '— (Already booked)' : '')}
                     </option>
                   );
                 })}
               </select>
-              {addOnOriginAppt && (
-                <div style={{ fontSize: '11.5px', color: '#6D28D9', marginTop: '3px', fontWeight: 650 }}>
-                  Note: Same-doctor add-ons are not allowed. Please select another consulting doctor for this visit episode.
-                </div>
-              )}
             </div>
 
             {/* Date */}
@@ -10763,30 +11401,27 @@ const ReceptionistDashboard = () => {
 
           </div>
 
-          {/* Available Slots Row */}
-          <div style={{ background: '#FFFFFF', borderRadius: '10px', padding: '14px 16px', border: '1px solid #E9D5FF' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          {/* Available Slots */}
+          <div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '10px 12px', border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A' }}>Available Time Slots</span>
               </div>
               {selectedSlot && (
-                <span style={{ fontSize: '11px', background: '#FAF5FF', color: '#7C3AED', padding: '2px 8px', borderRadius: '6px', fontWeight: 800, border: '1px solid #DDD6FE' }}>
+                <span style={{ fontSize: '11px', background: '#EFF6FF', color: '#2563EB', padding: '2px 8px', borderRadius: '5px', fontWeight: 800, border: '1px solid #BFDBFE' }}>
                   Selected: {selectedSlot.split(/\(Limit:/i)[0].trim()}
                 </span>
               )}
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {(!formData.doctorId || !bookingDate) ? (
-                <div style={{ padding: '10px 0', fontSize: '12px', color: '#94A3B8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                  Please select both a doctor and date to view available time slots.
+                <div style={{ padding: '6px 0', fontSize: '12px', color: '#94A3B8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  Select doctor and date above to view time slots.
                 </div>
               ) : !receptionDoctorAvailability.available ? (
-                <div style={{ padding: '10px 0', fontSize: '12px', color: '#DC2626', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                  Doctor is currently unavailable ({receptionDoctorAvailability.reason || 'On Leave'})
+                <div style={{ padding: '6px 0', fontSize: '12px', color: '#DC2626', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  Doctor is unavailable ({receptionDoctorAvailability.reason || 'On Leave'})
                 </div>
               ) : (
                 (receptionDoctorAvailability.slots || DEFAULT_RECEPTION_SLOTS).map(time => {
@@ -10807,19 +11442,20 @@ const ReceptionistDashboard = () => {
                     }).length;
                   }
                   const isFull = bookedCount >= limit;
+                  const isPast = isPastSlot(bookingDate, time);
                   const isSelected = selectedSlot === time;
                   const displayTime = time.split(/\(Limit:/i)[0].trim();
                   return (
                     <button
                       key={time}
                       type="button"
-                      disabled={isFull}
-                      onClick={() => { if (!isFull) setSelectedSlot(time); }}
-                      className={`rx-slot-chip ${isSelected ? 'selected' : ''} ${isFull ? 'slot-full' : ''}`}
+                      disabled={isFull || isPast}
+                      onClick={() => { if (!isFull && !isPast) setSelectedSlot(time); }}
+                      className={`rx-slot-chip ${isSelected ? 'selected' : ''} ${isFull ? 'slot-full' : ''} ${isPast ? 'slot-past' : ''}`}
                     >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                       {displayTime}
-                      {isFull && <span style={{ color: '#DC2626', fontSize: '9.5px', fontWeight: 850 }}>(Full)</span>}
+                      {isFull && <span style={{ color: '#DC2626', fontSize: '9px', fontWeight: 850 }}>(Full)</span>}
+                      {isPast && <span style={{ color: '#94A3B8', fontSize: '9px', fontWeight: 850 }}>(Past)</span>}
                     </button>
                   );
                 })
@@ -10841,61 +11477,32 @@ const ReceptionistDashboard = () => {
           <div 
             key={item.id || index} 
             className="rx-form-card" 
-            style={{ 
-              background: 'linear-gradient(135deg, #FFFFFF 0%, #FAF5FF 100%)', 
-              borderColor: '#DDD6FE', 
-              marginTop: '12px',
-              borderLeft: '4px solid #7C3AED'
-            }}
+            style={{ borderLeft: '4px solid #7C3AED' }}
           >
-            {/* Header: Appointment N + Remove Button */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', paddingBottom: '10px', borderBottom: '1px solid #F3E8FF' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: '#EDE9FE', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                  </svg>
-                </div>
-                <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>
-                  Appointment {appointmentNumber}
-                </span>
-                <span style={{ fontSize: '10.5px', background: '#EDE9FE', color: '#6D28D9', padding: '2px 8px', borderRadius: '6px', fontWeight: 800, border: '1px solid #DDD6FE' }}>
-                  Same Visit Episode
-                </span>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid #F3E8FF' }}>
+              <span style={{ fontSize: '12px', fontWeight: 850, color: '#0F172A' }}>
+                Appointment {appointmentNumber} (Add-on Consultation)
+              </span>
 
               <button
                 type="button"
                 onClick={() => handleRemoveAdditionalAppt(index)}
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '4px 10px',
+                  padding: '2px 8px',
                   background: '#FEF2F2',
-                  border: '1.5px solid #FECACA',
+                  border: '1px solid #FECACA',
                   color: '#DC2626',
-                  borderRadius: '6px',
-                  fontSize: '11px',
+                  borderRadius: '5px',
+                  fontSize: '10.5px',
                   fontWeight: 800,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
+                  cursor: 'pointer'
                 }}
-                onMouseOver={e => { e.currentTarget.style.background = '#DC2626'; e.currentTarget.style.color = '#FFFFFF'; }}
-                onMouseOut={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.color = '#DC2626'; }}
-                title="Remove this appointment"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
                 Remove
               </button>
             </div>
 
-            {/* Fields: Doctor and Date */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px 18px', marginBottom: '16px' }}>
-              {/* Doctor Selector */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px 12px', marginBottom: '8px' }}>
               <div className="rx-field-group">
                 <label className="rx-field-label">Consulting Doctor <span className="rx-req">*</span></label>
                 <select 
@@ -10908,19 +11515,15 @@ const ReceptionistDashboard = () => {
                     const isAlreadySelected = selectedDocIdsInGroup.includes(String(doc._id));
                     return (
                       <option key={doc._id} value={doc._id} disabled={isAlreadySelected}>
-                        {doc.name} {doc.role ? `(${doc.role})` : ''} {isAlreadySelected ? '— (Already selected in this visit)' : ''}
+                        {doc.name} {doc.role ? `(${doc.role})` : ''} {isAlreadySelected ? '— (Selected)' : ''}
                       </option>
                     );
                   })}
                 </select>
-                <div style={{ fontSize: '11px', color: '#6D28D9', marginTop: '3px', fontWeight: 650 }}>
-                  Select another consulting doctor for this visit episode.
-                </div>
               </div>
 
-              {/* Date */}
               <div className="rx-field-group">
-                <label className="rx-field-label">Appointment Date <span className="rx-req">*</span></label>
+                <label className="rx-field-label">Date <span className="rx-req">*</span></label>
                 <input 
                   type="date" 
                   className="rx-input" 
@@ -10931,118 +11534,45 @@ const ReceptionistDashboard = () => {
               </div>
             </div>
 
-            {/* Available Slots Row */}
-            <div style={{ background: '#FFFFFF', borderRadius: '10px', padding: '14px 16px', border: '1px solid #E9D5FF' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A' }}>Available Time Slots</span>
-                </div>
-                {item.time && (
-                  <span style={{ fontSize: '11px', background: '#FAF5FF', color: '#7C3AED', padding: '2px 8px', borderRadius: '6px', fontWeight: 800, border: '1px solid #DDD6FE' }}>
-                    Selected: {item.time.split(/\(Limit:/i)[0].trim()}
-                  </span>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {(!item.doctorId || !item.date) ? (
-                  <div style={{ padding: '10px 0', fontSize: '12px', color: '#94A3B8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    Please select both a doctor and date to view available time slots.
-                  </div>
-                ) : !item.available ? (
-                  <div style={{ padding: '10px 0', fontSize: '12px', color: '#DC2626', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    Doctor is currently unavailable ({item.leaveReason || 'On Leave'})
-                  </div>
-                ) : (
-                  (item.slots || DEFAULT_RECEPTION_SLOTS).map(time => {
-                    let limit = 5;
-                    const match = time.match(/\(Limit:\s*(\d+)\)/i);
-                    if (match) limit = parseInt(match[1], 10);
-                    const cleanTimeSlotStr = (str) => { if (!str) return ''; return str.split(/\(Limit:/i)[0].replace(/\s+/g, ' ').trim().toLowerCase(); };
-                    const targetTimeClean = cleanTimeSlotStr(time);
-                    const targetDateStr = new Date(item.date).toDateString();
-                    let bookedCount = 0;
-                    if (item.doctorId && item.date) {
-                      bookedCount = appointments.filter(app => {
-                        if (app.status === 'Cancelled') return false;
-                        const appDocId = app.doctorId?._id || app.doctorId;
-                        if (String(appDocId) !== String(item.doctorId)) return false;
-                        if (new Date(app.date).toDateString() !== targetDateStr) return false;
-                        return cleanTimeSlotStr(app.time) === targetTimeClean;
-                      }).length;
-                    }
-                    const isFull = bookedCount >= limit;
-                    const isSelected = item.time === time;
-                    const displayTime = time.split(/\(Limit:/i)[0].trim();
-                    return (
-                      <button
-                        key={time}
-                        type="button"
-                        disabled={isFull}
-                        onClick={() => { if (!isFull) handleSelectAdditionalSlot(index, time); }}
-                        className={`rx-slot-chip ${isSelected ? 'selected' : ''} ${isFull ? 'slot-full' : ''}`}
-                      >
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        {displayTime}
-                        {isFull && <span style={{ color: '#DC2626', fontSize: '9.5px', fontWeight: 850 }}>(Full)</span>}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {(item.slots || DEFAULT_RECEPTION_SLOTS).map(time => {
+                const itemDate = item.date || bookingDate || getLocalDateString();
+                const isPast = isPastSlot(itemDate, time);
+                const isSelected = item.time === time;
+                const displayTime = time.split(/\(Limit:/i)[0].trim();
+                return (
+                  <button
+                    key={time}
+                    type="button"
+                    disabled={isPast}
+                    onClick={() => { if (!isPast) handleSelectAdditionalSlot(index, time); }}
+                    className={`rx-slot-chip ${isSelected ? 'selected' : ''} ${isPast ? 'slot-past' : ''}`}
+                  >
+                    {displayTime}
+                    {isPast && <span style={{ color: '#94A3B8', fontSize: '9px', fontWeight: 850 }}>(Past)</span>}
+                  </button>
+                );
+              })}
             </div>
           </div>
         );
       })}
 
-      {/* Button to add further appointments if 1 or more already added */}
-      {bookingType === 'opd' && additionalApptsList.length > 0 && !reschedulingAppointment && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', marginBottom: '6px' }}>
-          <button
-            type="button"
-            onClick={handleAddAdditionalAppt}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              background: '#F5F3FF',
-              color: '#7C3AED',
-              border: '1.5px dashed #C4B5FD',
-              borderRadius: '8px',
-              fontSize: '12px',
-              fontWeight: 800,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseOver={e => { e.currentTarget.style.background = '#EDE9FE'; }}
-            onMouseOut={e => { e.currentTarget.style.background = '#F5F3FF'; }}
-            title="Add another doctor consultation for this same visit episode"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            + Add Another Appointment
-          </button>
-        </div>
-      )}
+    </div>
 
+    {/* Right Column: Vitals + Billing */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      
       {/* 3. Vitals & Consent Card */}
-      <div className="rx-form-card" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #F0FDF4 100%)', borderColor: '#BBF7D0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', paddingBottom: '10px', borderBottom: '1px solid #DCFCE7' }}>
-          <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: '#DCFCE7', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-            </svg>
+      <div className="rx-form-card">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', paddingBottom: '8px', borderBottom: '1px solid #F1F5F9' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="rx-section-badge" style={{ background: '#ECFDF5', color: '#059669' }}>3</span>
+            <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>Initial Vitals & Triage (Optional)</span>
           </div>
-          <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>Initial Vitals & Triage (Optional)</span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '10px 14px', marginBottom: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '6px 8px', marginBottom: '10px' }}>
           <div className="rx-field-group">
             <label className="rx-field-label">Temp (°F)</label>
             <input type="number" step="0.1" placeholder="98.6" className="rx-input" value={vitalTemp} onChange={e => setVitalTemp(e.target.value)} />
@@ -11075,50 +11605,36 @@ const ReceptionistDashboard = () => {
         </div>
 
         {/* DPDP Consent */}
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', background: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #DCFCE7' }}>
-          <span style={{ fontSize: '11.5px', fontWeight: 850, color: '#166534', display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            Patient Consent:
+        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', background: '#F8FAFC', padding: '8px 12px', borderRadius: '7px', border: '1px solid #E2E8F0' }}>
+          <span style={{ fontSize: '11px', fontWeight: 850, color: '#334155' }}>
+            Consent:
           </span>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', color: '#334155', fontWeight: 650 }}>
-            <input type="checkbox" checked={dpdpConsent.emrCreation} onChange={e => setDpdpConsent({...dpdpConsent, emrCreation: e.target.checked})} style={{ width: '15px', height: '15px', accentColor: '#16A34A', cursor: 'pointer' }} /> 
-            EMR Records Creation
+          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', cursor: 'pointer', color: '#334155', fontWeight: 650 }}>
+            <input type="checkbox" checked={dpdpConsent.emrCreation} onChange={e => setDpdpConsent({...dpdpConsent, emrCreation: e.target.checked})} style={{ width: '14px', height: '14px', accentColor: '#16A34A', cursor: 'pointer' }} /> 
+            EMR Record Creation
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', color: '#334155', fontWeight: 650 }}>
-            <input type="checkbox" checked={dpdpConsent.dataSharing} onChange={e => setDpdpConsent({...dpdpConsent, dataSharing: e.target.checked})} style={{ width: '15px', height: '15px', accentColor: '#16A34A', cursor: 'pointer' }} /> 
-            Data Sharing (Clinical Research)
+          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', cursor: 'pointer', color: '#334155', fontWeight: 650 }}>
+            <input type="checkbox" checked={dpdpConsent.dataSharing} onChange={e => setDpdpConsent({...dpdpConsent, dataSharing: e.target.checked})} style={{ width: '14px', height: '14px', accentColor: '#16A34A', cursor: 'pointer' }} /> 
+            Data Sharing (Research)
           </label>
         </div>
       </div>
 
       {/* 4. Billing & Settlement Card */}
-      <div className="rx-form-card" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #ECFEFF 100%)', borderColor: '#A5F3FC', marginTop: 'auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', paddingBottom: '10px', borderBottom: '1px solid #CFFAFE' }}>
-          <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: '#CFFAFE', color: '#0891B2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>
-            </svg>
-          </div>
+      <div className="rx-form-card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #F1F5F9' }}>
+          <span className="rx-section-badge" style={{ background: '#ECFEFF', color: '#0891B2' }}>4</span>
           <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>Billing & Payment Settlement</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px', alignItems: 'center' }}>
           
           {/* Payment Controls */}
-          <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px 18px', minWidth: '280px' }}>
-            
-            {/* Currency */}
-            <div className="rx-field-group">
-              <label className="rx-field-label">Currency</label>
-              <select className="rx-select" style={{ height: '34px', background: 'white' }}>
-                <option>INR (₹)</option>
-              </select>
-            </div>
-
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {/* Payment Mode */}
             <div className="rx-field-group">
               <label className="rx-field-label">Payment Mode</label>
-              <div style={{ display: 'flex', gap: '8px', height: '34px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '6px' }}>
                 {['Cash', 'UPI', 'Other'].map(method => {
                   const isChecked = bookingPaymentMethod === method;
                   return (
@@ -11130,9 +11646,9 @@ const ReceptionistDashboard = () => {
                         flex: 1,
                         height: '32px',
                         borderRadius: '6px',
-                        border: isChecked ? '1.5px solid #0891B2' : '1px solid #CBD5E1',
-                        background: isChecked ? '#ECFEFF' : '#FFFFFF',
-                        color: isChecked ? '#0891B2' : '#475569',
+                        border: isChecked ? '2px solid #2563EB' : '1.5px solid #CBD5E1',
+                        background: isChecked ? '#EFF6FF' : '#FFFFFF',
+                        color: isChecked ? '#2563EB' : '#475569',
                         fontSize: '11.5px',
                         fontWeight: 800,
                         cursor: 'pointer',
@@ -11146,61 +11662,58 @@ const ReceptionistDashboard = () => {
               </div>
             </div>
 
-            {/* Discount (%) */}
-            <div className="rx-field-group">
-              <label className="rx-field-label">Discount (%)</label>
-              <input 
-                type="number" 
-                min="0" 
-                max={allowedDiscountPercent} 
-                placeholder="0"
-                value={bookingDiscountPercent || ''} 
-                onChange={e => { 
-                  setBookingDiscountPercent(Math.min(allowedDiscountPercent, Math.max(0, Number(e.target.value)))); 
-                  if(!Number(e.target.value)) setBookingDiscountReason(''); 
-                }} 
-                className="rx-input"
-                style={{ height: '34px', textAlign: 'right' }} 
-              />
-            </div>
-            
-            {/* Reason */}
-            {Number(bookingDiscountPercent) > 0 ? (
+            {/* Discount (%) & Reason */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '8px' }}>
               <div className="rx-field-group">
-                <label className="rx-field-label">Discount Reason <span className="rx-req">*</span></label>
+                <label className="rx-field-label">Discount %</label>
+                <input 
+                  type="number" 
+                  min="0" 
+                  max={allowedDiscountPercent} 
+                  placeholder="0"
+                  value={bookingDiscountPercent || ''} 
+                  onChange={e => { 
+                    setBookingDiscountPercent(Math.min(allowedDiscountPercent, Math.max(0, Number(e.target.value)))); 
+                    if(!Number(e.target.value)) setBookingDiscountReason(''); 
+                  }} 
+                  className="rx-input"
+                  style={{ textAlign: 'right' }} 
+                />
+              </div>
+
+              <div className="rx-field-group">
+                <label className="rx-field-label">Discount Reason</label>
                 <input 
                   type="text" 
                   placeholder="e.g. Senior Citizen" 
                   value={bookingDiscountReason} 
                   onChange={e => setBookingDiscountReason(e.target.value)} 
                   className="rx-input"
-                  style={{ height: '34px' }} 
+                  disabled={!Number(bookingDiscountPercent)}
                 />
               </div>
-            ) : (
-              <div></div>
-            )}
+            </div>
           </div>
 
-          {/* Totals Summary */}
+          {/* Totals Summary Card */}
           {(() => {
             const subtotalVal = getBillingItems().reduce((sum, item) => sum + item.amount, 0) + ((!isExistingPatient && getBillingItems().length > 0) ? 50 : 0);
             const discAmt = (subtotalVal * Number(bookingDiscountPercent || 0)) / 100;
             const finalTotalVal = Math.max(0, subtotalVal - discAmt);
             return (
-              <div style={{ width: '260px', background: '#FFFFFF', border: '1.5px solid #A5F3FC', borderRadius: '10px', padding: '14px 16px', boxShadow: '0 4px 12px rgba(6, 182, 212, 0.08)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748B', fontWeight: 650, marginBottom: '6px' }}>
+              <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '9px', padding: '12px 14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#64748B', fontWeight: 650, marginBottom: '5px' }}>
                   <span>Gross Amount</span>
                   <span style={{ fontWeight: 800, color: '#0F172A' }}>₹{subtotalVal.toFixed(2)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#DC2626', fontWeight: 650, marginBottom: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#DC2626', fontWeight: 650, marginBottom: '8px' }}>
                   <span>Discount</span>
                   <span style={{ fontWeight: 800 }}>-₹{discAmt.toFixed(2)}</span>
                 </div>
-                <div style={{ borderTop: '1px dashed #CBD5E1', marginBottom: '10px' }}></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '15px', fontWeight: 900, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', padding: '9px 12px', borderRadius: '8px', color: 'white' }}>
+                <div style={{ borderTop: '1px dashed #CBD5E1', marginBottom: '8px' }}></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px', fontWeight: 900, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', padding: '8px 12px', borderRadius: '7px', color: 'white', boxShadow: '0 2px 6px rgba(16, 185, 129, 0.25)' }}>
                   <span>Net Payable</span>
-                  <span>₹{finalTotalVal.toFixed(2)}</span>
+                  <span style={{ fontSize: '16px' }}>₹{finalTotalVal.toFixed(2)}</span>
                 </div>
               </div>
             );
@@ -11210,75 +11723,84 @@ const ReceptionistDashboard = () => {
 
     </div>
 
-    {/* Action Sidebar (Right) */}
-    <div style={{ width: '230px', background: '#FFFFFF', padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: '12px', borderLeft: '1px solid #E2E8F0' }}>
-      
-      <input type="file" id="patientPhotoUpload" style={{ display: 'none' }} accept="image/png, image/jpeg" onChange={(e) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const reader = new FileReader(); reader.onloadend = () => { setPatientPhoto(reader.result); }; reader.readAsDataURL(file); } }} />
-      <input type="file" id="patientCameraUpload" style={{ display: 'none' }} accept="image/png, image/jpeg" capture="environment" onChange={(e) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const reader = new FileReader(); reader.onloadend = () => { setPatientPhoto(reader.result); }; reader.readAsDataURL(file); } }} />
-      
-      {/* Photo Frame */}
-      <div style={{ 
-        width: '100%', 
-        height: '160px', 
-        borderRadius: '12px', 
-        border: '1.5px dashed #CBD5E1', 
-        background: 'linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)', 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        gap: '8px', 
-        position: 'relative', 
-        overflow: 'hidden' 
+  </div>
+
+  {/* Docked Bottom Action Bar (Fixed, Edge-to-Edge, Height 54px) */}
+  <div style={{
+    background: '#FFFFFF',
+    borderTop: '1px solid #E2E8F0',
+    padding: '0 85px 0 20px',
+    height: '54px',
+    margin: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexShrink: 0,
+    boxShadow: '0 -2px 10px rgba(0,0,0,0.03)'
+  }}>
+    {/* Hidden file inputs */}
+    <input type="file" id="patientPhotoUpload" style={{ display: 'none' }} accept="image/png, image/jpeg" onChange={(e) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const reader = new FileReader(); reader.onloadend = () => { setPatientPhoto(reader.result); }; reader.readAsDataURL(file); } }} />
+    <input type="file" id="patientCameraUpload" style={{ display: 'none' }} accept="image/png, image/jpeg" capture="environment" onChange={(e) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const reader = new FileReader(); reader.onloadend = () => { setPatientPhoto(reader.result); }; reader.readAsDataURL(file); } }} />
+
+    {/* Left: Patient Avatar & Summary */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{
+        width: '36px',
+        height: '36px',
+        borderRadius: '8px',
+        border: '1.5px dashed #CBD5E1',
+        background: '#F8FAFC',
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0
       }}>
         {patientPhoto ? (
           <img src={patientPhoto} alt="Patient" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <>
-            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(37,99,235,0.15)' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                <circle cx="12" cy="13" r="4"/>
-              </svg>
-            </div>
-            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>No Image Available</span>
-          </>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         )}
       </div>
-      
-      <button 
-        type="button" 
-        onClick={() => document.getElementById('patientCameraUpload').click()} 
-        style={{ width: '100%', padding: '9px 0', fontSize: '12px', fontWeight: 750, background: '#FFFFFF', color: '#2563EB', border: '1.5px solid #BFDBFE', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.15s' }}
-        onMouseOver={e => e.target.style.background = '#EFF6FF'}
-        onMouseOut={e => e.target.style.background = '#FFFFFF'}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        Capture Photo
-      </button>
 
-      <button 
-        type="button" 
-        onClick={() => document.getElementById('patientPhotoUpload').click()} 
-        style={{ width: '100%', padding: '9px 0', fontSize: '12px', fontWeight: 750, background: '#FFFFFF', color: '#2563EB', border: '1.5px solid #BFDBFE', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.15s' }}
-        onMouseOver={e => e.target.style.background = '#EFF6FF'}
-        onMouseOut={e => e.target.style.background = '#FFFFFF'}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Upload Document
-      </button>
-      
-      <div style={{ flex: 1 }}></div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <button
+          type="button"
+          onClick={() => document.getElementById('patientCameraUpload').click()}
+          style={{ fontSize: '11px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', borderRadius: '5px', padding: '3px 8px', fontWeight: 750, cursor: 'pointer' }}
+        >
+          📷 Photo
+        </button>
+        <button
+          type="button"
+          onClick={() => document.getElementById('patientPhotoUpload').click()}
+          style={{ fontSize: '11px', background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', borderRadius: '5px', padding: '3px 8px', fontWeight: 750, cursor: 'pointer' }}
+        >
+          📄 Document
+        </button>
+      </div>
 
+      <div style={{ width: '1px', height: '16px', background: '#CBD5E1', margin: '0 4px' }}></div>
+
+      <div style={{ fontSize: '12px', color: '#334155', fontWeight: 700 }}>
+        {formData.name ? (
+          <span>Patient: <strong style={{ color: '#0F172A' }}>{formData.name}</strong> {formData.contact ? `(${formData.contact})` : ''}</span>
+        ) : (
+          <span style={{ color: '#94A3B8' }}>Fill patient details to proceed</span>
+        )}
+      </div>
+    </div>
+
+    {/* Right: OTP & Submit Buttons */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
       {!isExistingPatient && otpSent && !otpVerified && (
-        <div style={{ background: '#FEF2F2', padding: '12px', borderRadius: '10px', border: '1px solid #FECACA', marginBottom: '6px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 800, color: '#991B1B', marginBottom: '6px' }}>Verify Mobile/Email OTP</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FEF2F2', padding: '3px 8px', borderRadius: '6px', border: '1px solid #FECACA' }}>
           <input 
             type="text" 
             maxLength={6} 
-            placeholder="######" 
+            placeholder="OTP #" 
             className="rx-input" 
-            style={{ width: '100%', height: '32px', textAlign: 'center', borderColor: '#FCA5A5', fontSize: '15px', letterSpacing: '2px', fontWeight: 'bold', marginBottom: '8px' }} 
+            style={{ width: '68px', height: '28px', textAlign: 'center', fontSize: '12px', fontWeight: 800 }} 
             value={verificationOtp} 
             onChange={e => setVerificationOtp(e.target.value.replace(/\D/g, ''))} 
           />
@@ -11286,9 +11808,9 @@ const ReceptionistDashboard = () => {
             type="button" 
             onClick={handleVerifyOtp} 
             disabled={otpVerifying} 
-            style={{ width: '100%', background: '#EF4444', color: 'white', border: 'none', padding: '8px 0', borderRadius: '6px', fontWeight: 800, cursor: 'pointer', fontSize: '12px' }}
+            style={{ background: '#EF4444', color: 'white', border: 'none', padding: '5px 8px', borderRadius: '5px', fontWeight: 800, cursor: 'pointer', fontSize: '11px' }}
           >
-            {otpVerifying ? 'Verifying...' : 'Submit OTP'}
+            {otpVerifying ? '...' : 'Verify'}
           </button>
         </div>
       )}
@@ -11298,13 +11820,13 @@ const ReceptionistDashboard = () => {
         onClick={() => { 
           setSelectedPatient(null); 
           setIsExistingPatient(null); 
-          setFormData({name: '', age: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: ''}); 
+          setFormData({title: '', name: '', age: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: ''}); 
         }} 
-        style={{ width: '100%', padding: '10px 0', fontSize: '12.5px', fontWeight: 750, background: '#F1F5F9', color: '#475569', border: '1.5px solid #CBD5E1', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.15s' }}
+        style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 750, background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', borderRadius: '7px', cursor: 'pointer', transition: 'all 0.15s' }}
         onMouseOver={e => e.target.style.background = '#E2E8F0'}
         onMouseOut={e => e.target.style.background = '#F1F5F9'}
       >
-        Clear / Cancel
+        Cancel
       </button>
       
       <button 
@@ -11313,12 +11835,13 @@ const ReceptionistDashboard = () => {
         onClick={reschedulingAppointment ? handleRescheduleSubmit : (bookingType === 'lab' ? handleCreateLabOrder : bookingType === 'service' ? handleCreateServiceOrder : handleCreateAppointment)} 
         disabled={loading}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        {loading ? 'Saving...' : (reschedulingAppointment ? 'Reschedule' : 'Register Patient')}
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        {loading ? 'Processing...' : (reschedulingAppointment ? 'Confirm Reschedule' : 'Register & Book Slot')}
       </button>
     </div>
 
   </div>
+
 </div>
 </>
 )}
@@ -12353,6 +12876,7 @@ const ReceptionistDashboard = () => {
                                           setSelectedPatient(patientData);
                                           setAddOnOriginAppt(primary.rawItem);
                                           setFormData({
+                                            title: patientData.title || '',
                                             name: patientData.name || '',
                                             age: patientData.age || '',
                                             gender: patientData.gender || '',
@@ -16946,6 +17470,7 @@ const ReceptionistDashboard = () => {
                               }).length;
 
                               const isFull = bookedCount >= limit;
+                              const isPast = isPastSlot(selectedAppointment.date, time);
                               const isSelected = selectedAppointment.time === time;
                               const displayTime = time.split(/\(Limit:/i)[0].trim();
 
@@ -16953,27 +17478,32 @@ const ReceptionistDashboard = () => {
                                 <button
                                   key={time}
                                   type="button"
-                                  disabled={isFull}
-                                  onClick={() => setSelectedAppointment({ ...selectedAppointment, time })}
+                                  disabled={isFull || isPast}
+                                  onClick={() => { if (!isFull && !isPast) setSelectedAppointment({ ...selectedAppointment, time }); }}
                                   style={{
                                     minHeight: '26px',
                                     padding: '4px 8px',
                                     borderRadius: '2px',
                                     border: isSelected ? '2px solid #2563EB' : '1px solid #CBD5E1',
-                                    background: isFull ? '#E2E8F0' : (isSelected ? '#EFF6FF' : 'white'),
-                                    color: isFull ? '#94A3B8' : (isSelected ? '#2563EB' : '#1E293B'),
+                                    background: (isFull || isPast) ? '#E2E8F0' : (isSelected ? '#EFF6FF' : 'white'),
+                                    color: (isFull || isPast) ? '#94A3B8' : (isSelected ? '#2563EB' : '#1E293B'),
                                     fontWeight: isSelected ? 800 : 600,
                                     fontSize: '11px',
-                                    cursor: isFull ? 'not-allowed' : 'pointer',
+                                    cursor: (isFull || isPast) ? 'not-allowed' : 'pointer',
                                     transition: 'all 0.15s',
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
-                                    justifyContent: 'center'
+                                    justifyContent: 'center',
+                                    opacity: isPast ? 0.65 : 1
                                   }}
                                 >
                                   <span style={{ fontWeight: 700 }}>{displayTime}</span>
-                                  <span style={{ fontSize: '9px', opacity: 0.8 }}>({bookedCount}/{limit})</span>
+                                  {isPast ? (
+                                    <span style={{ fontSize: '9px', fontWeight: 800, color: '#94A3B8' }}>(Past)</span>
+                                  ) : (
+                                    <span style={{ fontSize: '9px', opacity: 0.8 }}>({bookedCount}/{limit})</span>
+                                  )}
                                 </button>
                               );
                             })}
@@ -18099,7 +18629,7 @@ const ReceptionistDashboard = () => {
               <div
                 onClick={() => {
                   setActivePatientMenuId(null);
-                  setFormData({ name: targetPatient.name, age: targetPatient.age, gender: targetPatient.gender, contact: targetPatient.contact, email: targetPatient.email || '', doctorId: '' });
+                  setFormData({ title: targetPatient.title || '', name: targetPatient.name, age: targetPatient.age, gender: targetPatient.gender, contact: targetPatient.contact, email: targetPatient.email || '', doctorId: '' });
                   setIsExistingPatient(true);
                   setSelectedPatient(targetPatient);
                   switchTab('registration-form', true);
@@ -18116,6 +18646,7 @@ const ReceptionistDashboard = () => {
                 onClick={() => {
                   setActivePatientMenuId(null);
                   setFormData({
+                    title: targetPatient.title || '',
                     name: targetPatient.name,
                     age: targetPatient.age,
                     gender: targetPatient.gender,

@@ -49,7 +49,7 @@ router.get('/', async (req, res) => {
 
 // Create a new patient (scoped to tenant)
 router.post('/', async (req, res) => {
-  const { name, age, ageMonths, ageDays, gender, contact, email, address, bloodGroup, allergies, currentMedications, medicalHistory, avatar, otp } = req.body;
+  const { title, name, age, ageMonths, ageDays, gender, contact, email, address, bloodGroup, allergies, currentMedications, medicalHistory, avatar, otp } = req.body;
   try {
     if (!contact || contact.trim() === '') {
       return res.status(400).json({ error: "Contact/Phone number is mandatory for patient registration." });
@@ -105,6 +105,7 @@ router.post('/', async (req, res) => {
       tenantId: req.tenantId,
       uhId,
       patientId: hospitalPatientId,
+      title: (title || '').trim(),
       name,
       age: parseInt(age) || 0,
       ageMonths: parseInt(ageMonths) || 0,
@@ -359,7 +360,7 @@ router.get('/:id', async (req, res) => {
 
 // Update patient details (profile & settings, scoped to tenant)
 router.put('/:id', async (req, res) => {
-  const { name, age, ageMonths, ageDays, gender, contact, address, bloodGroup, allergies, currentMedications, medicalHistory, avatar } = req.body;
+  const { title, name, age, ageMonths, ageDays, gender, contact, address, bloodGroup, allergies, currentMedications, medicalHistory, avatar } = req.body;
   try {
     let patient = null;
     try { patient = await Patient.findOne({ _id: req.params.id, tenantId: req.tenantId }); } catch(e) {}
@@ -415,6 +416,7 @@ router.put('/:id', async (req, res) => {
     const oldContact = patient.contact;
 
     // Update Patient details
+    if (title !== undefined) patient.title = String(title).trim();
     patient.name = name || patient.name;
     patient.age = parseInt(age) || patient.age;
     patient.gender = gender || patient.gender;

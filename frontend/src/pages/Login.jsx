@@ -493,7 +493,7 @@ const Login = () => {
         {/* ── RIGHT LOGIN CARD (Item 9: ~520px wide white rounded card) ── */}
         <div className="w-full lg:w-[44%] xl:w-[42%] flex flex-col items-center lg:items-end my-auto">
 
-          <div className="w-full max-w-[500px] xl:max-w-[515px] bg-white rounded-3xl shadow-[0_25px_70px_rgba(15,31,61,0.08)] border border-slate-100/90 p-7 sm:p-8 lg:p-9 relative z-10">
+          <div className="w-full max-w-[500px] xl:max-w-[515px] bg-white rounded-3xl shadow-[0_25px_70px_rgba(15,31,61,0.08)] border border-slate-100/90 p-7 sm:p-8 lg:p-9 relative z-10 login-panel">
             
             {/* Centered Quroxa Logo */}
             <div className="flex flex-col items-center mb-5">
@@ -551,7 +551,7 @@ const Login = () => {
               
               {/* Outlined Input: Username or Email */}
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
                   <User className="w-5 h-5" />
                 </div>
                 <input 
@@ -560,13 +560,13 @@ const Login = () => {
                   value={staffId} 
                   onChange={(e) => setStaffId(e.target.value.toLowerCase())} 
                   placeholder="Username or Email" 
-                  className="w-full h-12 pl-11 pr-4 bg-white rounded-xl border border-slate-200 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" 
+                  className="w-full h-12 pl-11 pr-4 bg-slate-50/70 hover:bg-slate-50 focus:bg-white rounded-xl border border-slate-300 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-500 placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition shadow-2xs" 
                 />
               </div>
 
               {/* Outlined Input: Password */}
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
                   <Lock className="w-5 h-5" />
                 </div>
                 <input 
@@ -575,16 +575,17 @@ const Login = () => {
                   value={password} 
                   onChange={(e) => setPassword(e.target.value)} 
                   placeholder="Password" 
-                  className="w-full h-12 pl-11 pr-11 bg-white rounded-xl border border-slate-200 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" 
+                  className="w-full h-12 pl-11 pr-11 bg-slate-50/70 hover:bg-slate-50 focus:bg-white rounded-xl border border-slate-300 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-500 placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition shadow-2xs" 
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
                   <button 
                     type="button" 
-                    onClick={() => setShowPassword(!showPassword)} 
-                    className="password-eye-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100/80 focus:outline-none transition"
+                    onClick={() => setShowPassword(prev => !prev)} 
+                    className="password-eye-btn w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-200/60 focus:outline-none transition"
                     style={{ transform: 'none', filter: 'none', boxShadow: 'none' }}
                     title={showPassword ? 'Hide password' : 'Show password'}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -747,7 +748,7 @@ const Login = () => {
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
                     placeholder="name@example.com or staff ID"
-                    className="w-full h-11 px-3.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+                    className="w-full h-11 px-3.5 bg-slate-50/60 focus:bg-white rounded-xl border border-slate-300 text-xs text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
                   />
                 </div>
                 <div className="flex gap-3 pt-2">
@@ -778,7 +779,7 @@ const Login = () => {
                     value={forgotOtp}
                     onChange={(e) => setForgotOtp(e.target.value)}
                     placeholder="6-digit OTP code"
-                    className="w-full h-10 px-3.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+                    className="w-full h-10 px-3.5 bg-slate-50/60 focus:bg-white rounded-xl border border-slate-300 text-xs text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
                   />
                 </div>
                 <div>
@@ -789,7 +790,7 @@ const Login = () => {
                     value={forgotNewPassword}
                     onChange={(e) => setForgotNewPassword(e.target.value)}
                     placeholder="Enter new password"
-                    className="w-full h-10 px-3.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+                    className="w-full h-10 px-3.5 bg-slate-50/60 focus:bg-white rounded-xl border border-slate-300 text-xs text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
                   />
                 </div>
                 <div>
@@ -800,7 +801,7 @@ const Login = () => {
                     value={forgotConfirmPassword}
                     onChange={(e) => setForgotConfirmPassword(e.target.value)}
                     placeholder="Confirm new password"
-                    className="w-full h-10 px-3.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+                    className="w-full h-10 px-3.5 bg-slate-50/60 focus:bg-white rounded-xl border border-slate-300 text-xs text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
                   />
                 </div>
                 <div className="flex gap-3 pt-3">
