@@ -56,7 +56,7 @@ export default function GoodsReceiptPage({
 
       const mappedItems = (editingGrn.items || []).map(it => ({
         ...it,
-        qtyOrdered: it.qtyOrdered || it.orderedQty || 0,
+        qtyOrdered: it.qtyOrdered || it.orderedQty || it.requiredQty || it.qty || 0,
         qtyReceived: it.qtyReceived !== undefined ? it.qtyReceived : 0,
         rejectedQty: it.rejectedQty !== undefined ? it.rejectedQty : 0,
         batchNumber: it.batchNumber || '',
@@ -109,7 +109,7 @@ export default function GoodsReceiptPage({
 
     const mappedItems = (po.items || []).map(item => {
       const alreadyRcvd = Number(item.receivedQty || 0);
-      const totalOrdered = Number(item.qty || item.quantity || 0);
+      const totalOrdered = Number(item.requiredQty || item.qty || item.quantity || item.orderedQty || 0);
       const remaining = Math.max(0, totalOrdered - alreadyRcvd);
 
       return {
@@ -935,11 +935,9 @@ export default function GoodsReceiptPage({
                         }}
                         style={{ width: '70px', fontSize: '12px' }}
                       >
-                        <option value="0">0%</option>
-                        <option value="5">5%</option>
-                        <option value="12">12%</option>
-                        <option value="18">18%</option>
-                        <option value="28">28%</option>
+                        {Array.from(new Set([0, 5, 12, 18, 24, 28, Number(item.gst || 0)])).sort((a, b) => a - b).map(rate => (
+                          <option key={rate} value={rate}>{rate}%</option>
+                        ))}
                       </select>
                     </td>
 

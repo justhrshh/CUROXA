@@ -614,10 +614,7 @@ export default function EmployeeProfileView({
       </div>
 
       {/* Profile Tab Contents */}
-      <div 
-        className="p-6 rounded-3xl border border-slate-200/60 shadow-sm min-h-[300px]"
-        style={{ background: 'linear-gradient(135deg, #FAFBFF 0%, #F8FAFC 50%, #F5F7FF 100%)' }}
-      >
+      <div className="p-6 rounded-3xl border border-slate-200/60 shadow-2xs min-h-[300px] bg-slate-50/60">
         
         {/* TAB 1: Overview */}
         {activeTab === 'Overview' && (
@@ -1150,31 +1147,28 @@ export default function EmployeeProfileView({
           <div className="space-y-6">
             
             {/* Year Selector & Top Header */}
-            <div
-              className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-4 rounded-2xl border border-green-100/80 shadow-[0_4px_16px_rgba(34,197,94,0.04)]"
-              style={{ background: 'radial-gradient(ellipse at 100% 0%, rgba(34,197,94,0.1) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #F0FDF4 60%, #DCFCE7 100%)' }}
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-green-600 to-emerald-500 text-white flex items-center justify-center shadow-xs shrink-0">
-                  <CalendarDays className="w-3.5 h-3.5" />
+            <div className="bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <CalendarDays className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-extrabold text-green-900 uppercase tracking-wider">Leave Balance & Ledger Matrix</h3>
-                  <p className="text-[10px] text-green-600 mt-0.5">Authoritative real-time balance ledger and leave applications history for {employee.name}.</p>
+                  <h3 className="text-xs font-black text-emerald-800 uppercase tracking-wider">Leave Balance & Ledger Matrix</h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Authoritative real-time balance ledger and leave applications history for {employee.name}.</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-500">Accounting Year:</span>
+                <span className="text-xs font-bold text-slate-500">Accounting Year:</span>
                 <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
                   {availableYears.map(yr => (
                     <button
                       key={yr}
                       type="button"
                       onClick={() => setLeaveYear(yr)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                         leaveYear === yr
-                          ? 'bg-blue-600 text-white shadow-sm'
+                          ? 'bg-blue-600 text-white shadow-xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
@@ -1189,121 +1183,115 @@ export default function EmployeeProfileView({
             <div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
                 
-                {/* SICK LEAVE - Red/Rose gradient */}
-                <div
-                  className="p-3.5 rounded-xl border border-red-200/80 shadow-[0_6px_20px_rgba(239,68,68,0.06)] relative overflow-hidden"
-                  style={{ background: 'radial-gradient(circle at 100% 0%, rgba(239,68,68,0.15) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #FFF1F1 60%, #FFE4E6 100%)' }}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-red-700 uppercase font-extrabold tracking-wider">SICK LEAVE</span>
-                    <span className="text-[9px] px-1.5 py-0.5 bg-red-100 text-red-700 font-bold rounded-full border border-red-200">
-                      +{sickBal?.monthlyAccrual ?? (employee.monthlyLeaveAllocation?.sick ?? 0.5)}/mo
+                {/* SICK LEAVE */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-red-600 uppercase font-black tracking-wider">SICK LEAVE</span>
+                      <span className="text-[9px] px-1.5 py-0.5 bg-red-50 text-red-600 font-bold rounded-full border border-red-200/60">
+                        +{sickBal?.monthlyAccrual ?? (employee.monthlyLeaveAllocation?.sick ?? 0.5)}/mo
+                      </span>
+                    </div>
+                    <span className="text-2xl font-black text-slate-900 font-mono block my-1">
+                      {sickBal ? sickBal.currentBalance : (employee.leaveBalance?.sick ?? 0)}
                     </span>
                   </div>
-                  <span className="text-2xl font-black text-slate-800 font-mono block my-1">
-                    {sickBal ? sickBal.currentBalance : (employee.leaveBalance?.sick ?? 0)}
-                  </span>
-                  <div className="text-[10px] text-slate-500 font-medium">
-                    Used: <span className="font-semibold text-slate-700">{sickBal?.consumed ?? 0}d</span> &bull; Quota: <span className="font-semibold text-slate-700">{sickBal ? (sickBal.opening + sickBal.carryForward + sickBal.accrued + sickBal.adjustments) : 0}d</span>
+                  <div className="text-[10px] text-slate-400 font-medium mt-1">
+                    Used: <span className="font-bold text-slate-700">{sickBal?.consumed ?? 0}d</span> &bull; Quota: <span className="font-bold text-slate-700">{sickBal ? (sickBal.opening + sickBal.carryForward + sickBal.accrued + sickBal.adjustments) : 0}d</span>
                   </div>
                   <div className="h-[3px] absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #EF4444 100%)' }} />
                 </div>
 
-                {/* CASUAL LEAVE - Blue gradient */}
-                <div
-                  className="p-3.5 rounded-xl border border-blue-200/80 shadow-[0_6px_20px_rgba(59,130,246,0.06)] relative overflow-hidden"
-                  style={{ background: 'radial-gradient(circle at 0% 0%, rgba(59,130,246,0.15) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 60%, #DBEAFE 100%)' }}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-blue-700 uppercase font-extrabold tracking-wider">CASUAL LEAVE</span>
-                    <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 font-bold rounded-full border border-blue-200">
-                      +{casualBal?.monthlyAccrual ?? (employee.monthlyLeaveAllocation?.casual ?? 0.5)}/mo
+                {/* CASUAL LEAVE */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-blue-600 uppercase font-black tracking-wider">CASUAL LEAVE</span>
+                      <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-600 font-bold rounded-full border border-blue-200/60">
+                        +{casualBal?.monthlyAccrual ?? (employee.monthlyLeaveAllocation?.casual ?? 0.5)}/mo
+                      </span>
+                    </div>
+                    <span className="text-2xl font-black text-slate-900 font-mono block my-1">
+                      {casualBal ? casualBal.currentBalance : (employee.leaveBalance?.casual ?? 0)}
                     </span>
                   </div>
-                  <span className="text-2xl font-black text-slate-800 font-mono block my-1">
-                    {casualBal ? casualBal.currentBalance : (employee.leaveBalance?.casual ?? 0)}
-                  </span>
-                  <div className="text-[10px] text-slate-500 font-medium">
-                    Used: <span className="font-semibold text-slate-700">{casualBal?.consumed ?? 0}d</span> &bull; Quota: <span className="font-semibold text-slate-700">{casualBal ? (casualBal.opening + casualBal.carryForward + casualBal.accrued + casualBal.adjustments) : 0}d</span>
+                  <div className="text-[10px] text-slate-400 font-medium mt-1">
+                    Used: <span className="font-bold text-slate-700">{casualBal?.consumed ?? 0}d</span> &bull; Quota: <span className="font-bold text-slate-700">{casualBal ? (casualBal.opening + casualBal.carryForward + casualBal.accrued + casualBal.adjustments) : 0}d</span>
                   </div>
                   <div className="h-[3px] absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #3B82F6 100%)' }} />
                 </div>
 
-                {/* ANNUAL / EARNED LEAVE - Purple gradient */}
-                <div
-                  className="p-3.5 rounded-xl border border-purple-200/80 shadow-[0_6px_20px_rgba(139,92,246,0.06)] relative overflow-hidden"
-                  style={{ background: 'radial-gradient(circle at 100% 100%, rgba(139,92,246,0.15) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 60%, #EDE9FE 100%)' }}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-purple-700 uppercase font-extrabold tracking-wider">EARNED / ANNUAL</span>
-                    <span className="text-[9px] px-1.5 py-0.5 bg-purple-100 text-purple-700 font-bold rounded-full border border-purple-200">
-                      +{earnedBal?.monthlyAccrual ?? (employee.monthlyLeaveAllocation?.annual ?? 1.25)}/mo
+                {/* ANNUAL / EARNED LEAVE */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-purple-600 uppercase font-black tracking-wider">EARNED / ANNUAL</span>
+                      <span className="text-[9px] px-1.5 py-0.5 bg-purple-50 text-purple-600 font-bold rounded-full border border-purple-200/60">
+                        +{earnedBal?.monthlyAccrual ?? (employee.monthlyLeaveAllocation?.annual ?? 1.25)}/mo
+                      </span>
+                    </div>
+                    <span className="text-2xl font-black text-slate-900 font-mono block my-1">
+                      {earnedBal ? earnedBal.currentBalance : (employee.leaveBalance?.annual ?? 0)}
                     </span>
                   </div>
-                  <span className="text-2xl font-black text-slate-800 font-mono block my-1">
-                    {earnedBal ? earnedBal.currentBalance : (employee.leaveBalance?.annual ?? 0)}
-                  </span>
-                  <div className="text-[10px] text-slate-500 font-medium">
-                    Used: <span className="font-semibold text-slate-700">{earnedBal?.consumed ?? 0}d</span> &bull; Quota: <span className="font-semibold text-slate-700">{earnedBal ? (earnedBal.opening + earnedBal.carryForward + earnedBal.accrued + earnedBal.adjustments) : 0}d</span>
+                  <div className="text-[10px] text-slate-400 font-medium mt-1">
+                    Used: <span className="font-bold text-slate-700">{earnedBal?.consumed ?? 0}d</span> &bull; Quota: <span className="font-bold text-slate-700">{earnedBal ? (earnedBal.opening + earnedBal.carryForward + earnedBal.accrued + earnedBal.adjustments) : 0}d</span>
                   </div>
                   <div className="h-[3px] absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #7C3AED 100%)' }} />
                 </div>
 
-                {/* COMPENSATORY OFF - Teal gradient */}
-                <div
-                  className="p-3.5 rounded-xl border border-teal-200/80 shadow-[0_6px_20px_rgba(20,184,166,0.06)] relative overflow-hidden"
-                  style={{ background: 'radial-gradient(circle at 0% 100%, rgba(20,184,166,0.15) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F0FDFA 60%, #CCFBF1 100%)' }}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-teal-700 uppercase font-extrabold tracking-wider">COMPENSATORY</span>
+                {/* COMPENSATORY OFF */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-teal-600 uppercase font-black tracking-wider">COMPENSATORY</span>
+                    </div>
+                    <span className="text-2xl font-black text-slate-900 font-mono block my-1">
+                      {compBal ? compBal.currentBalance : (employee.leaveBalance?.compOff ?? 0)}
+                    </span>
                   </div>
-                  <span className="text-2xl font-black text-slate-800 font-mono block my-1">
-                    {compBal ? compBal.currentBalance : (employee.leaveBalance?.compOff ?? 0)}
-                  </span>
-                  <div className="text-[10px] text-slate-500 font-medium">
-                    Used: <span className="font-semibold text-slate-700">{compBal?.consumed ?? 0}d</span>
+                  <div className="text-[10px] text-slate-400 font-medium mt-1">
+                    Used: <span className="font-bold text-slate-700">{compBal?.consumed ?? 0}d</span>
                   </div>
                   <div className="h-[3px] absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #0D9488 100%)' }} />
                 </div>
 
-                {/* MATERNITY / PATERNITY - Pink/Indigo gradient */}
-                <div
-                  className="p-3.5 rounded-xl border border-pink-200/80 shadow-[0_6px_20px_rgba(236,72,153,0.06)] relative overflow-hidden"
-                  style={{ background: 'radial-gradient(circle at 100% 0%, rgba(236,72,153,0.15) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #FDF2F8 60%, #FCE7F3 100%)' }}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-pink-700 uppercase font-extrabold tracking-wider">
-                      {employee.gender?.toLowerCase() === 'female' ? 'MATERNITY' : employee.gender?.toLowerCase() === 'male' ? 'PATERNITY' : 'MATERNITY'}
+                {/* MATERNITY / PATERNITY */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-pink-600 uppercase font-black tracking-wider">
+                        {employee.gender?.toLowerCase() === 'female' ? 'MATERNITY' : employee.gender?.toLowerCase() === 'male' ? 'PATERNITY' : 'MATERNITY'}
+                      </span>
+                    </div>
+                    <span className="text-2xl font-black text-slate-900 font-mono block my-1">
+                      {employee.gender?.toLowerCase() === 'female'
+                        ? (matBal ? matBal.currentBalance : (employee.leaveBalance?.maternity ?? 90))
+                        : employee.gender?.toLowerCase() === 'male'
+                          ? (patBal ? patBal.currentBalance : (employee.leaveBalance?.paternity ?? 14))
+                          : (matBal ? matBal.currentBalance : (employee.leaveBalance?.maternity ?? 0))}
                     </span>
                   </div>
-                  <span className="text-2xl font-black text-slate-800 font-mono block my-1">
-                    {employee.gender?.toLowerCase() === 'female'
-                      ? (matBal ? matBal.currentBalance : (employee.leaveBalance?.maternity ?? 90))
-                      : employee.gender?.toLowerCase() === 'male'
-                        ? (patBal ? patBal.currentBalance : (employee.leaveBalance?.paternity ?? 14))
-                        : (matBal ? matBal.currentBalance : (employee.leaveBalance?.maternity ?? 0))}
-                  </span>
-                  <div className="text-[10px] text-slate-500 font-medium">
-                    Used: <span className="font-semibold text-slate-700">
+                  <div className="text-[10px] text-slate-400 font-medium mt-1">
+                    Used: <span className="font-bold text-slate-700">
                       {employee.gender?.toLowerCase() === 'female' ? (matBal?.consumed ?? 0) : (patBal?.consumed ?? 0)}d
                     </span>
                   </div>
                   <div className="h-[3px] absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #EC4899 100%)' }} />
                 </div>
 
-                {/* LOSS OF PAY - Amber gradient */}
-                <div
-                  className="p-3.5 rounded-xl border border-amber-200/80 shadow-[0_6px_20px_rgba(245,158,11,0.06)] relative overflow-hidden"
-                  style={{ background: 'radial-gradient(circle at 0% 0%, rgba(245,158,11,0.15) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 60%, #FEF3C7 100%)' }}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-amber-700 uppercase font-extrabold tracking-wider">LOSS OF PAY</span>
+                {/* LOSS OF PAY */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-amber-600 uppercase font-black tracking-wider">LOSS OF PAY</span>
+                    </div>
+                    <span className="text-2xl font-black text-slate-900 font-mono block my-1">
+                      {lwpBal ? lwpBal.consumed : (employee.leaveBalance?.lwp ?? 0)}
+                    </span>
                   </div>
-                  <span className="text-2xl font-black text-slate-800 font-mono block my-1">
-                    {lwpBal ? lwpBal.consumed : (employee.leaveBalance?.lwp ?? 0)}
-                  </span>
-                  <div className="text-[10px] text-slate-500 font-medium">
-                    Unpaid Days: <span className="font-semibold text-slate-700">{lwpBal?.consumed ?? 0}d</span>
+                  <div className="text-[10px] text-slate-400 font-medium mt-1">
+                    Unpaid Days: <span className="font-bold text-slate-700">{lwpBal?.consumed ?? 0}d</span>
                   </div>
                   <div className="h-[3px] absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #D97706 100%)' }} />
                 </div>
@@ -1313,18 +1301,15 @@ export default function EmployeeProfileView({
 
             {/* HR Setup & Allocation Form — Requires Admin Approval */}
             {isAdminOrHR && (
-              <div
-                className="p-5 rounded-2xl border border-orange-200/80 shadow-[0_4px_16px_rgba(234,88,12,0.05)] space-y-4 relative overflow-hidden"
-                style={{ background: 'radial-gradient(ellipse at 100% 0%, rgba(234,88,12,0.08) 0%, transparent 55%), linear-gradient(135deg, #FFFFFF 0%, #FFF7ED 60%, #FFEDD5 100%)' }}
-              >
+              <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4 relative overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-orange-500 to-amber-400 text-white flex items-center justify-center shadow-xs shrink-0">
-                    <Settings className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <Settings className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-extrabold text-orange-900 uppercase tracking-wider">Leave Setup & Allocation (HR Mode)</h4>
-                    <p className="text-[10px] text-orange-600 mt-0.5">Changes require Admin approval before taking effect on the employee's leave balance.</p>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Leave Setup & Allocation (HR Mode)</h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Changes require Admin approval before taking effect on the employee's leave balance.</p>
                   </div>
                 </div>
 
@@ -1353,64 +1338,64 @@ export default function EmployeeProfileView({
                 {/* Allocation Fields */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-orange-700 text-[10px] uppercase font-extrabold tracking-wider mb-1">Carried Forward</label>
+                    <label className="block text-slate-600 text-[10px] uppercase font-black tracking-wider mb-1">Carried Forward</label>
                     <input 
                       type="number"
                       value={carriedForwardLeaves}
                       onChange={(e) => setCarriedForwardLeaves(Number(e.target.value) || 0)}
-                      className="w-full text-xs p-2.5 border border-orange-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white font-mono"
+                      className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 bg-white font-mono text-slate-800 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-orange-700 text-[10px] uppercase font-extrabold tracking-wider mb-1">Monthly Sick Leave</label>
+                    <label className="block text-slate-600 text-[10px] uppercase font-black tracking-wider mb-1">Monthly Sick Leave</label>
                     <input 
                       type="number"
                       step="0.1"
                       value={monthlyLeaveAllocation.sick}
                       onChange={(e) => setMonthlyLeaveAllocation({...monthlyLeaveAllocation, sick: Number(e.target.value) || 0})}
-                      className="w-full text-xs p-2.5 border border-orange-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white font-mono"
+                      className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 bg-white font-mono text-slate-800 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-orange-700 text-[10px] uppercase font-extrabold tracking-wider mb-1">Monthly Casual Leave</label>
+                    <label className="block text-slate-600 text-[10px] uppercase font-black tracking-wider mb-1">Monthly Casual Leave</label>
                     <input 
                       type="number"
                       step="0.1"
                       value={monthlyLeaveAllocation.casual}
                       onChange={(e) => setMonthlyLeaveAllocation({...monthlyLeaveAllocation, casual: Number(e.target.value) || 0})}
-                      className="w-full text-xs p-2.5 border border-orange-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white font-mono"
+                      className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 bg-white font-mono text-slate-800 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-orange-700 text-[10px] uppercase font-extrabold tracking-wider mb-1">Monthly Paid/Annual</label>
+                    <label className="block text-slate-600 text-[10px] uppercase font-black tracking-wider mb-1">Monthly Paid/Annual</label>
                     <input 
                       type="number"
                       step="0.1"
                       value={monthlyLeaveAllocation.annual}
                       onChange={(e) => setMonthlyLeaveAllocation({...monthlyLeaveAllocation, annual: Number(e.target.value) || 0})}
-                      className="w-full text-xs p-2.5 border border-orange-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white font-mono"
+                      className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 bg-white font-mono text-slate-800 transition-all"
                     />
                   </div>
                 </div>
 
                 {/* Reason / Justification */}
                 <div>
-                  <label className="block text-orange-700 text-[10px] uppercase font-extrabold tracking-wider mb-1">
-                    Reason / Justification <span className="text-red-500">*</span>
+                  <label className="block text-slate-600 text-[10px] uppercase font-black tracking-wider mb-1">
+                    Reason / Justification <span className="text-red-500 font-black">*</span>
                   </label>
-                  <textarea
+                  <textarea 
                     rows={2}
                     placeholder="Explain why you are requesting this leave allocation change for this employee..."
                     value={leaveAllocationReason}
                     onChange={(e) => setLeaveAllocationReason(e.target.value)}
-                    className="w-full text-xs p-2.5 border border-orange-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white resize-none"
+                    className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 bg-white text-slate-800 placeholder:text-slate-400 resize-none transition-all"
                   />
                 </div>
 
                 {/* Submit for Approval */}
                 <div className="flex justify-between items-center pt-1">
-                  <p className="text-[10px] text-orange-600 font-medium flex items-center gap-1">
-                    <Shield className="w-3 h-3" />
+                  <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-amber-500" />
                     This request will be sent to Admin for review and approval.
                   </p>
                   <button
@@ -1452,7 +1437,7 @@ export default function EmployeeProfileView({
                         showToast(err.response?.data?.error || 'Failed to submit allocation request.', 'error');
                       }
                     }}
-                    className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" />
                     Submit for Admin Approval

@@ -108,22 +108,38 @@ async function runAllTests() {
   });
 
   console.log('\n--- 3. Two-Level Control & Effective Access Computation ---');
-  await itAsync('Basic Plan + all hospital toggles ON -> Pharmacy & Lab are effectively DISABLED', async () => {
+  await itAsync('Basic Plan + default plan modules (no override) -> Pharmacy & Lab are effectively DISABLED', async () => {
     const hospital = {
       code: 'hosp_test_basic',
       plan: 'Basic Plan',
       subscriptionPlan: 'paid',
-      modules: {
-        reception: { enabled: true },
-        doctor: { enabled: true },
-        pharmacy: { enabled: true },
-        laboratory: { enabled: true }
-      }
+      modules: {}
     };
     const effective = await getHospitalEffectiveModules(hospital);
     assert.strictEqual(effective.reception.enabled, true);
     assert.strictEqual(effective.doctor.enabled, true);
     assert.strictEqual(effective.pharmacy.enabled, false);
+    assert.strictEqual(effective.laboratory.enabled, false);
+    assert.strictEqual(effective.pharmacy.planIncluded, false);
+  });
+
+  await itAsync('Basic Plan + Super Admin explicit override -> Pharmacy is effectively ENABLED', async () => {
+    const hospital = {
+      code: 'hosp_test_basic_override',
+      plan: 'Basic Plan',
+      subscriptionPlan: 'paid',
+      modules: {
+        reception: { enabled: true },
+        doctor: { enabled: true },
+        pharmacy: { enabled: true }, // SuperAdmin custom override
+        laboratory: { enabled: false }
+      }
+    };
+    const effective = await getHospitalEffectiveModules(hospital);
+    assert.strictEqual(effective.reception.enabled, true);
+    assert.strictEqual(effective.doctor.enabled, true);
+    assert.strictEqual(effective.pharmacy.enabled, true, 'SuperAdmin explicit override must enable Pharmacy on Basic Plan');
+    assert.strictEqual(effective.pharmacy.isCustomOverride, true);
     assert.strictEqual(effective.laboratory.enabled, false);
     assert.strictEqual(effective.pharmacy.planIncluded, false);
     assert.strictEqual(effective.pharmacy.hospitalConfigured, true);
@@ -221,33 +237,25 @@ async function runAllTests() {
   });
 
   console.log('\n--- 4. Plan Change Auto-Reconciliation Without Destroying Settings ---');
-  await itAsync('Switching from Enterprise to Basic automatically disables Pharmacy without mutating hospital settings', async () => {
+  await itAsync('Plan default reconciliation: modules fallback to plan entitlement when not explicitly overridden', async () => {
     const hospital = {
       code: 'hosp_reconcile_test',
       plan: 'Enterprise Elite',
       subscriptionPlan: 'paid',
-      modules: {
-        reception: { enabled: true },
-        doctor: { enabled: true },
-        pharmacy: { enabled: true },
-        laboratory: { enabled: true }
-      }
+      modules: {}
     };
 
     // On Enterprise:
     let effective = await getHospitalEffectiveModules(hospital);
     assert.strictEqual(effective.pharmacy.enabled, true);
 
-    // Plan downgraded to Basic (modules configuration remains untouched):
+    // Plan downgraded to Basic:
     hospital.plan = 'Basic Plan';
     effective = await getHospitalEffectiveModules(hospital);
     assert.strictEqual(effective.pharmacy.enabled, false);
     assert.strictEqual(effective.laboratory.enabled, false);
     assert.strictEqual(effective.reception.enabled, true);
     assert.strictEqual(effective.doctor.enabled, true);
-    // Verify raw hospital.modules is preserved intact!
-    assert.strictEqual(hospital.modules.pharmacy.enabled, true);
-    assert.strictEqual(hospital.modules.laboratory.enabled, true);
 
     // Plan upgraded back to Enterprise:
     hospital.plan = 'Enterprise Elite';
@@ -325,7 +333,7 @@ async function runAllTests() {
       code: 'hosp_a_change',
       plan: 'Basic Plan',
       subscriptionPlan: 'paid',
-      modules: { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true } }
+      modules: { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: false }, laboratory: { enabled: false } }
     };
 
     const hospitalB = {

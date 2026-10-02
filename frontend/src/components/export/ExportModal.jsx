@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { FileSpreadsheet, FileText, Calendar, Download, X, AlertCircle, CheckCircle2, Loader2, Check } from 'lucide-react';
 import { executeExport, filterDataByDate, fetchLetterheadConfig } from '../../utils/exportEngine';
 
@@ -303,7 +304,7 @@ export default function ExportModal({
     }
   };
 
-  return (
+  const modalContent = (
     <div
       style={{
         position: 'fixed',
@@ -314,7 +315,7 @@ export default function ExportModal({
         backgroundColor: 'rgba(15, 23, 42, 0.65)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',
-        zIndex: 9999,
+        zIndex: 99999,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -1041,4 +1042,9 @@ export default function ExportModal({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 }

@@ -760,6 +760,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const moduleUpdateTimeouts = useRef({});
   const latestModulesRef = useRef({});
   const rollbackModulesRef = useRef({});
+  const [moduleSaveStatus, setModuleSaveStatus] = useState({});
+  const [moduleDirtyMap, setModuleDirtyMap] = useState({});
 
   // Current user details
   const [currentUser, setCurrentUser] = useState(() => {
@@ -910,6 +912,49 @@ const SuperAdminDashboard = ({ initialTab }) => {
     setTimeout(() => {
       setToast(null);
     }, 3500);
+  };
+
+  const saveHospitalModules = async (hospitalId, modulesToSave) => {
+    setModuleSaveStatus(prev => ({ ...prev, [hospitalId]: 'saving' }));
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`/api/superadmin/hospitals/${hospitalId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ modules: modulesToSave })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setHospitals(prev => prev.map(h => h._id === hospitalId ? {
+          ...h,
+          ...updated,
+          modules: updated.modules || modulesToSave,
+          effectiveModules: updated.effectiveModules
+        } : h));
+        setModuleDirtyMap(prev => ({ ...prev, [hospitalId]: false }));
+        setModuleSaveStatus(prev => ({ ...prev, [hospitalId]: 'saved' }));
+        showToast('Module configuration saved successfully!', 'success');
+        setTimeout(() => {
+          setModuleSaveStatus(prev => {
+            if (prev[hospitalId] === 'saved') {
+              return { ...prev, [hospitalId]: 'idle' };
+            }
+            return prev;
+          });
+        }, 4000);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setModuleSaveStatus(prev => ({ ...prev, [hospitalId]: 'error' }));
+        showToast(errData.error || 'Failed to save module configuration', 'error');
+      }
+    } catch (err) {
+      console.error('Error saving hospital modules:', err);
+      setModuleSaveStatus(prev => ({ ...prev, [hospitalId]: 'error' }));
+      showToast('Network error while saving module configuration', 'error');
+    }
   };
 
   // Real-time notifications and meetings state
@@ -3122,7 +3167,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
               subscriptionExpiryDate: data.subscriptionExpiryDate ?? h.subscriptionExpiryDate,
               revenue: data.revenue ?? h.revenue,
               trialUsed: data.trialUsed ?? h.trialUsed,
-              modules: data.modules ?? h.modules
+              modules: data.modules ?? h.modules,
+              effectiveModules: data.effectiveModules ?? h.effectiveModules
             };
           }
           return h;
@@ -10204,72 +10250,143 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                       {/* Module access flags */}
                       <div>
-                        <strong style={{ fontSize: '10px', color: '#64748B', display: 'block', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>SOFTWARE MODULE ACCESS FLAGS</strong>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-                          {['reception', 'doctor', 'pharmacy', 'laboratory'].map(mod => (
-                            <div key={mod} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: '#475569' }}>
-                              <span style={{ textTransform: 'capitalize', fontWeight: 600 }}>{mod} Module</span>
-                              <ToggleSwitch 
-                                checked={hosp.modules?.[mod]?.enabled !== false} 
-                                onChange={async (nextEnabled) => {
-                                  // Keep track of the original state for rollback on error
-                                  if (!rollbackModulesRef.current[hosp._id]) {
-                                    rollbackModulesRef.current[hosp._id] = hosp.modules || {};
-                                  }
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <strong style={{ fontSize: '10px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>SOFTWARE MODULE ACCESS FLAGS</strong>
+                          <span style={{ fontSize: '10px', fontWeight: 700, color: '#2563EB', background: '#EFF6FF', padding: '2px 8px', borderRadius: '4px', border: '1px solid #DBEAFE' }}>
+                            SuperAdmin Override
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                          {['reception', 'doctor', 'pharmacy', 'laboratory'].map(mod => {
+                            // Current enabled state: respects hospital.modules first, then effectiveModules, defaults to true
+                            const isModEnabled = hosp.modules?.[mod]?.enabled !== undefined
+                              ? Boolean(hosp.modules[mod].enabled)
+                              : (hosp.effectiveModules?.[mod]?.enabled !== undefined
+                                  ? Boolean(hosp.effectiveModules[mod].enabled)
+                                  : true);
 
-                                  const currentModules = latestModulesRef.current[hosp._id] || hosp.modules || {};
-                                  const updatedModules = { ...currentModules, [mod]: { enabled: nextEnabled, lastMod: new Date().toLocaleDateString() } };
-                                  latestModulesRef.current[hosp._id] = updatedModules;
+                            // Determine plan tier entitlement
+                            const planStr = String(hosp.plan || '').toLowerCase();
+                            const isBasicPlan = planStr.includes('basic') || planStr.includes('standard');
+                            const planAllows = isBasicPlan ? (mod === 'reception' || mod === 'doctor') : true;
+                            const isCustomOverride = isModEnabled && !planAllows;
 
-                                  // Optimistically update frontend state immediately
-                                  setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, modules: updatedModules } : h));
-
-                                  // Clear previous timeout
-                                  if (moduleUpdateTimeouts.current[hosp._id]) {
-                                    clearTimeout(moduleUpdateTimeouts.current[hosp._id]);
-                                  }
-
-                                  // Set a new debounced timeout (750ms after the last toggle action)
-                                  const thisTimeoutId = setTimeout(async () => {
-                                    const token = localStorage.getItem('token');
-                                    try {
-                                      const res = await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
-                                        method: 'PUT',
-                                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                        body: JSON.stringify({ modules: updatedModules })
-                                      });
-                                      if (res.ok) {
-                                        const updated = await res.json();
-                                        // Only sync from server if this is still the latest scheduled timeout
-                                        if (moduleUpdateTimeouts.current[hosp._id] === thisTimeoutId) {
-                                          setHospitals(prev => prev.map(h => h._id === hosp._id ? updated : h));
-                                          delete latestModulesRef.current[hosp._id];
-                                          delete rollbackModulesRef.current[hosp._id];
-                                        }
-                                      } else {
-                                        // Rollback on failure
-                                        if (moduleUpdateTimeouts.current[hosp._id] === thisTimeoutId) {
-                                          setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, modules: rollbackModulesRef.current[hosp._id] } : h));
-                                          delete latestModulesRef.current[hosp._id];
-                                          delete rollbackModulesRef.current[hosp._id];
-                                        }
+                            return (
+                              <div key={mod} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: '#475569', padding: '2px 0' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ textTransform: 'capitalize', fontWeight: 650, color: '#1E293B' }}>{mod} Module</span>
+                                    {isCustomOverride && (
+                                      <span style={{ fontSize: '9px', fontWeight: 750, padding: '1px 6px', borderRadius: '4px', background: '#F3E8FF', color: '#7E22CE', border: '1px solid #E9D5FF' }}>
+                                        Custom Override
+                                      </span>
+                                    )}
+                                    {!planAllows && !isModEnabled && (
+                                      <span style={{ fontSize: '9px', fontWeight: 750, padding: '1px 6px', borderRadius: '4px', background: '#F1F5F9', color: '#64748B', border: '1px solid #E2E8F0' }}>
+                                        Plan Excluded
+                                      </span>
+                                    )}
+                                    {planAllows && (
+                                      <span style={{ fontSize: '9px', fontWeight: 750, padding: '1px 6px', borderRadius: '4px', background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0' }}>
+                                        Plan Default
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span style={{ fontSize: '10.5px', color: '#94A3B8' }}>
+                                    {isCustomOverride 
+                                      ? 'Enabled via SuperAdmin authoritative override' 
+                                      : !planAllows 
+                                        ? 'Not included in tenant base plan' 
+                                        : 'Included in base subscription plan'}
+                                  </span>
+                                </div>
+                                <ToggleSwitch 
+                                  checked={isModEnabled} 
+                                  onChange={(nextEnabled) => {
+                                    const currentModules = hosp.modules || {};
+                                    const updatedModules = {
+                                      ...currentModules,
+                                      [mod]: {
+                                        ...(currentModules[mod] || {}),
+                                        enabled: nextEnabled,
+                                        lastMod: new Date().toLocaleDateString()
                                       }
-                                    } catch (err) {
-                                      console.error(err);
-                                      // Rollback on failure
-                                      if (moduleUpdateTimeouts.current[hosp._id] === thisTimeoutId) {
-                                        setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, modules: rollbackModulesRef.current[hosp._id] } : h));
-                                        delete latestModulesRef.current[hosp._id];
-                                        delete rollbackModulesRef.current[hosp._id];
-                                      }
-                                    }
-                                  }, 750);
+                                    };
+                                    // Update frontend state immediately so switch reacts without lag
+                                    setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, modules: updatedModules } : h));
+                                    setModuleDirtyMap(prev => ({ ...prev, [hosp._id]: true }));
+                                    setModuleSaveStatus(prev => ({ ...prev, [hosp._id]: 'unsaved' }));
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
 
-                                  moduleUpdateTimeouts.current[hosp._id] = thisTimeoutId;
-                                }}
-                              />
-                            </div>
-                          ))}
+                          {/* Save Module Configuration Button and Feedback */}
+                          <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '12px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {(() => {
+                              const status = moduleSaveStatus[hosp._id] || 'idle';
+                              const isDirty = Boolean(moduleDirtyMap[hosp._id]);
+
+                              return (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={status === 'saving'}
+                                    onClick={() => saveHospitalModules(hosp._id, hosp.modules || {})}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: '8px',
+                                      width: '100%',
+                                      padding: '9px 16px',
+                                      borderRadius: '8px',
+                                      fontSize: '12px',
+                                      fontWeight: 700,
+                                      cursor: status === 'saving' ? 'not-allowed' : 'pointer',
+                                      transition: 'all 0.2s ease',
+                                      background: status === 'saved' ? '#16A34A' : isDirty ? '#2563EB' : '#0F172A',
+                                      color: '#FFFFFF',
+                                      border: 'none',
+                                      boxShadow: isDirty ? '0 2px 8px rgba(37, 99, 235, 0.28)' : '0 1px 3px rgba(0,0,0,0.1)'
+                                    }}
+                                  >
+                                    {status === 'saving' ? (
+                                      <>
+                                        <LucideIcon name="loader-2" className="animate-spin" style={{ width: '14px', height: '14px' }} />
+                                        <span>Saving Module Configuration...</span>
+                                      </>
+                                    ) : status === 'saved' ? (
+                                      <>
+                                        <LucideIcon name="check" style={{ width: '14px', height: '14px' }} />
+                                        <span>✓ Module Configuration Saved!</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <LucideIcon name="save" style={{ width: '14px', height: '14px' }} />
+                                        <span>{isDirty ? 'Save Module Configuration' : 'Save Module Access'}</span>
+                                      </>
+                                    )}
+                                  </button>
+
+                                  {status === 'saved' && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#16A34A', fontWeight: 650, background: '#F0FDF4', padding: '6px 10px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
+                                      <LucideIcon name="check-circle" style={{ width: '13px', height: '13px', flexShrink: 0 }} />
+                                      <span>Saved successfully! Module permissions are live for this tenant.</span>
+                                    </div>
+                                  )}
+
+                                  {isDirty && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#EA580C', fontWeight: 600, background: '#FFF7ED', padding: '6px 10px', borderRadius: '6px', border: '1px solid #FED7AA' }}>
+                                      <LucideIcon name="alert-circle" style={{ width: '13px', height: '13px', flexShrink: 0 }} />
+                                      <span>Unsaved changes. Click "Save Module Configuration" to apply.</span>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
                         </div>
                       </div>
 
@@ -10915,11 +11032,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>ADMIN USERNAME (STAFF ID / PHONE)</span>
                             <input
                               type="text"
+                              maxLength={10}
                               style={styles.formInput}
                               value={hosp.adminUsername || ''}
-                              placeholder="Admin Username"
+                              placeholder="Admin Username (10 digits)"
                               onChange={(e) => {
-                                const val = e.target.value;
+                                const val = e.target.value.slice(0, 10);
                                 setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, adminUsername: val } : h));
                               }}
                             />

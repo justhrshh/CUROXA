@@ -32,7 +32,7 @@ const Login = () => {
   useEffect(() => {
     const savedUser = localStorage.getItem('quroxa_saved_username');
     if (savedUser && localStorage.getItem('quroxa_remember_me') === 'true') {
-      setStaffId(savedUser);
+      setStaffId(savedUser.slice(0, 10));
     }
   }, []);
 
@@ -557,9 +557,10 @@ const Login = () => {
                 <input 
                   type="text" 
                   required 
+                  maxLength={10}
                   value={staffId} 
-                  onChange={(e) => setStaffId(e.target.value.toLowerCase())} 
-                  placeholder="Username or Email" 
+                  onChange={(e) => setStaffId(e.target.value.toLowerCase().slice(0, 10))} 
+                  placeholder="Username" 
                   className="w-full h-12 pl-11 pr-4 bg-slate-50/70 hover:bg-slate-50 focus:bg-white rounded-xl border border-slate-300 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-500 placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition shadow-2xs" 
                 />
               </div>

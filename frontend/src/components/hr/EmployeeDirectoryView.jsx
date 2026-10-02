@@ -1894,7 +1894,7 @@ export default function EmployeeDirectoryView({
             search: searchTerm,
             department: selectedDept,
             status: selectedStatus,
-            type: selectedType
+            role: selectedRole
           }}
           clinicName="QUROXA HEALTHCARE"
           onClose={() => setShowExportModal(false)}

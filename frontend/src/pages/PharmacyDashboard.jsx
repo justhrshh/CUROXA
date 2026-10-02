@@ -3938,7 +3938,7 @@ const PharmacyDashboard = () => {
           background: linear-gradient(135deg, #FFFFFF 0%, #FFF8F8 60%, #FFEFEF 100%);
           border: 1px solid rgba(254, 226, 226, 0.9);
           border-radius: 14px;
-          padding: 6px 20px 6px 12px;
+          padding: 6px 14px 6px 12px;
           height: 38px;
           cursor: pointer;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -4929,38 +4929,6 @@ const PharmacyDashboard = () => {
                 onClick={() => setShowExpiryAlerts(prev => !prev)}
                 title="Medicine Expiry Alerts"
               >
-                {/* Bottom Right Organic Light Pastel Coral Wave */}
-                <svg 
-                  viewBox="0 0 75 55" 
-                  fill="none" 
-                  xmlns="http://www.w3.org/2000/svg"
-                  style={{
-                    position: 'absolute',
-                    right: 0,
-                    bottom: 0,
-                    width: '48px',
-                    height: '36px',
-                    pointerEvents: 'none',
-                    zIndex: 1
-                  }}
-                >
-                  <path d="M8 55 C22 48 34 30 46 13 C54 2 64 0 75 0 L75 55 Z" fill="url(#alertCoralWaveLightPharm)" opacity="0.65" />
-                  <path d="M20 55 C34 49 44 34 54 20 C60 9 67 3 75 2 L75 55 Z" fill="url(#alertCoralWaveAccentPharm)" opacity="0.4" />
-                  <path d="M8 55 C22 48 34 30 46 13 C54 2 64 0 75 0" stroke="rgba(255, 255, 255, 0.65)" strokeWidth="0.8" />
-                  <path d="M20 55 C34 49 44 34 54 20 C60 9 67 3 75 2" stroke="rgba(255, 255, 255, 0.45)" strokeWidth="0.8" />
-                  <defs>
-                    <linearGradient id="alertCoralWaveLightPharm" x1="8" y1="0" x2="75" y2="55" gradientUnits="userSpaceOnUse">
-                      <stop stopColor="#FECDD3" stopOpacity="0.85" />
-                      <stop offset="0.5" stopColor="#FDA4AF" stopOpacity="0.9" />
-                      <stop offset="1" stopColor="#F87171" />
-                    </linearGradient>
-                    <linearGradient id="alertCoralWaveAccentPharm" x1="20" y1="0" x2="75" y2="55" gradientUnits="userSpaceOnUse">
-                      <stop stopColor="#FFE4E6" stopOpacity="0.6" />
-                      <stop offset="1" stopColor="#FB7185" stopOpacity="0.8" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-
                 {/* Left Warning Triangle Icon */}
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, position: 'relative', zIndex: 2 }}>
                   <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>

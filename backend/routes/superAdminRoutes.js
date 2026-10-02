@@ -888,7 +888,8 @@ router.get('/hospitals', requireRole('Onboarding Manager'), async (req, res) => 
 
     const bulkOps = [];
 
-    const result = hospitals.map((hospital) => {
+    const { getHospitalEffectiveModules } = require('../utils/subscriptionHelper');
+    const result = await Promise.all(hospitals.map(async (hospital) => {
       const counts = countsMap.get(hospital.code) || { doctorsCount: 0, staffCount: 0 };
       const doctorsCount = counts.doctorsCount;
       const staffCount = counts.staffCount;
@@ -942,6 +943,8 @@ router.get('/hospitals', requireRole('Onboarding Manager'), async (req, res) => 
       }
 
       const hospObj = hospital.toObject();
+      hospObj.effectiveModules = await getHospitalEffectiveModules(hospital);
+
       if (adminUser) {
         hospObj.adminUsername = adminUser.staff_id;
         hospObj.adminEmail = adminUser.email;
@@ -954,7 +957,7 @@ router.get('/hospitals', requireRole('Onboarding Manager'), async (req, res) => 
         hospObj.adminName = '';
       }
       return hospObj;
-    });
+    }));
 
     if (bulkOps.length > 0) {
       await SuperAdminHospital.bulkWrite(bulkOps).catch(e => console.warn('hospital save limit update err:', e.message));
@@ -1180,7 +1183,8 @@ router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
         subscriptionExpiryDate: hospital.subscriptionExpiryDate,
         revenue: hospital.revenue,
         trialUsed: hospital.trialUsed,
-        modules: effectiveModules
+        modules: hospital.modules,
+        effectiveModules: effectiveModules
       });
     }
     res.json(hospObj);

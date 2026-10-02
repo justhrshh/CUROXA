@@ -364,14 +364,20 @@ async function getHospitalEffectiveModules(hospital) {
 
   for (const mod of FOUR_CORE_MODULES) {
     const planAllows = planModules.includes(mod);
-    const hospitalSetting = hospital.modules && hospital.modules[mod] && hospital.modules[mod].enabled !== undefined
-      ? hospital.modules[mod].enabled !== false
-      : true;
+    const hasExplicitOverride = hospital.modules && hospital.modules[mod] && hospital.modules[mod].enabled !== undefined;
+    
+    // SuperAdmin custom override: If SuperAdmin has explicitly set enabled on the hospital record,
+    // that explicit setting takes precedence over default plan tier restrictions.
+    // Otherwise, falls back to the plan module entitlements.
+    const isEnabled = hasExplicitOverride
+      ? Boolean(hospital.modules[mod].enabled)
+      : planAllows;
 
     effective[mod] = {
-      enabled: Boolean(planAllows && hospitalSetting),
+      enabled: isEnabled,
       planIncluded: planAllows,
-      hospitalConfigured: hospitalSetting,
+      hospitalConfigured: hasExplicitOverride ? Boolean(hospital.modules[mod].enabled) : null,
+      isCustomOverride: hasExplicitOverride && (Boolean(hospital.modules[mod].enabled) !== planAllows),
       lastMod: hospital.modules?.[mod]?.lastMod || null
     };
   }
