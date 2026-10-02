@@ -306,6 +306,16 @@ function App() {
             <AdminDashboard />
           </ProtectedRoute>
         } />
+        <Route path="/admin/staff" element={
+          <ProtectedRoute targetRole="admin">
+            <AdminDashboard initialTab="workforce" />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/staff/new" element={
+          <ProtectedRoute targetRole="admin">
+            <AdminDashboard initialStaffSubView="new" />
+          </ProtectedRoute>
+        } />
         
         <Route path="/doctor" element={
           <ProtectedRoute targetRole="doctor">

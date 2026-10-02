@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import * as Icons from 'lucide-react';
 import axios from 'axios';
+import { getApiUrl } from '../../../utils/api';
 import {
   MASTER_SCHEMA_REGISTRY,
   getAllCategories,
@@ -56,7 +57,7 @@ export default function SuperAdminMasterApprovalsView() {
     const fetchHospitals = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('/api/superadmin/masters/hospitals-list', {
+        const res = await axios.get(getApiUrl('/superadmin/masters/hospitals-list'), {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.data.success) {
@@ -83,7 +84,7 @@ export default function SuperAdminMasterApprovalsView() {
         requestType: typeFilter !== 'ALL' ? typeFilter : undefined,
         search: searchQuery || undefined
       };
-      const res = await axios.get('/api/item-requests/admin/all', {
+      const res = await axios.get(getApiUrl('/item-requests/admin/all'), {
         headers: { Authorization: `Bearer ${token}` },
         params
       });
@@ -118,7 +119,7 @@ export default function SuperAdminMasterApprovalsView() {
     if (['SUBMITTED', 'PENDING'].includes(req.status)) {
       try {
         const token = localStorage.getItem('token');
-        await axios.put(`/api/item-requests/admin/${req._id}/review`, { note: 'Review opened by Super Admin' }, {
+        await axios.put(getApiUrl(`/item-requests/admin/${req._id}/review`), { note: 'Review opened by Super Admin' }, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setActiveRequest(prev => ({ ...prev, status: 'UNDER_REVIEW' }));
@@ -140,7 +141,7 @@ export default function SuperAdminMasterApprovalsView() {
         note: reviewNote
       };
 
-      const res = await axios.put(`/api/item-requests/admin/${activeRequest._id}/approve`, payload, {
+      const res = await axios.put(getApiUrl(`/item-requests/admin/${activeRequest._id}/approve`), payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -171,7 +172,7 @@ export default function SuperAdminMasterApprovalsView() {
     setRejecting(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.put(`/api/item-requests/admin/${activeRequest._id}/reject`, {
+      const res = await axios.put(getApiUrl(`/item-requests/admin/${activeRequest._id}/reject`), {
         rejectionReason: rejectionReason.trim(),
         note: reviewNote
       }, {
@@ -199,7 +200,7 @@ export default function SuperAdminMasterApprovalsView() {
       setLoadingCandidates(true);
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('/api/superadmin/masters/unassigned-global-items', {
+        const res = await axios.get(getApiUrl('/superadmin/masters/unassigned-global-items'), {
           headers: { Authorization: `Bearer ${token}` },
           params: {
             tenantId: activeRequest.tenantId,
@@ -229,7 +230,7 @@ export default function SuperAdminMasterApprovalsView() {
     setConverting(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.put(`/api/item-requests/admin/${activeRequest._id}/convert-to-assign`, {
+      const res = await axios.put(getApiUrl(`/item-requests/admin/${activeRequest._id}/convert-to-assign`), {
         canonicalMasterItemId: selectedCanonicalItem._id,
         note: `Matched proposal with canonical item ${selectedCanonicalItem.itemCode} (${selectedCanonicalItem.itemName || selectedCanonicalItem.genericName})`
       }, {

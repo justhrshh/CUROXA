@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import * as Icons from 'lucide-react';
 import { getCategoryConfig } from '../../../config/masterSchemaRegistry';
+import { getApiUrl } from '../../../utils/api';
 
 const LucideIcon = ({ name, ...props }) => {
   if (!name) return <Icons.HelpCircle {...props} />;
@@ -63,12 +64,28 @@ export default function MasterCatalogTable({
       params.append('page', page.toString());
       params.append('limit', limit.toString());
 
-      const res = await fetch(`/api/superadmin/masters/items?${params.toString()}`, {
+      const targetUrl = getApiUrl(`/superadmin/masters/items?${params.toString()}`);
+      const res = await fetch(targetUrl, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
 
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await res.text();
+        throw new Error(
+          res.status === 404 || text.includes('<!doctype') || text.includes('<html')
+            ? `API server returned HTML (Status ${res.status}). Verify backend service availability.`
+            : `Server returned non-JSON response (${res.status} ${res.statusText || ''})`
+        );
+      }
+
       if (!res.ok) {
-        throw new Error(`Failed to load items: HTTP ${res.status}`);
+        let errMessage = `Failed to load items: HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData?.error) errMessage = errData.error;
+        } catch (e) {}
+        throw new Error(errMessage);
       }
 
       const data = await res.json();

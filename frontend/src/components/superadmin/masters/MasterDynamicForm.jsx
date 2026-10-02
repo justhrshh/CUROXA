@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as Icons from 'lucide-react';
 import FieldRenderer from './FieldRenderer';
 import { getDepartmentFields, getCategoryConfig } from '../../../config/masterSchemaRegistry';
+import { getApiUrl } from '../../../utils/api';
 
 const LucideIcon = ({ name, ...props }) => {
   if (!name) return <Icons.HelpCircle {...props} />;
@@ -117,10 +118,14 @@ export default function MasterDynamicForm({
       const fetchNextCode = async () => {
         try {
           setLoadingCode(true);
-          const token = localStorage.getItem('token');
-          const res = await fetch(`/api/superadmin/masters/next-code?category=${encodeURIComponent(category)}`, {
+          const targetUrl = getApiUrl(`/superadmin/masters/next-code?category=${encodeURIComponent(category)}`);
+          const res = await fetch(targetUrl, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           });
+          const contentType = res.headers.get('content-type') || '';
+          if (!contentType.includes('application/json')) {
+            throw new Error(`Non-JSON response (Status ${res.status})`);
+          }
           const data = await res.json();
           if (isMounted && data.success && data.nextCode) {
             setFormData((prev) => ({
@@ -257,7 +262,7 @@ export default function MasterDynamicForm({
     try {
       setSaving(true);
       const token = localStorage.getItem('token');
-      const url = isEdit ? `/api/superadmin/masters/items/${initialData._id}` : '/api/superadmin/masters/items';
+      const url = getApiUrl(isEdit ? `/superadmin/masters/items/${initialData._id}` : '/superadmin/masters/items');
       const method = isEdit ? 'PUT' : 'POST';
 
       // Split payload into canonical top-level fields vs categoryData
@@ -279,6 +284,16 @@ export default function MasterDynamicForm({
         },
         body: JSON.stringify(payload)
       });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await res.text();
+        throw new Error(
+          res.status === 404 || text.includes('<!doctype') || text.includes('<html')
+            ? `API server returned HTML (Status ${res.status}). Verify backend service availability.`
+            : `Server returned non-JSON response (${res.status} ${res.statusText || ''})`
+        );
+      }
 
       const result = await res.json();
       if (!res.ok || !result.success) {

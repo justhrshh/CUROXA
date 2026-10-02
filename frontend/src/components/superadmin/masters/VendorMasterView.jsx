@@ -5,9 +5,10 @@ import {
   VENDOR_FIELDS,
   getVendorFieldsBySection
 } from '../../../config/vendorSchemaRegistry';
+import { getApiUrl } from '../../../utils/api';
 
-const API_BASE = '/api/superadmin/vendors';
-const REQUESTS_API_BASE = '/api/superadmin/vendor-requests';
+const API_BASE = getApiUrl('/superadmin/vendors');
+const REQUESTS_API_BASE = getApiUrl('/superadmin/vendor-requests');
 
 const LucideIcon = ({ name, size = 15, color = 'currentColor', style = {} }) => {
   if (!name) return <Icons.HelpCircle size={size} color={color} style={style} />;

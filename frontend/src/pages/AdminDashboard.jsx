@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api, { clearPortalAuthContext, performLogout } from '../utils/api';
 import { socket, joinTenantRoom } from '../utils/socket';
 import HRPayroll from './HRPayroll';
 import EmployeeProfileView from '../components/hr/EmployeeProfileView';
+import StaffOnboardingPage from '../components/admin/StaffOnboardingPage';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import { printPO, printGRN } from '../utils/printDocHelper';
 import curoxaSidebarLogo from '../assets/quroxa_new_logo.png';
@@ -107,8 +108,23 @@ const AdminCoverageCountdown = ({ expiresAt }) => {
   return <span style={{ marginLeft: '6px', opacity: 0.85, fontWeight: 800 }}>({timeLeft})</span>;
 };
 
-const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isDirectNewStaff = initialStaffSubView === 'new' || (typeof window !== 'undefined' && window.location.pathname.includes('/admin/staff/new'));
+  const isDirectStaffList = initialTab === 'workforce' || (typeof window !== 'undefined' && (window.location.pathname === '/admin/staff' || window.location.pathname.startsWith('/admin/staff/')));
+  const [activeTab, setActiveTab] = useState(isDirectNewStaff || isDirectStaffList ? 'workforce' : (initialTab || 'dashboard'));
+  const [staffSubView, setStaffSubView] = useState(isDirectNewStaff ? 'new' : 'list');
+
+  useEffect(() => {
+    if (initialStaffSubView === 'new' || location?.pathname === '/admin/staff/new') {
+      setActiveTab('workforce');
+      setStaffSubView('new');
+    } else if (initialTab === 'workforce' || location?.pathname === '/admin/staff') {
+      setActiveTab('workforce');
+      setStaffSubView('list');
+    }
+  }, [initialStaffSubView, initialTab, location?.pathname]);
   const [letterheadUrl, setLetterheadUrl] = useState('');
   const [letterheadUploading, setLetterheadUploading] = useState(false);
   const [letterheadPreviewImage, setLetterheadPreviewImage] = useState(null);
@@ -343,6 +359,7 @@ const AdminDashboard = () => {
   const getAvailableRoles = () => {
     const allRoles = [
       { value: 'doctor', label: 'Doctor', moduleKey: 'doctor' },
+      { value: 'nurse', label: 'Nurse', moduleKey: null },
       { value: 'receptionist', label: 'Receptionist', moduleKey: 'reception' },
       { value: 'lab', label: 'Laboratory', moduleKey: 'laboratory' },
       { value: 'pharmacy', label: 'Pharmacy', moduleKey: 'pharmacy' },
@@ -1008,7 +1025,6 @@ const AdminDashboard = () => {
   const sidebarRef = useRef(null);
   const sidebarNavRef = useRef(null);
   
-  const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{}'));
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem('curoxa_sidebar_collapsed') === 'true');
   const [sectionOpen, setSectionOpen] = useState({
@@ -11476,7 +11492,7 @@ const AdminDashboard = () => {
                     )}
                     <div 
                       className={`sidebar-link ${activeTab === 'workforce' ? 'active' : ''}`}
-                      onClick={() => { setActiveTab('workforce'); setSelectedStaffProfile(null); }}
+                      onClick={() => { setActiveTab('workforce'); setSelectedStaffProfile(null); setStaffSubView('list'); }}
                     >
                       {activeTab === 'workforce' && (
                         <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
@@ -12250,9 +12266,9 @@ const AdminDashboard = () => {
               <button 
                 className="header-add-staff-btn" 
                 onClick={() => { 
-                  setHrInitialTab('Dashboard');
-                  setHrInitialAdding(false);
-                  setActiveTab('hr-payroll'); 
+                  setActiveTab('workforce');
+                  setStaffSubView('new');
+                  navigate('/admin/staff/new');
                 }}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -13658,7 +13674,27 @@ const AdminDashboard = () => {
 
         {/* 5. Enterprise Workforce / Staff Directory */}
         {activeTab === 'workforce' && (
-          selectedStaffProfile ? (
+          staffSubView === 'new' ? (
+            <div className="admin-dashboard-content active p-0" style={{ animation: 'adminFadeIn 0.15s ease-out' }}>
+              <StaffOnboardingPage 
+                availableRoles={getAvailableRoles ? getAvailableRoles() : []}
+                showToast={showToast}
+                onCancel={() => {
+                  setActiveTab('workforce');
+                  setStaffSubView('list');
+                  navigate('/admin/staff');
+                }}
+                onStaffCreated={async () => {
+                  try {
+                    await fetchStaff();
+                  } catch (_) {}
+                  setActiveTab('workforce');
+                  setStaffSubView('list');
+                  navigate('/admin/staff');
+                }}
+              />
+            </div>
+          ) : selectedStaffProfile ? (
             <div className="admin-dashboard-content active p-0" style={{ animation: 'adminFadeIn 0.15s ease-out' }}>
               <EmployeeProfileView 
                 employee={formatEmployeeForProfile(selectedStaffProfile)}
@@ -14098,7 +14134,10 @@ const AdminDashboard = () => {
                       {/* + Add Staff CTA */}
                       <button
                         className="h-9 px-4 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-md shadow-blue-500/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-                        onClick={() => setShowAddStaffModal(true)}
+                        onClick={() => {
+                          setStaffSubView('new');
+                          navigate('/admin/staff/new');
+                        }}
                       >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                         Add Staff Member
@@ -25027,958 +25066,6 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {/* Onboard New Hospital Staff Modal Overlay */}
-      {showAddStaffModal && (
-        <div 
-          className="fixed inset-0 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 animate-fadeIn hr-modal-overlay" 
-          style={{ zIndex: 99999 }}
-          onClick={() => {
-            setShowAddStaffModal(false);
-            setShowAddStaffPassword(false);
-            setShowAddStaffConfirmPassword(false);
-            setError('');
-          }}
-        >
-          <form 
-            ref={addStaffModalFormRef}
-            onSubmit={handleAddStaff}
-            onKeyDown={handleStaffModalKeyDown}
-            autoComplete="off"
-            className="bg-slate-50 rounded-2xl shadow-2xl border border-slate-200/90 max-w-4xl lg:max-w-[960px] w-full relative hr-admin-modal max-h-[92vh] flex flex-col overflow-hidden animate-scaleUp"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header: Gradient Banner with Medical Glow & Icon Badge */}
-            <div className="relative bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 px-6 py-5 text-white flex items-center justify-between shadow-lg overflow-hidden shrink-0">
-              <div className="absolute -right-8 -top-8 w-36 h-36 rounded-full bg-white/10 blur-2xl pointer-events-none" />
-              <div className="absolute left-1/3 -bottom-8 w-32 h-32 rounded-full bg-cyan-400/15 blur-xl pointer-events-none" />
-              
-              <div className="flex items-center gap-3.5 relative z-10">
-                <div className="w-11 h-11 rounded-xl bg-white/15 border border-white/25 backdrop-blur-md flex items-center justify-center shadow-inner">
-                  <UserPlus className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-black tracking-tight text-white m-0">
-                      Onboard New Hospital Staff
-                    </h3>
-                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-white/20 text-blue-100 border border-white/20 tracking-wider">
-                      Clinic HR
-                    </span>
-                  </div>
-                  <p className="text-xs text-blue-100/90 font-medium m-0 mt-0.5">
-                    Configure login credentials, clinical access & staff profile
-                  </p>
-                </div>
-              </div>
-
-              <button 
-                type="button"
-                onClick={() => {
-                  setShowAddStaffModal(false);
-                  setShowAddStaffPassword(false);
-                  setShowAddStaffConfirmPassword(false);
-                  setError('');
-                }} 
-                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer border border-white/15 active:scale-95 z-10"
-                title="Close (Esc)"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Status Guidance Strip */}
-            <div className="bg-white px-6 py-2.5 border-b border-slate-200/80 flex items-center justify-between flex-wrap gap-2 text-xs sm:text-[13px] shrink-0">
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1.5 font-bold text-slate-700">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 ring-4 ring-rose-100" />
-                  <span className="text-rose-600 font-extrabold text-xs sm:text-[12.5px]">Required</span>
-                  <span className="text-slate-500 font-normal text-xs sm:text-[12.5px]">Compulsory for registration</span>
-                </span>
-                <span className="text-slate-300">•</span>
-                <span className="flex items-center gap-1.5 font-bold text-slate-700">
-                  <span className="w-2 h-2 rounded-full bg-slate-300" />
-                  <span className="text-slate-600 font-semibold text-xs sm:text-[12.5px]">Optional</span>
-                  <span className="text-slate-500 font-normal text-xs sm:text-[12.5px]">Can be skipped or filled later</span>
-                </span>
-              </div>
-              <div className="text-xs text-slate-500 font-medium hidden sm:flex items-center gap-1">
-                <span>Press</span>
-                <kbd className="px-1.5 py-0.5 text-xs font-bold bg-slate-100 border border-slate-300 rounded text-slate-700 font-mono">Enter ↵</kbd>
-                <span>for next field</span>
-              </div>
-            </div>
-
-            {/* Form Scrollable Body */}
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/60" data-lenis-prevent>
-              {error && (
-                <div id="staff-form-error" className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2.5 animate-shake">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
-                  <span className="flex-1">{error}</span>
-                </div>
-              )}
-
-              {/* CARD 1: Essential Account Credentials */}
-              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7.5 h-7.5 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs sm:text-sm">
-                      1
-                    </div>
-                    <div>
-                      <h4 className="text-[13px] sm:text-sm font-black uppercase tracking-wider text-slate-900 m-0">
-                        Account Credentials & Security
-                      </h4>
-                      <p className="text-xs text-slate-500 m-0">Core login identification for the staff member</p>
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
-                    Compulsory
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Full Name */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                        Full Legal Name
-                      </label>
-                      <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
-                        Required
-                      </span>
-                    </div>
-                    <div className="relative flex items-center group">
-                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                      <input 
-                        type="text" 
-                        required
-                        placeholder="e.g. Dr. Rajesh Sharma"
-                        value={newStaff.name}
-                        onChange={(e) => setNewStaff({...newStaff, name: e.target.value})}
-                        className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
-                        style={{ paddingLeft: '44px' }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Phone Number (Used as Login Username) */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                        Phone Number <span className="text-slate-500 font-normal text-xs">(Login Username)</span>
-                      </label>
-                      <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
-                        10 Digits
-                      </span>
-                    </div>
-                    <div className="relative flex items-center group">
-                      <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                      <input 
-                        type="tel" 
-                        required
-                        maxLength="10"
-                        placeholder="10-digit mobile number"
-                        value={newStaff.phone}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, '');
-                          setNewStaff({
-                            ...newStaff, 
-                            phone: val,
-                            staff_id: val
-                          });
-                        }}
-                        className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
-                        style={{ paddingLeft: '44px' }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Username / Staff ID (Auto-populated from phone) */}
-                  <div className="md:col-span-2">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                        System Login ID / Staff ID
-                      </label>
-                      <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        Auto-Populated
-                      </span>
-                    </div>
-                    <div className="relative flex items-center group">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600 absolute left-3.5 pointer-events-none z-10" />
-                      <input 
-                        type="text" 
-                        readOnly
-                        value={newStaff.phone || 'Enter 10-digit Phone Number above'}
-                        className="w-full h-10 pr-3.5 bg-slate-100/80 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 cursor-not-allowed select-none font-mono"
-                        style={{ paddingLeft: '44px' }}
-                      />
-                      {newStaff.phone?.length === 10 && (
-                        <span className="absolute right-3 text-xs font-bold text-emerald-600 flex items-center gap-1">
-                          <Check className="w-4 h-4 stroke-[3]" /> Valid ID
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Password Field */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                        Login Password
-                      </label>
-                      <div className="flex items-center gap-2">
-                        {newStaff.password && (
-                          <span 
-                            className="text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded border"
-                            style={{ 
-                              color: getPasswordStrength(newStaff.password).color,
-                              borderColor: getPasswordStrength(newStaff.password).color,
-                              backgroundColor: `${getPasswordStrength(newStaff.password).color}15`
-                            }}
-                          >
-                            {getPasswordStrength(newStaff.password).label}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={generateRandomPassword}
-                          className="text-xs font-bold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md px-2 py-0.5 transition-all cursor-pointer flex items-center gap-1"
-                          title="Generate secure password"
-                        >
-                          <Sparkles className="w-3 h-3" />
-                          <span>Generate</span>
-                        </button>
-                      </div>
-                    </div>
-                    <div className="relative flex items-center group">
-                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                      <input 
-                        type={showAddStaffPassword ? "text" : "password"} 
-                        required
-                        placeholder="Enter login password"
-                        value={newStaff.password}
-                        onChange={(e) => setNewStaff({...newStaff, password: e.target.value})}
-                        className={`w-full h-10 pr-10 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm placeholder:tracking-normal focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs ${
-                          !showAddStaffPassword && newStaff.password ? 'text-lg tracking-[0.22em]' : 'text-sm tracking-normal'
-                        }`}
-                        style={{ paddingLeft: '44px' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowAddStaffPassword(!showAddStaffPassword)}
-                        className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors p-1"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Password Strength Indicator Bar */}
-                    {newStaff.password && (
-                      <div className="mt-1.5 flex gap-1 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full transition-all duration-300 rounded-full"
-                          style={{ 
-                            width: getPasswordStrength(newStaff.password).label === 'Weak' ? '33%' : getPasswordStrength(newStaff.password).label === 'Medium' ? '66%' : '100%',
-                            backgroundColor: getPasswordStrength(newStaff.password).color
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Confirm Password */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                        Confirm Password
-                      </label>
-                      {newStaff.confirmPassword && (
-                        <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
-                          newStaff.password === newStaff.confirmPassword 
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                            : 'bg-rose-50 text-rose-600 border-rose-200'
-                        }`}>
-                          {newStaff.password === newStaff.confirmPassword ? '✓ Matched' : 'Mismatch'}
-                        </span>
-                      )}
-                    </div>
-                    <div className="relative flex items-center group">
-                      <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                      <input 
-                        type={showAddStaffConfirmPassword ? "text" : "password"} 
-                        required
-                        placeholder="Confirm login password"
-                        value={newStaff.confirmPassword}
-                        onChange={(e) => setNewStaff({...newStaff, confirmPassword: e.target.value})}
-                        className={`w-full h-10 pr-10 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm placeholder:tracking-normal focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs ${
-                          !showAddStaffConfirmPassword && newStaff.confirmPassword ? 'text-lg tracking-[0.22em]' : 'text-sm tracking-normal'
-                        }`}
-                        style={{ paddingLeft: '44px' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowAddStaffConfirmPassword(!showAddStaffConfirmPassword)}
-                        className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors p-1"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* CARD 2: Role & Department Assignment */}
-              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7.5 h-7.5 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs sm:text-sm">
-                      2
-                    </div>
-                    <div>
-                      <h4 className="text-[13px] sm:text-sm font-black uppercase tracking-wider text-slate-900 m-0">
-                        Role & Department Assignment
-                      </h4>
-                      <p className="text-xs text-slate-500 m-0">Sets module permissions and department affiliation</p>
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
-                    Compulsory
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Access Role */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                        Access Role
-                      </label>
-                      <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
-                        Required
-                      </span>
-                    </div>
-                    <div className="relative flex items-center group">
-                      <Shield className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                      <select 
-                        className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
-                        style={{ paddingLeft: '44px', paddingRight: '36px' }}
-                        value={newStaff.role} 
-                        onChange={(e) => setNewStaff({...newStaff, role: e.target.value})}
-                      >
-                        {getAvailableRoles().map(r => (
-                          <option key={r.value} value={r.value}>{r.label}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none z-10" />
-                    </div>
-                  </div>
-
-                  {/* Hospital Email */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                        Hospital / Work Email
-                      </label>
-                      <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
-                        Required
-                      </span>
-                    </div>
-                    <div className="relative flex items-center group">
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                      <input 
-                        type="email" 
-                        required
-                        placeholder="staff.name@hospital.com"
-                        value={newStaff.email}
-                        onChange={(e) => setNewStaff({...newStaff, email: e.target.value})}
-                        className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
-                        style={{ paddingLeft: '44px' }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* CARD 3: Doctor Configuration (Conditionally rendered when role is Doctor) */}
-              {newStaff.role === 'doctor' && (
-                <div className="bg-gradient-to-br from-teal-500/5 via-teal-50/50 to-white rounded-xl p-5 border-2 border-teal-500/40 shadow-xs space-y-4 animate-slideDown">
-                  <div className="flex items-center justify-between border-b border-teal-200/60 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7.5 h-7.5 rounded-lg bg-teal-600 text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-xs">
-                        <Stethoscope className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h4 className="text-[13px] sm:text-sm font-black uppercase tracking-wider text-teal-950 m-0">
-                          3. Doctor Clinical Configuration
-                        </h4>
-                        <p className="text-xs text-teal-700 m-0">Specialization, appointment fees, and OPD schedule</p>
-                      </div>
-                    </div>
-                    <span className="text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-300">
-                      Doctor Setup
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Specialization */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                          Medical Specialization
-                        </label>
-                        <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
-                          Required
-                        </span>
-                      </div>
-                      <div className="relative flex items-center group">
-                        <Stethoscope className="w-4 h-4 text-teal-600 absolute left-3.5 pointer-events-none z-10" />
-                        <select 
-                          value={newStaff.specialty || ''}
-                          onChange={(e) => setNewStaff({...newStaff, specialty: e.target.value})}
-                          className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-teal-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
-                          style={{ paddingLeft: '44px', paddingRight: '36px' }}
-                        >
-                          <option value="">-- Select Specialization --</option>
-                          {DOCTOR_SPECIALIZATIONS.map(spec => (
-                            <option key={spec} value={spec}>{spec}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none z-10" />
-                      </div>
-                    </div>
-
-                    {/* Doctor Consultation Fee */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                          Consultation Fee <span className="text-slate-500 font-normal text-xs">(₹ INR)</span>
-                        </label>
-                        <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                          Default: ₹500
-                        </span>
-                      </div>
-                      <div className="relative flex items-center group">
-                        <span className="absolute left-3.5 font-bold text-base text-slate-500 pointer-events-none group-focus-within:text-teal-600 transition-colors z-10">₹</span>
-                        <input 
-                          type="number" 
-                          min="0"
-                          placeholder="e.g. 500"
-                          value={newStaff.consultationFee !== undefined ? newStaff.consultationFee : 500}
-                          onChange={(e) => setNewStaff({...newStaff, consultationFee: e.target.value !== '' ? Number(e.target.value) : ''})}
-                          className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-teal-500/15 transition-all shadow-2xs"
-                          style={{ paddingLeft: '44px' }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Attending Time Slots */}
-                    <div className="md:col-span-2 space-y-2.5">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-2">
-                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                            Attending OPD Time Slots
-                          </label>
-                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs">
-                            {(newStaff.doctorSlots || []).length} Active
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const allBase = [
-                                '09:00 AM - 09:30 AM', '09:30 AM - 10:00 AM', '10:00 AM - 10:30 AM',
-                                '10:30 AM - 11:00 AM', '11:00 AM - 11:30 AM', '11:30 AM - 12:00 PM',
-                                '12:00 PM - 12:30 PM', '12:30 PM - 01:00 PM', '02:00 PM - 02:30 PM',
-                                '02:30 PM - 03:00 PM', '03:00 PM - 03:30 PM', '03:30 PM - 04:00 PM',
-                                '04:00 PM - 04:30 PM', '04:30 PM - 05:00 PM', '05:00 PM - 05:30 PM',
-                                ...(newStaff.doctorSlots || [])
-                              ];
-                              setNewStaff({ ...newStaff, doctorSlots: Array.from(new Set(allBase)) });
-                            }}
-                            className="text-xs font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
-                          >
-                            Select All
-                          </button>
-                          <span className="text-slate-300">|</span>
-                          <button
-                            type="button"
-                            onClick={() => setNewStaff({ ...newStaff, doctorSlots: [] })}
-                            className="text-xs font-bold text-slate-500 hover:text-rose-600 underline cursor-pointer"
-                          >
-                            Clear All
-                          </button>
-                          <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200 ml-1">
-                            Required (≥ 1)
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Add Custom Slot Input */}
-                      <div className="flex gap-2">
-                        <div className="relative flex-1 flex items-center">
-                          <Clock className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
-                          <input 
-                            type="text" 
-                            placeholder="Add custom slot (e.g. 10:00 AM - 11:00 AM)" 
-                            value={adminCustomSlotInput}
-                            onChange={e => setAdminCustomSlotInput(e.target.value)}
-                            className="w-full h-10 pl-9 pr-3 bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-500 rounded-lg text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-3 focus:ring-teal-500/15 transition-all"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!adminCustomSlotInput.trim()) return;
-                            const newSlot = adminCustomSlotInput.trim();
-                            const currentSlots = newStaff.doctorSlots || [];
-                            if (!currentSlots.includes(newSlot)) {
-                              setNewStaff({
-                                ...newStaff,
-                                doctorSlots: [...currentSlots, newSlot]
-                              });
-                            }
-                            setAdminCustomSlotInput('');
-                          }}
-                          className="px-4 h-10 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-lg text-xs sm:text-[13px] font-bold transition-all shadow-xs cursor-pointer active:scale-95 flex items-center gap-1.5"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span>Add Slot</span>
-                        </button>
-                      </div>
-
-                      {/* Visual Legend */}
-                      <div className="flex items-center justify-between text-xs px-1 text-slate-500 pt-0.5">
-                        <div className="flex items-center gap-3">
-                          <span className="inline-flex items-center gap-1.5 font-bold text-blue-700">
-                            <span className="w-4 h-4 rounded bg-blue-600 text-white inline-flex items-center justify-center text-[11px] shadow-2xs font-bold">✓</span>
-                            Selected (Scheduled OPD)
-                          </span>
-                          <span className="inline-flex items-center gap-1.5 font-medium text-slate-500">
-                            <span className="w-4 h-4 rounded border border-dashed border-slate-400 bg-white text-slate-400 inline-flex items-center justify-center text-[11px] font-bold">+</span>
-                            Deselected (Click to enable)
-                          </span>
-                        </div>
-                        <span className="text-xs text-slate-400 hidden sm:inline">Click slot to toggle</span>
-                      </div>
-
-                      {/* Slots Pill Stack */}
-                      <div className="flex flex-wrap gap-2 p-3.5 border border-teal-200/70 rounded-xl bg-teal-50/25 max-h-[160px] overflow-y-auto" data-lenis-prevent>
-                        {Array.from(new Set([
-                          '09:00 AM - 09:30 AM', '09:30 AM - 10:00 AM', '10:00 AM - 10:30 AM',
-                          '10:30 AM - 11:00 AM', '11:00 AM - 11:30 AM', '11:30 AM - 12:00 PM',
-                          '12:00 PM - 12:30 PM', '12:30 PM - 01:00 PM', '02:00 PM - 02:30 PM',
-                          '02:30 PM - 03:00 PM', '03:00 PM - 03:30 PM', '03:30 PM - 04:00 PM',
-                          '04:00 PM - 04:30 PM', '04:30 PM - 05:00 PM', '05:00 PM - 05:30 PM',
-                          ...(newStaff.doctorSlots || [])
-                        ])).map(slot => {
-                          const isSelected = (newStaff.doctorSlots || []).includes(slot);
-                          return (
-                            <button
-                              key={slot}
-                              type="button"
-                              onClick={() => {
-                                let currentSlots = [...(newStaff.doctorSlots || [])];
-                                if (currentSlots.includes(slot)) {
-                                  currentSlots = currentSlots.filter(s => s !== slot);
-                                } else {
-                                  currentSlots.push(slot);
-                                }
-                                setNewStaff({...newStaff, doctorSlots: currentSlots});
-                              }}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer select-none active:scale-95 ${
-                                isSelected
-                                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs shadow-blue-500/25 border border-blue-600'
-                                  : 'bg-white hover:bg-blue-50/50 text-slate-600 border border-dashed border-slate-300 hover:border-blue-400 hover:text-blue-700'
-                              }`}
-                              title={isSelected ? 'Click to deselect (remove from schedule)' : 'Click to select (add to schedule)'}
-                            >
-                              {isSelected ? (
-                                <span className="w-3.5 h-3.5 rounded-full bg-white/20 flex items-center justify-center">
-                                  <Check className="w-2.5 h-2.5 text-white stroke-[3]" />
-                                </span>
-                              ) : (
-                                <span className="w-3.5 h-3.5 rounded-full bg-slate-100 flex items-center justify-center">
-                                  <Plus className="w-2.5 h-2.5 text-slate-400" />
-                                </span>
-                              )}
-                              <span>{slot}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Weekly Off Days */}
-                    <div className="md:col-span-2 space-y-1.5">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                            Weekly Off Days
-                          </label>
-                          <span className="text-xs text-slate-500 font-medium">
-                            (Mark which days doctor does NOT attend clinic)
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                          Optional
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {WEEKDAYS.map(day => {
-                          const isSelected = Array.isArray(newStaff.weeklyOff)
-                            ? newStaff.weeklyOff.includes(day)
-                            : (newStaff.weeklyOff || '').split(',').map(d => d.trim()).includes(day);
-                          return (
-                            <button
-                              key={day}
-                              type="button"
-                              onClick={() => {
-                                let currentOffs = Array.isArray(newStaff.weeklyOff)
-                                  ? [...newStaff.weeklyOff]
-                                  : (newStaff.weeklyOff ? newStaff.weeklyOff.split(',').map(d => d.trim()) : []);
-                                if (currentOffs.includes(day)) {
-                                  currentOffs = currentOffs.filter(d => d !== day);
-                                } else {
-                                  currentOffs.push(day);
-                                }
-                                setNewStaff({...newStaff, weeklyOff: currentOffs});
-                              }}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-[13px] font-bold border transition-all cursor-pointer select-none active:scale-95 ${
-                                isSelected
-                                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-transparent shadow-xs shadow-blue-500/25'
-                                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                              }`}
-                              title={isSelected ? `${day} marked as OFF (Click to mark Working)` : `${day} is Working (Click to mark OFF)`}
-                            >
-                              {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
-                              <span>{day.slice(0, 3)}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* CARD 4: Personal, Statutory & Emergency Details (Optional Collapsible) */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setShowAddStaffOptional(!showAddStaffOptional)}
-                  className="w-full px-5 py-3.5 bg-slate-50/70 hover:bg-slate-100/70 flex items-center justify-between transition-colors border-b border-slate-200/80 text-left cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-md bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs sm:text-sm">
-                      <FileText className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="text-[13px] sm:text-sm font-extrabold uppercase tracking-wider text-slate-800 m-0">
-                        4. Personal, Statutory & Emergency Details
-                      </h4>
-                      <p className="text-xs text-slate-500 m-0">Demographics, Aadhaar/PAN, Address & Emergency Contact</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">
-                      All Optional
-                    </span>
-                    {showAddStaffOptional ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                  </div>
-                </button>
-
-                {showAddStaffOptional && (
-                  <div className="p-5 space-y-4 animate-fadeIn">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {/* Annual CTC */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                            Annual CTC <span className="text-slate-500 font-normal text-xs">(₹ INR)</span>
-                          </label>
-                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                            Optional
-                          </span>
-                        </div>
-                        <div className="relative flex items-center group">
-                          <span className="absolute left-3.5 font-bold text-base text-slate-400 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10">₹</span>
-                          <input 
-                            type="number" 
-                            min="0"
-                            placeholder="e.g. 600000"
-                            value={newStaff.ctcAnnual || ''}
-                            onChange={e => setNewStaff({...newStaff, ctcAnnual: e.target.value})}
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
-                            style={{ paddingLeft: '44px' }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Date of Birth */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                            Date of Birth
-                          </label>
-                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                            Optional
-                          </span>
-                        </div>
-                        <div className="relative flex items-center group">
-                          <Calendar className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                          <input 
-                            type="date" 
-                            value={newStaff.dob || ''} 
-                            onChange={e => setNewStaff({...newStaff, dob: e.target.value})} 
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
-                            style={{ paddingLeft: '44px' }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Gender */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                            Gender
-                          </label>
-                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                            Optional
-                          </span>
-                        </div>
-                        <div className="relative flex items-center group">
-                          <Users className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                          <select 
-                            value={newStaff.gender || ''} 
-                            onChange={e => setNewStaff({...newStaff, gender: e.target.value})} 
-                            className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
-                            style={{ paddingLeft: '44px', paddingRight: '36px' }}
-                          >
-                            <option value="">-- Select Gender --</option>
-                            <option value="Male">Male</option>
-                            <option value="Female">Female</option>
-                            <option value="Other">Other</option>
-                          </select>
-                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none z-10" />
-                        </div>
-                      </div>
-
-                      {/* Blood Group */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                            Blood Group
-                          </label>
-                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                            Optional
-                          </span>
-                        </div>
-                        <div className="relative flex items-center group">
-                          <Droplet className="w-4 h-4 text-rose-500 absolute left-3.5 pointer-events-none z-10" />
-                          <select 
-                            value={newStaff.bloodGroup || ''} 
-                            onChange={e => setNewStaff({...newStaff, bloodGroup: e.target.value})} 
-                            className="w-full h-10 pr-9 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all appearance-none cursor-pointer shadow-2xs"
-                            style={{ paddingLeft: '44px', paddingRight: '36px' }}
-                          >
-                            <option value="">-- Select Blood Group --</option>
-                            {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => <option key={bg} value={bg}>{bg}</option>)}
-                          </select>
-                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none z-10" />
-                        </div>
-                      </div>
-
-                      {/* Aadhaar Number */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                            Aadhaar Card <span className="text-slate-500 font-normal text-xs">(12 Digits)</span>
-                          </label>
-                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                            Optional
-                          </span>
-                        </div>
-                        <div className="relative flex items-center group">
-                          <CreditCard className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                          <input 
-                            type="text" 
-                            maxLength="12"
-                            placeholder="XXXX XXXX XXXX" 
-                            value={newStaff.aadhaar || ''} 
-                            onChange={e => setNewStaff({...newStaff, aadhaar: e.target.value.replace(/\D/g, '')})} 
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs font-mono"
-                            style={{ paddingLeft: '44px' }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* PAN Card */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                            PAN Number <span className="text-slate-500 font-normal text-xs">(10 Characters)</span>
-                          </label>
-                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                            Optional
-                          </span>
-                        </div>
-                        <div className="relative flex items-center group">
-                          <FileText className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                          <input 
-                            type="text" 
-                            maxLength="10"
-                            placeholder="ABCDE1234F" 
-                            value={newStaff.pan || ''} 
-                            onChange={e => setNewStaff({...newStaff, pan: e.target.value.toUpperCase()})} 
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm uppercase focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs font-mono"
-                            style={{ paddingLeft: '44px' }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Residential Address */}
-                      <div className="md:col-span-3">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                            Residential Address
-                          </label>
-                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                            Optional
-                          </span>
-                        </div>
-                        <div className="relative flex items-center group">
-                          <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                          <textarea 
-                            rows="2"
-                            placeholder="Street address, city, state, postal pin code..." 
-                            value={newStaff.address || ''} 
-                            onChange={e => setNewStaff({...newStaff, address: e.target.value})} 
-                            className="w-full pr-3.5 pt-2.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
-                            style={{ paddingLeft: '44px' }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Emergency Contact Name */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                            Emergency Contact Name
-                          </label>
-                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                            Optional
-                          </span>
-                        </div>
-                        <div className="relative flex items-center group">
-                          <HeartPulse className="w-4 h-4 text-rose-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                          <input 
-                            type="text" 
-                            placeholder="Next of Kin / Contact Name" 
-                            value={newStaff.emergencyContactName || ''} 
-                            onChange={e => setNewStaff({...newStaff, emergencyContactName: e.target.value})} 
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
-                            style={{ paddingLeft: '44px' }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Emergency Contact Relation */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                            Relationship
-                          </label>
-                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                            Optional
-                          </span>
-                        </div>
-                        <div className="relative flex items-center group">
-                          <Users className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                          <input 
-                            type="text" 
-                            placeholder="e.g. Spouse / Parent / Sibling" 
-                            value={newStaff.emergencyContactRelation || ''} 
-                            onChange={e => setNewStaff({...newStaff, emergencyContactRelation: e.target.value})} 
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
-                            style={{ paddingLeft: '44px' }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Emergency Contact Phone */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                            Emergency Phone Number
-                          </label>
-                          <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
-                            Optional
-                          </span>
-                        </div>
-                        <div className="relative flex items-center group">
-                          <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none group-focus-within:text-blue-600 transition-colors z-10" />
-                          <input 
-                            type="tel" 
-                            maxLength="10"
-                            placeholder="10-digit emergency phone" 
-                            value={newStaff.emergencyContactPhone || ''} 
-                            onChange={e => setNewStaff({...newStaff, emergencyContactPhone: e.target.value.replace(/\D/g, '')})} 
-                            className="w-full h-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 placeholder:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"
-                            style={{ paddingLeft: '44px' }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Modal Sticky Footer */}
-            <div className="px-6 py-4 bg-white border-t border-slate-200 flex items-center justify-between flex-wrap gap-3 shrink-0 shadow-lg">
-              <div className="text-xs text-slate-500 hidden sm:flex items-center gap-1.5 font-medium">
-                <span className="font-semibold text-slate-600">Shortcut:</span>
-                <kbd className="px-2 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-xs text-slate-700 font-bold">Enter ↵</kbd>
-                <span>advances fields & submits</span>
-              </div>
-
-              <div className="flex items-center gap-3 ml-auto">
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setShowAddStaffModal(false);
-                    setShowAddStaffPassword(false);
-                    setShowAddStaffConfirmPassword(false);
-                    setError('');
-                  }} 
-                  className="px-5 py-2.5 rounded-xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-700 font-bold text-sm transition-all cursor-pointer active:scale-95"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={loading}
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 text-white font-extrabold text-sm shadow-md shadow-blue-500/25 transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Registering Staff...</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-4 h-4" />
-                      <span>Register Staff Member</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-      )}
 
       {/* Delete/Revoke Confirmation Modal Overlay */}
       {showRevokeConfirm && (

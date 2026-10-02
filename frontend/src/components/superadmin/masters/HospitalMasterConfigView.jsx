@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import * as Icons from 'lucide-react';
 import { getAllCategories, getCategoryConfig } from '../../../config/masterSchemaRegistry';
+import { getApiUrl } from '../../../utils/api';
 
 const LucideIcon = ({ name, ...props }) => {
   if (!name) return <Icons.HelpCircle {...props} />;
@@ -75,9 +76,13 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
       try {
         setLoadingHospitals(true);
         const token = localStorage.getItem('token');
-        const res = await fetch('/api/superadmin/masters/hospitals-list', {
+        const res = await fetch(getApiUrl('/superadmin/masters/hospitals-list'), {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error(`Non-JSON response (Status ${res.status})`);
+        }
         const data = await res.json();
         if (isMounted && data.success && Array.isArray(data.data)) {
           setHospitals(data.data);
@@ -110,9 +115,13 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
       params.append('page', page.toString());
       params.append('limit', limit.toString());
 
-      const res = await fetch(`/api/superadmin/masters/hospital-configs?${params.toString()}`, {
+      const res = await fetch(getApiUrl(`/superadmin/masters/hospital-configs?${params.toString()}`), {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(`Non-JSON response (Status ${res.status})`);
+      }
       const data = await res.json();
       if (data.success) {
         setConfigs(data.data || []);
@@ -144,9 +153,13 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
       if (categoryFilter !== 'all') params.append('category', categoryFilter);
       if (unassignedSearch.trim()) params.append('search', unassignedSearch.trim());
 
-      const res = await fetch(`/api/superadmin/masters/unassigned-global-items?${params.toString()}`, {
+      const res = await fetch(getApiUrl(`/superadmin/masters/unassigned-global-items?${params.toString()}`), {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(`Non-JSON response (Status ${res.status})`);
+      }
       const data = await res.json();
       if (data.success) {
         setUnassignedItems(data.data || []);
@@ -191,7 +204,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
         status: assignForm.status || 'Active'
       };
 
-      const res = await fetch('/api/superadmin/masters/hospital-configs/assign', {
+      const res = await fetch(getApiUrl('/superadmin/masters/hospital-configs/assign'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -199,6 +212,10 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
         },
         body: JSON.stringify(payload)
       });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(`Non-JSON response (Status ${res.status})`);
+      }
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Failed to assign master item');
@@ -241,7 +258,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
         status: editForm.status
       };
 
-      const res = await fetch(`/api/superadmin/masters/hospital-configs/${editingConfig._id}`, {
+      const res = await fetch(getApiUrl(`/superadmin/masters/hospital-configs/${editingConfig._id}`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -249,6 +266,10 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
         },
         body: JSON.stringify(payload)
       });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(`Non-JSON response (Status ${res.status})`);
+      }
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Failed to update pricing');
@@ -273,10 +294,14 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
     }
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/superadmin/masters/hospital-configs/${config._id}`, {
+      const res = await fetch(getApiUrl(`/superadmin/masters/hospital-configs/${config._id}`), {
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(`Non-JSON response (Status ${res.status})`);
+      }
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Failed to unassign item');

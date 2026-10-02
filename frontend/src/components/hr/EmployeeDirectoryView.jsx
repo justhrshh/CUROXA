@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { 
   Search, Filter, Plus, Shield, ShieldCheck, Mail, Phone, Eye, 
@@ -54,10 +55,12 @@ export default function EmployeeDirectoryView({
   onDeactivateEmployee,
   initialIsAdding = false
 }) {
+  const navigate = useNavigate();
   const tenantModules = JSON.parse(localStorage.getItem('tenantModules') || '{}');
   const getAvailableRoles = () => {
     const allRoles = [
       { value: 'doctor', label: 'Doctor', moduleKey: 'doctor' },
+      { value: 'nurse', label: 'Nurse', moduleKey: null },
       { value: 'receptionist', label: 'Receptionist', moduleKey: 'reception' },
       { value: 'lab', label: 'Laboratory', moduleKey: 'laboratory' },
       { value: 'pharmacy', label: 'Pharmacy', moduleKey: 'pharmacy' },
@@ -743,7 +746,9 @@ export default function EmployeeDirectoryView({
           {/* + Add Staff CTA */}
           <button
             className="h-9 px-4 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-md shadow-blue-500/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-            onClick={() => { resetForm(); setIsAdding(true); }}
+            onClick={() => {
+              navigate('/admin/staff/new');
+            }}
           >
             <Plus className="w-3.5 h-3.5" />
             Add Staff Member

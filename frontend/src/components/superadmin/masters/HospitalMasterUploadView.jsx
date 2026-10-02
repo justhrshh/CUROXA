@@ -16,6 +16,7 @@ import UploadContextSelector from './UploadContextSelector';
 import ExcelDropzone from './ExcelDropzone';
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportResultSummary from './ImportResultSummary';
+import { getApiUrl } from '../../../utils/api';
 
 export default function HospitalMasterUploadView({ onSwitchTab }) {
   const [hospitals, setHospitals] = useState([]);
@@ -51,9 +52,13 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
       try {
         setLoadingHospitals(true);
         const token = localStorage.getItem('token');
-        const res = await fetch('/api/superadmin/masters/hospitals-list', {
+        const res = await fetch(getApiUrl('/superadmin/masters/hospitals-list'), {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error(`Non-JSON response (Status ${res.status})`);
+        }
         const data = await res.json();
         if (isMounted && data.success && Array.isArray(data.data)) {
           setHospitals(data.data);
@@ -102,11 +107,15 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
       setLoadingHistory(true);
       const token = localStorage.getItem('token');
       const url = selectedHospital 
-        ? `/api/superadmin/masters/upload/history?tenantId=${encodeURIComponent(selectedHospital)}&limit=10`
-        : '/api/superadmin/masters/upload/history?limit=10';
-      const res = await fetch(url, {
+        ? `/superadmin/masters/upload/history?tenantId=${encodeURIComponent(selectedHospital)}&limit=10`
+        : '/superadmin/masters/upload/history?limit=10';
+      const res = await fetch(getApiUrl(url), {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(`Non-JSON response (Status ${res.status})`);
+      }
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
         setHistory(data.data);
@@ -141,12 +150,12 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
       setDownloadingTemplate(true);
       setError('');
       const token = localStorage.getItem('token');
-      let url = `/api/superadmin/masters/upload/template?category=${encodeURIComponent(selectedCategory)}`;
+      let url = `/superadmin/masters/upload/template?category=${encodeURIComponent(selectedCategory)}`;
       if (selectedDepartment) {
         url += `&department=${encodeURIComponent(selectedDepartment)}`;
       }
 
-      const res = await fetch(url, {
+      const res = await fetch(getApiUrl(url), {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
 
@@ -204,12 +213,15 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
       }
 
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/superadmin/masters/upload/parse-preview', {
+      const res = await fetch(getApiUrl('/superadmin/masters/upload/parse-preview'), {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData
       });
-
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(`Non-JSON response (Status ${res.status})`);
+      }
       const data = await res.json();
 
       if (!res.ok || !data.success) {
@@ -233,7 +245,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
       setError('');
 
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/superadmin/masters/upload/confirm-import', {
+      const res = await fetch(getApiUrl('/superadmin/masters/upload/confirm-import'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

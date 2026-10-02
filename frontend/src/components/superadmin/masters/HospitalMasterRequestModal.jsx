@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import * as Icons from 'lucide-react';
 import axios from 'axios';
+import { getApiUrl } from '../../../utils/api';
 import {
   MASTER_SCHEMA_REGISTRY,
   getAllCategories,
@@ -86,7 +87,7 @@ export default function HospitalMasterRequestModal({
       setLoadingUnassigned(true);
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('/api/superadmin/masters/unassigned-global-items', {
+        const res = await axios.get(getApiUrl('/superadmin/masters/unassigned-global-items'), {
           headers: { Authorization: `Bearer ${token}` },
           params: {
             tenantId,
@@ -120,7 +121,7 @@ export default function HospitalMasterRequestModal({
     const checkDup = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('/api/item-requests/check-duplicate', {
+        const res = await axios.get(getApiUrl('/item-requests/check-duplicate'), {
           headers: { Authorization: `Bearer ${token}` },
           params: {
             tenantId,
@@ -167,7 +168,7 @@ export default function HospitalMasterRequestModal({
     setErrorMsg('');
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.post('/api/item-requests', {
+      const res = await axios.post(getApiUrl('/item-requests'), {
         requestType: 'ASSIGN_EXISTING_GLOBAL_ITEM',
         masterItemId: selectedMasterItem._id,
         category: selectedCategoryA,
@@ -202,7 +203,7 @@ export default function HospitalMasterRequestModal({
     setErrorMsg('');
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.post('/api/item-requests', {
+      const res = await axios.post(getApiUrl('/item-requests'), {
         requestType: 'NEW_GLOBAL_ITEM',
         category: selectedCategoryB,
         department: selectedDepartmentB,

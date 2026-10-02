@@ -1,7 +1,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import axios from 'axios'
 import App from './App.jsx'
 import './css/index.css'
+import { getApiUrl } from './utils/api'
 
 // Global interceptor to suppress standard browser success alert popups
 const originalAlert = window.alert;
@@ -98,12 +100,38 @@ const originalFetch = window.fetch;
 window.fetch = async function(...args) {
   startLoading();
   try {
-    const response = await originalFetch.apply(this, args);
+    let targetArgs = [...args];
+    const resource = targetArgs[0];
+
+    if (typeof resource === 'string') {
+      if (resource.startsWith('/api') || resource.startsWith('api/')) {
+        targetArgs[0] = getApiUrl(resource);
+      }
+    } else if (resource instanceof Request && typeof resource.url === 'string') {
+      const origin = window.location.origin;
+      if (resource.url.startsWith(`${origin}/api/`)) {
+        const pathAndQuery = resource.url.slice(origin.length);
+        const rewritten = getApiUrl(pathAndQuery);
+        targetArgs[0] = new Request(rewritten, resource);
+      }
+    }
+
+    const response = await originalFetch.apply(this, targetArgs);
     return response;
   } finally {
     stopLoading();
   }
 };
+
+// Global Axios interceptor for default axios instances
+axios.interceptors.request.use((config) => {
+  if (config.url && typeof config.url === 'string') {
+    if (config.url.startsWith('/api') || config.url.startsWith('api/')) {
+      config.url = getApiUrl(config.url);
+    }
+  }
+  return config;
+});
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
