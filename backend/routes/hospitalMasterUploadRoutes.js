@@ -124,6 +124,26 @@ router.post('/parse-preview', upload.single('file'), async (req, res) => {
     const expiresAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 Hour
     const cleanupAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 Hours
 
+    // Build normalized summary with both old keys (for backward compat) and new frontend keys
+    const normalizedSummary = matchedRows.summary || {
+      totalRows: matchedRows.length,
+      selected: matchedRows.filter(r => r.isSelected).length,
+      notSelected: matchedRows.filter(r => !r.isSelected).length,
+      // Frontend MatchSummaryCards keys
+      exactMatch: matchedCount,
+      safeMatch: safeMatchCount,
+      ambiguous: ambiguousCount,
+      unmatched: unmatchedCount,
+      repricingDiffs: repricingCount,
+      // Also keep old keys for any other consumers
+      matchedCount,
+      safeMatchCount,
+      ambiguousCount,
+      unmatchedCount,
+      repricingCount,
+      errorCount
+    };
+
     const sessionDoc = await HospitalMasterImportSession.create({
       previewId,
       tenantId: tenantId.trim(),
@@ -141,27 +161,27 @@ router.post('/parse-preview', upload.single('file'), async (req, res) => {
       expiresAt,
       cleanupAt,
       status: 'PREVIEW_READY',
-      summary: matchedRows.summary || {
-        totalRows: matchedRows.length,
-        selected: matchedRows.filter(r => r.isSelected).length,
-        notSelected: matchedRows.filter(r => !r.isSelected).length,
-        newSelected: matchedRows.filter(r => r.isSelected && r.selectionStatus === 'NEW_SELECTION').length,
-        existingCount: matchedRows.filter(r => r.isSelected && r.selectionStatus === 'EXISTING_UNCHANGED').length,
-        matchedCount,
-        safeMatchCount,
-        ambiguousCount,
-        unmatchedCount,
-        repricingCount,
-        errorCount
-      },
+      summary: normalizedSummary,
       rows: matchedRows
     });
 
     res.json({
       success: true,
+      // sessionId is the canonical name the frontend uses; previewId kept for backward compat
+      sessionId: previewId,
       previewId,
+      filename: req.file.originalname,
+      category: category.trim(),
+      department: effectiveDept || '',
+      tenant: {
+        id: tenantId.trim(),
+        code: tenantId.trim(),
+        name: hospitalName
+      },
       expiresAt,
-      summary: sessionDoc.summary,
+      summary: normalizedSummary,
+      // previewRows is the canonical name the frontend uses; rows kept for backward compat
+      previewRows: matchedRows,
       rows: matchedRows
     });
   } catch (err) {
@@ -181,13 +201,17 @@ router.post('/parse-preview', upload.single('file'), async (req, res) => {
 router.post('/confirm-import', async (req, res) => {
   try {
     const {
-      previewId,
+      sessionId,
+      previewId: rawPreviewId,
       tenantId,
       category,
       department,
       allowRepricing = false,
       ambiguousResolutions = {}
     } = req.body;
+
+    // Accept either sessionId or previewId (frontend sends sessionId)
+    const previewId = sessionId || rawPreviewId;
 
     const result = await confirmImportSession({
       previewId,

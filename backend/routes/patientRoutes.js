@@ -107,6 +107,7 @@ router.post('/', async (req, res) => {
       patientId: hospitalPatientId,
       title: (title || '').trim(),
       name,
+      dob: req.body.dob || '',
       age: parseInt(age) || 0,
       ageMonths: parseInt(ageMonths) || 0,
       ageDays: parseInt(ageDays) || 0,
@@ -418,6 +419,7 @@ router.put('/:id', async (req, res) => {
     // Update Patient details
     if (title !== undefined) patient.title = String(title).trim();
     patient.name = name || patient.name;
+    if (req.body.dob !== undefined) patient.dob = req.body.dob;
     patient.age = parseInt(age) || patient.age;
     patient.gender = gender || patient.gender;
     patient.address = address !== undefined ? address : patient.address;

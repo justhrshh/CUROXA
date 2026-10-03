@@ -6,6 +6,7 @@ const patientSchema = new mongoose.Schema({
   patientId: { type: String },
   title: { type: String, default: '' },
   name: { type: String, required: true },
+  dob: { type: String, default: '' },
   age: { type: Number, default: 0 },
   ageMonths: { type: Number, default: 0 },
   ageDays: { type: Number, default: 0 },

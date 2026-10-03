@@ -1054,12 +1054,27 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
       console.warn('Could not auto-clean onboarding draft:', cleanErr.message);
     }
     
-    // Send email notifications
+    // Send email notifications with password-protected PDF credentials
     try {
       const { sendEmail } = require('../utils/emailService');
+      const { generateCredentialPdf, derivePdfPassword } = require('../utils/credentialPdfGenerator');
 
-      const frontendBaseUrl = getFrontendBaseUrl();
+      const frontendBaseUrl = getFrontendBaseUrl(req);
       const portalUrl = hospital.hospitalId ? `${frontendBaseUrl}/portal/${hospital.hospitalId}` : `${frontendBaseUrl}/login`;
+
+      const pdfPassword = derivePdfPassword(adminName, adminPhone);
+      const pdfBuffer = await generateCredentialPdf({
+        hospitalName: hospital.name,
+        hospitalCode: hospital.code,
+        hospitalId: hospital.hospitalId,
+        subscriptionPlan: hospital.plan,
+        portalUrl,
+        adminName,
+        adminEmail,
+        adminPhone,
+        adminPassword,
+        pdfPassword
+      });
 
       // Email to Hospital Admin
       const adminMailHtml = `
@@ -1079,11 +1094,26 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
             ${hospital.hospitalId ? `<p style="margin: 4px 0; font-size: 13px; color: #475569;"><strong>Portal ID:</strong> ${hospital.hospitalId}</p>` : ''}
             <p style="margin: 4px 0; font-size: 13px; color: #475569;"><strong>Portal Link:</strong> <a href="${portalUrl}" style="color: #4F46E5; font-weight: 600;">${portalUrl}</a></p>
           </div>
-          <div style="background: #EEF2FF; border-radius: 8px; padding: 16px; margin-bottom: 24px; border: 1px solid #E0E7FF;">
-            <h3 style="margin-top: 0; font-size: 15px; color: #4F46E5; font-weight: 700;">Your Admin Login Credentials</h3>
-            <p style="margin: 4px 0; font-size: 13px; color: #3730A3;"><strong>Username (Login ID):</strong> ${adminPhone}</p>
-            <p style="margin: 4px 0; font-size: 13px; color: #3730A3;"><strong>Password:</strong> ${adminPassword}</p>
-            <p style="margin: 12px 0 0 0; font-size: 12px; color: #6366F1;">Please log in and update your password immediately for safety.</p>
+          <div style="background: #EEF2FF; border-radius: 8px; padding: 18px; margin-bottom: 24px; border: 1.5px solid #C7D2FE;">
+            <h3 style="margin-top: 0; font-size: 15px; color: #3730A3; font-weight: 800;">🔒 Confidential Credentials Attached (Encrypted PDF)</h3>
+            <p style="margin: 4px 0 10px 0; font-size: 12.5px; color: #4338CA; line-height: 1.5;">
+              For enterprise security compliance, your administrator login password and access credentials are encrypted in the attached PDF:
+              <br/>
+              <strong>Hospital_Credentials_${hospital.code}.pdf</strong>
+            </p>
+            <div style="background: #FFFFFF; border-radius: 6px; padding: 12px; border: 1px dashed #818CF8; margin-top: 8px;">
+              <p style="margin: 0; font-size: 12px; color: #312E81;"><strong>PDF Password Formula:</strong></p>
+              <p style="margin: 3px 0 0 0; font-size: 11.5px; color: #475569;">
+                First 4 letters of Admin Name (UPPERCASE) + Last 4 digits of Admin Telephone
+              </p>
+              <p style="margin: 6px 0 0 0; font-size: 12px; color: #3730A3; font-weight: 700;">
+                Document Password: <span style="background: #EEF2FF; padding: 2px 8px; border-radius: 4px; font-family: monospace; letter-spacing: 1px; font-size: 13px;">${pdfPassword}</span>
+              </p>
+            </div>
+            <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #E0E7FF; font-size: 12px; color: #3730A3;">
+              <strong>Username (Login ID):</strong> <span style="color: #1E293B; font-weight: 700;">${adminPhone}</span>
+            </div>
+            <p style="margin: 10px 0 0 0; font-size: 11.5px; color: #6366F1;">Please log in and update your security password immediately for safety.</p>
           </div>
           <div style="text-align: center;">
             <a href="${portalUrl}" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Hospital Portal</a>
@@ -1094,15 +1124,20 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
         </div>
       `;
 
-    // Removed superAdminMailHtml
-
-      sendEmail({
+      await sendEmail({
         to: adminEmail,
-        subject: `Welcome to Quroxa! Your Hospital Onboarding is Approved`,
-        text: `Your Quroxa Hospital Admin Account is ready.\nTenant: ${hospital.name} (${hospital.code})\nPortal URL: ${portalUrl}\nUsername: ${adminPhone}\nPassword: ${adminPassword}`,
+        subject: `Welcome to Quroxa! Your Hospital Onboarding is Approved (${hospital.name})`,
+        text: `Your Quroxa Hospital Admin Account is ready.\nTenant: ${hospital.name} (${hospital.code})\nPortal URL: ${portalUrl}\nUsername (Login ID): ${adminPhone}\n\nYour login credentials are encrypted in the attached PDF: Hospital_Credentials_${hospital.code}.pdf\nPDF Password: ${pdfPassword} (First 4 letters of name in uppercase + last 4 digits of telephone)\n`,
         html: adminMailHtml,
-        senderName: 'Quroxa Onboarding'
-      }).catch(err => console.error("Error sending onboarding admin email:", err));
+        senderName: 'Quroxa Onboarding',
+        attachments: [
+          {
+            filename: `Hospital_Credentials_${hospital.code}.pdf`,
+            content: pdfBuffer,
+            contentType: 'application/pdf'
+          }
+        ]
+      });
     } catch (emailErr) {
       console.error("Failed to trigger onboarding email sending:", emailErr);
     }
@@ -1249,7 +1284,7 @@ router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req
     try {
       const { sendEmail } = require('../utils/emailService');
 
-      const frontendBaseUrl = getFrontendBaseUrl();
+      const frontendBaseUrl = getFrontendBaseUrl(req);
       const portalUrl = hospital.hospitalId ? `${frontendBaseUrl}/portal/${hospital.hospitalId}` : `${frontendBaseUrl}/login`;
 
       // Email to Hospital Admin

@@ -212,6 +212,7 @@ const FloatingInput = ({
   disabled = false,
   error = false,
   isValid = false,
+  compact = false,
   style = {},
   inputStyle = {},
   rightElement,
@@ -234,7 +235,8 @@ const FloatingInput = ({
       style={{
         position: 'relative',
         width: '100%',
-        minHeight: multiline ? '74px' : '52px',
+        minHeight: compact ? (multiline ? '52px' : '38px') : (multiline ? '74px' : '52px'),
+        height: compact && !multiline ? '38px' : undefined,
         background: disabled 
           ? '#F8FAFC' 
           : isFocused 
@@ -259,11 +261,11 @@ const FloatingInput = ({
                     ? '#CBD5E1' 
                     : '#E2E8F0'
         }`,
-        borderRadius: '12px',
+        borderRadius: compact ? '8px' : '12px',
         boxShadow: isFocused 
-          ? '0 6px 20px -2px rgba(37, 99, 235, 0.15), 0 0 0 3.5px rgba(37, 99, 235, 0.12)' 
+          ? '0 4px 14px -2px rgba(37, 99, 235, 0.15), 0 0 0 3px rgba(37, 99, 235, 0.12)' 
           : isHovered 
-            ? '0 3px 10px rgba(15, 23, 42, 0.04)' 
+            ? '0 2px 8px rgba(15, 23, 42, 0.04)' 
             : '0 1px 2px rgba(0,0,0,0.02)',
         transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
         display: 'flex',
@@ -284,10 +286,10 @@ const FloatingInput = ({
       <label
         style={{
           position: 'absolute',
-          left: '16px',
-          top: isFloating ? (multiline ? '8px' : '7px') : '50%',
+          left: compact ? '12px' : '16px',
+          top: isFloating ? (compact ? (multiline ? '4px' : '4px') : (multiline ? '8px' : '7px')) : '50%',
           transform: isFloating ? 'none' : 'translateY(-50%)',
-          fontSize: isFloating ? '10.5px' : '13.5px',
+          fontSize: isFloating ? (compact ? '9px' : '10.5px') : (compact ? '12px' : '13.5px'),
           fontWeight: isFloating ? 700 : 450,
           color: error 
             ? '#EF4444' 
@@ -305,12 +307,12 @@ const FloatingInput = ({
           zIndex: 2,
           display: 'flex',
           alignItems: 'center',
-          gap: '5px'
+          gap: compact ? '3px' : '5px'
         }}
       >
         <span>{label}</span>
-        {required && <span style={{ color: '#EF4444', fontWeight: 800, fontSize: isFloating ? '12px' : '14px' }}>*</span>}
-        {optional && !isFloating && <span style={{ color: '#94A3B8', fontSize: '12px', fontWeight: 400 }}>(Optional)</span>}
+        {required && <span style={{ color: '#EF4444', fontWeight: 800, fontSize: isFloating ? (compact ? '10px' : '12px') : (compact ? '12px' : '14px') }}>*</span>}
+        {optional && !isFloating && <span style={{ color: '#94A3B8', fontSize: compact ? '10.5px' : '12px', fontWeight: 400 }}>(Optional)</span>}
       </label>
 
       {/* Input or Textarea */}
@@ -334,8 +336,8 @@ const FloatingInput = ({
             border: 'none',
             outline: 'none',
             background: 'transparent',
-            padding: isFloating ? '22px 16px 6px 16px' : '14px 16px',
-            fontSize: '14px',
+            padding: isFloating ? (compact ? '15px 12px 3px 12px' : '22px 16px 6px 16px') : (compact ? '8px 12px' : '14px 16px'),
+            fontSize: compact ? '12.5px' : '14px',
             fontWeight: 500,
             color: '#0F172A',
             boxSizing: 'border-box',
@@ -366,9 +368,9 @@ const FloatingInput = ({
             border: 'none',
             outline: 'none',
             background: 'transparent',
-            padding: isFloating ? '20px 16px 4px 16px' : '0 16px',
-            paddingRight: rightElement ? '42px' : '16px',
-            fontSize: '14px',
+            padding: isFloating ? (compact ? '13px 12px 1px 12px' : '20px 16px 4px 16px') : (compact ? '0 12px' : '0 16px'),
+            paddingRight: rightElement ? (compact ? '30px' : '42px') : (compact ? '12px' : '16px'),
+            fontSize: compact ? '12.5px' : '14px',
             fontWeight: 500,
             color: '#0F172A',
             boxSizing: 'border-box',
@@ -381,7 +383,7 @@ const FloatingInput = ({
 
       {/* Right Element */}
       {rightElement && (
-        <div style={{ position: 'absolute', right: '14px', display: 'flex', alignItems: 'center', zIndex: 3 }}>
+        <div style={{ position: 'absolute', right: compact ? '10px' : '14px', display: 'flex', alignItems: 'center', zIndex: 3 }}>
           {rightElement}
         </div>
       )}
@@ -1445,6 +1447,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [wizardHospital, setWizardHospital] = useState(null);
   const [wizardStep, setWizardStep] = useState(1);
   const [isDraftSaved, setIsDraftSaved] = useState(false);
+  const [isSavingStep, setIsSavingStep] = useState(false);
+  const wizardLogoInputRef = useRef(null);
+  const [wizardLogoDragOver, setWizardLogoDragOver] = useState(false);
+  const [wizardLogoError, setWizardLogoError] = useState('');
   const [isEditingPlanModalOpen, setIsEditingPlanModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -3443,13 +3449,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const renderOnboardingWizard = () => {
     const steps = [
-      { id: 1, label: 'Basic Information', sub: 'Hospital identity & location', icon: 'building-2' },
-      { id: 2, label: 'Organisation Setup', sub: 'Infrastructure & branches', icon: 'network' },
-      { id: 3, label: 'Legal & Compliance', sub: 'GST, CIN & CDSCO License', icon: 'file-check-2' },
-      { id: 4, label: 'Subscription & Licensing', sub: 'Plan selection & quotas', icon: 'credit-card' },
-      { id: 5, label: 'User & Role Provisioning', sub: 'Admin master credentials', icon: 'shield-check' },
-      { id: 6, label: 'Review & Validation', sub: 'Dossier pre-checks', icon: 'clipboard-check' },
-      { id: 7, label: 'Go Live Activation', sub: 'Final launch & provisioning', icon: 'rocket' }
+      { id: 1, label: 'Basic Information', sub: 'Hospital identity & branding', icon: 'building-2' },
+      { id: 2, label: 'Legal & Compliance', sub: 'GST, CIN & CDSCO License', icon: 'file-check-2' },
+      { id: 3, label: 'Subscription & Licensing', sub: 'Plan selection & quotas', icon: 'credit-card' },
+      { id: 4, label: 'User & Role Provisioning', sub: 'Admin master credentials', icon: 'shield-check' },
+      { id: 5, label: 'Review & Validation', sub: 'Dossier pre-checks', icon: 'clipboard-check' },
+      { id: 6, label: 'Go Live Activation', sub: 'Final launch & provisioning', icon: 'rocket' }
     ];
 
     const totalSteps = steps.length;
@@ -3463,10 +3468,6 @@ const SuperAdminDashboard = ({ initialTab }) => {
       wizardHospital.city,
       wizardHospital.country,
       wizardHospital.address,
-      wizardHospital.timezone,
-      wizardHospital.currency,
-      wizardHospital.language,
-      wizardHospital.dateFormat,
       wizardHospital.panNumber,
       wizardHospital.gstin,
       wizardHospital.corpId,
@@ -3588,6 +3589,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
     const finalizeOnboarding = async (finalStatus) => {
       const token = localStorage.getItem('token');
       try {
+        if (finalStatus === 'Live') {
+          await executeHospitalActivation(wizardHospital);
+          setIsOnboardingWizardOpen(false);
+          return;
+        }
+
         const updateData = {
           ...wizardHospital,
           status: finalStatus,
@@ -3597,7 +3604,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           adminStatus: 'Approved',
           stage: 'Go Live',
           progress: 100,
-          currentStep: 7
+          currentStep: 6
         };
         delete updateData._id;
         delete updateData.__v;
@@ -3610,12 +3617,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           const updated = await res.json();
           setOnboardingHospitals(prev => prev.map(o => o._id === updated._id ? updated : o));
           setIsOnboardingWizardOpen(false);
-          
-          if (finalStatus === 'Live') {
-            showToast(`Hospital deployed successfully and is now Live.`, 'success');
-          } else {
-            showToast(`Client approval request dispatched.`, 'success');
-          }
+          showToast(`Client approval request dispatched.`, 'success');
         } else {
           showToast(`Failed to finalize onboarding.`, 'error');
         }
@@ -3697,9 +3699,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
         if (!wizardHospital.city?.trim()) missing.push('City');
         if (!wizardHospital.address?.trim()) missing.push('Street Address');
       } else if (step === 2) {
-        // Step 2 fields all have sensible defaults (timezone, currency, dateFormat, language) via selects
-        // No mandatory text inputs — always valid
-      } else if (step === 3) {
+        // Legal & Compliance (Previously Step 3)
         if (!wizardHospital.panNumber?.trim()) {
           missing.push('PAN Number');
         } else if (!validatePANFormat(wizardHospital.panNumber)) {
@@ -3731,9 +3731,11 @@ const SuperAdminDashboard = ({ initialTab }) => {
         if (wizardHospital.pollutionCertificate && !validateCertificateFormat(wizardHospital.pollutionCertificate)) {
           missing.push('Pollution Control Board Register Number in correct format (e.g. PCB-MED-7491)');
         }
-      } else if (step === 4) {
+      } else if (step === 3) {
+        // Subscription & Licensing (Previously Step 4)
         if (!wizardHospital.subscriptionPlan) missing.push('Subscription Plan');
-      } else if (step === 5) {
+      } else if (step === 4) {
+        // User & Role Provisioning (Previously Step 5)
         if (!wizardHospital.adminName?.trim()) missing.push('Admin Full Name');
         if (!wizardHospital.adminEmail?.trim()) {
           missing.push('Admin Work Email');
@@ -3743,7 +3745,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
         if (!wizardHospital.adminPhone?.trim() || wizardHospital.adminPhone.length !== 10) missing.push('Admin Telephone (10 digits)');
         if (!wizardHospital.adminPassword?.trim()) missing.push('Security Password');
       }
-      // Steps 6 and 7 are review/activation — no gating needed
+      // Steps 5 and 6 are review/activation — no gating needed
       return missing;
     };
 
@@ -3757,9 +3759,15 @@ const SuperAdminDashboard = ({ initialTab }) => {
           return;
         }
         const nextStep = wizardStep + 1;
-        const saved = await saveWizardDraft(false, nextStep);
-        if (saved) {
-          setWizardStep(nextStep);
+        setIsSavingStep(true);
+        // Instant optimistic transition for 0ms latency
+        setWizardStep(nextStep);
+        try {
+          await saveWizardDraft(false, nextStep);
+        } catch (err) {
+          console.error('Draft autosave error:', err);
+        } finally {
+          setIsSavingStep(false);
         }
       }
     };
@@ -3767,8 +3775,16 @@ const SuperAdminDashboard = ({ initialTab }) => {
     const handlePrevStep = async () => {
       if (wizardStep > 1) {
         const prevStep = wizardStep - 1;
-        saveWizardDraft(false, prevStep);
+        setIsSavingStep(true);
+        // Instant optimistic transition for 0ms latency
         setWizardStep(prevStep);
+        try {
+          await saveWizardDraft(false, prevStep);
+        } catch (err) {
+          console.error('Draft autosave error:', err);
+        } finally {
+          setIsSavingStep(false);
+        }
       }
     };
 
@@ -3788,6 +3804,22 @@ const SuperAdminDashboard = ({ initialTab }) => {
         }
         return updated;
       });
+    };
+
+    const handleWizardLogoFile = (file) => {
+      setWizardLogoError('');
+      if (!file) return;
+      if (!['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'].includes(file.type)) {
+        setWizardLogoError('Only PNG, JPG, or SVG files are allowed.');
+        return;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        setWizardLogoError('Logo must be under 2 MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => updateWizardField('logo', e.target.result);
+      reader.readAsDataURL(file);
     };
 
 
@@ -3956,6 +3988,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             </button>
             <button
               type="button"
+              disabled={isSavingStep}
               onClick={() => {
                 if (wizardStep === totalSteps) {
                   handleGoLive();
@@ -3967,20 +4000,31 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 50%, #4F46E5 100%)',
+                background: isSavingStep 
+                  ? '#93C5FD' 
+                  : 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 50%, #4F46E5 100%)',
                 color: '#FFFFFF',
                 border: 'none',
                 borderRadius: '8px',
                 padding: '8px 20px',
                 fontSize: '12.5px',
                 fontWeight: 750,
-                cursor: 'pointer',
+                cursor: isSavingStep ? 'not-allowed' : 'pointer',
                 boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
                 transition: 'all 0.15s ease'
               }}
             >
-              <span>{wizardStep === totalSteps ? 'Register Hospital' : 'Save & Next'}</span>
-              <LucideIcon name="arrow-right" style={{ width: '14px', height: '14px' }} />
+              {isSavingStep ? (
+                <>
+                  <LucideIcon name="loader-2" style={{ width: '14px', height: '14px', animation: 'spin 1s linear infinite' }} />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <span>{wizardStep === totalSteps ? 'Register Hospital' : 'Save & Next'}</span>
+                  <LucideIcon name="arrow-right" style={{ width: '14px', height: '14px' }} />
+                </>
+              )}
             </button>
           </div>
         </header>
@@ -4010,8 +4054,15 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   <div
                     onClick={async () => {
                       if (step.id < wizardStep) {
-                        saveWizardDraft(false, step.id);
+                        setIsSavingStep(true);
                         setWizardStep(step.id);
+                        try {
+                          await saveWizardDraft(false, step.id);
+                        } catch (err) {
+                          console.error('Draft autosave error:', err);
+                        } finally {
+                          setIsSavingStep(false);
+                        }
                       } else if (step.id > wizardStep) {
                         const missing = getStepValidation(wizardStep);
                         if (missing.length > 0) {
@@ -4025,9 +4076,14 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             return;
                           }
                         }
-                        const saved = await saveWizardDraft(false, step.id);
-                        if (saved) {
-                          setWizardStep(step.id);
+                        setIsSavingStep(true);
+                        setWizardStep(step.id);
+                        try {
+                          await saveWizardDraft(false, step.id);
+                        } catch (err) {
+                          console.error('Draft autosave error:', err);
+                        } finally {
+                          setIsSavingStep(false);
                         }
                       }
                     }}
@@ -4129,7 +4185,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           </div>
 
           {/* 2-Column Split: Main Form & Preview */}
-          <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', gap: wizardStep === 1 ? '16px' : '24px', alignItems: 'flex-start' }}>
             {/* Form Main Area (Left) */}
             <div 
               onKeyDown={(e) => {
@@ -4146,28 +4202,28 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 flex: 1,
                 minWidth: 0,
                 background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFCFF 100%)',
-                borderRadius: '20px',
+                borderRadius: '16px',
                 border: '1px solid #DBEAFE',
                 boxShadow: '0 20px 45px -10px rgba(37, 99, 235, 0.08), 0 1px 3px rgba(0,0,0,0.02)',
-                padding: '28px 32px',
+                padding: '12px 18px 14px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '24px'
+                gap: '10px'
               }}
             >
               {/* Form Card Header Banner */}
               <div style={{ 
                 display: 'flex', 
                 justifyContent: 'space-between', 
-                alignItems: 'flex-start', 
+                alignItems: 'center', 
                 borderBottom: '1px solid #EFF6FF', 
-                paddingBottom: '16px' 
+                paddingBottom: '8px' 
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <div style={{
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '12px',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
                     background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 100%)',
                     color: '#FFFFFF',
                     display: 'flex',
@@ -4176,13 +4232,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     flexShrink: 0,
                     boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)'
                   }}>
-                    <LucideIcon name={steps[wizardStep - 1]?.icon || "file-text"} style={{ width: '22px', height: '22px' }} />
+                    <LucideIcon name={steps[wizardStep - 1]?.icon || "file-text"} style={{ width: '16px', height: '16px' }} />
                   </div>
                   <div>
-                    <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 850, color: '#0F172A', letterSpacing: '-0.2px' }}>
+                    <h3 style={{ margin: 0, fontSize: '14.5px', fontWeight: 850, color: '#0F172A', letterSpacing: '-0.2px' }}>
                       {steps[wizardStep - 1]?.label}
                     </h3>
-                    <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#64748B' }}>
+                    <p style={{ margin: '1px 0 0 0', fontSize: '11px', color: '#64748B' }}>
                       {steps[wizardStep - 1]?.sub}
                     </p>
                   </div>
@@ -4191,9 +4247,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 <span style={{
                   background: 'linear-gradient(135deg, #EFF6FF 0%, #EEF2FF 100%)',
                   color: '#2563EB',
-                  padding: '5px 14px',
+                  padding: '3px 10px',
                   borderRadius: '20px',
-                  fontSize: '11px',
+                  fontSize: '10.5px',
                   fontWeight: 800,
                   border: '1px solid #BFDBFE',
                   boxShadow: '0 2px 8px rgba(37, 99, 235, 0.1)'
@@ -4203,388 +4259,430 @@ const SuperAdminDashboard = ({ initialTab }) => {
               </div>
 
               {wizardStep === 1 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: '20px', alignItems: 'start' }}>
+                  {/* LEFT COLUMN: Hospital Core, Contact & Location Details */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-                  {/* Section 1: Hospital Core Info */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    <div style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '6px 12px',
-                      background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
-                      border: '1px solid #BFDBFE',
-                      borderRadius: '8px',
-                      width: 'fit-content'
-                    }}>
-                      <LucideIcon name="building-2" style={{ width: '14px', height: '14px', color: '#2563EB' }} />
-                      <span style={{ fontSize: '11px', fontWeight: 750, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        1. Hospital Core Information
-                      </span>
+                    {/* Section 1: Hospital Core Info */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '3px 10px',
+                        background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+                        border: '1px solid #BFDBFE',
+                        borderRadius: '6px',
+                        width: 'fit-content'
+                      }}>
+                        <LucideIcon name="building-2" style={{ width: '12px', height: '12px', color: '#2563EB' }} />
+                        <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                          1. Hospital Core Information
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <FloatingInput
+                            compact
+                            label="Hospital Name"
+                            required
+                            value={wizardHospital.name || ''}
+                            onChange={e => updateWizardField('name', e.target.value)}
+                            isValid={!!wizardHospital.name?.trim()}
+                          />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ position: 'relative', width: '100%' }}>
+                            <FloatingInput
+                              compact
+                              label="Hospital Type"
+                              optional
+                              value={wizardHospital.hospitalType || ''}
+                              onFocus={() => setHospitalTypeSearchOpen(true)}
+                              onChange={e => {
+                                updateWizardField('hospitalType', e.target.value);
+                                setHospitalTypeSearchOpen(true);
+                              }}
+                              rightElement={
+                                <LucideIcon 
+                                  name="chevron-down" 
+                                  style={{ width: '14px', height: '14px', color: '#64748B', pointerEvents: 'none' }} 
+                                />
+                              }
+                            />
+
+                            {hospitalTypeSearchOpen && (
+                              <>
+                                <div 
+                                  style={{ position: 'fixed', inset: 0, zIndex: 99 }} 
+                                  onClick={() => setHospitalTypeSearchOpen(false)} 
+                                />
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '100%',
+                                  left: 0,
+                                  right: 0,
+                                  marginTop: '4px',
+                                  background: '#FFFFFF',
+                                  border: '1px solid #CBD5E1',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
+                                  maxHeight: '200px',
+                                  overflowY: 'auto',
+                                  zIndex: 100,
+                                  padding: '4px'
+                                }}>
+                                  {(() => {
+                                    const allTypes = [
+                                      'General Clinics',
+                                      'Child & Women Care',
+                                      'Medicine Specialties',
+                                      'Surgical Specialties',
+                                      'Cancer & Chronic Care',
+                                      'Mental Health',
+                                      'Skin & Cosmetic',
+                                      'Dental',
+                                      'Rehabilitation',
+                                      'Diagnostics',
+                                      'Eye & Hearing',
+                                      'Lifestyle & Wellness',
+                                      'AYUSH (India)',
+                                      'Specialized Clinics',
+                                      'Digital Healthcare'
+                                    ];
+
+                                    const query = (wizardHospital.hospitalType || '').toLowerCase().trim();
+                                    const matches = allTypes.filter(t => t.toLowerCase().includes(query));
+                                    
+                                    return (
+                                      <>
+                                        {matches.map(type => (
+                                          <div 
+                                            key={type}
+                                            onClick={() => {
+                                              updateWizardField('hospitalType', type);
+                                              setHospitalTypeSearchOpen(false);
+                                            }}
+                                            style={{
+                                              padding: '6px 10px',
+                                              fontSize: '11.5px',
+                                              fontWeight: 600,
+                                              color: wizardHospital.hospitalType === type ? '#2563EB' : '#334155',
+                                              background: wizardHospital.hospitalType === type ? '#EFF6FF' : 'transparent',
+                                              borderRadius: '5px',
+                                              cursor: 'pointer',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'space-between',
+                                              transition: 'background 0.1s'
+                                            }}
+                                            onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
+                                            onMouseLeave={e => e.currentTarget.style.background = wizardHospital.hospitalType === type ? '#EFF6FF' : 'transparent'}
+                                          >
+                                            <span>{type}</span>
+                                            {wizardHospital.hospitalType === type && (
+                                              <LucideIcon name="check" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
+                                            )}
+                                          </div>
+                                        ))}
+                                        {query && !allTypes.some(t => t.toLowerCase() === query) && (
+                                          <div 
+                                            onClick={() => {
+                                              setHospitalTypeSearchOpen(false);
+                                            }}
+                                            style={{
+                                              padding: '6px 10px',
+                                              fontSize: '11.5px',
+                                              fontWeight: 700,
+                                              color: '#059669',
+                                              background: '#ECFDF5',
+                                              borderRadius: '5px',
+                                              cursor: 'pointer',
+                                              marginTop: '3px',
+                                              border: '1px solid #A7F3D0'
+                                            }}
+                                          >
+                                            ✨ Use Custom Type: "{wizardHospital.hospitalType}"
+                                          </div>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div style={styles.formRow}>
-                      <div style={styles.formCol}>
-                        <FloatingInput
-                          label="Hospital Name"
-                          required
-                          value={wizardHospital.name || ''}
-                          onChange={e => updateWizardField('name', e.target.value)}
-                          isValid={!!wizardHospital.name?.trim()}
-                        />
+                    {/* Section 2: Primary Contact */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '3px 10px',
+                        background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
+                        border: '1px solid #A7F3D0',
+                        borderRadius: '6px',
+                        width: 'fit-content'
+                      }}>
+                        <LucideIcon name="user-check" style={{ width: '12px', height: '12px', color: '#059669' }} />
+                        <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                          2. Primary Contact Details
+                        </span>
                       </div>
-                      <div style={styles.formCol}>
-                        <div style={{ position: 'relative', width: '100%' }}>
+
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
                           <FloatingInput
-                            label="Hospital Type"
-                            optional
-                            value={wizardHospital.hospitalType || ''}
-                            onFocus={() => setHospitalTypeSearchOpen(true)}
-                            onChange={e => {
-                              updateWizardField('hospitalType', e.target.value);
-                              setHospitalTypeSearchOpen(true);
-                            }}
-                            rightElement={
-                              <LucideIcon 
-                                name="chevron-down" 
-                                style={{ width: '15px', height: '15px', color: '#64748B', pointerEvents: 'none' }} 
-                              />
-                            }
+                            compact
+                            label="Primary Contact Person"
+                            required
+                            value={wizardHospital.contactName || ''}
+                            onChange={e => updateWizardField('contactName', e.target.value)}
+                            isValid={!!wizardHospital.contactName?.trim()}
                           />
-
-                          {hospitalTypeSearchOpen && (
-                            <>
-                              <div 
-                                style={{ position: 'fixed', inset: 0, zIndex: 99 }} 
-                                onClick={() => setHospitalTypeSearchOpen(false)} 
-                              />
-                              <div style={{
-                                position: 'absolute',
-                                top: '100%',
-                                left: 0,
-                                right: 0,
-                                marginTop: '4px',
-                                background: '#FFFFFF',
-                                border: '1px solid #CBD5E1',
-                                borderRadius: '8px',
-                                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
-                                maxHeight: '220px',
-                                overflowY: 'auto',
-                                zIndex: 100,
-                                padding: '4px'
-                              }}>
-                                {(() => {
-                                  const allTypes = [
-                                    'General Clinics',
-                                    'Child & Women Care',
-                                    'Medicine Specialties',
-                                    'Surgical Specialties',
-                                    'Cancer & Chronic Care',
-                                    'Mental Health',
-                                    'Skin & Cosmetic',
-                                    'Dental',
-                                    'Rehabilitation',
-                                    'Diagnostics',
-                                    'Eye & Hearing',
-                                    'Lifestyle & Wellness',
-                                    'AYUSH (India)',
-                                    'Specialized Clinics',
-                                    'Digital Healthcare'
-                                  ];
-
-                                  const query = (wizardHospital.hospitalType || '').toLowerCase().trim();
-                                  const matches = allTypes.filter(t => t.toLowerCase().includes(query));
-                                  
-                                  return (
-                                    <>
-                                      {matches.map(type => (
-                                        <div 
-                                          key={type}
-                                          onClick={() => {
-                                            updateWizardField('hospitalType', type);
-                                            setHospitalTypeSearchOpen(false);
-                                          }}
-                                          style={{
-                                            padding: '8px 12px',
-                                            fontSize: '12px',
-                                            fontWeight: 600,
-                                            color: wizardHospital.hospitalType === type ? '#2563EB' : '#334155',
-                                            background: wizardHospital.hospitalType === type ? '#EFF6FF' : 'transparent',
-                                            borderRadius: '6px',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between',
-                                            transition: 'background 0.1s'
-                                          }}
-                                          onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
-                                          onMouseLeave={e => e.currentTarget.style.background = wizardHospital.hospitalType === type ? '#EFF6FF' : 'transparent'}
-                                        >
-                                          <span>{type}</span>
-                                          {wizardHospital.hospitalType === type && (
-                                            <LucideIcon name="check" style={{ width: '14px', height: '14px', color: '#2563EB' }} />
-                                          )}
-                                        </div>
-                                      ))}
-                                      {query && !allTypes.some(t => t.toLowerCase() === query) && (
-                                        <div 
-                                          onClick={() => {
-                                            setHospitalTypeSearchOpen(false);
-                                          }}
-                                          style={{
-                                            padding: '8px 12px',
-                                            fontSize: '12px',
-                                            fontWeight: 700,
-                                            color: '#059669',
-                                            background: '#ECFDF5',
-                                            borderRadius: '6px',
-                                            cursor: 'pointer',
-                                            marginTop: '4px',
-                                            border: '1px solid #A7F3D0'
-                                          }}
-                                        >
-                                          ✨ Use Custom Type: "{wizardHospital.hospitalType}"
-                                        </div>
-                                      )}
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            </>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <FloatingInput
+                            compact
+                            label="Designation"
+                            optional
+                            value={wizardHospital.contactDesignation || ''}
+                            onChange={e => updateWizardField('contactDesignation', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <FloatingInput
+                            compact
+                            label="Contact Email"
+                            required
+                            type="email"
+                            value={wizardHospital.contactEmail || ''}
+                            onChange={e => updateWizardField('contactEmail', e.target.value)}
+                            error={wizardHospital.contactEmail && !validateEmailFormat(wizardHospital.contactEmail)}
+                            isValid={wizardHospital.contactEmail && validateEmailFormat(wizardHospital.contactEmail)}
+                          />
+                          {wizardHospital.contactEmail && !validateEmailFormat(wizardHospital.contactEmail) && (
+                            <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>⚠️ Please enter a valid email address.</span>
                           )}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <FloatingInput
+                            compact
+                            label="Mobile Number (10 Digits)"
+                            optional
+                            maxLength={10}
+                            value={wizardHospital.contactMobile || ''}
+                            onChange={e => updateWizardField('contactMobile', e.target.value.replace(/[^0-9]/g, ''))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section 3: Facility Location */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '3px 10px',
+                        background: 'linear-gradient(135deg, #FAF5FF 0%, #EDE9FE 100%)',
+                        border: '1px solid #DDD6FE',
+                        borderRadius: '6px',
+                        width: 'fit-content'
+                      }}>
+                        <LucideIcon name="map-pin" style={{ width: '12px', height: '12px', color: '#7C3AED' }} />
+                        <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#5B21B6', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                          3. Facility Location & Address
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <FloatingInput
+                            compact
+                            label="City"
+                            required
+                            value={wizardHospital.city || ''}
+                            onChange={e => updateWizardField('city', e.target.value)}
+                            isValid={!!wizardHospital.city?.trim()}
+                          />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <FloatingInput
+                            compact
+                            label="Country"
+                            optional
+                            value={wizardHospital.country || ''}
+                            onChange={e => updateWizardField('country', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        <div style={{ flex: 1.2, minWidth: 0 }}>
+                          <FloatingInput
+                            compact
+                            label="Street Address"
+                            required
+                            value={wizardHospital.address || ''}
+                            onChange={e => updateWizardField('address', e.target.value)}
+                            isValid={!!wizardHospital.address?.trim()}
+                          />
+                        </div>
+                        <div style={{ flex: 0.8, minWidth: 0 }}>
+                          <FloatingInput
+                            compact
+                            label="Google Maps URL"
+                            optional
+                            value={wizardHospital.googleMapUrl || ''}
+                            onChange={e => updateWizardField('googleMapUrl', e.target.value)}
+                          />
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, #E2E8F0, transparent)' }} />
-
-                  {/* Section 2: Primary Contact */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    <div style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '6px 12px',
-                      background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
-                      border: '1px solid #A7F3D0',
-                      borderRadius: '8px',
-                      width: 'fit-content'
-                    }}>
-                      <LucideIcon name="user-check" style={{ width: '14px', height: '14px', color: '#059669' }} />
-                      <span style={{ fontSize: '11px', fontWeight: 750, color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        2. Primary Contact Details
-                      </span>
+                  {/* RIGHT COLUMN: Hospital Identity & Branding Logo Card */}
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    padding: '14px',
+                    background: 'linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%)',
+                    border: '1.5px solid #CBD5E1',
+                    borderRadius: '12px',
+                    boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 850, color: '#0F172A' }}>Hospital Logo</span>
+                      <span style={{
+                        fontSize: '8.5px',
+                        fontWeight: 750,
+                        color: '#2563EB',
+                        background: '#DBEAFE',
+                        borderRadius: '999px',
+                        padding: '2px 8px',
+                        letterSpacing: '0.4px',
+                        textTransform: 'uppercase'
+                      }}>Portal Emblem</span>
                     </div>
 
-                    <div style={styles.formRow}>
-                      <div style={styles.formCol}>
-                        <FloatingInput
-                          label="Primary Contact Person"
-                          required
-                          value={wizardHospital.contactName || ''}
-                          onChange={e => updateWizardField('contactName', e.target.value)}
-                          isValid={!!wizardHospital.contactName?.trim()}
-                        />
-                      </div>
-                      <div style={styles.formCol}>
-                        <FloatingInput
-                          label="Designation"
-                          optional
-                          value={wizardHospital.contactDesignation || ''}
-                          onChange={e => updateWizardField('contactDesignation', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div style={styles.formRow}>
-                      <div style={styles.formCol}>
-                        <FloatingInput
-                          label="Contact Email"
-                          required
-                          type="email"
-                          value={wizardHospital.contactEmail || ''}
-                          onChange={e => updateWizardField('contactEmail', e.target.value)}
-                          error={wizardHospital.contactEmail && !validateEmailFormat(wizardHospital.contactEmail)}
-                          isValid={wizardHospital.contactEmail && validateEmailFormat(wizardHospital.contactEmail)}
-                        />
-                        {wizardHospital.contactEmail && !validateEmailFormat(wizardHospital.contactEmail) && (
-                          <span style={{ fontSize: '10.5px', color: '#EF4444', marginTop: '4px', fontWeight: 600 }}>⚠️ Please enter a valid email address (e.g. contact@hospital.com).</span>
-                        )}
-                      </div>
-                      <div style={styles.formCol}>
-                        <FloatingInput
-                          label="Mobile Number (10 Digits)"
-                          optional
-                          maxLength={10}
-                          value={wizardHospital.contactMobile || ''}
-                          onChange={e => updateWizardField('contactMobile', e.target.value.replace(/[^0-9]/g, ''))}
-                        />
-                      </div>
-                    </div>
-                  </div>
+                    <p style={{ margin: 0, fontSize: '10.5px', color: '#64748B', lineHeight: 1.4 }}>
+                      Emblem for prescriptions, invoices, and tenant portal header.
+                    </p>
 
-                  <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, #E2E8F0, transparent)' }} />
-
-                  {/* Section 3: Facility Location */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    <div style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '6px 12px',
-                      background: 'linear-gradient(135deg, #FAF5FF 0%, #EDE9FE 100%)',
-                      border: '1px solid #DDD6FE',
-                      borderRadius: '8px',
-                      width: 'fit-content'
-                    }}>
-                      <LucideIcon name="map-pin" style={{ width: '14px', height: '14px', color: '#7C3AED' }} />
-                      <span style={{ fontSize: '11px', fontWeight: 750, color: '#5B21B6', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        3. Facility Location & Address
-                      </span>
+                    {/* Logo Drop Area */}
+                    <div
+                      style={{
+                        width: '100%',
+                        height: '112px',
+                        borderRadius: '10px',
+                        border: wizardLogoDragOver ? '2px dashed #2563EB' : '1.5px dashed #93C5FD',
+                        background: wizardLogoDragOver ? '#DBEAFE' : '#FFFFFF',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        overflow: 'hidden',
+                        transition: 'all 0.15s ease',
+                        boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.02)'
+                      }}
+                      onClick={() => wizardLogoInputRef.current && wizardLogoInputRef.current.click()}
+                      onDragOver={(e) => { e.preventDefault(); setWizardLogoDragOver(true); }}
+                      onDragLeave={() => setWizardLogoDragOver(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setWizardLogoDragOver(false);
+                        const f = e.dataTransfer.files[0];
+                        if (f) handleWizardLogoFile(f);
+                      }}
+                      title="Click or drag to upload logo"
+                    >
+                      {wizardHospital?.logo ? (
+                        <img
+                          src={wizardHospital.logo}
+                          alt="Hospital Logo"
+                          style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '6px' }}
+                        />
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '8px', textAlign: 'center' }}>
+                          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <LucideIcon name="upload-cloud" style={{ width: '18px', height: '18px', color: '#3B82F6' }} />
+                          </div>
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155' }}>Drop logo or Browse</span>
+                          <span style={{ fontSize: '9px', color: '#94A3B8' }}>PNG, JPG, SVG (max 2MB)</span>
+                        </div>
+                      )}
                     </div>
 
-                    <div style={styles.formRow}>
-                      <div style={styles.formCol}>
-                        <FloatingInput
-                          label="City"
-                          required
-                          value={wizardHospital.city || ''}
-                          onChange={e => updateWizardField('city', e.target.value)}
-                          isValid={!!wizardHospital.city?.trim()}
-                        />
-                      </div>
-                      <div style={styles.formCol}>
-                        <FloatingInput
-                          label="Country"
-                          optional
-                          value={wizardHospital.country || ''}
-                          onChange={e => updateWizardField('country', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div style={styles.formCol}>
-                      <FloatingInput
-                        label="Street Address"
-                        required
-                        multiline
-                        rows={2}
-                        value={wizardHospital.address || ''}
-                        onChange={e => updateWizardField('address', e.target.value)}
-                        isValid={!!wizardHospital.address?.trim()}
-                      />
-                    </div>
-                    <div style={styles.formCol}>
-                      <FloatingInput
-                        label="Google Maps Embed or Location URL"
-                        optional
-                        value={wizardHospital.googleMapUrl || ''}
-                        onChange={e => updateWizardField('googleMapUrl', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {wizardStep === 2 && (
-                <HospitalIdentityStep
-                  wizardHospital={wizardHospital}
-                  updateWizardField={updateWizardField}
-                />
-              )}
-              {wizardStep === 2 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '-4px' }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Regional & Localization Configurations</h3>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>Set default times, currencies, languages, and view enabled software modules.</p>
-                  </div>
-                  <div style={styles.formRow}>
-                    <div style={styles.formCol}>
-                      <FloatingSelect 
-                        label="Timezone"
-                        required
-                        value={wizardHospital.timezone || ''} 
-                        onChange={e => updateWizardField('timezone', e.target.value)}
-                        options={[
-                          { value: '', label: 'Select Timezone' },
-                          { value: 'Asia/Kolkata', label: 'Asia/Kolkata (IST)' },
-                          { value: 'UTC', label: 'UTC (Greenwich Mean Time)' },
-                          { value: 'America/New_York', label: 'America/New_York (EST)' },
-                          { value: 'Europe/London', label: 'Europe/London (GMT/BST)' }
-                        ]}
-                      />
-                    </div>
-                    <div style={styles.formCol}>
-                      <FloatingSelect 
-                        label="Currency"
-                        required
-                        value={wizardHospital.currency || ''} 
-                        onChange={e => updateWizardField('currency', e.target.value)}
-                        options={[
-                          { value: '', label: 'Select Currency' },
-                          { value: 'INR', label: 'INR (₹)' },
-                          { value: 'USD', label: 'USD ($)' },
-                          { value: 'EUR', label: 'EUR (€)' },
-                          { value: 'GBP', label: 'GBP (£)' }
-                        ]}
-                      />
-                    </div>
-                  </div>
-                  <div style={styles.formRow}>
-                    <div style={styles.formCol}>
-                      <FloatingSelect 
-                        label="Date Format"
-                        required
-                        value={wizardHospital.dateFormat || ''} 
-                        onChange={e => updateWizardField('dateFormat', e.target.value)}
-                        options={[
-                          { value: '', label: 'Select Format' },
-                          { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
-                          { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY' },
-                          { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' }
-                        ]}
-                      />
-                    </div>
-                    <div style={styles.formCol}>
-                      <FloatingSelect 
-                        label="Time Format"
-                        required
-                        value={wizardHospital.timeFormat || ''} 
-                        onChange={e => updateWizardField('timeFormat', e.target.value)}
-                        options={[
-                          { value: '', label: 'Select Format' },
-                          { value: '12-hour', label: '12-hour' },
-                          { value: '24-hour', label: '24-hour' }
-                        ]}
-                      />
-                    </div>
-                  </div>
-                  <div style={styles.formCol}>
-                    <FloatingSelect 
-                      label="Primary Language"
-                      required
-                      value={wizardHospital.primaryLanguage || ''} 
-                      onChange={e => updateWizardField('primaryLanguage', e.target.value)}
-                      options={[
-                        { value: '', label: 'Select Language' },
-                        { value: 'English', label: 'English' },
-                        { value: 'Hindi', label: 'Hindi' },
-                        { value: 'Spanish', label: 'Spanish' },
-                        { value: 'Arabic', label: 'Arabic' }
-                      ]}
+                    <input
+                      ref={wizardLogoInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                      style={{ display: 'none' }}
+                      onChange={(e) => handleWizardLogoFile(e.target.files[0])}
                     />
+
+                    {/* Logo Buttons */}
+                    <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+                      <button
+                        type="button"
+                        onClick={() => wizardLogoInputRef.current && wizardLogoInputRef.current.click()}
+                        style={{
+                          flex: 1,
+                          height: '30px',
+                          fontSize: '11px', fontWeight: 750, color: '#FFFFFF',
+                          background: '#2563EB', border: 'none',
+                          borderRadius: '6px', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                          boxShadow: '0 1px 4px rgba(37,99,235,0.25)'
+                        }}
+                      >
+                        <LucideIcon name="upload" style={{ width: '12px', height: '12px' }} />
+                        {wizardHospital?.logo ? 'Change' : 'Upload'}
+                      </button>
+                      {wizardHospital?.logo && (
+                        <button
+                          type="button"
+                          onClick={() => { updateWizardField('logo', ''); setWizardLogoError(''); }}
+                          style={{
+                            height: '30px',
+                            fontSize: '11px', fontWeight: 750, color: '#DC2626',
+                            background: '#FEF2F2', border: '1px solid #FECACA',
+                            borderRadius: '6px', padding: '0 10px', cursor: 'pointer'
+                          }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    {wizardLogoError && (
+                      <span style={{ fontSize: '10px', color: '#DC2626', fontWeight: 650, textAlign: 'center' }}>{wizardLogoError}</span>
+                    )}
                   </div>
                 </div>
               )}
 
-              {wizardStep === 3 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Legal Registration & Compliance Credentials</h3>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>Insert tax registration certificates, CIN, drug license and status audits.</p>
+              {wizardStep === 2 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
+                    <span style={{ fontSize: '11.5px', fontWeight: 750, color: '#334155' }}>Legal Registration & Compliance Credentials</span>
+                    <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600 }}>Official registration & licenses</span>
                   </div>
+
+                  {/* Row 1: PAN & GSTIN */}
                   <div style={styles.formRow}>
                     <div style={styles.formCol}>
                       <FloatingInput
+                        compact
                         label="PAN Number (10 Alphanumeric)"
                         required
                         error={wizardHospital.panNumber && !validatePANFormat(wizardHospital.panNumber)}
@@ -4593,11 +4691,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         onChange={e => updateWizardField('panNumber', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))} 
                       />
                       {wizardHospital.panNumber && !validatePANFormat(wizardHospital.panNumber) && (
-                        <span style={{ fontSize: '10.5px', color: '#EF4444', marginTop: '4px', fontWeight: 600 }}>⚠️ PAN must be structured as: 5 letters, 4 digits, 1 letter.</span>
+                        <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>⚠️ 5 letters, 4 digits, 1 letter.</span>
                       )}
                     </div>
                     <div style={styles.formCol}>
                       <FloatingInput
+                        compact
                         label="GSTIN Number (15 Characters)"
                         required
                         error={wizardHospital.gstin && !validateGSTINFormat(wizardHospital.gstin)}
@@ -4606,13 +4705,16 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         onChange={e => updateWizardField('gstin', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15))} 
                       />
                       {wizardHospital.gstin && !validateGSTINFormat(wizardHospital.gstin) && (
-                        <span style={{ fontSize: '10.5px', color: '#EF4444', marginTop: '4px', fontWeight: 600 }}>⚠️ GSTIN must be structured as: 15-character official format (e.g. 07METRO8827P1ZX).</span>
+                        <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>⚠️ 15-char official GST format.</span>
                       )}
                     </div>
                   </div>
+
+                  {/* Row 2: CIN & Authorized Signatory */}
                   <div style={styles.formRow}>
                     <div style={styles.formCol}>
                       <FloatingInput
+                        compact
                         label="CIN (Corporate ID - 21 Chars)"
                         required
                         error={wizardHospital.corpId && !validateCINFormat(wizardHospital.corpId)}
@@ -4621,11 +4723,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         onChange={e => updateWizardField('corpId', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 21))} 
                       />
                       {wizardHospital.corpId && !validateCINFormat(wizardHospital.corpId) && (
-                        <span style={{ fontSize: '10.5px', color: '#EF4444', marginTop: '4px', fontWeight: 600 }}>⚠️ CIN must be structured as: 21-character corporate listing format.</span>
+                        <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>⚠️ 21-character corporate listing format.</span>
                       )}
                     </div>
                     <div style={styles.formCol}>
                       <FloatingInput
+                        compact
                         label="Authorized Signatory Name"
                         required
                         isValid={!!wizardHospital.signatoryName?.trim()}
@@ -4634,10 +4737,14 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       />
                     </div>
                   </div>
-                  <div style={{ height: '1px', background: '#F1F5F9', margin: '6px 0' }} />
+
+                  <div style={{ height: '1px', background: '#F1F5F9', margin: '2px 0' }} />
+
+                  {/* Row 3: Drug License & Fire Safety Certificate */}
                   <div style={styles.formRow}>
                     <div style={styles.formCol}>
                       <FloatingInput
+                        compact
                         label="Drug License Number"
                         required
                         error={wizardHospital.drugLicense && !validateDrugLicenseFormat(wizardHospital.drugLicense)}
@@ -4646,11 +4753,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         onChange={e => updateWizardField('drugLicense', e.target.value.replace(/[^a-zA-Z0-9\-\/\s]/g, '').slice(0, 30))} 
                       />
                       {wizardHospital.drugLicense && !validateDrugLicenseFormat(wizardHospital.drugLicense) && (
-                        <span style={{ fontSize: '10.5px', color: '#EF4444', marginTop: '4px', fontWeight: 600 }}>⚠️ Drug license must be 5 to 30 characters using only alphanumeric, hyphens, slashes, or spaces.</span>
+                        <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>⚠️ 5-30 chars (alphanumeric, hyphens, slashes).</span>
                       )}
                     </div>
                     <div style={styles.formCol}>
                       <FloatingInput
+                        compact
                         label="Fire Safety Certificate"
                         optional
                         error={wizardHospital.fireSafetyCertificate && !validateCertificateFormat(wizardHospital.fireSafetyCertificate)}
@@ -4659,101 +4767,134 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         onChange={e => updateWizardField('fireSafetyCertificate', e.target.value.replace(/[^a-zA-Z0-9\-\/\s]/g, '').slice(0, 30))} 
                       />
                       {wizardHospital.fireSafetyCertificate && !validateCertificateFormat(wizardHospital.fireSafetyCertificate) && (
-                        <span style={{ fontSize: '10.5px', color: '#EF4444', marginTop: '4px', fontWeight: 600 }}>⚠️ Fire Certificate must be 5 to 30 characters using only alphanumeric, hyphens, slashes, or spaces.</span>
+                        <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>⚠️ 5-30 chars (alphanumeric, hyphens, slashes).</span>
                       )}
                     </div>
                   </div>
-                  <div style={styles.formCol}>
-                    <FloatingInput
-                      label="Pollution Control Board Register Number"
-                      optional
-                      error={wizardHospital.pollutionCertificate && !validateCertificateFormat(wizardHospital.pollutionCertificate)}
-                      isValid={wizardHospital.pollutionCertificate && validateCertificateFormat(wizardHospital.pollutionCertificate)}
-                      value={wizardHospital.pollutionCertificate || ''} 
-                      onChange={e => updateWizardField('pollutionCertificate', e.target.value.replace(/[^a-zA-Z0-9\-\/\s]/g, '').slice(0, 30))} 
-                    />
-                    {wizardHospital.pollutionCertificate && !validateCertificateFormat(wizardHospital.pollutionCertificate) && (
-                      <span style={{ fontSize: '10.5px', color: '#EF4444', marginTop: '4px', fontWeight: 600 }}>⚠️ Pollution Certificate must be 5 to 30 characters using only alphanumeric, hyphens, slashes, or spaces.</span>
-                    )}
-                  </div>
-                  
-                  <div style={styles.formCol}>
-                    <label style={styles.formLabel}>
-                      COMPLIANCE DOCUMENTS (PDF, XML, DOCX, IMAGES) <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'none' }}>(Optional)</span>
-                    </label>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <input 
-                        type="file"
-                        accept=".pdf,.xml,.docx,image/*"
-                        onChange={async (e) => {
-                          const file = e.target.files[0];
-                          if (!file) return;
-                          
-                          // Front-end file size guard (10MB limit)
-                          if (file.size > 10 * 1024 * 1024) {
-                            setDocUploadError('⚠️ Maximum file size limit exceeded (10MB maximum).');
-                            showToast('File size exceeds the 10MB limit.', 'error');
-                            e.target.value = '';
-                            return;
-                          }
-                          
-                          setDocUploadError('');
-                          setUploadingDoc(true);
-                          const formData = new FormData();
-                          formData.append('document', file);
-                          
-                          try {
-                            const token = localStorage.getItem('token');
-                            const res = await fetch('/api/superadmin/upload-compliance', {
-                              method: 'POST',
-                              headers: { 'Authorization': `Bearer ${token}` },
-                              body: formData
-                            });
-                            
-                            if (res.ok) {
-                              const data = await res.json();
-                              const currentDocs = wizardHospital.complianceDocuments || [];
-                              updateWizardField('complianceDocuments', [...currentDocs, { url: data.url, filename: data.filename, uploadedAt: new Date() }]);
-                              showToast(`Uploaded ${data.filename} successfully`);
-                            } else {
-                              const errData = await res.json().catch(() => ({}));
-                              setDocUploadError(errData.error || 'File upload failed');
-                              showToast(errData.error || 'File upload failed', 'error');
-                            }
-                          } catch (err) {
-                            console.error('Upload error:', err);
-                            setDocUploadError('Error uploading document. Check server connectivity.');
-                            showToast('Error uploading document', 'error');
-                          } finally {
-                            setUploadingDoc(false);
-                          }
-                          e.target.value = ''; // Reset input
-                        }}
-                        style={{ padding: '8px', border: '1px dashed #CBD5E1', borderRadius: '6px', background: '#F8FAFC', cursor: 'pointer', fontSize: '11px', color: '#64748B' }}
+
+                  {/* Row 4: Pollution Control Certificate & Compliance Documents (paired side-by-side) */}
+                  <div style={styles.formRow}>
+                    <div style={styles.formCol}>
+                      <FloatingInput
+                        compact
+                        label="Pollution Control Board Register Number"
+                        optional
+                        error={wizardHospital.pollutionCertificate && !validateCertificateFormat(wizardHospital.pollutionCertificate)}
+                        isValid={wizardHospital.pollutionCertificate && validateCertificateFormat(wizardHospital.pollutionCertificate)}
+                        value={wizardHospital.pollutionCertificate || ''} 
+                        onChange={e => updateWizardField('pollutionCertificate', e.target.value.replace(/[^a-zA-Z0-9\-\/\s]/g, '').slice(0, 30))} 
                       />
+                      {wizardHospital.pollutionCertificate && !validateCertificateFormat(wizardHospital.pollutionCertificate) && (
+                        <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>⚠️ 5-30 chars (alphanumeric, hyphens, slashes).</span>
+                      )}
+                    </div>
+                    
+                    <div style={styles.formCol}>
+                      <div style={{ 
+                        height: '38px', 
+                        border: '1px dashed #CBD5E1', 
+                        borderRadius: '8px', 
+                        background: '#F8FAFC', 
+                        padding: '0 8px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        boxSizing: 'border-box'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1, marginRight: '6px' }}>
+                          <LucideIcon name="file-text" style={{ width: '13px', height: '13px', color: '#2563EB', flexShrink: 0 }} />
+                          <span style={{ fontSize: '11px', color: '#475569', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {wizardHospital.complianceDocuments && wizardHospital.complianceDocuments.length > 0
+                              ? `${wizardHospital.complianceDocuments.length} document${wizardHospital.complianceDocuments.length === 1 ? '' : 's'} attached`
+                              : 'Compliance Docs (PDF, XML, DOCX)'}
+                          </span>
+                        </div>
+                        <label style={{ 
+                          background: '#2563EB', 
+                          color: '#FFFFFF', 
+                          fontSize: '10px', 
+                          fontWeight: 700, 
+                          padding: '4px 10px', 
+                          borderRadius: '5px', 
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}>
+                          <LucideIcon name="upload" style={{ width: '11px', height: '11px' }} />
+                          Browse
+                          <input 
+                            type="file"
+                            accept=".pdf,.xml,.docx,image/*"
+                            style={{ display: 'none' }}
+                            onChange={async (e) => {
+                              const file = e.target.files[0];
+                              if (!file) return;
+                              
+                              if (file.size > 10 * 1024 * 1024) {
+                                setDocUploadError('⚠️ File exceeds 10MB limit.');
+                                showToast('File size exceeds the 10MB limit.', 'error');
+                                e.target.value = '';
+                                return;
+                              }
+                              
+                              setDocUploadError('');
+                              setUploadingDoc(true);
+                              const formData = new FormData();
+                              formData.append('document', file);
+                              
+                              try {
+                                const token = localStorage.getItem('token');
+                                const res = await fetch('/api/superadmin/upload-compliance', {
+                                  method: 'POST',
+                                  headers: { 'Authorization': `Bearer ${token}` },
+                                  body: formData
+                                });
+                                
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  const currentDocs = wizardHospital.complianceDocuments || [];
+                                  updateWizardField('complianceDocuments', [...currentDocs, { url: data.url, filename: data.filename, uploadedAt: new Date() }]);
+                                  showToast(`Uploaded ${data.filename} successfully`);
+                                } else {
+                                  const errData = await res.json().catch(() => ({}));
+                                  setDocUploadError(errData.error || 'File upload failed');
+                                  showToast(errData.error || 'File upload failed', 'error');
+                                }
+                              } catch (err) {
+                                console.error('Upload error:', err);
+                                setDocUploadError('Error uploading document.');
+                                showToast('Error uploading document', 'error');
+                              } finally {
+                                setUploadingDoc(false);
+                              }
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
                       {uploadingDoc && (
-                        <span style={{ fontSize: '11px', color: '#2563EB', fontWeight: 600 }}>⏳ Uploading document, please wait...</span>
+                        <span style={{ fontSize: '10px', color: '#2563EB', fontWeight: 600 }}>⏳ Uploading document...</span>
                       )}
                       {docUploadError && (
-                        <span style={{ fontSize: '11px', color: '#EF4444', fontWeight: 600 }}>{docUploadError}</span>
+                        <span style={{ fontSize: '10px', color: '#EF4444', fontWeight: 600 }}>{docUploadError}</span>
                       )}
                       {wizardHospital.complianceDocuments && wizardHospital.complianceDocuments.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
                           {wizardHospital.complianceDocuments.map((doc, idx) => (
-                            <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#F1F5F9', padding: '6px 10px', borderRadius: '4px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <LucideIcon name="file-text" style={{ width: '12px', height: '12px', color: '#3B82F6' }} />
-                                <span style={{ fontSize: '11px', fontWeight: 600, color: '#334155' }}>{doc.filename}</span>
-                              </div>
+                            <div key={idx} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: '#F1F5F9', padding: '3px 7px', borderRadius: '4px' }}>
+                              <LucideIcon name="file-text" style={{ width: '11px', height: '11px', color: '#3B82F6' }} />
+                              <span style={{ fontSize: '10px', fontWeight: 600, color: '#334155', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.filename}</span>
                               <button 
                                 type="button"
                                 onClick={() => {
                                   const updated = wizardHospital.complianceDocuments.filter((_, i) => i !== idx);
                                   updateWizardField('complianceDocuments', updated);
                                 }}
-                                style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', display: 'flex' }}
+                                style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: 0, display: 'flex' }}
                               >
-                                <LucideIcon name="trash-2" style={{ width: '12px', height: '12px' }} />
+                                <LucideIcon name="trash-2" style={{ width: '10px', height: '10px' }} />
                               </button>
                             </div>
                           ))}
@@ -4764,7 +4905,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 </div>
               )}
 
-              {wizardStep === 4 && (
+              {wizardStep === 3 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   <div>
                     <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Subscription Plans & Gating Options</h3>
@@ -5027,7 +5168,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 </div>
               )}
 
-              {wizardStep === 5 && (
+              {wizardStep === 4 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   <div>
                     <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>User & Role Provisioning Console</h3>
@@ -5161,7 +5302,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   {/* Admin SMTP invite triggers */}
                   <div style={{ padding: '16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div>
-                      <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>Administrator Credentials & SMTP Dispatcher</h4>
+                      <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>Administrator Credentials</h4>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
                         <div style={styles.formCol}>
                           <FloatingInput
@@ -5238,32 +5379,24 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           )}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '12px' }}>
-                        <button 
-                          type="button"
-                          style={styles.btnActionSmall}
-                          onClick={() => handleProvisionAdmin(wizardHospital._id)}
-                        >
-                          {provisioningId === wizardHospital._id ? 'Sending Invite...' : 'Dispatch SMTP Provisioning Invite'}
-                        </button>
-                        {(provisionedId === wizardHospital._id || wizardHospital.adminStatus === 'Approved') && (
-                          <span style={{ fontSize: '11.5px', fontWeight: 750, color: '#059669', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <LucideIcon name="check-circle" style={{ width: '14px', height: '14px', color: '#059669' }} /> Invitation credentials dispatched!
-                          </span>
-                        )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', padding: '10px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px' }}>
+                        <LucideIcon name="shield-check" style={{ width: '16px', height: '16px', color: '#16A34A', flexShrink: 0 }} />
+                        <span style={{ fontSize: '12px', color: '#166534', fontWeight: 600 }}>
+                          Administrator credentials will be automatically emailed to <strong>{wizardHospital.adminEmail || 'the registered work email'}</strong> in an encrypted, password-protected PDF once hospital onboarding is finalized.
+                        </span>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {wizardStep === 6 && (
+              {wizardStep === 5 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
                   
                   {/* Step Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>Step 6: Review & Validation</h2>
+                      <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>Step 5: Review & Validation</h2>
                       <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#64748B' }}>Review all completed configurations before activating the hospital.</p>
                     </div>
                     <div style={{ display: 'flex', gap: '10px' }}>
@@ -5360,25 +5493,24 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       <strong style={{ fontSize: '14px', color: '#0F172A', fontWeight: 805 }}>Implementation Summary</strong>
                       <button 
                         onClick={() => {
-                          if (expandedSteps.length === 5) {
+                          if (expandedSteps.length === 4) {
                             setExpandedSteps([]);
                           } else {
-                            setExpandedSteps([1, 2, 3, 4, 5]);
+                            setExpandedSteps([1, 2, 3, 4]);
                           }
                         }}
                         style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}
                       >
-                        {expandedSteps.length === 5 ? 'Collapse All' : 'Expand All'}
+                        {expandedSteps.length === 4 ? 'Collapse All' : 'Expand All'}
                       </button>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {[
-                        { id: 1, title: 'Step 1: Basic Info', desc: 'Hospital identity and branding assets verified.', details: `Hospital Name: ${wizardHospital.name || 'Not Provided'}\nContact Email: ${wizardHospital.contactEmail || 'Not Provided'}` },
-                        { id: 2, title: 'Step 2: Org Setup', desc: 'Department hierarchy and facility mapping complete.', details: `Timezone: ${wizardHospital.timezone || 'Not Provided'}\nCurrency: ${wizardHospital.currency || 'Not Provided'}\nDate Format: ${wizardHospital.dateFormat || 'Not Provided'}\nDefault Language: ${wizardHospital.language || 'Not Provided'}` },
-                        { id: 3, title: 'Step 3: Legal & Compliance', desc: 'Regulatory documents and HIPAA protocols signed.', details: `PAN Number: ${wizardHospital.panNumber || 'Not Provided'}\nGSTIN: ${wizardHospital.gstin || 'Not Provided'}\nCorporate ID (CIN): ${wizardHospital.corpId || 'Not Provided'}\nAuthorized Signatory: ${wizardHospital.signatoryName || 'Not Provided'}\nDrug License: ${wizardHospital.drugLicense || 'Not Provided'}` },
-                        { id: 4, title: 'Step 4: Subscription & Licensing', desc: 'Entitlements, clinical operating mode & active modules.', details: `Subscription Tier: ${(wizardHospital.subscriptionPlan || 'Not Provided').toUpperCase()}\nBilling Cycle: ${(wizardHospital.billingCycle || 'Not Provided').toUpperCase()}\nContract Duration: ${wizardHospital.contractDurationYears || 0} Year(s)\nDoctor Clinical Mode: ${wizardHospital.doctorClinicalMode || 'ONLINE'}\nModules: Reception (${isModuleEnabled('reception') ? 'ON' : 'OFF'}), Doctor (${isModuleEnabled('doctor') ? 'ON' : 'OFF'}), Pharmacy (${isModuleEnabled('pharmacy') ? 'ON' : 'OFF'}), Laboratory (${isModuleEnabled('laboratory') ? 'ON' : 'OFF'})` },
-                        { id: 5, title: 'Step 5: User & Role Provisioning', desc: 'RBAC matrices applied to 120 staff members.', details: `Sandbox Database Link: ${wizardHospital.sandboxDbUrl || 'Pending'}\nAdmin Username: ${wizardHospital.adminEmail || 'Not Provided'}\nProvisioned Users: Configured` }
+                        { id: 1, title: 'Step 1: Basic Info & Branding', desc: 'Hospital identity, branding emblem & location verified.', details: `Hospital Name: ${wizardHospital.name || 'Not Provided'}\nLogo: ${wizardHospital.logo ? 'Uploaded' : 'None'}\nContact Email: ${wizardHospital.contactEmail || 'Not Provided'}\nCity: ${wizardHospital.city || 'Not Provided'}` },
+                        { id: 2, title: 'Step 2: Legal & Compliance', desc: 'Regulatory documents and compliance certifications signed.', details: `PAN Number: ${wizardHospital.panNumber || 'Not Provided'}\nGSTIN: ${wizardHospital.gstin || 'Not Provided'}\nCorporate ID (CIN): ${wizardHospital.corpId || 'Not Provided'}\nAuthorized Signatory: ${wizardHospital.signatoryName || 'Not Provided'}\nDrug License: ${wizardHospital.drugLicense || 'Not Provided'}` },
+                        { id: 3, title: 'Step 3: Subscription & Licensing', desc: 'Entitlements, clinical operating mode & active modules.', details: `Subscription Tier: ${(wizardHospital.subscriptionPlan || 'Not Provided').toUpperCase()}\nBilling Cycle: ${(wizardHospital.billingCycle || 'Not Provided').toUpperCase()}\nContract Duration: ${wizardHospital.contractDurationYears || 0} Year(s)\nDoctor Clinical Mode: ${wizardHospital.doctorClinicalMode || 'ONLINE'}\nModules: Reception (${isModuleEnabled('reception') ? 'ON' : 'OFF'}), Doctor (${isModuleEnabled('doctor') ? 'ON' : 'OFF'}), Pharmacy (${isModuleEnabled('pharmacy') ? 'ON' : 'OFF'}), Laboratory (${isModuleEnabled('laboratory') ? 'ON' : 'OFF'})` },
+                        { id: 4, title: 'Step 4: User & Role Provisioning', desc: 'RBAC matrices applied to staff members.', details: `Sandbox Database Link: ${wizardHospital.sandboxDbUrl || 'Pending'}\nAdmin Username: ${wizardHospital.adminEmail || 'Not Provided'}\nProvisioned Users: Configured` }
                       ].map(step => {
                         const isOpen = expandedSteps.includes(step.id);
                         return (
@@ -5443,10 +5575,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         const issues = [];
                         if (!wizardHospital.name) issues.push({ severity: 'HIGH', label: 'Hospital Name Missing', module: 'Identity', desc: 'Specify name in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 1 });
                         if (!wizardHospital.contactEmail) issues.push({ severity: 'MEDIUM', label: 'Contact Email Missing', module: 'Identity', desc: 'Provide contact details in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Today', step: 1 });
-                        if (!wizardHospital.panNumber) issues.push({ severity: 'HIGH', label: 'PAN Document Missing', module: 'Compliance', desc: 'Upload PAN in Step 3', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 3 });
-                        if (!wizardHospital.gstin) issues.push({ severity: 'HIGH', label: 'GSTIN Registration Missing', module: 'Compliance', desc: 'Provide GSTIN in Step 3', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 3 });
-                        if (!wizardHospital.drugLicense) issues.push({ severity: 'HIGH', label: 'Drug License Number Missing', module: 'Compliance', desc: 'Insert drug license in Step 3', owner: wizardHospital.signatoryName || 'Client Lead', eta: '2 Days', step: 3 });
-                        if (!wizardHospital.adminName || !wizardHospital.adminEmail) issues.push({ severity: 'HIGH', label: 'Administrator Account Unprovisioned', module: 'Users', desc: 'Create admin user in Step 5', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 5 });
+                        if (!wizardHospital.panNumber) issues.push({ severity: 'HIGH', label: 'PAN Document Missing', module: 'Compliance', desc: 'Upload PAN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 2 });
+                        if (!wizardHospital.gstin) issues.push({ severity: 'HIGH', label: 'GSTIN Registration Missing', module: 'Compliance', desc: 'Provide GSTIN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 2 });
+                        if (!wizardHospital.drugLicense) issues.push({ severity: 'HIGH', label: 'Drug License Number Missing', module: 'Compliance', desc: 'Insert drug license in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '2 Days', step: 2 });
+                        if (!wizardHospital.adminName || !wizardHospital.adminEmail) issues.push({ severity: 'HIGH', label: 'Administrator Account Unprovisioned', module: 'Users', desc: 'Create admin user in Step 4', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 4 });
 
                         if (issues.length === 0) {
                           return (
@@ -5467,10 +5599,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       const issues = [];
                       if (!wizardHospital.name) issues.push({ severity: 'HIGH', label: 'Hospital Name Missing', module: 'Identity', desc: 'Specify name in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 1 });
                       if (!wizardHospital.contactEmail) issues.push({ severity: 'MEDIUM', label: 'Contact Email Missing', module: 'Identity', desc: 'Provide contact details in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Today', step: 1 });
-                      if (!wizardHospital.panNumber) issues.push({ severity: 'HIGH', label: 'PAN Document Missing', module: 'Compliance', desc: 'Upload PAN in Step 3', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 3 });
-                      if (!wizardHospital.gstin) issues.push({ severity: 'HIGH', label: 'GSTIN Registration Missing', module: 'Compliance', desc: 'Provide GSTIN in Step 3', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 3 });
-                      if (!wizardHospital.drugLicense) issues.push({ severity: 'HIGH', label: 'Drug License Number Missing', module: 'Compliance', desc: 'Insert drug license in Step 3', owner: wizardHospital.signatoryName || 'Client Lead', eta: '2 Days', step: 3 });
-                      if (!wizardHospital.adminName || !wizardHospital.adminEmail) issues.push({ severity: 'HIGH', label: 'Administrator Account Unprovisioned', module: 'Users', desc: 'Create admin user in Step 5', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 5 });
+                      if (!wizardHospital.panNumber) issues.push({ severity: 'HIGH', label: 'PAN Document Missing', module: 'Compliance', desc: 'Upload PAN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 2 });
+                      if (!wizardHospital.gstin) issues.push({ severity: 'HIGH', label: 'GSTIN Registration Missing', module: 'Compliance', desc: 'Provide GSTIN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 2 });
+                      if (!wizardHospital.drugLicense) issues.push({ severity: 'HIGH', label: 'Drug License Number Missing', module: 'Compliance', desc: 'Insert drug license in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '2 Days', step: 2 });
+                      if (!wizardHospital.adminName || !wizardHospital.adminEmail) issues.push({ severity: 'HIGH', label: 'Administrator Account Unprovisioned', module: 'Users', desc: 'Create admin user in Step 4', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 4 });
 
                       if (issues.length === 0) {
                         return (
@@ -5528,8 +5660,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                       onClick={e => { 
                                         e.preventDefault(); 
                                         if (iss.step) {
+                                          setIsSavingStep(true);
                                           setWizardStep(iss.step);
-                                          saveWizardDraft(false, iss.step);
+                                          saveWizardDraft(false, iss.step).finally(() => setIsSavingStep(false));
                                           showToast(`Navigated to Step ${iss.step} to resolve: ${iss.label}`, 'info');
                                         } else {
                                           showToast('Redirecting to fix issue...', 'info'); 
@@ -5577,7 +5710,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 </div>
               )}
 
-              {wizardStep === 7 && (
+              {wizardStep === 6 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'center', padding: '20px 0' }}>
                   <div style={{ margin: '0 auto', width: '64px', height: '64px', borderRadius: '50%', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <LucideIcon name="rocket" style={{ width: '32px', height: '32px', color: '#10B981' }} />
@@ -5597,8 +5730,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             </div>
 
-            {/* Right Side: Deployment Readiness (Step 6) OR Live Tenant Mockup Preview */}
-            {wizardStep === 6 ? (
+            {/* Right Side: Deployment Readiness (Step 5) OR Live Tenant Mockup Preview */}
+            {wizardStep === 5 ? (
               <aside style={{ width: '320px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '18px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', flexShrink: 0, boxShadow: '0 4px 15px rgba(15, 23, 42, 0.02)' }}>
                 
                 {/* Circular gauge */}
@@ -5695,14 +5828,14 @@ const SuperAdminDashboard = ({ initialTab }) => {
               </aside>
             ) : (
               <aside style={{ 
-                width: '320px', 
+                width: '310px', 
                 background: 'linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)', 
                 border: '1px solid #DBEAFE', 
-                borderRadius: '20px', 
-                padding: '20px', 
+                borderRadius: '16px', 
+                padding: '12px 14px', 
                 display: 'flex', 
                 flexDirection: 'column', 
-                gap: '16px', 
+                gap: '10px', 
                 flexShrink: 0, 
                 boxShadow: '0 20px 45px -10px rgba(37, 99, 235, 0.08), 0 1px 3px rgba(0,0,0,0.02)' 
               }}>
@@ -5717,25 +5850,25 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 <div style={{ 
                   background: 'linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 100%)', 
                   border: '1.5px solid #BFDBFE', 
-                  borderRadius: '16px', 
-                  padding: '18px', 
+                  borderRadius: '14px', 
+                  padding: '12px 14px', 
                   display: 'flex', 
                   flexDirection: 'column', 
-                  gap: '14px',
+                  gap: '10px',
                   boxShadow: '0 4px 15px rgba(37, 99, 235, 0.06)'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div style={{ 
-                      width: '44px', 
-                      height: '44px', 
-                      borderRadius: '12px', 
+                      width: '36px', 
+                      height: '36px', 
+                      borderRadius: '10px', 
                       background: wizardHospital.logo ? '#FFFFFF' : 'linear-gradient(135deg, #2563EB 0%, #4F46E5 100%)', 
                       color: '#FFFFFF', 
                       display: 'flex', 
                       alignItems: 'center', 
                       justifyContent: 'center', 
                       fontWeight: 900, 
-                      fontSize: '15px', 
+                      fontSize: '13px', 
                       boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
                       overflow: 'hidden',
                       border: wizardHospital.logo ? '1.5px solid #BFDBFE' : 'none',
@@ -5818,12 +5951,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ color: '#475569', display: 'flex', alignItems: 'center', gap: '7px', fontWeight: 600 }}>
                         <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <LucideIcon name="clock" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
+                          <LucideIcon name="mail" style={{ width: '13px', height: '13px', color: '#2563EB' }} />
                         </div>
-                        Currency/Time
+                        Contact Email
                       </span>
-                      <span style={{ fontWeight: 750, color: (wizardHospital.currency || wizardHospital.timezone) ? '#0F172A' : '#94A3B8' }}>
-                        {(wizardHospital.currency || wizardHospital.timezone) ? `${wizardHospital.currency || ''} (${wizardHospital.timezone || ''})` : 'Not Specified'}
+                      <span style={{ fontWeight: 750, color: wizardHospital.contactEmail ? '#0F172A' : '#94A3B8', fontSize: '11px', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {wizardHospital.contactEmail || 'Not Specified'}
                       </span>
                     </div>
 
@@ -5968,15 +6101,18 @@ const SuperAdminDashboard = ({ initialTab }) => {
               <button 
                 type="button"
                 onClick={handleNextStep}
+                disabled={isSavingStep || !isCurrentStepValid}
                 style={{ 
-                  background: isCurrentStepValid ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#94A3B8', 
+                  background: isSavingStep
+                    ? '#93C5FD'
+                    : isCurrentStepValid ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#94A3B8', 
                   border: 'none', 
                   color: '#FFFFFF', 
                   borderRadius: '8px', 
                   padding: '8px 20px', 
                   fontSize: '12.5px', 
                   fontWeight: 750, 
-                  cursor: isCurrentStepValid ? 'pointer' : 'not-allowed',
+                  cursor: (isCurrentStepValid && !isSavingStep) ? 'pointer' : 'not-allowed',
                   opacity: isCurrentStepValid ? 1 : 0.7,
                   boxShadow: isCurrentStepValid ? '0 4px 12px rgba(37, 99, 235, 0.25)' : 'none',
                   transition: 'all 0.2s',
@@ -5985,8 +6121,17 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   gap: '6px'
                 }}
               >
-                <span>{wizardStep === 6 ? 'Continue to Go Live' : `Next: ${steps[wizardStep]?.label || 'Next Step'}`}</span>
-                <LucideIcon name="arrow-right" style={{ width: '14px', height: '14px' }} />
+                {isSavingStep ? (
+                  <>
+                    <LucideIcon name="loader-2" style={{ width: '14px', height: '14px', animation: 'spin 1s linear infinite' }} />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{wizardStep === 5 ? 'Continue to Go Live' : `Next: ${steps[wizardStep]?.label || 'Next Step'}`}</span>
+                    <LucideIcon name="arrow-right" style={{ width: '14px', height: '14px' }} />
+                  </>
+                )}
               </button>
             ) : (
               <button 

@@ -24483,60 +24483,90 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
       {/* Edit Staff Modal Overlay */}
       {editingStaff && (
-        <div className="admin-modal-overlay" onClick={() => { setEditingStaff(null); setShowEditPassword(false); }} style={{ backdropFilter: 'blur(6px)', background: 'rgba(15, 23, 42, 0.55)' }}>
+        <div 
+          className="admin-modal-overlay" 
+          onClick={() => { setEditingStaff(null); setShowEditPassword(false); }} 
+          style={{ backdropFilter: 'blur(8px)', background: 'rgba(15, 23, 42, 0.6)', padding: '20px', zIndex: 2100 }}
+        >
           <div 
             onClick={e => e.stopPropagation()}
             style={{
               background: '#FFFFFF',
               borderRadius: '20px',
               width: '100%',
-              maxWidth: '580px',
-              padding: '24px 28px',
-              boxShadow: '0 24px 48px -12px rgba(15, 23, 42, 0.22), 0 4px 12px rgba(0, 0, 0, 0.06)',
+              maxWidth: '960px',
+              boxShadow: '0 25px 60px -15px rgba(15, 23, 42, 0.3), 0 0 0 1px rgba(226, 232, 240, 0.8)',
               border: '1px solid #E2E8F0',
               maxHeight: '92vh',
               overflowY: 'auto',
               display: 'flex',
               flexDirection: 'column',
-              gap: '18px',
               position: 'relative'
             }}
           >
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '20px 28px',
+              borderBottom: '1px solid #F1F5F9',
+              background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFCFF 100%)',
+              borderTopLeftRadius: '20px',
+              borderTopRightRadius: '20px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <div style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
-                  border: '1px solid #BFDBFE',
-                  color: '#2563EB',
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                  color: '#FFFFFF',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 2px 6px rgba(37, 99, 235, 0.12)'
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.28)',
+                  flexShrink: 0
                 }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '16.5px', fontWeight: 800, color: '#0F172A', margin: 0, lineHeight: 1.2 }}>
-                    Edit Staff Profile
-                  </h3>
-                  <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550 }}>
-                    Updating credentials for <strong style={{ color: '#2563EB' }}>{editingStaff.name}</strong>
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: 850, color: '#0F172A', margin: 0, letterSpacing: '-0.2px' }}>
+                      Edit Staff Profile
+                    </h3>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      background: '#EFF6FF',
+                      color: '#2563EB',
+                      border: '1px solid #DBEAFE',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em'
+                    }}>
+                      {editingStaff.role || 'Staff'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 550, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>Updating credentials for <strong style={{ color: '#0F172A' }}>{editingStaff.name}</strong></span>
+                    {editingStaff.staff_id && (
+                      <span style={{ color: '#94A3B8' }}>• Staff ID: <strong style={{ color: '#475569' }}>{editingStaff.staff_id}</strong></span>
+                    )}
+                  </div>
                 </div>
               </div>
+
               <button 
                 type="button"
                 className="admin-modal-close-btn" 
                 onClick={() => { setEditingStaff(null); setShowEditPassword(false); }}
                 style={{
-                  width: '32px',
-                  height: '32px',
+                  width: '34px',
+                  height: '34px',
                   borderRadius: '50%',
-                  background: '#F1F5F9',
+                  background: '#F8FAFC',
                   border: '1px solid #E2E8F0',
                   color: '#64748B',
                   display: 'flex',
@@ -24545,495 +24575,544 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   cursor: 'pointer',
                   transition: 'all 0.15s'
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#E2E8F0'; e.currentTarget.style.color = '#0F172A'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#64748B'; }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#0F172A'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.color = '#64748B'; }}
                 title="Close"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
               </button>
             </div>
             
-            <form onSubmit={handleEditStaffSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-                {/* Full Name */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Full Name <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  <input 
-                    type="text" 
-                    className="admin-text-input" 
-                    style={{ width: '100%', height: '40px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: 650, color: '#0F172A' }}
-                    value={editStaffFields.name} 
-                    onChange={e => setEditStaffFields({...editStaffFields, name: e.target.value})} 
-                    placeholder="e.g. Dr. Jane Smith" 
-                    required 
-                  />
-                </div>
-
-                {/* Access Role */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Access Role <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  <select 
-                    className="admin-text-input" 
-                    style={{ width: '100%', height: '40px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '13px', fontWeight: 650, color: '#0F172A' }}
-                    value={editStaffFields.role} 
-                    onChange={e => setEditStaffFields({...editStaffFields, role: e.target.value})}
-                  >
-                    {getAvailableRoles().map(r => (
-                      <option key={r.value} value={r.value}>{r.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Specialty / Department */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Specialty / Department
-                  </label>
-                  <input 
-                    type="text" 
-                    className="admin-text-input" 
-                    style={{ width: '100%', height: '40px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: 650, color: '#0F172A' }}
-                    value={editStaffFields.specialty} 
-                    onChange={e => setEditStaffFields({...editStaffFields, specialty: e.target.value})} 
-                    placeholder="e.g. Dermatology, Outpatient, etc." 
-                  />
-                </div>
-
-                {/* Phone Number */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Phone Number
-                  </label>
-                  <input 
-                    type="tel" 
-                    className="admin-text-input" 
-                    style={{ width: '100%', height: '40px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: 650, color: '#0F172A' }}
-                    value={editStaffFields.phone} 
-                    onChange={e => setEditStaffFields({...editStaffFields, phone: e.target.value})} 
-                    placeholder="e.g. 8888888887" 
-                  />
-                </div>
-
-                {/* Google Login Email (Full Width) */}
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    <svg style={{ width: '13px', height: '13px', flexShrink: 0 }} viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.62-.62-1.05-1.37-1.35-2.22z"/>
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                    </svg>
-                    Google Login Email
-                    <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#94A3B8', textTransform: 'none' }}>(optional)</span>
-                  </label>
-                  <input 
-                    type="email" 
-                    className="admin-text-input" 
-                    style={{ width: '100%', height: '40px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: 650, color: '#0F172A' }}
-                    value={editStaffFields.email} 
-                    onChange={e => setEditStaffFields({...editStaffFields, email: e.target.value})} 
-                    placeholder="e.g. doctor.sarah@gmail.com" 
-                    autoComplete="off"
-                  />
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 550, marginTop: '3px', display: 'block' }}>
-                    Staff can use this email to log in directly with "Sign in with Google"
-                  </span>
-                </div>
-
-                {/* Hospital Shift */}
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Hospital Shift <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  <select 
-                    className="admin-text-input" 
-                    style={{ width: '100%', height: '40px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '13px', fontWeight: 650, color: '#0F172A' }}
-                    value={editStaffFields.shiftName || 'General Shift'} 
-                    onChange={e => setEditStaffFields({...editStaffFields, shiftName: e.target.value})}
-                    required
-                  >
-                    <option value="General Shift">General Shift (09:00 AM - 05:00 PM)</option>
-                    <option value="Morning Shift">Morning Shift (08:00 AM - 02:00 PM)</option>
-                    <option value="Evening Shift">Evening Shift (02:00 PM - 08:00 PM)</option>
-                    <option value="Night Rotation">Night Rotation (08:00 PM - 08:00 AM)</option>
-                  </select>
-                </div>
-
-                {/* Weekly Off Days (Multi-Select) */}
-                {(() => {
-                  const parseSelectedOffDays = (val) => {
-                    if (!val) return ['Sunday'];
-                    if (Array.isArray(val)) {
-                      return val.map(d => {
-                        const s = String(d).trim();
-                        return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-                      });
-                    }
-                    if (typeof val === 'string') {
-                      return val.split(',').map(d => {
-                        const s = d.trim();
-                        return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-                      }).filter(Boolean);
-                    }
-                    return ['Sunday'];
-                  };
-
-                  const selectedOffDays = parseSelectedOffDays(editStaffFields.weeklyOff);
-
-                  const toggleDay = (dayName) => {
-                    let updated;
-                    if (selectedOffDays.includes(dayName)) {
-                      updated = selectedOffDays.filter(d => d !== dayName);
-                    } else {
-                      const order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-                      updated = [...selectedOffDays, dayName].sort((a, b) => order.indexOf(a) - order.indexOf(b));
-                    }
-                    setEditStaffFields({
-                      ...editStaffFields,
-                      weeklyOff: updated
-                    });
-                  };
-
-                  const dayOptions = [
-                    { key: 'Monday', label: 'Mon' },
-                    { key: 'Tuesday', label: 'Tue' },
-                    { key: 'Wednesday', label: 'Wed' },
-                    { key: 'Thursday', label: 'Thu' },
-                    { key: 'Friday', label: 'Fri' },
-                    { key: 'Saturday', label: 'Sat' },
-                    { key: 'Sunday', label: 'Sun' }
-                  ];
-
-                  return (
-                    <div style={{ gridColumn: 'span 2', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '12px 14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
-                          Weekly Off Days
-                          <span style={{ fontSize: '10px', fontWeight: 600, color: '#94A3B8', textTransform: 'none' }}>(click to toggle multiple days)</span>
-                        </label>
-                        <span style={{
-                          fontSize: '11px',
-                          fontWeight: 800,
-                          color: selectedOffDays.length > 0 ? '#1E40AF' : '#64748B',
-                          background: selectedOffDays.length > 0 ? '#EFF6FF' : '#F1F5F9',
-                          padding: '2px 8px',
-                          borderRadius: '6px',
-                          border: selectedOffDays.length > 0 ? '1px solid #BFDBFE' : '1px solid #E2E8F0'
-                        }}>
-                          {selectedOffDays.length === 0 ? 'No off days (All days on duty)' : `${selectedOffDays.join(' + ')} (${selectedOffDays.length} ${selectedOffDays.length === 1 ? 'day off' : 'days off'})`}
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px' }}>
-                        {dayOptions.map(d => {
-                          const isOff = selectedOffDays.includes(d.key);
-                          return (
-                            <button
-                              key={d.key}
-                              type="button"
-                              onClick={() => toggleDay(d.key)}
-                              style={{
-                                padding: '8px 4px',
-                                borderRadius: '10px',
-                                border: isOff ? '1.5px solid #2563EB' : '1px solid #CBD5E1',
-                                background: isOff ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#FFFFFF',
-                                color: isOff ? '#FFFFFF' : '#475569',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease',
-                                boxShadow: isOff ? '0 3px 8px rgba(37, 99, 235, 0.28)' : '0 1px 2px rgba(0,0,0,0.03)'
-                              }}
-                              onMouseEnter={e => {
-                                if (!isOff) {
-                                  e.currentTarget.style.borderColor = '#93C5FD';
-                                  e.currentTarget.style.background = '#F8FAFC';
-                                }
-                              }}
-                              onMouseLeave={e => {
-                                if (!isOff) {
-                                  e.currentTarget.style.borderColor = '#CBD5E1';
-                                  e.currentTarget.style.background = '#FFFFFF';
-                                }
-                              }}
-                              title={`Click to set ${d.key} as ${isOff ? 'Working Day' : 'Weekly Off Day'}`}
-                            >
-                              <span style={{ fontSize: '12px', fontWeight: 800, lineHeight: 1 }}>{d.label}</span>
-                              <span style={{
-                                fontSize: '9px',
-                                fontWeight: 800,
-                                marginTop: '3px',
-                                padding: '1px 4px',
-                                borderRadius: '4px',
-                                background: isOff ? 'rgba(255, 255, 255, 0.25)' : '#F1F5F9',
-                                color: isOff ? '#FFFFFF' : '#94A3B8',
-                                letterSpacing: '0.02em'
-                              }}>
-                                {isOff ? 'OFF' : 'WORK'}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-
-              {/* Doctor-Specific Clinical Parameters Card */}
-              {editStaffFields.role === 'doctor' && (
+            {/* Modal Body Form */}
+            <form onSubmit={handleEditStaffSubmit} style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{
+                padding: '22px 28px',
+                display: 'grid',
+                gridTemplateColumns: '1.05fr 1fr',
+                gap: '22px',
+                background: '#FFFFFF'
+              }}>
+                {/* Left Column: Personal Identity & Login Credentials */}
                 <div style={{
-                  background: 'linear-gradient(135deg, #FAF5FF 0%, #F5F3FF 100%)',
-                  border: '1px solid #E9D5FF',
-                  borderRadius: '14px',
-                  padding: '14px 16px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '12px'
+                  gap: '14px',
+                  background: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '16px',
+                  padding: '18px 20px',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '26px', height: '26px', borderRadius: '7px', background: '#EDE9FE', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></svg>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>
+                    <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                     </div>
-                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#6B21A8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Doctor Clinical Parameters
+                    <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Personal Identity & Role
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                  {/* Row: Full Name & Access Role */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6B21A8', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                        Daily Max Appointment Slots
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Full Name <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <input 
-                        type="number" 
+                        type="text" 
                         className="admin-text-input" 
-                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #DDD6FE', padding: '0 10px', fontSize: '13px', fontWeight: 700, background: '#FFFFFF' }}
-                        min="1" 
-                        max="100" 
-                        value={editStaffFields.max_slots} 
-                        onChange={e => setEditStaffFields({...editStaffFields, max_slots: Number(e.target.value)})} 
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: 650, color: '#0F172A', boxSizing: 'border-box' }}
+                        value={editStaffFields.name} 
+                        onChange={e => setEditStaffFields({...editStaffFields, name: e.target.value})} 
+                        placeholder="e.g. Dr. Jane Smith" 
                         required 
                       />
                     </div>
+
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6B21A8', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                        Consultation Fee (₹)
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Access Role <span style={{ color: '#EF4444' }}>*</span>
+                      </label>
+                      <select 
+                        className="admin-text-input" 
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '13px', fontWeight: 650, color: '#0F172A', boxSizing: 'border-box', background: '#FFFFFF' }}
+                        value={editStaffFields.role} 
+                        onChange={e => setEditStaffFields({...editStaffFields, role: e.target.value})}
+                      >
+                        {getAvailableRoles().map(r => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Row: Specialty & Phone */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Specialty / Department
                       </label>
                       <input 
-                        type="number" 
+                        type="text" 
                         className="admin-text-input" 
-                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #DDD6FE', padding: '0 10px', fontSize: '13px', fontWeight: 700, background: '#FFFFFF' }}
-                        min="0" 
-                        placeholder="e.g. 500"
-                        value={editStaffFields.consultationFee !== undefined ? editStaffFields.consultationFee : 500} 
-                        onChange={e => setEditStaffFields({...editStaffFields, consultationFee: e.target.value !== '' ? Number(e.target.value) : ''})} 
-                        required 
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: 650, color: '#0F172A', boxSizing: 'border-box' }}
+                        value={editStaffFields.specialty} 
+                        onChange={e => setEditStaffFields({...editStaffFields, specialty: e.target.value})} 
+                        placeholder="e.g. Outpatient, Cardiology" 
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Phone Number
+                      </label>
+                      <input 
+                        type="tel" 
+                        className="admin-text-input" 
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: 650, color: '#0F172A', boxSizing: 'border-box' }}
+                        value={editStaffFields.phone} 
+                        onChange={e => setEditStaffFields({...editStaffFields, phone: e.target.value})} 
+                        placeholder="e.g. 9876543210" 
                       />
                     </div>
                   </div>
 
-                  {/* Attending Slots */}
+                  {/* Google Login Email */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6B21A8', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                      Attending Time Slots
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      <svg style={{ width: '13px', height: '13px', flexShrink: 0 }} viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.62-.62-1.05-1.37-1.35-2.22z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                      </svg>
+                      Google Login Email
+                      <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#94A3B8', textTransform: 'none' }}>(optional)</span>
                     </label>
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                    <input 
+                      type="email" 
+                      className="admin-text-input" 
+                      style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: 650, color: '#0F172A', boxSizing: 'border-box' }}
+                      value={editStaffFields.email} 
+                      onChange={e => setEditStaffFields({...editStaffFields, email: e.target.value})} 
+                      placeholder="e.g. staff.name@gmail.com" 
+                      autoComplete="off"
+                    />
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 550, marginTop: '3px', display: 'block' }}>
+                      Staff can use this email to log in directly with "Sign in with Google"
+                    </span>
+                  </div>
+
+                  {/* Change Password */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Change Password <span style={{ fontSize: '10px', fontWeight: 600, color: '#94A3B8', textTransform: 'none' }}>(leave blank to keep current)</span>
+                    </label>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                       <input 
-                        type="text" 
-                        placeholder="e.g. 10:00 AM - 11:00 AM" 
-                        style={{ flex: 1, height: '36px', borderRadius: '8px', border: '1px solid #DDD6FE', padding: '0 10px', fontSize: '12.5px', background: '#FFFFFF' }}
-                        value={adminCustomSlotInput}
-                        onChange={e => setAdminCustomSlotInput(e.target.value)}
+                        type={showEditPassword ? 'text' : 'password'} 
+                        className="admin-text-input" 
+                        style={{ 
+                          width: '100%', 
+                          height: '38px', 
+                          borderRadius: '8px', 
+                          border: '1px solid #CBD5E1', 
+                          padding: '0 38px 0 12px', 
+                          fontSize: !showEditPassword && editStaffFields.password ? '18px' : '13px', 
+                          letterSpacing: !showEditPassword && editStaffFields.password ? '0.2em' : 'normal', 
+                          fontWeight: 600, 
+                          background: '#FFFFFF',
+                          boxSizing: 'border-box',
+                          transition: 'all 0.15s ease'
+                        }}
+                        value={editStaffFields.password} 
+                        onChange={e => setEditStaffFields({...editStaffFields, password: e.target.value})} 
+                        placeholder="Leave blank to keep current password" 
                       />
-                      <button
+                      <button 
                         type="button"
-                        onClick={() => {
-                          if (!adminCustomSlotInput.trim()) return;
-                          const newSlot = adminCustomSlotInput.trim();
-                          const currentSlots = editStaffFields.doctorSlots || [];
-                          if (!currentSlots.includes(newSlot)) {
-                            setEditStaffFields({
-                              ...editStaffFields,
-                              doctorSlots: [...currentSlots, newSlot]
-                            });
-                          }
-                          setAdminCustomSlotInput('');
-                        }}
+                        onClick={() => setShowEditPassword(!showEditPassword)}
                         style={{
-                          background: '#7C3AED',
+                          position: 'absolute',
+                          right: '10px',
+                          background: 'none',
                           border: 'none',
-                          color: '#FFFFFF',
-                          padding: '0 14px',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: 750,
                           cursor: 'pointer',
-                          boxShadow: '0 2px 6px rgba(124, 58, 237, 0.25)'
+                          color: '#64748B',
+                          padding: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
                         }}
+                        title={showEditPassword ? 'Hide Password' : 'Show Password'}
                       >
-                        + Add Slot
+                        {showEditPassword ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.52 13.52 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        )}
                       </button>
                     </div>
+                  </div>
+                </div>
 
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '140px', overflowY: 'auto', padding: '8px', border: '1px solid #E9D5FF', borderRadius: '8px', background: '#FFFFFF' }} data-lenis-prevent>
-                      {Array.from(new Set([
-                        '09:00 AM - 09:30 AM', '09:30 AM - 10:00 AM', '10:00 AM - 10:30 AM',
-                        '10:30 AM - 11:00 AM', '11:00 AM - 11:30 AM', '11:30 AM - 12:00 PM',
-                        '12:00 PM - 12:30 PM', '12:30 PM - 01:00 PM', '02:00 PM - 02:30 PM',
-                        '02:30 PM - 03:00 PM', '03:00 PM - 03:30 PM', '03:30 PM - 04:00 PM',
-                        '04:00 PM - 04:30 PM', '04:30 PM - 05:00 PM', '05:00 PM - 05:30 PM',
-                        ...(editStaffFields.doctorSlots || [])
-                      ])).map(slot => {
-                        const isSelected = (editStaffFields.doctorSlots || []).includes(slot);
-                        return (
+                {/* Right Column: Duty Schedule & Clinical Settings */}
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '16px',
+                  padding: '18px 20px',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '10px' }}>
+                    <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </div>
+                    <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Work Cadence & Hospital Shift
+                    </span>
+                  </div>
+
+                  {/* Hospital Shift */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Hospital Shift <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <select 
+                      className="admin-text-input" 
+                      style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '13px', fontWeight: 650, color: '#0F172A', boxSizing: 'border-box', background: '#FFFFFF' }}
+                      value={editStaffFields.shiftName || 'General Shift'} 
+                      onChange={e => setEditStaffFields({...editStaffFields, shiftName: e.target.value})}
+                      required
+                    >
+                      <option value="General Shift">General Shift (09:00 AM - 05:00 PM)</option>
+                      <option value="Morning Shift">Morning Shift (08:00 AM - 02:00 PM)</option>
+                      <option value="Evening Shift">Evening Shift (02:00 PM - 08:00 PM)</option>
+                      <option value="Night Rotation">Night Rotation (08:00 PM - 08:00 AM)</option>
+                    </select>
+                  </div>
+
+                  {/* Weekly Off Days */}
+                  {(() => {
+                    const parseSelectedOffDays = (val) => {
+                      if (!val) return ['Sunday'];
+                      if (Array.isArray(val)) {
+                        return val.map(d => {
+                          const s = String(d).trim();
+                          return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+                        });
+                      }
+                      if (typeof val === 'string') {
+                        return val.split(',').map(d => {
+                          const s = d.trim();
+                          return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+                        }).filter(Boolean);
+                      }
+                      return ['Sunday'];
+                    };
+
+                    const selectedOffDays = parseSelectedOffDays(editStaffFields.weeklyOff);
+
+                    const toggleDay = (dayName) => {
+                      let updated;
+                      if (selectedOffDays.includes(dayName)) {
+                        updated = selectedOffDays.filter(d => d !== dayName);
+                      } else {
+                        const order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                        updated = [...selectedOffDays, dayName].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+                      }
+                      setEditStaffFields({
+                        ...editStaffFields,
+                        weeklyOff: updated
+                      });
+                    };
+
+                    const dayOptions = [
+                      { key: 'Monday', label: 'Mon' },
+                      { key: 'Tuesday', label: 'Tue' },
+                      { key: 'Wednesday', label: 'Wed' },
+                      { key: 'Thursday', label: 'Thu' },
+                      { key: 'Friday', label: 'Fri' },
+                      { key: 'Saturday', label: 'Sat' },
+                      { key: 'Sunday', label: 'Sun' }
+                    ];
+
+                    return (
+                      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                            Weekly Off Days
+                            <span style={{ fontSize: '10px', fontWeight: 600, color: '#94A3B8', textTransform: 'none' }}>(click to toggle)</span>
+                          </label>
+                          <span style={{
+                            fontSize: '10.5px',
+                            fontWeight: 800,
+                            color: selectedOffDays.length > 0 ? '#1E40AF' : '#64748B',
+                            background: selectedOffDays.length > 0 ? '#EFF6FF' : '#F1F5F9',
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            border: selectedOffDays.length > 0 ? '1px solid #BFDBFE' : '1px solid #E2E8F0'
+                          }}>
+                            {selectedOffDays.length === 0 ? 'All days on duty' : selectedOffDays.join(', ') + ' (' + selectedOffDays.length + ' off)'}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '5px' }}>
+                          {dayOptions.map(d => {
+                            const isOff = selectedOffDays.includes(d.key);
+                            return (
+                              <button
+                                key={d.key}
+                                type="button"
+                                onClick={() => toggleDay(d.key)}
+                                style={{
+                                  padding: '7px 2px',
+                                  borderRadius: '8px',
+                                  border: isOff ? '1.5px solid #2563EB' : '1px solid #CBD5E1',
+                                  background: isOff ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#FFFFFF',
+                                  color: isOff ? '#FFFFFF' : '#475569',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                  boxShadow: isOff ? '0 2px 6px rgba(37, 99, 235, 0.25)' : 'none'
+                                }}
+                                title={'Click to set ' + d.key + ' as ' + (isOff ? 'Working Day' : 'Weekly Off Day')}
+                              >
+                                <span style={{ fontSize: '11px', fontWeight: 800, lineHeight: 1 }}>{d.label}</span>
+                                <span style={{
+                                  fontSize: '8.5px',
+                                  fontWeight: 800,
+                                  marginTop: '3px',
+                                  padding: '1px 3px',
+                                  borderRadius: '3px',
+                                  background: isOff ? 'rgba(255, 255, 255, 0.25)' : '#F1F5F9',
+                                  color: isOff ? '#FFFFFF' : '#94A3B8',
+                                  letterSpacing: '0.02em'
+                                }}>
+                                  {isOff ? 'OFF' : 'WORK'}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Doctor Clinical Parameters Card (if doctor) */}
+                  {editStaffFields.role === 'doctor' && (
+                    <div style={{
+                      background: 'linear-gradient(135deg, #FAF5FF 0%, #F5F3FF 100%)',
+                      border: '1px solid #E9D5FF',
+                      borderRadius: '12px',
+                      padding: '12px 14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: '#EDE9FE', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></svg>
+                        </div>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#6B21A8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Doctor Clinical Parameters
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 800, color: '#6B21A8', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                            Daily Max Slots
+                          </label>
+                          <input 
+                            type="number" 
+                            className="admin-text-input" 
+                            style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #DDD6FE', padding: '0 10px', fontSize: '12.5px', fontWeight: 700, background: '#FFFFFF', boxSizing: 'border-box' }}
+                            min="1" 
+                            max="100" 
+                            value={editStaffFields.max_slots} 
+                            onChange={e => setEditStaffFields({...editStaffFields, max_slots: Number(e.target.value)})} 
+                            required 
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 800, color: '#6B21A8', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                            Fee (₹)
+                          </label>
+                          <input 
+                            type="number" 
+                            className="admin-text-input" 
+                            style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #DDD6FE', padding: '0 10px', fontSize: '12.5px', fontWeight: 700, background: '#FFFFFF', boxSizing: 'border-box' }}
+                            min="0" 
+                            placeholder="e.g. 500"
+                            value={editStaffFields.consultationFee !== undefined ? editStaffFields.consultationFee : 500} 
+                            onChange={e => setEditStaffFields({...editStaffFields, consultationFee: e.target.value !== '' ? Number(e.target.value) : ''})} 
+                            required 
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                          <input 
+                            type="text" 
+                            placeholder="e.g. 10:00 AM - 11:00 AM" 
+                            style={{ flex: 1, height: '32px', borderRadius: '6px', border: '1px solid #DDD6FE', padding: '0 8px', fontSize: '11.5px', background: '#FFFFFF', boxSizing: 'border-box' }}
+                            value={adminCustomSlotInput}
+                            onChange={e => setAdminCustomSlotInput(e.target.value)}
+                          />
                           <button
-                            key={slot}
                             type="button"
                             onClick={() => {
-                              let currentSlots = [...(editStaffFields.doctorSlots || [])];
-                              if (currentSlots.includes(slot)) {
-                                currentSlots = currentSlots.filter(s => s !== slot);
-                              } else {
-                                currentSlots.push(slot);
+                              if (!adminCustomSlotInput.trim()) return;
+                              const newSlot = adminCustomSlotInput.trim();
+                              const currentSlots = editStaffFields.doctorSlots || [];
+                              if (!currentSlots.includes(newSlot)) {
+                                setEditStaffFields({
+                                  ...editStaffFields,
+                                  doctorSlots: [...currentSlots, newSlot]
+                                });
                               }
-                              setEditStaffFields({...editStaffFields, doctorSlots: currentSlots});
+                              setAdminCustomSlotInput('');
                             }}
                             style={{
-                              padding: '5px 10px',
+                              background: '#7C3AED',
+                              border: 'none',
+                              color: '#FFFFFF',
+                              padding: '0 10px',
                               borderRadius: '6px',
                               fontSize: '11px',
                               fontWeight: 750,
-                              border: '1px solid ' + (isSelected ? '#7C3AED' : '#E2E8F0'),
-                              background: isSelected ? '#FAF5FF' : '#F8FAFC',
-                              color: isSelected ? '#6B21A8' : '#475569',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease'
+                              cursor: 'pointer'
                             }}
                           >
-                            {slot}
+                            + Add
                           </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
+                        </div>
 
-              {/* Password Section */}
-              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '12px 14px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Change Password <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#94A3B8', textTransform: 'none' }}>(leave blank to keep current)</span>
-                </label>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input 
-                    type={showEditPassword ? 'text' : 'password'} 
-                    className="admin-text-input" 
-                    style={{ 
-                      width: '100%', 
-                      height: '40px', 
-                      borderRadius: '8px', 
-                      border: '1px solid #CBD5E1', 
-                      padding: '0 38px 0 14px', 
-                      fontSize: !showEditPassword && editStaffFields.password ? '20px' : '13px', 
-                      letterSpacing: !showEditPassword && editStaffFields.password ? '0.22em' : 'normal', 
-                      fontWeight: 600, 
-                      background: '#FFFFFF',
-                      transition: 'all 0.15s ease'
-                    }}
-                    value={editStaffFields.password} 
-                    onChange={e => setEditStaffFields({...editStaffFields, password: e.target.value})} 
-                    placeholder="Leave blank to keep current password" 
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => setShowEditPassword(!showEditPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '10px',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: '#64748B',
-                      padding: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                    title={showEditPassword ? 'Hide Password' : 'Show Password'}
-                  >
-                    {showEditPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.52 13.52 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                    )}
-                  </button>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxHeight: '90px', overflowY: 'auto', padding: '6px', border: '1px solid #E9D5FF', borderRadius: '6px', background: '#FFFFFF' }} data-lenis-prevent>
+                          {Array.from(new Set([
+                            '09:00 AM - 09:30 AM', '09:30 AM - 10:00 AM', '10:00 AM - 10:30 AM',
+                            '10:30 AM - 11:00 AM', '11:00 AM - 11:30 AM', '11:30 AM - 12:00 PM',
+                            '12:00 PM - 12:30 PM', '12:30 PM - 01:00 PM', '02:00 PM - 02:30 PM',
+                            '02:30 PM - 03:00 PM', '03:00 PM - 03:30 PM', '03:30 PM - 04:00 PM',
+                            '04:00 PM - 04:30 PM', '04:30 PM - 05:00 PM', '05:00 PM - 05:30 PM',
+                            ...(editStaffFields.doctorSlots || [])
+                          ])).map(slot => {
+                            const isSelected = (editStaffFields.doctorSlots || []).includes(slot);
+                            return (
+                              <button
+                                key={slot}
+                                type="button"
+                                onClick={() => {
+                                  let currentSlots = [...(editStaffFields.doctorSlots || [])];
+                                  if (currentSlots.includes(slot)) {
+                                    currentSlots = currentSlots.filter(s => s !== slot);
+                                  } else {
+                                    currentSlots.push(slot);
+                                  }
+                                  setEditStaffFields({...editStaffFields, doctorSlots: currentSlots});
+                                }}
+                                style={{
+                                  padding: '3px 8px',
+                                  borderRadius: '5px',
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  border: '1px solid ' + (isSelected ? '#7C3AED' : '#E2E8F0'),
+                                  background: isSelected ? '#FAF5FF' : '#F8FAFC',
+                                  color: isSelected ? '#6B21A8' : '#475569',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {slot}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Footer Buttons */}
-              <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
-                <button 
-                  type="submit" 
-                  disabled={loading} 
-                  style={{
-                    flex: 1,
-                    height: '42px',
-                    borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
-                    color: '#FFFFFF',
-                    fontSize: '13px',
-                    fontWeight: 800,
-                    border: 'none',
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    opacity: loading ? 0.7 : 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={e => { if (!loading) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.35)'; } }}
-                  onMouseLeave={e => { if (!loading) { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.25)'; } }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  {loading ? 'Saving Changes...' : 'Save Changes'}
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => { setEditingStaff(null); setShowEditPassword(false); }}
-                  style={{
-                    padding: '0 22px',
-                    height: '42px',
-                    borderRadius: '10px',
-                    background: '#FFFFFF',
-                    border: '1px solid #CBD5E1',
-                    color: '#475569',
-                    fontSize: '13px',
-                    fontWeight: 750,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#94A3B8'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
-                >
-                  Cancel
-                </button>
+              {/* Modal Footer */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px 28px',
+                borderTop: '1px solid #F1F5F9',
+                background: '#F8FAFC',
+                borderBottomLeftRadius: '20px',
+                borderBottomRightRadius: '20px'
+              }}>
+                <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 550, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  Profile and security changes take effect immediately across all portals.
+                </span>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button 
+                    type="button" 
+                    onClick={() => { setEditingStaff(null); setShowEditPassword(false); }}
+                    style={{
+                      padding: '0 20px',
+                      height: '40px',
+                      borderRadius: '8px',
+                      background: '#FFFFFF',
+                      border: '1px solid #CBD5E1',
+                      color: '#475569',
+                      fontSize: '12.5px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.borderColor = '#94A3B8'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
+                  >
+                    Cancel
+                  </button>
+
+                  <button 
+                    type="submit" 
+                    disabled={loading} 
+                    style={{
+                      height: '40px',
+                      padding: '0 26px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                      color: '#FFFFFF',
+                      fontSize: '12.5px',
+                      fontWeight: 800,
+                      border: 'none',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      opacity: loading ? 0.7 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={e => { if (!loading) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(37, 99, 235, 0.4)'; } }}
+                    onMouseLeave={e => { if (!loading) { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(37, 99, 235, 0.3)'; } }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    {loading ? 'Saving Changes...' : 'Save Changes'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
         </div>
       )}
-
 
       {/* Delete/Revoke Confirmation Modal Overlay */}
       {showRevokeConfirm && (

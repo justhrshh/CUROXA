@@ -10,7 +10,7 @@ const https = require("https");
  * @param {string} [options.html] - HTML email content
  * @returns {Promise<{ success: boolean, results: Array<{ recipient: string, success: boolean, provider?: string, error?: string }> }>}
  */
-async function sendEmail({ to, subject, text, html, senderName }) {
+async function sendEmail({ to, subject, text, html, senderName, attachments }) {
   const recipients = Array.isArray(to) ? to : [to];
   const results = [];
   const displayName = (senderName && senderName.trim()) ? senderName.trim() : "Quroxa Healthcare";
@@ -43,14 +43,24 @@ async function sendEmail({ to, subject, text, html, senderName }) {
           socketTimeout: 8000
         };
         const transporter = nodemailer.createTransport(smtpConfig);
-        await transporter.sendMail({
+        const mailOptions = {
           from: process.env.SMTP_FROM || `"${displayName}" <${process.env.SMTP_USER}>`,
           to: recipient,
           replyTo: `"${displayName}" <${process.env.SMTP_USER}>`,
           subject,
           text: plainText,
           html: cleanHtml || cleanText || ""
-        });
+        };
+
+        if (Array.isArray(attachments) && attachments.length > 0) {
+          mailOptions.attachments = attachments.map(att => ({
+            filename: att.filename || att.name || 'document.pdf',
+            content: att.content,
+            contentType: att.contentType || 'application/pdf'
+          }));
+        }
+
+        await transporter.sendMail(mailOptions);
         emailSent = true;
         usedProvider = "SMTP";
         console.log(`[EMAIL] Email successfully sent via SMTP to ${recipient}`);
@@ -69,7 +79,7 @@ async function sendEmail({ to, subject, text, html, senderName }) {
 
         const senderEmail = process.env.SMTP_USER || "curoxatechnology@gmail.com";
 
-        const payload = JSON.stringify({
+        const brevoPayload = {
           sender: { 
             name: displayName, 
             email: senderEmail 
@@ -85,7 +95,16 @@ async function sendEmail({ to, subject, text, html, senderName }) {
           subject,
           textContent: plainText,
           htmlContent: cleanHtml || `<p>${plainText}</p>`
-        });
+        };
+
+        if (Array.isArray(attachments) && attachments.length > 0) {
+          brevoPayload.attachment = attachments.map(att => ({
+            name: att.filename || att.name || 'document.pdf',
+            content: Buffer.isBuffer(att.content) ? att.content.toString('base64') : (typeof att.content === 'string' ? att.content : Buffer.from(String(att.content)).toString('base64'))
+          }));
+        }
+
+        const payload = JSON.stringify(brevoPayload);
         const options = {
           hostname: 'api.brevo.com',
           port: 443,
@@ -125,13 +144,22 @@ async function sendEmail({ to, subject, text, html, senderName }) {
     if (!emailSent && process.env.RESEND_API_KEY) {
       try {
         const fromAddress = process.env.RESEND_FROM || "onboarding@resend.dev";
-        const payload = JSON.stringify({
+        const resendPayload = {
           from: fromAddress,
           to: [recipient],
           subject,
           text: cleanText || undefined,
           html: cleanHtml || cleanText || ""
-        });
+        };
+
+        if (Array.isArray(attachments) && attachments.length > 0) {
+          resendPayload.attachments = attachments.map(att => ({
+            filename: att.filename || att.name || 'document.pdf',
+            content: Buffer.isBuffer(att.content) ? att.content.toString('base64') : (typeof att.content === 'string' ? att.content : Buffer.from(String(att.content)).toString('base64'))
+          }));
+        }
+
+        const payload = JSON.stringify(resendPayload);
         const options = {
           hostname: 'api.resend.com',
           port: 443,

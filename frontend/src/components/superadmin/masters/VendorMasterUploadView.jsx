@@ -277,7 +277,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
       )}
 
       {/* Main Two-Section Workflow: Download Master vs Upload Master */}
-      {!importResult && (
+      {!importResult && !isPreviewOpen && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 'clamp(14px, 2vh, 24px)' }}>
           
           {/* ══════════════════════════════════════════════════════════════════════════ */}
@@ -543,35 +543,26 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════════ */}
-      {/* VENDOR PREVIEW & CONFIRMATION MODAL                                        */}
+      {/* VENDOR PREVIEW & CONFIRMATION INLINE VIEW                                  */}
       {/* ══════════════════════════════════════════════════════════════════════════ */}
       {isPreviewOpen && previewData && (
         <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.6)',
-          backdropFilter: 'blur(3px)',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px'
+          flexDirection: 'column',
+          gap: '16px',
+          width: '100%'
         }}>
           <div style={{
             background: '#FFFFFF',
-            borderRadius: '14px',
+            borderRadius: '12px',
+            border: '1px solid #E2E8F0',
             width: '100%',
-            maxWidth: '850px',
-            maxHeight: '90vh',
             display: 'flex',
             flexDirection: 'column',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
             overflow: 'hidden'
           }}>
-            {/* Modal Header */}
+            {/* Header */}
             <div style={{
               padding: '16px 20px',
               borderBottom: '1px solid #E2E8F0',

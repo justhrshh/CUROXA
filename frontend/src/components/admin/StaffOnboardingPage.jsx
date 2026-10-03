@@ -306,7 +306,6 @@ export default function StaffOnboardingPage({
     }
 
     if (!formData.role) errors.role = 'Role selection is required.';
-    if (!formData.department) errors.department = 'Department is required.';
 
     if (formData.role === 'doctor') {
       if (!formData.specialty) errors.specialty = 'Specialization is required for Doctor.';
@@ -336,10 +335,10 @@ export default function StaffOnboardingPage({
       email: formData.email.trim().toLowerCase(),
       password: formData.password,
       role: formData.role,
-      department: formData.department,
-      designation: formData.designation || formData.role,
-      employmentType: formData.employmentType,
-      workLocation: formData.workLocation,
+      department: formData.department || (formData.role === 'doctor' ? (formData.specialty || 'General Medicine') : 'Administration'),
+      designation: formData.designation || (formData.role.charAt(0).toUpperCase() + formData.role.slice(1)),
+      employmentType: formData.employmentType || 'Full-Time',
+      workLocation: formData.workLocation || 'Main Wing',
       shiftName: formData.shiftName,
       // Weekly Off (Persisted for ALL ROLES)
       weeklyOff: Array.isArray(formData.weeklyOff) && formData.weeklyOff.length > 0
@@ -625,19 +624,19 @@ export default function StaffOnboardingPage({
           </div>
 
           {/* ══════════════════════════════════════════════════════════════════
-              SECTION 2: ROLE & DEPARTMENT ASSIGNMENT
+              SECTION 2: ROLE & ACCESS ASSIGNMENT
              ══════════════════════════════════════════════════════════════════ */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
             <div className="px-5 py-2.5 bg-slate-50/70 border-b border-slate-200">
               <h2 className="text-xs sm:text-[13px] font-black uppercase tracking-wider text-slate-800 m-0">
-                2. Role & Department
+                2. Role & Access
               </h2>
               <p className="text-xs text-slate-500 m-0 mt-0.5">
-                Organizational assignment and module permissions
+                Role assignment, work email and employment terms
               </p>
             </div>
 
-            <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               
               {/* Access Role - NO overlapping left icon */}
               <div>
@@ -653,26 +652,6 @@ export default function StaffOnboardingPage({
                   >
                     {rolesList.map(r => (
                       <option key={r.value} value={r.value}>{r.label}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Department */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Department <span className="text-rose-500 font-black text-sm ml-0.5 select-none leading-none">*</span>
-                </label>
-                <div className="relative flex items-center">
-                  <select
-                    name="department"
-                    value={formData.department}
-                    onChange={e => setFormData({ ...formData, department: e.target.value })}
-                    className="w-full h-9.5 px-3.5 pr-8 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none cursor-pointer"
-                  >
-                    {ALL_DEPARTMENTS.map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
                     ))}
                   </select>
                   <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
@@ -705,23 +684,8 @@ export default function StaffOnboardingPage({
                 )}
               </div>
 
-              {/* Designation */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Designation
-                </label>
-                <input
-                  type="text"
-                  name="designation"
-                  placeholder="e.g. Senior Consultant"
-                  value={formData.designation}
-                  onChange={e => setFormData({ ...formData, designation: e.target.value })}
-                  className="w-full h-9.5 px-3.5 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                />
-              </div>
-
               {/* Employment Type */}
-              <div className="lg:col-span-2">
+              <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Employment Type
                 </label>
@@ -739,21 +703,6 @@ export default function StaffOnboardingPage({
                   </select>
                   <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
                 </div>
-              </div>
-
-              {/* Work Location */}
-              <div className="lg:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Work Location
-                </label>
-                <input
-                  type="text"
-                  name="workLocation"
-                  placeholder="e.g. Main Wing - Sunrise Clinic"
-                  value={formData.workLocation}
-                  onChange={e => setFormData({ ...formData, workLocation: e.target.value })}
-                  className="w-full h-9.5 px-3.5 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                />
               </div>
 
             </div>

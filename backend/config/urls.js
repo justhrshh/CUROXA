@@ -19,14 +19,70 @@ const CANONICAL_LOGO_FILENAME = 'quroxa_new_logo.png';
  * Always trims trailing slashes for clean concatenation.
  * @returns {string} Fully qualified base URL (e.g. "https://quroxa.com" or "http://localhost:3000")
  */
-function getPublicAppUrl() {
+function getPublicAppUrl(req) {
+  // 1. Explicit domain / app URL environment variables
+  if (process.env.PUBLIC_APP_URL) {
+    return process.env.PUBLIC_APP_URL.trim().replace(/\/+$/, '');
+  }
+  if (process.env.DOMAIN) {
+    const d = process.env.DOMAIN.trim().replace(/\/+$/, '');
+    return d.startsWith('http') ? d : `https://${d}`;
+  }
+  if (process.env.DEPLOYED_URL) {
+    return process.env.DEPLOYED_URL.trim().replace(/\/+$/, '');
+  }
+  if (process.env.RENDER_EXTERNAL_URL) {
+    return process.env.RENDER_EXTERNAL_URL.trim().replace(/\/+$/, '');
+  }
+
+  // 2. If req object is available, detect the live host/origin (especially when deployed)
+  if (req) {
+    const origin = req.get ? req.get('origin') : (req.headers && req.headers.origin);
+    if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+      return origin.trim().replace(/\/+$/, '');
+    }
+
+    const referer = req.get ? req.get('referer') : (req.headers && req.headers.referer);
+    if (referer) {
+      try {
+        const refUrl = new URL(referer);
+        if (!refUrl.hostname.includes('localhost') && !refUrl.hostname.includes('127.0.0.1')) {
+          return refUrl.origin.trim().replace(/\/+$/, '');
+        }
+      } catch (_) {}
+    }
+
+    const fwdHost = req.headers && req.headers['x-forwarded-host'];
+    if (fwdHost && !fwdHost.includes('localhost') && !fwdHost.includes('127.0.0.1')) {
+      const proto = (req.headers && req.headers['x-forwarded-proto']) || 'https';
+      return `${proto}://${fwdHost.split(',')[0].trim()}`.replace(/\/+$/, '');
+    }
+
+    const host = req.get ? req.get('host') : (req.headers && req.headers.host);
+    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+      const proto = req.secure || (req.headers && req.headers['x-forwarded-proto'] === 'https') ? 'https' : 'http';
+      return `${proto}://${host.trim()}`.replace(/\/+$/, '');
+    }
+  }
+
+  // 3. If running in production or on a cloud platform (Render, Vercel, Railway, AWS, etc.)
+  const isProd = process.env.NODE_ENV === 'production' || !!process.env.RENDER || !!process.env.VERCEL;
+  if (isProd) {
+    const candidate = process.env.FRONTEND_URL || process.env.APP_URL || process.env.CLIENT_URL;
+    if (candidate && !candidate.includes('localhost') && !candidate.includes('127.0.0.1')) {
+      return candidate.trim().replace(/\/+$/, '');
+    }
+    return 'https://curoxa.onrender.com';
+  }
+
+  // 4. Local Development Fallbacks
   const rawUrl =
-    process.env.PUBLIC_APP_URL ||
     process.env.FRONTEND_URL ||
     process.env.APP_URL ||
     process.env.CLIENT_URL ||
     (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',')[0].trim() : null) ||
-    (process.env.NODE_ENV === 'production' ? 'https://curoxa.onrender.com' : 'http://localhost:3000');
+    'http://localhost:3000';
+
   return String(rawUrl).trim().replace(/\/+$/, '');
 }
 

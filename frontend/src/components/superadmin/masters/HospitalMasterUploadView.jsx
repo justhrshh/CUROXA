@@ -15,13 +15,270 @@ import {
   Info,
   ShieldCheck,
   Check,
-  Package
+  Package,
+  X,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+  FileCheck2
 } from 'lucide-react';
 import ExcelDropzone from './ExcelDropzone';
-import ImportPreviewModal from './ImportPreviewModal';
+import MatchSummaryCards from './MatchSummaryCards';
+import PreviewDataTable from './PreviewDataTable';
 import ImportResultSummary from './ImportResultSummary';
 import { getAllCategories, getCategoryConfig } from '../../../config/masterSchemaRegistry';
 import { getApiUrl } from '../../../utils/api';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// InlineImportPreview — Renders the import preview inline in the page
+// (replaces the modal overlay approach)
+// ─────────────────────────────────────────────────────────────────────────────
+function InlineImportPreview({ previewData, onClose, onConfirmImport, isImporting }) {
+  const [activeFilter, setActiveFilter] = useState('ALL');
+  const [allowRepricing, setAllowRepricing] = useState(false);
+  const [ambiguousResolutions, setAmbiguousResolutions] = useState({});
+
+  const {
+    sessionId,
+    previewId,
+    filename,
+    tenant,
+    category,
+    department,
+    summary = {},
+    previewRows = [],
+    expiresAt
+  } = previewData;
+
+  const effectiveSessionId = sessionId || previewId;
+
+  const handleResolveAmbiguous = (rowNumber, masterItemId) => {
+    setAmbiguousResolutions(prev => ({ ...prev, [rowNumber]: masterItemId }));
+  };
+
+  const ambiguousCount = summary?.ambiguous || 0;
+  const resolvedCount = Object.keys(ambiguousResolutions).filter(k => !!ambiguousResolutions[k]).length;
+  const unresolvedAmbiguous = Math.max(0, ambiguousCount - resolvedCount);
+
+  const handleConfirm = () => {
+    const formattedResolutions = Object.entries(ambiguousResolutions)
+      .filter(([_, id]) => !!id)
+      .map(([rowNum, id]) => ({ rowNumber: parseInt(rowNum, 10), selectedMasterItemId: id }));
+    onConfirmImport({ sessionId: effectiveSessionId, allowRepricing, ambiguousResolutions: formattedResolutions });
+  };
+
+  const readyToImport = (summary?.exactMatch || 0) + (summary?.safeMatch || 0) + resolvedCount;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Preview Header */}
+      <div style={{
+        background: '#FFFFFF',
+        borderRadius: '12px',
+        border: '1px solid #E2E8F0',
+        padding: '16px 20px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '9px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <FileCheck2 size={18} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  Catalog Import Preview
+                </h3>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#059669', background: '#D1FAE5', padding: '2px 8px', borderRadius: '5px', border: '1px solid #A7F3D0' }}>
+                  Server-Authoritative Session
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginTop: '4px', fontSize: '11.5px', color: '#64748B' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Building2 size={13} />
+                  Hospital: <strong style={{ color: '#0F172A' }}>{tenant?.name || tenant?.id || '—'}</strong>
+                  {tenant?.code && tenant.code !== tenant.name && ` (${tenant.code})`}
+                </span>
+                <span>·</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Layers size={13} />
+                  Category: <strong style={{ color: '#0F172A' }}>{category}</strong>
+                  {department && <> · Dept: <strong style={{ color: '#0F172A' }}>{department}</strong></>}
+                </span>
+                <span>·</span>
+                <span style={{ color: '#94A3B8', fontFamily: 'monospace', fontSize: '11px' }}>
+                  {filename}
+                </span>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isImporting}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#64748B', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '7px 12px', cursor: 'pointer' }}
+          >
+            <X size={14} />
+            Cancel & Go Back
+          </button>
+        </div>
+
+        {/* Session expiry notice */}
+        {expiresAt && (
+          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '7px', padding: '7px 12px', color: '#1D4ED8' }}>
+            <Clock size={13} />
+            <span>
+              Session locked for validation. Expires at <strong>{new Date(expiresAt).toLocaleTimeString()}</strong>
+            </span>
+            <span style={{ marginLeft: 'auto', fontFamily: 'monospace', color: '#94A3B8', fontSize: '10px' }}>
+              ID: {effectiveSessionId?.substring(0, 16)}...
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Metric Cards */}
+      <div style={{ background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px 20px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '12px' }}>
+          Import Summary — Click a card to filter rows
+        </div>
+        <MatchSummaryCards summary={summary} activeFilter={activeFilter} onSelectFilter={setActiveFilter} />
+      </div>
+
+      {/* Policy Controls */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '12px' }}>
+        {/* Repricing policy */}
+        <div style={{
+          background: allowRepricing ? '#FAF5FF' : '#F8FAFC',
+          border: allowRepricing ? '1.5px solid #C4B5FD' : '1px solid #E2E8F0',
+          borderRadius: '10px',
+          padding: '14px 16px'
+        }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={allowRepricing}
+              onChange={(e) => setAllowRepricing(e.target.checked)}
+              style={{ marginTop: '2px', width: '14px', height: '14px', cursor: 'pointer', accentColor: '#7C3AED' }}
+            />
+            <div>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A', display: 'block' }}>
+                Allow Repricing of Existing Hospital Catalog Items
+              </span>
+              <p style={{ fontSize: '11px', color: allowRepricing ? '#6D28D9' : '#64748B', margin: '3px 0 0 0', lineHeight: 1.4 }}>
+                {allowRepricing
+                  ? `Enabled: Imported prices will overwrite existing hospital catalog prices for matching items (${summary?.repricingDiffs || 0} items affected).`
+                  : 'Disabled: Existing hospital catalog prices remain strictly frozen and untouched.'}
+              </p>
+            </div>
+          </label>
+        </div>
+
+        {/* Ambiguous notice */}
+        <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+          <AlertTriangle size={16} color="#D97706" style={{ flexShrink: 0, marginTop: '1px' }} />
+          <div>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#92400E', display: 'block' }}>
+              Ambiguous Matches: {ambiguousCount} Row(s)
+            </span>
+            <p style={{ fontSize: '11px', color: '#B45309', margin: '3px 0 0 0', lineHeight: 1.4 }}>
+              {unresolvedAmbiguous > 0
+                ? <><strong>{unresolvedAmbiguous}</strong> row(s) still need selection. Unresolved rows will be skipped.</>
+                : ambiguousCount > 0
+                  ? <span style={{ color: '#059669', fontWeight: 600 }}>✓ All ambiguous rows resolved.</span>
+                  : 'No ambiguous rows detected in this workbook.'
+              }
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Preview Data Table */}
+      <div style={{ background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <h3 style={{ fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
+            Item Preview &amp; Resolution Table
+          </h3>
+          {activeFilter !== 'ALL' && (
+            <button
+              type="button"
+              onClick={() => setActiveFilter('ALL')}
+              style={{ fontSize: '11.5px', color: '#2563EB', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Clear filter (showing {activeFilter})
+            </button>
+          )}
+        </div>
+        <PreviewDataTable
+          rows={previewRows}
+          ambiguousResolutions={ambiguousResolutions}
+          onResolveAmbiguous={handleResolveAmbiguous}
+          category={category}
+          activeFilter={activeFilter}
+        />
+      </div>
+
+      {/* Footer Actions */}
+      <div style={{
+        background: '#FFFFFF',
+        borderRadius: '12px',
+        border: '1px solid #E2E8F0',
+        padding: '14px 20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        flexWrap: 'wrap'
+      }}>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={isImporting}
+          style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: '#475569', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '8px', cursor: 'pointer' }}
+        >
+          Discard &amp; Cancel
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>
+            Ready to import <strong style={{ color: '#0F172A', fontWeight: 800 }}>{readyToImport}</strong> items
+          </span>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={isImporting || readyToImport === 0}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '9px 20px',
+              fontSize: '12.5px',
+              fontWeight: 750,
+              color: '#FFFFFF',
+              background: isImporting || readyToImport === 0 ? '#94A3B8' : '#2563EB',
+              border: 'none',
+              borderRadius: '9px',
+              cursor: isImporting || readyToImport === 0 ? 'not-allowed' : 'pointer',
+              boxShadow: '0 1px 4px rgba(37,99,235,0.25)'
+            }}
+          >
+            {isImporting ? (
+              <>
+                <div style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#FFFFFF', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                Importing Catalog...
+              </>
+            ) : (
+              <>
+                <ShieldCheck size={15} />
+                Confirm &amp; Import Hospital Catalog
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 export default function HospitalMasterUploadView({ onSwitchTab }) {
   const [hospitals, setHospitals] = useState([]);
@@ -323,7 +580,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
       )}
 
       {/* Main Two-Section Workflow: SECTION A (Download) vs SECTION B (Upload) */}
-      {!importResult && (
+      {!importResult && !isPreviewOpen && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 'clamp(14px, 2vh, 24px)' }}>
           
           {/* ══════════════════════════════════════════════════════════════════════════ */}
@@ -740,14 +997,15 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
         </div>
       )}
 
-      {/* Preview Modal */}
-      <ImportPreviewModal
-        isOpen={isPreviewOpen}
-        onClose={() => setIsPreviewOpen(false)}
-        previewData={previewData}
-        onConfirmImport={handleConfirmImport}
-        isImporting={isImporting}
-      />
+      {/* Preview (Inline — not a modal) */}
+      {isPreviewOpen && previewData && (
+        <InlineImportPreview
+          previewData={previewData}
+          onClose={() => { setIsPreviewOpen(false); setPreviewData(null); }}
+          onConfirmImport={handleConfirmImport}
+          isImporting={isImporting}
+        />
+      )}
 
       {/* ══════════════════════════════════════════════════════════════════════════ */}
       {/* SECTION C — RECENT CATALOG INGESTION HISTORY                               */}
