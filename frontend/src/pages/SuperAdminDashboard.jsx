@@ -876,7 +876,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
     'master-upload': { title: 'Upload', icon: 'upload-cloud' },
     'masters': { title: 'Item Master', icon: 'package' },
     'global-item-master': { title: 'Item Master', icon: 'package' },
-    'item-requests': { title: 'Item Requests', icon: 'clipboard-list' },
+    'item-requests': { title: 'Master Requests', icon: 'clipboard-list' },
+    'master-requests': { title: 'Master Requests', icon: 'clipboard-list' },
     'customer-support': { title: 'Customer Support', icon: 'headset' },
     'broadcast-center': { title: 'Broadcast Center', icon: 'megaphone' },
     'finance': { title: 'Finance', icon: 'wallet' },
@@ -14817,8 +14818,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
               <CommonMasterUploadView onSwitchTab={setActiveTab} />
             )}
 
-            {/* SUPER ADMIN ITEM REQUESTS MODULE */}
-            {isTabAllowed && activeTab === 'item-requests' && (
+            {/* SUPER ADMIN MASTER REQUESTS MODULE (ITEM & VENDOR MASTER) */}
+            {isTabAllowed && (activeTab === 'item-requests' || activeTab === 'master-requests') && (
               <SuperAdminMasterApprovalsView />
             )}
 
@@ -17404,7 +17405,7 @@ const menuGroups = [
       { id: 'vendor-master', label: 'Vendor Master', icon: 'truck' },
       { id: 'stock-master', label: 'Stock Master', icon: 'boxes' },
       { id: 'master-upload', label: 'Upload', icon: 'upload-cloud' },
-      { id: 'item-requests', label: 'Item Requests', icon: 'clipboard-list' }
+      { id: 'item-requests', label: 'Master Requests', icon: 'clipboard-list' }
     ]
   },
   {

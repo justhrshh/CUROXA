@@ -200,17 +200,116 @@ async function runTests() {
     pass('Export rejects Radiology: Category remains SOURCE-CONFIRMATION-REQUIRED');
   } catch (err) { fail('Radiology export rejection', err); }
 
+  // --- 5. CATEGORY-WIDE EXPORT (ALL DEPARTMENTS IN ONE WORKBOOK) ---
   try {
-    let deptRequiredRejected = false;
+    const multiDeptLabItems = [
+      { itemCode: '990000001', itemName: 'Reagent Set A', category: 'Lab Operation', department: 'Biochemistry', status: 'Active' },
+      { itemCode: '990000002', itemName: 'Reagent Set B', category: 'Lab Operation', department: 'Hematology', status: 'Active' },
+      { itemCode: '990000003', itemName: 'Reagent Set C', category: 'Lab Operation', department: 'Serology', status: 'Active' }
+    ];
+    const categoryWideResult = await generateMasterExportWorkbook('Lab Operation', 'all', multiDeptLabItems);
+    assert(categoryWideResult.buffer && categoryWideResult.buffer.length > 0, 'Must produce valid buffer');
+    assert.strictEqual(categoryWideResult.itemCount, 3, 'Must contain all 3 items across departments');
+    
+    // Parse back to verify department preservation across all rows
+    const parsedCatWide = parseWorkbook(categoryWideResult.buffer, 'Lab Operation', 'all');
+    assert.strictEqual(parsedCatWide.rows.length, 3, 'All 3 rows parsed');
+    assert.strictEqual(parsedCatWide.rows[0].rawRowData.department, 'Biochemistry', 'Row 1 department preserved');
+    assert.strictEqual(parsedCatWide.rows[1].rawRowData.department, 'Hematology', 'Row 2 department preserved');
+    assert.strictEqual(parsedCatWide.rows[2].rawRowData.department, 'Serology', 'Row 3 department preserved');
+    pass('Category-wide export includes all departments in one single workbook and preserves row departments');
+  } catch (err) { fail('Category-wide export', err); }
+
+  // --- 6. HOSPITAL COMMERCIAL WORKBOOK (MRP & NET RATE COLUMNS) ---
+  try {
+    const commercialResult = await generateMasterExportWorkbook('Lab Operation', 'all', sampleLab, { isHospitalCommercial: true });
+    assert(commercialResult.headers.includes('MRP'), 'Hospital commercial export must append MRP column');
+    assert(commercialResult.headers.includes('Net Rate'), 'Hospital commercial export must append Net Rate column');
+    assert.strictEqual(commercialResult.headers.length, 26, 'Lab Operation has 24 canonical + 2 commercial columns = 26');
+    pass('Hospital Commercial export appends both "MRP" and "Net Rate" columns');
+  } catch (err) { fail('Hospital Commercial export columns', err); }
+
+  const mongoose = require('mongoose');
+  const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/clinical_management';
+  if (mongoose.connection.readyState === 0) {
     try {
-      await generateMasterExportWorkbook('Lab Operation', ''); // Missing department
-    } catch (err) {
-      deptRequiredRejected = true;
-      assert(err.message.includes('Department context is required'), 'Must require department');
+      await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
+    } catch (e) {
+      console.warn('MongoDB connection failed in test:', e.message);
     }
-    assert(deptRequiredRejected, 'Must reject export when department is missing for department-enabled category');
-    pass('Export requires department context for department-enabled category');
-  } catch (err) { fail('Department required for export', err); }
+  }
+
+  // Base commercial export template with verified 26 columns (24 canonical + MRP + Net Rate)
+  const baseCommercial = await generateMasterExportWorkbook('Lab Operation', 'Biochemistry', sampleLab, { isHospitalCommercial: true });
+
+  // --- 7. COMMERCIAL SELECTION SEMANTICS & PRICE VALIDATION ---
+  try {
+    // Test: MRP = 0 is SELECTED
+    const wb1 = XLSX.read(baseCommercial.buffer, { type: 'buffer' });
+    const sheet1 = wb1.Sheets['Lab Operation'];
+    const matrix1 = XLSX.utils.sheet_to_json(sheet1, { header: 1 });
+    matrix1[1][24] = 0; // MRP = 0
+    matrix1[1][25] = 0; // Net Rate = 0
+    wb1.Sheets['Lab Operation'] = XLSX.utils.aoa_to_sheet(matrix1);
+    const buf1 = XLSX.write(wb1, { type: 'buffer', bookType: 'xlsx' });
+    const parsed1 = parseWorkbook(buf1, 'Lab Operation', 'Biochemistry');
+    assert.strictEqual(parsed1.rows[0].importedPricing.mrp, 0, 'MRP=0 preserved as 0');
+    assert.strictEqual(parsed1.rows[0].importedPricing.netRate, 0, 'Net Rate=0 preserved as 0');
+    
+    const matched1 = await matchParsedRows(parsed1.rows, sampleLab, [], 'Lab Operation', 'Biochemistry');
+    assert.strictEqual(matched1[0].isSelected, true, 'MRP = 0 selects item');
+    pass('Item Master selection semantics: MRP = 0 is a valid price and marks item as SELECTED');
+  } catch (err) { fail('MRP = 0 selection', err); }
+
+  try {
+    // Test: MRP blank + Net Rate = 250 -> NOT SELECTED
+    const wb2 = XLSX.read(baseCommercial.buffer, { type: 'buffer' });
+    const sheet2 = wb2.Sheets['Lab Operation'];
+    const matrix2 = XLSX.utils.sheet_to_json(sheet2, { header: 1 });
+    matrix2[1][24] = ''; // MRP blank
+    matrix2[1][25] = 250; // Net Rate = 250
+    wb2.Sheets['Lab Operation'] = XLSX.utils.aoa_to_sheet(matrix2);
+    const buf2 = XLSX.write(wb2, { type: 'buffer', bookType: 'xlsx' });
+    const parsed2 = parseWorkbook(buf2, 'Lab Operation', 'Biochemistry');
+    assert.strictEqual(parsed2.rows[0].importedPricing.mrp, undefined, 'MRP is undefined');
+    assert.strictEqual(parsed2.rows[0].importedPricing.netRate, 250, 'Net Rate is 250');
+    
+    const matched2 = await matchParsedRows(parsed2.rows, sampleLab, [], 'Lab Operation', 'Biochemistry');
+    assert.strictEqual(matched2[0].isSelected, false, 'Blank MRP means NOT selected even with Net Rate entered');
+    pass('Item Master selection semantics: Net Rate alone does NOT select an item when MRP is blank');
+  } catch (err) { fail('Net Rate alone not selected', err); }
+
+  try {
+    // Test: Net Rate > MRP -> validation error
+    const wb3 = XLSX.read(baseCommercial.buffer, { type: 'buffer' });
+    const sheet3 = wb3.Sheets['Lab Operation'];
+    const matrix3 = XLSX.utils.sheet_to_json(sheet3, { header: 1 });
+    matrix3[1][24] = 100; // MRP = 100
+    matrix3[1][25] = 150; // Net Rate = 150 (exceeds MRP)
+    wb3.Sheets['Lab Operation'] = XLSX.utils.aoa_to_sheet(matrix3);
+    const buf3 = XLSX.write(wb3, { type: 'buffer', bookType: 'xlsx' });
+    const parsed3 = parseWorkbook(buf3, 'Lab Operation', 'Biochemistry');
+    assert(parsed3.rows[0].validationErrors.some(e => e.includes('cannot exceed MRP')), 'Validation error when Net Rate > MRP');
+    pass('Price validation: Net Rate cannot exceed MRP for selected rows');
+  } catch (err) { fail('Net Rate exceeding MRP validation', err); }
+
+  // --- 8. VENDOR MASTER 49-COLUMN EXPORT & UPLOAD INTEGRITY ---
+  try {
+    const { generateVendorExportWorkbook } = require('../services/vendorExportService');
+    const { parseVendorWorkbook } = require('../services/vendorWorkbookParser');
+    const vendorExport = await generateVendorExportWorkbook();
+    assert(vendorExport.buffer && vendorExport.buffer.length > 0, 'Produces valid vendor buffer');
+    
+    const parsedVendors = parseVendorWorkbook(vendorExport.buffer);
+    assert.strictEqual(parsedVendors.sheetName, 'Store Vendor Master', 'Vendor sheet name is Store Vendor Master');
+    pass('Vendor Master 49-column Store Vendor Master export and parse round-trip successful');
+  } catch (err) { fail('Vendor Master export and parse', err); }
+
+  if (mongoose.connection.readyState !== 0) {
+    try {
+      await mongoose.connection.close();
+    } catch (_) {}
+  }
 
   console.log('\n========================================================================');
   console.log(`  WORKFLOW AUDIT SUMMARY: ${passed} / ${total} TESTS PASSED`);

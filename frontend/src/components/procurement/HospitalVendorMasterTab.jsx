@@ -77,7 +77,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
           display: 'grid',
           gridTemplateColumns: `${labelWidth} 10px minmax(0, 1fr)`,
           alignItems: 'center',
-          height: '26px',
+          minHeight: '32px',
           width: '100%',
           minWidth: 0,
           boxSizing: 'border-box'
@@ -95,7 +95,8 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             cursor: 'default',
-            minWidth: 0
+            minWidth: 0,
+            lineHeight: '1.2'
           }}
         >
           {displayLabel}
@@ -121,7 +122,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
               onChange={e => onChangeFn && onChangeFn(field.fieldKey, e.target.value)}
               style={{
                 width: '100%',
-                height: '26px',
+                height: '30px',
                 boxSizing: 'border-box',
                 padding: '0 24px 0 8px',
                 borderRadius: '4px',
@@ -158,7 +159,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
               onChange={e => onChangeFn && onChangeFn(field.fieldKey, e.target.value)}
               style={{
                 width: '100%',
-                height: '26px',
+                height: '30px',
                 boxSizing: 'border-box',
                 padding: '0 8px',
                 borderRadius: '4px',
@@ -809,7 +810,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>8 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {identityFields.map(f => renderHospitalAlignedField(f, true, viewingVendor, null, null, '112px'))}
                 </div>
               </div>
@@ -823,7 +824,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>8 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {addressFields.map(f => renderHospitalAlignedField(f, true, viewingVendor, null, null, '112px'))}
                 </div>
               </div>
@@ -842,7 +843,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>4 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {primaryFields.map(f => {
                     let label = f.clientHeader;
                     if (f.fieldKey === 'primaryContactPerson') label = 'Contact Name';
@@ -863,7 +864,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>4 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {secondaryFields.map(f => {
                     let label = f.clientHeader;
                     if (f.fieldKey === 'secondaryContactPerson') label = 'Contact Name';
@@ -889,7 +890,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>6 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {corporateFields.map(f => {
                     let label = f.clientHeader;
                     if (f.fieldKey === 'panCardNo') label = 'PAN Card No';
@@ -910,7 +911,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>7 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {complianceFields.map(f => {
                     let label = f.clientHeader;
                     if (f.fieldKey === 'isoCertificationNo') label = 'ISO Cert No';
@@ -939,7 +940,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>9 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {bankGstFields.map(f => {
                     let label = f.clientHeader;
                     if (f.fieldKey === 'banKAccountsNo') label = 'Bank A/C No';
@@ -961,7 +962,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>3 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {termsFields.map(f => renderHospitalAlignedField(f, true, viewingVendor, null, null, '112px'))}
                 </div>
               </div>
@@ -1310,7 +1311,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                     8 Fields • <strong style={{ color: '#FEE2E2', textDecoration: 'underline' }}>4 Required (Red Line)</strong>
                   </span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {identityFields.map(f => renderHospitalAlignedField(f, false, requestFormData, handleRequestFieldChange, null, '112px'))}
                 </div>
               </div>
@@ -1324,7 +1325,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>8 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {addressFields.map(f => renderHospitalAlignedField(f, false, requestFormData, handleRequestFieldChange, null, '112px'))}
                 </div>
               </div>
@@ -1345,7 +1346,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                     4 Fields • <strong style={{ color: '#FEE2E2', textDecoration: 'underline' }}>Primary Contact * Required (Red Line)</strong>
                   </span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {primaryFields.map(f => {
                     let label = f.clientHeader;
                     if (f.fieldKey === 'primaryContactPerson') label = 'Contact Name';
@@ -1366,7 +1367,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>4 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {secondaryFields.map(f => {
                     let label = f.clientHeader;
                     if (f.fieldKey === 'secondaryContactPerson') label = 'Contact Name';
@@ -1392,7 +1393,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>6 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {corporateFields.map(f => {
                     let label = f.clientHeader;
                     if (f.fieldKey === 'panCardNo') label = 'PAN Card No';
@@ -1413,7 +1414,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>7 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {complianceFields.map(f => {
                     let label = f.clientHeader;
                     if (f.fieldKey === 'isoCertificationNo') label = 'ISO Cert No';
@@ -1442,7 +1443,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>9 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {bankGstFields.map(f => {
                     let label = f.clientHeader;
                     if (f.fieldKey === 'banKAccountsNo') label = 'Bank A/C No';
@@ -1464,7 +1465,7 @@ export default function HospitalVendorMasterTab({ showToast = () => {} }) {
                   </div>
                   <span style={{ fontSize: '10px', opacity: 0.9, fontWeight: 600 }}>3 Fields</span>
                 </div>
-                <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '6px' }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: '16px', rowGap: '12px' }}>
                   {termsFields.map(f => renderHospitalAlignedField(f, false, requestFormData, handleRequestFieldChange, null, '112px'))}
                 </div>
               </div>

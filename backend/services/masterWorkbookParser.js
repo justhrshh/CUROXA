@@ -123,19 +123,20 @@ function parseWorkbook(fileBuffer, category, department) {
   // Check if hospital commercial columns are present
   let hasCommercialColumns = false;
   let commercialMrpColIdx = -1;
+  let commercialNetRateColIdx = -1;
 
-  if (category === 'Pharmacy' || category === 'Lab Operation') {
-    // Check if extra column at index expectedFields.length has "MRP"
-    for (let c = expectedFields.length; c < (matrix[0] || []).length; c++) {
-      const h = String(matrix[0][c] || '').trim();
-      if (/^mrp$/i.test(h) || /^hospital\s*mrp$/i.test(h) || /^select\s*\/\s*mrp$/i.test(h)) {
-        hasCommercialColumns = true;
-        commercialMrpColIdx = c;
-        break;
-      }
+  for (let c = expectedFields.length; c < (matrix[0] || []).length; c++) {
+    const h = String(matrix[0][c] || '').trim();
+    if (/^mrp/i.test(h) || /^hospital\s*mrp/i.test(h) || /^select\s*\/\s*mrp/i.test(h)) {
+      hasCommercialColumns = true;
+      commercialMrpColIdx = c;
+    } else if (/^net\s*rate/i.test(h) || /^hospital\s*net\s*rate/i.test(h)) {
+      hasCommercialColumns = true;
+      commercialNetRateColIdx = c;
     }
-  } else {
-    // In Pathology, Service, Assets, pricing is in canonical columns
+  }
+
+  if (category === 'Pathology' || category === 'Service' || category === 'Assets') {
     hasCommercialColumns = true;
   }
 
@@ -160,7 +161,7 @@ function parseWorkbook(fileBuffer, category, department) {
       sourceData[field.clientHeader] = cellVal;
     });
 
-    // Capture any optional operational hospital columns beyond standard schema (e.g. Hospital MRP)
+    // Capture any optional operational hospital columns beyond standard schema (e.g. Hospital MRP, Net Rate)
     for (let colIdx = expectedFields.length; colIdx < (matrix[0] || []).length; colIdx++) {
       const header = String(matrix[0][colIdx] || '').trim();
       if (header) {
@@ -196,44 +197,65 @@ function parseWorkbook(fileBuffer, category, department) {
     // Category-specific pricing extraction
     const importedPricing = { mrp: undefined, netRate: undefined, hospitalCost: undefined };
 
+    let rawMrp = null;
+    let rawNetRate = null;
+
     if (category === 'Pathology') {
-      // Col K: "MRP " (mrp), Col L: "Net Rate" (netRate)
-      const parsedMrp = resolveNumericPrice(rawRowData.mrp);
-      const parsedNetRate = resolveNumericPrice(rawRowData.netRate);
-      if (parsedMrp !== null) importedPricing.mrp = parsedMrp;
-      if (parsedNetRate !== null) importedPricing.netRate = parsedNetRate;
+      rawMrp = rawRowData.mrp !== undefined ? rawRowData.mrp : sourceData['MRP '];
+      rawNetRate = rawRowData.netRate !== undefined ? rawRowData.netRate : sourceData['Net Rate'];
     } else if (category === 'Service') {
-      // Col G: "MRP" (mrp), Col H: "Net Rate" (netRate)
-      const parsedMrp = resolveNumericPrice(rawRowData.mrp);
-      const parsedNetRate = resolveNumericPrice(rawRowData.netRate);
-      if (parsedMrp !== null) importedPricing.mrp = parsedMrp;
-      if (parsedNetRate !== null) importedPricing.netRate = parsedNetRate;
+      rawMrp = rawRowData.mrp !== undefined ? rawRowData.mrp : sourceData['MRP'];
+      rawNetRate = rawRowData.netRate !== undefined ? rawRowData.netRate : sourceData['Net Rate'];
     } else if (category === 'Assets') {
-      // Col O: "MRP" (mrp)
-      const parsedMrp = resolveNumericPrice(rawRowData.mrp);
-      if (parsedMrp !== null) importedPricing.mrp = parsedMrp;
+      rawMrp = rawRowData.mrp !== undefined ? rawRowData.mrp : sourceData['MRP'];
+      rawNetRate = rawRowData.netRate !== undefined ? rawRowData.netRate : (commercialNetRateColIdx !== -1 ? rowCells[commercialNetRateColIdx] : sourceData['Net Rate']);
     } else {
-      // Lab Operation & Pharmacy: Commercial selection MRP column
-      let operationalMrp = null;
+      // Lab Operation & Pharmacy
       if (commercialMrpColIdx !== -1 && rowCells[commercialMrpColIdx] !== undefined) {
-        operationalMrp = rowCells[commercialMrpColIdx];
+        rawMrp = rowCells[commercialMrpColIdx];
       } else if (sourceData['MRP'] !== undefined) {
-        operationalMrp = sourceData['MRP'];
+        rawMrp = sourceData['MRP'];
       } else if (sourceData['Hospital MRP'] !== undefined) {
-        operationalMrp = sourceData['Hospital MRP'];
+        rawMrp = sourceData['Hospital MRP'];
       } else if (sourceData['Select / MRP'] !== undefined) {
-        operationalMrp = sourceData['Select / MRP'];
+        rawMrp = sourceData['Select / MRP'];
       } else if (rawRowData.mrp !== undefined) {
-        operationalMrp = rawRowData.mrp;
+        rawMrp = rawRowData.mrp;
       }
 
-      if (operationalMrp !== null && operationalMrp !== undefined) {
-        const parsedMrp = resolveNumericPrice(operationalMrp);
-        if (parsedMrp !== null) {
-          importedPricing.mrp = parsedMrp;
-          rawRowData.mrp = parsedMrp;
-        }
+      if (commercialNetRateColIdx !== -1 && rowCells[commercialNetRateColIdx] !== undefined) {
+        rawNetRate = rowCells[commercialNetRateColIdx];
+      } else if (sourceData['Net Rate'] !== undefined) {
+        rawNetRate = sourceData['Net Rate'];
+      } else if (sourceData['Hospital Net Rate'] !== undefined) {
+        rawNetRate = sourceData['Hospital Net Rate'];
+      } else if (rawRowData.netRate !== undefined) {
+        rawNetRate = rawRowData.netRate;
       }
+    }
+
+    const parsedMrp = resolveNumericPrice(rawMrp);
+    const parsedNetRate = resolveNumericPrice(rawNetRate);
+
+    if (parsedMrp !== null) {
+      importedPricing.mrp = parsedMrp;
+      rawRowData.mrp = parsedMrp;
+      if (parsedMrp < 0) {
+        rowErrors.push('MRP cannot be negative.');
+      }
+    }
+
+    if (parsedNetRate !== null) {
+      importedPricing.netRate = parsedNetRate;
+      rawRowData.netRate = parsedNetRate;
+      if (parsedNetRate < 0) {
+        rowErrors.push('Net Rate cannot be negative.');
+      }
+    }
+
+    // Commercial price validation: Net Rate cannot exceed MRP for selected rows
+    if (parsedMrp !== null && parsedNetRate !== null && parsedNetRate > parsedMrp) {
+      rowErrors.push(`Net Rate (${parsedNetRate}) cannot exceed MRP (${parsedMrp}).`);
     }
 
     parsedRows.push({
@@ -272,10 +294,17 @@ function generateWorkbookTemplate(category, department, options = {}) {
   const fields = catConfig.sharedFields || [];
   const headers = fields.map(f => f.clientHeader);
 
-  // For Pharmacy and Lab Operation, append commercial MRP column only if hospital commercial template is requested
-  const isCommercialAppended = options.isHospitalCommercial && (category === 'Pharmacy' || category === 'Lab Operation');
+  // Append commercial MRP and Net Rate columns if hospital commercial template is requested
+  const isCommercialAppended = options.isHospitalCommercial;
+  const extraHeaders = [];
   if (isCommercialAppended) {
-    headers.push('MRP');
+    if (!headers.some(h => /mrp/i.test(h))) {
+      extraHeaders.push('MRP');
+    }
+    if (!headers.some(h => /net\s*rate/i.test(h))) {
+      extraHeaders.push('Net Rate');
+    }
+    headers.push(...extraHeaders);
   }
 
   const sampleRow = fields.map(f => {
@@ -286,7 +315,7 @@ function generateWorkbookTemplate(category, department, options = {}) {
     return '';
   });
   if (isCommercialAppended) {
-    sampleRow.push(''); // Blank commercial input
+    extraHeaders.forEach(() => sampleRow.push('')); // Blank commercial inputs
   }
 
   const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);

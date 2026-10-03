@@ -4,7 +4,10 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const { verifyToken, isSuperAdmin } = require('../middleware/authMiddleware');
 const { getCategoryConfig } = require('../config/masterSchemaRegistry');
-const { parseWorkbook } = require('../services/masterWorkbookParser');
+const { parseWorkbook, generateWorkbookTemplate } = require('../services/masterWorkbookParser');
+const { generateHospitalCommercialExportWorkbook } = require('../services/masterExportService');
+const { generateVendorExportWorkbook } = require('../services/vendorExportService');
+const { parseVendorWorkbook, matchAndProcessVendorRows, commitVendorImport } = require('../services/vendorWorkbookParser');
 const { matchParsedRows } = require('../services/masterMatchingEngine');
 const { confirmImportSession } = require('../services/hospitalCatalogIngestionService');
 const HospitalMasterImportSession = require('../models/HospitalMasterImportSession');
@@ -21,17 +24,20 @@ router.use(isSuperAdmin);
 
 /**
  * GET /api/superadmin/masters/upload/template
- * Generate and stream clean Excel template formatted strictly to MASTER_SCHEMA_REGISTRY
+ * GET /api/superadmin/masters/upload/download
+ * Generate and stream hospital commercial Excel workbook.
+ * If tenantId is passed: populates existing hospital pricing from HospitalMasterConfig.
+ * Category-wide download: exports all records across all departments in one workbook.
  */
-router.get('/template', (req, res) => {
+async function handleMasterDownloadOrTemplate(req, res) {
   try {
-    const { category, department } = req.query;
+    const { category, department, tenantId } = req.query;
     if (!category) {
       return res.status(400).json({ error: 'category query parameter is required.' });
     }
 
     if (category === 'Radiology') {
-      return res.status(400).json({ error: 'Radiology templates are unavailable: Category remains SOURCE-CONFIRMATION-REQUIRED.' });
+      return res.status(400).json({ error: 'Radiology is unavailable: Category remains SOURCE-CONFIRMATION-REQUIRED.' });
     }
 
     const catConfig = getCategoryConfig(category);
@@ -39,38 +45,22 @@ router.get('/template', (req, res) => {
       return res.status(400).json({ error: `Invalid category: "${category}".` });
     }
 
-    const fields = catConfig.sharedFields || [];
-    const headers = fields.map(f => f.clientHeader);
+    const effectiveDept = (department && department !== 'all') ? department.trim() : '';
 
-    // Build sample row based on verified defaultValue or sample values
-    const sampleRow = fields.map(f => {
-      if (f.defaultValue !== null && f.defaultValue !== undefined) return f.defaultValue;
-      if (f.allowedValues && f.allowedValues.length > 0) return f.allowedValues[0];
-      if (f.clientHeader === 'Category') return category;
-      if (f.clientHeader === 'Department') return department || (catConfig.hasDepartment ? Object.keys(catConfig.departments || {})[0] : '');
-      return '';
-    });
-
-    const worksheetData = [headers, sampleRow];
-    const ws = XLSX.utils.aoa_to_sheet(worksheetData);
-
-    // Auto-fit column widths
-    const colWidths = headers.map(h => ({ wch: Math.max(h.length + 4, 14) }));
-    ws['!cols'] = colWidths;
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, catConfig.excelSheet || category);
-
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    const safeFilename = `${category.replace(/\s+/g, '_')}_Master_Template.xlsx`;
+    // If tenantId is provided or full catalog download requested, generate complete commercial export workbook
+    const result = await generateHospitalCommercialExportWorkbook(category, effectiveDept, null, { tenantId: tenantId ? tenantId.trim() : '' });
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
-    res.send(buffer);
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader('X-Item-Count', result.itemCount);
+    res.send(result.buffer);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
-});
+}
+
+router.get('/template', handleMasterDownloadOrTemplate);
+router.get('/download', handleMasterDownloadOrTemplate);
 
 /**
  * POST /api/superadmin/masters/upload/parse-preview
@@ -271,6 +261,105 @@ router.get('/history/:batchId', async (req, res) => {
     res.json({ success: true, data: doc });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VENDOR MASTER UPLOAD & DOWNLOAD ENDPOINTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/superadmin/masters/upload/vendor/download
+ * Download 49-column Store Vendor Master workbook:
+ * - If tenantId provided: exports hospital-associated vendors (or template if none)
+ * - If tenantId omitted: exports global vendor catalog
+ */
+router.get('/vendor/download', async (req, res) => {
+  try {
+    const { tenantId } = req.query;
+    const { buffer, filename, vendorCount } = await generateVendorExportWorkbook({}, { tenantId: tenantId ? tenantId.trim() : '' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-Vendor-Count', vendorCount);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/vendor/template', async (req, res) => {
+  try {
+    const { tenantId } = req.query;
+    const { buffer, filename, vendorCount } = await generateVendorExportWorkbook({}, { tenantId: tenantId ? tenantId.trim() : '' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-Vendor-Count', vendorCount);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/superadmin/masters/upload/vendor/parse-preview
+ * Parse uploaded 49-column vendor workbook and match against canonical Global Vendors.
+ */
+router.post('/vendor/parse-preview', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No Excel file uploaded.' });
+    }
+    const { tenantId } = req.body;
+    if (!tenantId || !tenantId.trim()) {
+      return res.status(400).json({ error: 'tenantId is required.' });
+    }
+
+    const parsed = parseVendorWorkbook(req.file.buffer);
+    const result = await matchAndProcessVendorRows(parsed.rows, tenantId.trim());
+
+    res.json({
+      success: true,
+      fileHash: parsed.fileHash,
+      fileName: req.file.originalname,
+      summary: result.summary,
+      rows: result.rows
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/superadmin/masters/upload/vendor/confirm
+ * Non-destructive ingestion:
+ * - Associates matched global vendors with the hospital.
+ * - Routes unmatched vendors to SuperAdmin approval queue (VendorRequest).
+ */
+router.post('/vendor/confirm', async (req, res) => {
+  try {
+    const { tenantId, rows } = req.body;
+    if (!tenantId || !tenantId.trim()) {
+      return res.status(400).json({ error: 'tenantId is required.' });
+    }
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'No vendor rows provided for confirmation.' });
+    }
+
+    const result = await commitVendorImport({
+      tenantId: tenantId.trim(),
+      rows,
+      superAdminUser: req.user
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(tenantId.trim()).emit('data_changed', { type: 'hospital_vendors' });
+      io.emit('data_changed', { type: 'vendor_requests' });
+    }
+
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

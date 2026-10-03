@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api, { clearPortalAuthContext, performLogout } from '../utils/api';
 import { socket, joinTenantRoom } from '../utils/socket';
@@ -409,6 +409,8 @@ const ReceptionistDashboard = () => {
   const sidebarNavRef = useRef(null);
   const medicineSearchContainerRef = useRef(null);
   const symptomDropdownRef = useRef(null);
+  const photoFileRef = useRef(null);
+  const photoCamRef = useRef(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedBillForPayment, setSelectedBillForPayment] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
@@ -635,6 +637,12 @@ const ReceptionistDashboard = () => {
   const [bills, setBills] = useState([]);
   
   const [patientPhoto, setPatientPhoto] = useState(null);
+  const [photoZoom, setPhotoZoom] = useState(1);
+  const [photoOffsetX, setPhotoOffsetX] = useState(0);
+  const [photoOffsetY, setPhotoOffsetY] = useState(0);
+  const [photoDragging, setPhotoDragging] = useState(false);
+  const [photoDragStartX, setPhotoDragStartX] = useState(0);
+  const [photoDragStartY, setPhotoDragStartY] = useState(0);
   const [formData, setFormData] = useState({
     title: '', name: '', age: '', ageMonths: '', ageDays: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: ''
   });
@@ -10959,505 +10967,253 @@ const ReceptionistDashboard = () => {
     </div>
   </div>
 
-  {/* Scrollable Workstation Body (Edge-to-edge, fills remaining height above bottom dock) */}
-  <div style={{
-    display: 'grid',
-    gridTemplateColumns: '1.2fr 1fr',
-    gap: '14px',
-    padding: '14px 18px',
-    flex: 1,
-    minHeight: 0,
-    overflowY: 'auto'
-  }}>
-    
-    {/* Left Column: Demographics + Doctor & Slot Selection */}
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      
-      {/* 1. Patient Demographics Card */}
-      <div className="rx-form-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #F1F5F9' }}>
-          <span className="rx-section-badge" style={{ background: '#EFF6FF', color: '#2563EB' }}>1</span>
-          <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>Patient Information & Demographics</span>
+  {/* Single-Form Area */}
+  <div style={{ flex: 1, overflowY: "auto", background: "linear-gradient(135deg, #F0F4FF 0%, #F8FAFC 60%, #F0FDF4 100%)" }}>
+    <div style={{ maxWidth: "860px", margin: "0 auto", padding: "20px 24px 32px" }}>
+
+      {/* â”€â”€â”€ SECTION 1: Patient Information â”€â”€â”€ */}
+      <div style={{ background: "#FFFFFF", borderRadius: "14px", border: "1px solid #E8ECEF", padding: "20px 22px", marginBottom: "14px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+
+        {/* Section Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "linear-gradient(135deg, #6366F1, #818CF8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+            <span style={{ fontSize: "13px", fontWeight: 800, color: "#0F172A" }}>Patient Information</span>
+          </div>
+          {/* Compact photo avatar integrated here */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div
+              style={{ width: "52px", height: "52px", borderRadius: "50%", overflow: "hidden", border: "2.5px solid #6366F1",
+                background: patientPhoto ? "transparent" : "#F0F4FF",
+                cursor: patientPhoto ? (photoDragging ? "grabbing" : "grab") : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                position: "relative", userSelect: "none"
+              }}
+              onMouseDown={e => { if (!patientPhoto) return; setPhotoDragging(true); setPhotoDragStartX(e.clientX - photoOffsetX); setPhotoDragStartY(e.clientY - photoOffsetY); }}
+              onMouseMove={e => { if (!photoDragging) return; setPhotoOffsetX(e.clientX - photoDragStartX); setPhotoOffsetY(e.clientY - photoDragStartY); }}
+              onMouseUp={() => setPhotoDragging(false)}
+              onMouseLeave={() => setPhotoDragging(false)}
+              onClick={() => !patientPhoto && photoFileRef.current?.click()}
+              title={patientPhoto ? "Drag to reposition" : "Click to upload photo"}
+            >
+              {patientPhoto ? (
+                <img src={patientPhoto} alt="Patient" draggable={false}
+                  style={{ position: "absolute", width: `${100 * photoZoom}%`, height: `${100 * photoZoom}%`, objectFit: "cover",
+                    top: `calc(50% + ${photoOffsetY}px)`, left: `calc(50% + ${photoOffsetX}px)`,
+                    transform: "translate(-50%, -50%)", pointerEvents: "none" }}
+                />
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6366F1" strokeWidth="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              )}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <div style={{ fontSize: "10px", fontWeight: 700, color: "#334155" }}>Patient Photo</div>
+              <div style={{ display: "flex", gap: "4px" }}>
+                <button type="button" onClick={() => photoFileRef.current?.click()}
+                  style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "5px", border: "1px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontWeight: 700, cursor: "pointer" }}
+                >Upload</button>
+                {patientPhoto && (
+                  <>
+                    <button type="button" onClick={() => photoCamRef.current?.click()}
+                      style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "5px", border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#64748B", fontWeight: 700, cursor: "pointer" }}
+                    >Camera</button>
+                    <button type="button" onClick={() => { setPatientPhoto(null); setPhotoZoom(1); setPhotoOffsetX(0); setPhotoOffsetY(0); }}
+                      style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "5px", border: "1px solid #FECACA", background: "transparent", color: "#EF4444", fontWeight: 700, cursor: "pointer" }}
+                    >Remove</button>
+                  </>
+                )}
+              </div>
+              {patientPhoto && (
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <span style={{ fontSize: "9px", color: "#94A3B8" }}>Zoom</span>
+                  <input type="range" min="1" max="3" step="0.05" value={photoZoom}
+                    onChange={e => setPhotoZoom(parseFloat(e.target.value))}
+                    style={{ width: "70px", accentColor: "#6366F1", cursor: "pointer" }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+          <input type="file" ref={photoFileRef} style={{ display: "none" }} accept="image/png,image/jpeg,image/webp"
+            onChange={e => { const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onloadend=()=>{setPatientPhoto(r.result);setPhotoZoom(1);setPhotoOffsetX(0);setPhotoOffsetY(0);}; r.readAsDataURL(f); }} />
+          <input type="file" ref={photoCamRef} style={{ display: "none" }} accept="image/*" capture="environment"
+            onChange={e => { const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onloadend=()=>{setPatientPhoto(r.result);setPhotoZoom(1);setPhotoOffsetX(0);setPhotoOffsetY(0);}; r.readAsDataURL(f); }} />
         </div>
 
         {(() => {
           const isFormStarted = Boolean(formData.age || formData.title || formData.gender || formData.doctorId || formData.address);
-
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px 14px' }}>
-              
-              {/* Mobile No. */}
-              <div className="rx-field-group">
-                <label className="rx-field-label">Mobile No. <span className="rx-req">*</span></label>
-                <input 
-                  type="text" 
-                  placeholder="10-digit number"
-                  className={`rx-input ${!formData.contact && isFormStarted ? 'required-empty' : ''}`} 
-                  value={formData.contact} 
-                  onChange={e => { 
-                    const val = e.target.value.replace(/\D/g, '').substring(0, 10); 
-                    setFormData({...formData, contact: val}); 
-                  }} 
-                  readOnly={isExistingPatient} 
-                />
-              </div>
-
-              {/* Title */}
-              <div className="rx-field-group">
-                <label className="rx-field-label">Title <span className="rx-req">*</span></label>
-                <select 
-                  className={`rx-select ${!formData.title && isFormStarted ? 'required-empty' : ''}`}
-                  value={formData.title || ''} 
-                  onChange={e => {
-                    const selectedTitle = e.target.value;
-                    let autoGender = formData.gender;
-                    if (selectedTitle === 'Mr.' || selectedTitle === 'Master') autoGender = 'Male';
-                    else if (selectedTitle === 'Mrs.' || selectedTitle === 'Miss' || selectedTitle === 'Ms.') autoGender = 'Female';
-                    else if (selectedTitle === 'Prefer not to say') autoGender = 'Other';
-                    setFormData({...formData, title: selectedTitle, gender: autoGender});
-                  }} 
-                  disabled={Boolean(isExistingPatient)}
-                >
-                  <option value="">-- Title --</option>
-                  <option value="Mr.">Mr.</option>
-                  <option value="Mrs.">Mrs.</option>
-                  <option value="Ms.">Ms.</option>
-                  <option value="Miss">Miss</option>
-                  <option value="Master">Master</option>
-                  <option value="Dr.">Dr.</option>
-                  <option value="Prefer not to say">Prefer not to say</option>
-                  {formData.title && !['Mr.', 'Mrs.', 'Ms.', 'Miss', 'Master', 'Dr.', 'Prefer not to say'].includes(formData.title) && (
-                    <option value={formData.title}>{formData.title}</option>
-                  )}
-                </select>
-              </div>
-
-              {/* Patient Name */}
-              <div className="rx-field-group">
-                <label className="rx-field-label">Full Name <span className="rx-req">*</span></label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. John Doe"
-                  className={`rx-input ${!formData.name && isFormStarted ? 'required-empty' : ''}`} 
-                  value={formData.name} 
-                  onChange={e => setFormData({...formData, name: e.target.value})} 
-                  readOnly={isExistingPatient} 
-                />
-              </div>
-
-              {/* Gender */}
-              <div className="rx-field-group">
-                <label className="rx-field-label">Gender <span className="rx-req">*</span></label>
-                <select 
-                  className={`rx-select ${!formData.gender && isFormStarted ? 'required-empty' : ''}`} 
-                  value={formData.gender} 
-                  onChange={e => setFormData({...formData, gender: e.target.value})} 
-                  disabled={isExistingPatient}
-                >
-                  <option value="">-- Gender --</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
-              {/* Age (Y / M / D) */}
-              <div className="rx-field-group">
-                <label className="rx-field-label">Age <span className="rx-req">*</span></label>
-                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                  <div style={{ position: 'relative', flex: 1.2 }}>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      max="120" 
-                      placeholder="Yrs" 
-                      className={`rx-input ${!formData.age && !formData.ageMonths && !formData.ageDays && isFormStarted ? 'required-empty' : ''}`} 
-                      style={{ paddingRight: '20px', textAlign: 'center' }} 
-                      value={formData.age} 
-                      onChange={e => setFormData({...formData, age: e.target.value})} 
-                      readOnly={isExistingPatient} 
-                    />
-                    <span style={{ position: 'absolute', right: '5px', top: '8px', fontSize: '10px', color: '#94A3B8', fontWeight: 800 }}>Y</span>
-                  </div>
-
-                  <div style={{ position: 'relative', flex: 1 }}>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      max="11" 
-                      placeholder="M" 
-                      className="rx-input" 
-                      style={{ paddingRight: '18px', textAlign: 'center' }} 
-                      value={formData.ageMonths || ''} 
-                      onChange={e => setFormData({...formData, ageMonths: e.target.value})} 
-                      readOnly={isExistingPatient} 
-                    />
-                    <span style={{ position: 'absolute', right: '4px', top: '8px', fontSize: '9.5px', color: '#94A3B8', fontWeight: 800 }}>M</span>
-                  </div>
-
-                  <div style={{ position: 'relative', flex: 1 }}>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      max="30" 
-                      placeholder="D" 
-                      className="rx-input" 
-                      style={{ paddingRight: '18px', textAlign: 'center' }} 
-                      value={formData.ageDays || ''} 
-                      onChange={e => setFormData({...formData, ageDays: e.target.value})} 
-                      readOnly={isExistingPatient} 
-                    />
-                    <span style={{ position: 'absolute', right: '4px', top: '8px', fontSize: '9.5px', color: '#94A3B8', fontWeight: 800 }}>D</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Email with Verify Button */}
-              <div className="rx-field-group">
-                <label className="rx-field-label">Email Address</label>
-                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                  <input 
-                    type="email" 
-                    placeholder="patient@email.com"
-                    className="rx-input" 
-                    value={formData.email} 
-                    onChange={e => setFormData({...formData, email: e.target.value})} 
-                    readOnly={isExistingPatient || otpVerified} 
-                  />
-                  {!isExistingPatient && !otpVerified && (
-                    <button 
-                      type="button" 
-                      onClick={handleSendOtp} 
-                      style={{ height: '34px', fontSize: '11px', background: '#EFF6FF', color: '#2563EB', border: '1.5px solid #BFDBFE', borderRadius: '7px', padding: '0 10px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {/* Row 1: Name (Title + Full) | Age | Gender */}
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "12px" }}>
+                <div className="rx-field-group">
+                  <label className="rx-field-label">Full Name <span className="rx-req">*</span></label>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <select className="rx-select" style={{ width: "72px", flexShrink: 0 }}
+                      value={formData.title || ""}
+                      onChange={e => { const t=e.target.value; let g=formData.gender; if(t==="Mr."||t==="Master") g="Male"; else if(t==="Mrs."||t==="Miss"||t==="Ms.") g="Female"; else if(t==="Prefer not to say") g="Other"; setFormData({...formData,title:t,gender:g}); }}
+                      disabled={Boolean(isExistingPatient)}
                     >
-                      Verify
-                    </button>
-                  )}
+                      <option value="">Title</option>
+                      <option value="Mr.">Mr.</option><option value="Mrs.">Mrs.</option><option value="Ms.">Ms.</option>
+                      <option value="Miss">Miss</option><option value="Master">Master</option><option value="Dr.">Dr.</option>
+                    </select>
+                    <input type="text" placeholder="Patient full name"
+                      className={`rx-input ${!formData.name&&isFormStarted?"required-empty":""}`}
+                      value={formData.name}
+                      onChange={e => setFormData({...formData, name: e.target.value})}
+                      readOnly={isExistingPatient}
+                    />
+                  </div>
+                </div>
+                <div className="rx-field-group">
+                  <label className="rx-field-label">Age <span className="rx-req">*</span></label>
+                  <div style={{ display: "flex", gap: "4px" }}>
+                    <div style={{ position: "relative", flex: 1 }}>
+                      <input type="number" min="0" max="120" placeholder="Yrs"
+                        className={`rx-input ${!formData.age&&!formData.ageMonths&&!formData.ageDays&&isFormStarted?"required-empty":""}`}
+                        style={{ paddingRight: "20px", textAlign: "center" }}
+                        value={formData.age} onChange={e => setFormData({...formData, age: e.target.value})} readOnly={isExistingPatient}
+                      />
+                      <span style={{ position: "absolute", right: "5px", top: "9px", fontSize: "9px", color: "#94A3B8", fontWeight: 800 }}>Y</span>
+                    </div>
+                    <div style={{ position: "relative", flex: 1 }}>
+                      <input type="number" min="0" max="11" placeholder="M"
+                        className="rx-input" style={{ paddingRight: "16px", textAlign: "center" }}
+                        value={formData.ageMonths || ""} onChange={e => setFormData({...formData, ageMonths: e.target.value})} readOnly={isExistingPatient}
+                      />
+                      <span style={{ position: "absolute", right: "3px", top: "9px", fontSize: "9px", color: "#94A3B8", fontWeight: 800 }}>M</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="rx-field-group">
+                  <label className="rx-field-label">Gender <span className="rx-req">*</span></label>
+                  <select className={`rx-select ${!formData.gender&&isFormStarted?"required-empty":""}`}
+                    value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} disabled={isExistingPatient}
+                  >
+                    <option value="">Gender</option>
+                    <option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option>
+                  </select>
                 </div>
               </div>
-
-              {/* Blood Group / Referred By */}
-              <div className="rx-field-group">
-                <label className="rx-field-label">{bookingType === 'lab' ? 'Referred By' : 'Blood Group'}</label>
-                {bookingType === 'lab' ? (
-                  <input 
-                    type="text" 
-                    placeholder="Referred Doctor"
-                    className="rx-input" 
-                    value={formData.referredBy || ''} 
-                    onChange={e => setFormData({...formData, referredBy: e.target.value})} 
-                    readOnly={isExistingPatient} 
+              {/* Row 2: Blood Group | Mobile | Emergency Mobile */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                <div className="rx-field-group">
+                  <label className="rx-field-label">Blood Group</label>
+                  {bookingType === "lab" ? (
+                    <input type="text" placeholder="Referred Doctor" className="rx-input"
+                      value={formData.referredBy||""} onChange={e => setFormData({...formData, referredBy: e.target.value})} readOnly={isExistingPatient} />
+                  ) : (
+                    <select className="rx-select" value={formData.bloodGroup}
+                      onChange={e => setFormData({...formData, bloodGroup: e.target.value})} disabled={isExistingPatient}
+                    >
+                      <option value="">-- Group --</option>
+                      <option value="O+">O+</option><option value="O-">O-</option>
+                      <option value="A+">A+</option><option value="A-">A-</option>
+                      <option value="B+">B+</option><option value="B-">B-</option>
+                      <option value="AB+">AB+</option><option value="AB-">AB-</option>
+                    </select>
+                  )}
+                </div>
+                <div className="rx-field-group">
+                  <label className="rx-field-label">Mobile <span className="rx-req">*</span></label>
+                  <input type="text" placeholder="10-digit number"
+                    className={`rx-input ${!formData.contact&&isFormStarted?"required-empty":""}`}
+                    value={formData.contact}
+                    onChange={e => { const v=e.target.value.replace(/\D/g,"").substring(0,10); setFormData({...formData, contact: v}); }}
+                    readOnly={isExistingPatient}
                   />
-                ) : (
-                  <select 
-                    className="rx-select" 
-                    value={formData.bloodGroup} 
-                    onChange={e => setFormData({...formData, bloodGroup: e.target.value})} 
-                    disabled={isExistingPatient}
-                  >
-                    <option value="">-- Blood Group --</option>
-                    <option value="O+">O+</option>
-                    <option value="O-">O-</option>
-                    <option value="A+">A+</option>
-                    <option value="A-">A-</option>
-                    <option value="B+">B+</option>
-                    <option value="B-">B-</option>
-                    <option value="AB+">AB+</option>
-                    <option value="AB-">AB-</option>
-                  </select>
-                )}
+                </div>
+                <div className="rx-field-group">
+                  <label className="rx-field-label">Emergency Mobile</label>
+                  <input type="text" placeholder="Alternate number" className="rx-input"
+                    value={formData.emergencyContact||""}
+                    onChange={e => { const v=e.target.value.replace(/\D/g,"").substring(0,10); setFormData({...formData, emergencyContact: v}); }}
+                    readOnly={isExistingPatient}
+                  />
+                </div>
               </div>
-
-              {/* Address (Spans 2 columns) */}
-              <div className="rx-field-group" style={{ gridColumn: 'span 2' }}>
-                <label className="rx-field-label">Residential Address</label>
-                <input 
-                  type="text" 
-                  placeholder="Street, City, Pin code"
-                  className="rx-input" 
-                  value={formData.address} 
-                  onChange={e => setFormData({...formData, address: e.target.value})} 
-                  readOnly={isExistingPatient} 
-                />
-              </div>
-
-              {/* Medical History */}
+              {/* Row 3: Address */}
               <div className="rx-field-group">
-                <label className="rx-field-label">Medical History</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Hypertension"
-                  className="rx-input" 
-                  value={formData.medicalHistory} 
-                  onChange={e => setFormData({...formData, medicalHistory: e.target.value})} 
-                  readOnly={isExistingPatient} 
-                />
+                <label className="rx-field-label">Address</label>
+                <input type="text" placeholder="Street, City, Pin code" className="rx-input"
+                  value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} readOnly={isExistingPatient} />
               </div>
-
-              {/* Allergies */}
-              <div className="rx-field-group">
-                <label className="rx-field-label">Known Allergies</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. None"
-                  className="rx-input" 
-                  value={formData.allergies} 
-                  onChange={e => setFormData({...formData, allergies: e.target.value})} 
-                />
-              </div>
-
-              {/* Current Medications */}
-              <div className="rx-field-group">
-                <label className="rx-field-label">Current Medications</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Metformin 500mg"
-                  className="rx-input" 
-                  value={formData.currentMedications} 
-                  onChange={e => setFormData({...formData, currentMedications: e.target.value})} 
-                />
-              </div>
-
             </div>
           );
         })()}
       </div>
 
-      {/* 2. Appointment & Consultation Card */}
-      {bookingType === 'opd' && (
-        <div className="rx-form-card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #F1F5F9' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className="rx-section-badge" style={{ background: '#FAF5FF', color: '#7C3AED' }}>2</span>
-              <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>
-                {additionalApptsList.length > 0 ? 'Appointment 1 (Primary Consultation)' : 'Doctor Consultation & Time Slot'}
-              </span>
+      {/* â”€â”€â”€ SECTION 2: Doctor Consultation â”€â”€â”€ */}
+      {bookingType === "opd" && (
+        <div style={{ background: "#FFFFFF", borderRadius: "14px", border: "1px solid #E8ECEF", padding: "20px 22px", marginBottom: "14px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+            <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "linear-gradient(135deg, #8B5CF6, #A78BFA)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             </div>
-
-            {!reschedulingAppointment && (
-              <button
-                type="button"
-                onClick={handleAddAdditionalAppt}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '4px 10px',
-                  background: '#FAF5FF',
-                  color: '#7C3AED',
-                  border: '1.5px solid #DDD6FE',
-                  borderRadius: '6px',
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseOver={e => { e.currentTarget.style.background = '#7C3AED'; e.currentTarget.style.color = '#FFFFFF'; }}
-                onMouseOut={e => { e.currentTarget.style.background = '#FAF5FF'; e.currentTarget.style.color = '#7C3AED'; }}
-                title="Add another doctor consultation for this same visit episode"
-              >
-                + Add Appointment
-              </button>
-            )}
+            <span style={{ fontSize: "13px", fontWeight: 800, color: "#0F172A" }}>Doctor Consultation</span>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px 14px', marginBottom: '12px' }}>
-            
-            {/* Symptoms */}
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "12px", marginBottom: "12px" }}>
             <div className="rx-field-group">
-              <label className="rx-field-label">Symptoms</label>
-              <div className="custom-dropdown-container" style={{ width: '100%', position: 'relative' }}>
-                <div 
-                  className="rx-input" 
-                  onClick={() => { 
-                    if (!reschedulingAppointment) { 
-                      setSymptomDropdownOpen(!symptomDropdownOpen); 
-                      if (symptomDropdownOpen) setSymptomSearchQuery(''); 
-                    } 
-                  }} 
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'space-between', 
-                    cursor: reschedulingAppointment ? 'not-allowed' : 'pointer', 
-                    padding: '2px 8px', 
-                    height: 'auto', 
-                    minHeight: '34px', 
-                    opacity: reschedulingAppointment ? 0.6 : 1 
-                  }}
-                >
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                    {selectedSymptoms.length > 0 ? (
-                      selectedSymptoms.map(s => (
-                        <div key={s} style={{ background: '#EDE9FE', color: '#6D28D9', padding: '1px 6px', fontSize: '10.5px', borderRadius: '5px', display: 'flex', alignItems: 'center', gap: '3px', border: '1px solid #DDD6FE', fontWeight: 700 }}>
-                          {s}
-                          <span 
-                            onClick={(e) => { e.stopPropagation(); !reschedulingAppointment && toggleSymptom(s); }}
-                            style={{ cursor: 'pointer', color: '#7C3AED', fontWeight: 900 }}
-                          >
-                            ×
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <span style={{ color: '#94A3B8', fontSize: '12px', fontWeight: 500 }}>Select symptoms...</span>
-                    )}
-                  </div>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transition: '0.2s', transform: symptomDropdownOpen ? 'rotate(180deg)' : 'none' }}><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-
-                {symptomDropdownOpen && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1.5px solid #CBD5E1', borderRadius: '8px', marginTop: '4px', maxHeight: '150px', overflowY: 'auto', zIndex: 100, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)' }}>
-                    <div style={{ padding: '6px', position: 'sticky', top: 0, background: 'white', borderBottom: '1px solid #F1F5F9' }}>
-                      <input 
-                        type="text" 
-                        autoFocus 
-                        placeholder="Search or type new symptom..." 
-                        value={symptomSearchQuery} 
-                        onChange={e => setSymptomSearchQuery(e.target.value)} 
-                        onClick={e => e.stopPropagation()} 
-                        onKeyDown={e => { 
-                          if (e.key === 'Enter' && symptomSearchQuery.trim()) { 
-                            toggleSymptom(symptomSearchQuery.trim()); 
-                            setSymptomSearchQuery(''); 
-                            setSymptomDropdownOpen(false); 
-                          } 
-                        }} 
-                        style={{ width: '100%', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '5px 8px', fontSize: '11.5px', outline: 'none', background: '#F8FAFC' }} 
-                      />
-                    </div>
-                    {(() => {
-                      const filtered = availableSymptoms.filter(s => s.toLowerCase().includes(symptomSearchQuery.toLowerCase()));
-                      return (
-                        <>
-                          {filtered.map(s => (
-                            <div 
-                              key={s} 
-                              onClick={() => { toggleSymptom(s); setSymptomDropdownOpen(false); }} 
-                              style={{ padding: '6px 10px', fontSize: '11.5px', cursor: 'pointer', borderBottom: '1px solid #F8FAFC', fontWeight: 600, color: '#334155' }} 
-                              onMouseOver={e => e.target.style.background = '#FAF5FF'} 
-                              onMouseOut={e => e.target.style.background = 'white'}
-                            >
-                              {s}
-                            </div>
-                          ))}
-                          {filtered.length === 0 && symptomSearchQuery.trim() !== '' && (
-                            <div 
-                              onClick={() => { toggleSymptom(symptomSearchQuery.trim()); setSymptomSearchQuery(''); setSymptomDropdownOpen(false); }} 
-                              style={{ padding: '6px 10px', fontSize: '11.5px', cursor: 'pointer', color: '#7C3AED', fontWeight: 700, fontStyle: 'italic' }}
-                            >
-                              + Press Enter to add "{symptomSearchQuery}"
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Doctor */}
-            <div className="rx-field-group">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label className="rx-field-label">Consulting Doctor <span className="rx-req">*</span></label>
-                {addOnOriginAppt && (
-                  <span style={{ fontSize: '10px', color: '#7C3AED', fontWeight: 800 }}>
-                    ↳ Add-On
-                  </span>
-                )}
-              </div>
-              <select 
-                className="rx-select" 
-                value={formData.doctorId} 
-                onChange={e => { setFormData({...formData, doctorId: e.target.value}); setSelectedSlot(''); }} 
+              <label className="rx-field-label">Doctor <span className="rx-req">*</span></label>
+              <select className="rx-select" value={formData.doctorId}
+                onChange={e => { setFormData({...formData, doctorId: e.target.value}); setSelectedSlot(""); }}
                 disabled={!!reschedulingAppointment}
               >
                 <option value="">-- Choose Doctor --</option>
                 {doctors.map(doc => {
-                  const isOriginDoctor = addOnOriginAppt && String(addOnOriginAppt.doctorId?._id || addOnOriginAppt.doctorId) === String(doc._id);
-                  const isSelectedInAddon = additionalApptsList.some(a => String(a.doctorId) === String(doc._id));
-                  return (
-                    <option key={doc._id} value={doc._id} disabled={isOriginDoctor || isSelectedInAddon}>
-                      {doc.name} {doc.role ? `(${doc.role})` : ''} {isSelectedInAddon ? '— (Selected)' : (isOriginDoctor ? '— (Already booked)' : '')}
-                    </option>
-                  );
+                  const isOrig = addOnOriginAppt && String(addOnOriginAppt.doctorId?._id||addOnOriginAppt.doctorId)===String(doc._id);
+                  const isSel = additionalApptsList.some(a => String(a.doctorId)===String(doc._id));
+                  return (<option key={doc._id} value={doc._id} disabled={isOrig||isSel}>{doc.name} {doc.role?`(${doc.role})`:""}</option>);
                 })}
               </select>
             </div>
-
-            {/* Date */}
             <div className="rx-field-group">
-              <label className="rx-field-label">Appointment Date <span className="rx-req">*</span></label>
-              <input 
-                type="date" 
-                className="rx-input" 
-                value={bookingDate} 
-                min={getLocalDateString()} 
-                onChange={e => { setBookingDate(e.target.value); setSelectedSlot(''); }} 
-                disabled={!!reschedulingAppointment} 
+              <label className="rx-field-label">Date <span className="rx-req">*</span></label>
+              <input type="date" className="rx-input" value={bookingDate}
+                min={getLocalDateString()}
+                onChange={e => { setBookingDate(e.target.value); setSelectedSlot(""); }}
+                disabled={!!reschedulingAppointment}
               />
             </div>
-
-          </div>
-
-          {/* Available Slots */}
-          <div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '10px 12px', border: '1px solid #E2E8F0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A' }}>Available Time Slots</span>
-              </div>
-              {selectedSlot && (
-                <span style={{ fontSize: '11px', background: '#EFF6FF', color: '#2563EB', padding: '2px 8px', borderRadius: '5px', fontWeight: 800, border: '1px solid #BFDBFE' }}>
-                  Selected: {selectedSlot.split(/\(Limit:/i)[0].trim()}
-                </span>
-              )}
+            <div className="rx-field-group">
+              <label className="rx-field-label">Consult Fee (\u20b9)</label>
+              {(() => {
+                const sd = doctors.find(d => String(d._id)===String(formData.doctorId));
+                const df = sd?.consultationFee||sd?.fee||0;
+                return (<input type="number" min="0" placeholder={df||"0"} className="rx-input" style={{ textAlign: "right" }}
+                  value={formData.customConsultFee!==undefined?formData.customConsultFee:(df||"")}
+                  onChange={e => setFormData({...formData, customConsultFee: e.target.value})}
+                />);
+              })()}
             </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {(!formData.doctorId || !bookingDate) ? (
-                <div style={{ padding: '6px 0', fontSize: '12px', color: '#94A3B8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  Select doctor and date above to view time slots.
-                </div>
+          </div>
+          {/* Time Slots */}
+          <div style={{ background: "#FAFAFA", borderRadius: "8px", border: "1px solid #F0F0F0", padding: "10px 12px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+              <span style={{ fontSize: "11px", fontWeight: 800, color: "#334155" }}>Time Slot</span>
+              {selectedSlot && (<span style={{ fontSize: "10.5px", background: "#EEF2FF", color: "#4F46E5", padding: "2px 8px", borderRadius: "5px", fontWeight: 800, border: "1px solid #C7D2FE" }}>{selectedSlot.split(/\(Limit:/i)[0].trim()}</span>)}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+              {(!formData.doctorId||!bookingDate) ? (
+                <span style={{ fontSize: "11.5px", color: "#94A3B8", fontWeight: 500 }}>Select doctor and date first</span>
               ) : !receptionDoctorAvailability.available ? (
-                <div style={{ padding: '6px 0', fontSize: '12px', color: '#DC2626', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  Doctor is unavailable ({receptionDoctorAvailability.reason || 'On Leave'})
-                </div>
+                <span style={{ fontSize: "11.5px", color: "#DC2626", fontWeight: 700 }}>Doctor unavailable ({receptionDoctorAvailability.reason||"On Leave"})</span>
               ) : (
-                (receptionDoctorAvailability.slots || DEFAULT_RECEPTION_SLOTS).map(time => {
-                  let limit = 5;
-                  const match = time.match(/\(Limit:\s*(\d+)\)/i);
-                  if (match) limit = parseInt(match[1], 10);
-                  const cleanTimeSlotStr = (str) => { if (!str) return ''; return str.split(/\(Limit:/i)[0].replace(/\s+/g, ' ').trim().toLowerCase(); };
-                  const targetTimeClean = cleanTimeSlotStr(time);
-                  const targetDateStr = new Date(bookingDate).toDateString();
-                  let bookedCount = 0;
-                  if (formData.doctorId && bookingDate) {
-                    bookedCount = appointments.filter(app => {
-                      if (app.status === 'Cancelled') return false;
-                      const appDocId = app.doctorId?._id || app.doctorId;
-                      if (String(appDocId) !== String(formData.doctorId)) return false;
-                      if (new Date(app.date).toDateString() !== targetDateStr) return false;
-                      return cleanTimeSlotStr(app.time) === targetTimeClean;
-                    }).length;
-                  }
-                  const isFull = bookedCount >= limit;
-                  const isPast = isPastSlot(bookingDate, time);
-                  const isSelected = selectedSlot === time;
-                  const displayTime = time.split(/\(Limit:/i)[0].trim();
-                  return (
-                    <button
-                      key={time}
-                      type="button"
-                      disabled={isFull || isPast}
-                      onClick={() => { if (!isFull && !isPast) setSelectedSlot(time); }}
-                      className={`rx-slot-chip ${isSelected ? 'selected' : ''} ${isFull ? 'slot-full' : ''} ${isPast ? 'slot-past' : ''}`}
-                    >
-                      {displayTime}
-                      {isFull && <span style={{ color: '#DC2626', fontSize: '9px', fontWeight: 850 }}>(Full)</span>}
-                      {isPast && <span style={{ color: '#94A3B8', fontSize: '9px', fontWeight: 850 }}>(Past)</span>}
-                    </button>
-                  );
+                (receptionDoctorAvailability.slots||DEFAULT_RECEPTION_SLOTS).map(time => {
+                  let limit=5; const m=time.match(/\(Limit:\s*(\d+)\)/i); if(m) limit=parseInt(m[1],10);
+                  const cs=s=>s?s.split(/\(Limit:/i)[0].replace(/\s+/g," ").trim().toLowerCase():"";
+                  const tDate=new Date(bookingDate).toDateString();
+                  let bc=0;
+                  if(formData.doctorId&&bookingDate){bc=appointments.filter(a=>{if(a.status==="Cancelled")return false;const d=a.doctorId?._id||a.doctorId;if(String(d)!==String(formData.doctorId))return false;if(new Date(a.date).toDateString()!==tDate)return false;return cs(a.time)===cs(time);}).length;}
+                  const full=bc>=limit; const past=isPastSlot(bookingDate,time); const sel=selectedSlot===time;
+                  const disp=time.split(/\(Limit:/i)[0].trim();
+                  return (<button key={time} type="button" disabled={full||past}
+                    onClick={()=>{if(!full&&!past)setSelectedSlot(time);}}
+                    className={`rx-slot-chip ${sel?"selected":""} ${full?"slot-full":""} ${past?"slot-past":""}`}
+                  >{disp}{full&&<span style={{color:"#DC2626",fontSize:"9px",fontWeight:850}}>(Full)</span>}{past&&<span style={{color:"#94A3B8",fontSize:"9px",fontWeight:850}}>(Past)</span>}</button>);
                 })
               )}
             </div>
@@ -11465,381 +11221,118 @@ const ReceptionistDashboard = () => {
         </div>
       )}
 
-      {/* Additional Appointments Cards */}
-      {bookingType === 'opd' && additionalApptsList.map((item, index) => {
-        const appointmentNumber = index + 2;
-        const selectedDocIdsInGroup = [
-          formData.doctorId,
-          ...additionalApptsList.filter((_, i) => i !== index).map(a => a.doctorId)
-        ].filter(Boolean);
-
-        return (
-          <div 
-            key={item.id || index} 
-            className="rx-form-card" 
-            style={{ borderLeft: '4px solid #7C3AED' }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid #F3E8FF' }}>
-              <span style={{ fontSize: '12px', fontWeight: 850, color: '#0F172A' }}>
-                Appointment {appointmentNumber} (Add-on Consultation)
-              </span>
-
-              <button
-                type="button"
-                onClick={() => handleRemoveAdditionalAppt(index)}
-                style={{
-                  padding: '2px 8px',
-                  background: '#FEF2F2',
-                  border: '1px solid #FECACA',
-                  color: '#DC2626',
-                  borderRadius: '5px',
-                  fontSize: '10.5px',
-                  fontWeight: 800,
-                  cursor: 'pointer'
-                }}
-              >
-                Remove
-              </button>
+      {/* â”€â”€â”€ SECTION 3: Initial Vitals â”€â”€â”€ */}
+      <div style={{ background: "#FFFFFF", borderRadius: "14px", border: "1px solid #E8ECEF", padding: "20px 22px", marginBottom: "14px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+          <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "linear-gradient(135deg, #10B981, #34D399)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <span style={{ fontSize: "13px", fontWeight: 800, color: "#0F172A" }}>Initial Vitals</span>
+          <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>Optional</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+          <div className="rx-field-group">
+            <label className="rx-field-label">BP (Sys / Dia)</label>
+            <div style={{ display: "flex", gap: "5px" }}>
+              <input type="number" placeholder="120" className="rx-input" style={{ textAlign: "center" }} value={vitalBpSys} onChange={e => setVitalBpSys(e.target.value)} />
+              <input type="number" placeholder="80" className="rx-input" style={{ textAlign: "center" }} value={vitalBpDia} onChange={e => setVitalBpDia(e.target.value)} />
             </div>
+          </div>
+          <div className="rx-field-group">
+            <label className="rx-field-label">Pulse (bpm)</label>
+            <input type="number" placeholder="72" className="rx-input" style={{ textAlign: "center" }} value={vitalPulse} onChange={e => setVitalPulse(e.target.value)} />
+          </div>
+          <div className="rx-field-group">
+            <label className="rx-field-label">Temp (\u00b0F)</label>
+            <input type="number" step="0.1" placeholder="98.6" className="rx-input" style={{ textAlign: "center" }} value={vitalTemp} onChange={e => setVitalTemp(e.target.value)} />
+          </div>
+          <div className="rx-field-group">
+            <label className="rx-field-label">Weight (kg)</label>
+            <input type="number" step="0.1" placeholder="68.0" className="rx-input" style={{ textAlign: "center" }} value={vitalWeight} onChange={e => setVitalWeight(e.target.value)} />
+          </div>
+        </div>
+      </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px 12px', marginBottom: '8px' }}>
-              <div className="rx-field-group">
-                <label className="rx-field-label">Consulting Doctor <span className="rx-req">*</span></label>
-                <select 
-                  className="rx-select" 
-                  value={item.doctorId} 
-                  onChange={e => handleUpdateAdditionalDoctor(index, e.target.value)}
-                >
-                  <option value="">-- Choose Doctor --</option>
-                  {doctors.map(doc => {
-                    const isAlreadySelected = selectedDocIdsInGroup.includes(String(doc._id));
-                    return (
-                      <option key={doc._id} value={doc._id} disabled={isAlreadySelected}>
-                        {doc.name} {doc.role ? `(${doc.role})` : ''} {isAlreadySelected ? '— (Selected)' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
+      {/* â”€â”€â”€ SECTION 4: Billing â”€â”€â”€ */}
+      {(() => {
+        const sub = getBillingItems().reduce((s,i)=>s+i.amount,0) + ((!isExistingPatient&&getBillingItems().length>0)?50:0);
+        const disc = (sub*Number(bookingDiscountPercent||0))/100;
+        const total = Math.max(0, sub-disc);
+        const paid = Number(formData.amountPaid||0);
+        const bal = Math.max(0, total-paid);
+        return (
+          <div style={{ background: "#FFFFFF", borderRadius: "14px", border: "1px solid #E8ECEF", padding: "20px 22px", marginBottom: "14px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+              <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "linear-gradient(135deg, #F59E0B, #FBBF24)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
               </div>
-
+              <span style={{ fontSize: "13px", fontWeight: 800, color: "#0F172A" }}>Billing</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px", alignItems: "end" }}>
               <div className="rx-field-group">
-                <label className="rx-field-label">Date <span className="rx-req">*</span></label>
-                <input 
-                  type="date" 
-                  className="rx-input" 
-                  value={item.date || bookingDate || getLocalDateString()} 
-                  min={getLocalDateString()} 
-                  onChange={e => handleUpdateAdditionalDate(index, e.target.value)}
+                <label className="rx-field-label">Total</label>
+                <div style={{ height: "34px", borderRadius: "7px", border: "1.5px solid #10B981", background: "linear-gradient(135deg,#ECFDF5,#D1FAE5)", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: "10px", fontSize: "13px", fontWeight: 900, color: "#065F46" }}>
+                  \u20b9{total.toFixed(2)}
+                </div>
+              </div>
+              <div className="rx-field-group">
+                <label className="rx-field-label">Payment Mode</label>
+                <div style={{ display: "flex", gap: "4px" }}>
+                  {["Cash","UPI","Other"].map(method => {
+                    const chk=bookingPaymentMethod===method;
+                    return (<button key={method} type="button" onClick={()=>setBookingPaymentMethod(method)}
+                      style={{ flex:1, height:"34px", borderRadius:"6px", border: chk?"2px solid #6366F1":"1.5px solid #CBD5E1", background: chk?"#EEF2FF":"#FFFFFF", color: chk?"#4F46E5":"#475569", fontSize:"11px", fontWeight:800, cursor:"pointer", transition:"all 0.15s" }}
+                    >{method}</button>);
+                  })}
+                </div>
+              </div>
+              <div className="rx-field-group">
+                <label className="rx-field-label">Amount Paid</label>
+                <input type="number" min="0" placeholder="0" className="rx-input" style={{ textAlign: "right" }}
+                  value={formData.amountPaid||""} onChange={e => setFormData({...formData, amountPaid: e.target.value})}
                 />
               </div>
-            </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {(item.slots || DEFAULT_RECEPTION_SLOTS).map(time => {
-                const itemDate = item.date || bookingDate || getLocalDateString();
-                const isPast = isPastSlot(itemDate, time);
-                const isSelected = item.time === time;
-                const displayTime = time.split(/\(Limit:/i)[0].trim();
-                return (
-                  <button
-                    key={time}
-                    type="button"
-                    disabled={isPast}
-                    onClick={() => { if (!isPast) handleSelectAdditionalSlot(index, time); }}
-                    className={`rx-slot-chip ${isSelected ? 'selected' : ''} ${isPast ? 'slot-past' : ''}`}
-                  >
-                    {displayTime}
-                    {isPast && <span style={{ color: '#94A3B8', fontSize: '9px', fontWeight: 850 }}>(Past)</span>}
-                  </button>
-                );
-              })}
+              <div className="rx-field-group">
+                <label className="rx-field-label">Balance</label>
+                <div style={{ height: "34px", borderRadius: "7px", border: `1.5px solid ${bal>0?"#FECACA":"#BBF7D0"}`, background: bal>0?"#FEF2F2":"#F0FDF4", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: "10px", fontSize: "13px", fontWeight: 900, color: bal>0?"#DC2626":"#059669" }}>
+                  \u20b9{bal.toFixed(2)}
+                </div>
+              </div>
             </div>
           </div>
         );
-      })}
+      })()}
 
-    </div>
-
-    {/* Right Column: Vitals + Billing */}
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      
-      {/* 3. Vitals & Consent Card */}
-      <div className="rx-form-card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', paddingBottom: '8px', borderBottom: '1px solid #F1F5F9' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="rx-section-badge" style={{ background: '#ECFDF5', color: '#059669' }}>3</span>
-            <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>Initial Vitals & Triage (Optional)</span>
+      {/* â”€â”€â”€ ACTION BUTTONS â”€â”€â”€ */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "10px", paddingTop: "4px" }}>
+        {!isExistingPatient && otpSent && !otpVerified && (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#FEF2F2", padding: "3px 8px", borderRadius: "6px", border: "1px solid #FECACA" }}>
+            <input type="text" maxLength={6} placeholder="OTP" className="rx-input"
+              style={{ width: "68px", height: "28px", textAlign: "center", fontSize: "12px", fontWeight: 800 }}
+              value={verificationOtp} onChange={e => setVerificationOtp(e.target.value.replace(/\D/g,""))}
+            />
+            <button type="button" onClick={handleVerifyOtp} disabled={otpVerifying}
+              style={{ background: "#EF4444", color: "white", border: "none", padding: "5px 8px", borderRadius: "5px", fontWeight: 800, cursor: "pointer", fontSize: "11px" }}
+            >{otpVerifying?"...":"Verify"}</button>
           </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '6px 8px', marginBottom: '10px' }}>
-          <div className="rx-field-group">
-            <label className="rx-field-label">Temp (°F)</label>
-            <input type="number" step="0.1" placeholder="98.6" className="rx-input" value={vitalTemp} onChange={e => setVitalTemp(e.target.value)} />
-          </div>
-
-          <div className="rx-field-group">
-            <label className="rx-field-label">Pulse (bpm)</label>
-            <input type="number" placeholder="72" className="rx-input" value={vitalPulse} onChange={e => setVitalPulse(e.target.value)} />
-          </div>
-
-          <div className="rx-field-group">
-            <label className="rx-field-label">Weight (kg)</label>
-            <input type="number" step="0.1" placeholder="68.0" className="rx-input" value={vitalWeight} onChange={e => setVitalWeight(e.target.value)} />
-          </div>
-
-          <div className="rx-field-group">
-            <label className="rx-field-label">BP Sys</label>
-            <input type="number" placeholder="120" className="rx-input" value={vitalBpSys} onChange={e => setVitalBpSys(e.target.value)} />
-          </div>
-
-          <div className="rx-field-group">
-            <label className="rx-field-label">BP Dia</label>
-            <input type="number" placeholder="80" className="rx-input" value={vitalBpDia} onChange={e => setVitalBpDia(e.target.value)} />
-          </div>
-
-          <div className="rx-field-group">
-            <label className="rx-field-label">Height (cm)</label>
-            <input type="number" placeholder="172" className="rx-input" value={vitalHeight} onChange={e => setVitalHeight(e.target.value)} />
-          </div>
-        </div>
-
-        {/* DPDP Consent */}
-        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', background: '#F8FAFC', padding: '8px 12px', borderRadius: '7px', border: '1px solid #E2E8F0' }}>
-          <span style={{ fontSize: '11px', fontWeight: 850, color: '#334155' }}>
-            Consent:
-          </span>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', cursor: 'pointer', color: '#334155', fontWeight: 650 }}>
-            <input type="checkbox" checked={dpdpConsent.emrCreation} onChange={e => setDpdpConsent({...dpdpConsent, emrCreation: e.target.checked})} style={{ width: '14px', height: '14px', accentColor: '#16A34A', cursor: 'pointer' }} /> 
-            EMR Record Creation
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', cursor: 'pointer', color: '#334155', fontWeight: 650 }}>
-            <input type="checkbox" checked={dpdpConsent.dataSharing} onChange={e => setDpdpConsent({...dpdpConsent, dataSharing: e.target.checked})} style={{ width: '14px', height: '14px', accentColor: '#16A34A', cursor: 'pointer' }} /> 
-            Data Sharing (Research)
-          </label>
-        </div>
-      </div>
-
-      {/* 4. Billing & Settlement Card */}
-      <div className="rx-form-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #F1F5F9' }}>
-          <span className="rx-section-badge" style={{ background: '#ECFEFF', color: '#0891B2' }}>4</span>
-          <span style={{ fontSize: '13px', fontWeight: 850, color: '#0F172A' }}>Billing & Payment Settlement</span>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px', alignItems: 'center' }}>
-          
-          {/* Payment Controls */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {/* Payment Mode */}
-            <div className="rx-field-group">
-              <label className="rx-field-label">Payment Mode</label>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {['Cash', 'UPI', 'Other'].map(method => {
-                  const isChecked = bookingPaymentMethod === method;
-                  return (
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() => setBookingPaymentMethod(method)}
-                      style={{
-                        flex: 1,
-                        height: '32px',
-                        borderRadius: '6px',
-                        border: isChecked ? '2px solid #2563EB' : '1.5px solid #CBD5E1',
-                        background: isChecked ? '#EFF6FF' : '#FFFFFF',
-                        color: isChecked ? '#2563EB' : '#475569',
-                        fontSize: '11.5px',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s'
-                      }}
-                    >
-                      {method}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Discount (%) & Reason */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '8px' }}>
-              <div className="rx-field-group">
-                <label className="rx-field-label">Discount %</label>
-                <input 
-                  type="number" 
-                  min="0" 
-                  max={allowedDiscountPercent} 
-                  placeholder="0"
-                  value={bookingDiscountPercent || ''} 
-                  onChange={e => { 
-                    setBookingDiscountPercent(Math.min(allowedDiscountPercent, Math.max(0, Number(e.target.value)))); 
-                    if(!Number(e.target.value)) setBookingDiscountReason(''); 
-                  }} 
-                  className="rx-input"
-                  style={{ textAlign: 'right' }} 
-                />
-              </div>
-
-              <div className="rx-field-group">
-                <label className="rx-field-label">Discount Reason</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Senior Citizen" 
-                  value={bookingDiscountReason} 
-                  onChange={e => setBookingDiscountReason(e.target.value)} 
-                  className="rx-input"
-                  disabled={!Number(bookingDiscountPercent)}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Totals Summary Card */}
-          {(() => {
-            const subtotalVal = getBillingItems().reduce((sum, item) => sum + item.amount, 0) + ((!isExistingPatient && getBillingItems().length > 0) ? 50 : 0);
-            const discAmt = (subtotalVal * Number(bookingDiscountPercent || 0)) / 100;
-            const finalTotalVal = Math.max(0, subtotalVal - discAmt);
-            return (
-              <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '9px', padding: '12px 14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#64748B', fontWeight: 650, marginBottom: '5px' }}>
-                  <span>Gross Amount</span>
-                  <span style={{ fontWeight: 800, color: '#0F172A' }}>₹{subtotalVal.toFixed(2)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#DC2626', fontWeight: 650, marginBottom: '8px' }}>
-                  <span>Discount</span>
-                  <span style={{ fontWeight: 800 }}>-₹{discAmt.toFixed(2)}</span>
-                </div>
-                <div style={{ borderTop: '1px dashed #CBD5E1', marginBottom: '8px' }}></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px', fontWeight: 900, background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', padding: '8px 12px', borderRadius: '7px', color: 'white', boxShadow: '0 2px 6px rgba(16, 185, 129, 0.25)' }}>
-                  <span>Net Payable</span>
-                  <span style={{ fontSize: '16px' }}>₹{finalTotalVal.toFixed(2)}</span>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-      </div>
-
-    </div>
-
-  </div>
-
-  {/* Docked Bottom Action Bar (Fixed, Edge-to-Edge, Height 54px) */}
-  <div style={{
-    background: '#FFFFFF',
-    borderTop: '1px solid #E2E8F0',
-    padding: '0 85px 0 20px',
-    height: '54px',
-    margin: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexShrink: 0,
-    boxShadow: '0 -2px 10px rgba(0,0,0,0.03)'
-  }}>
-    {/* Hidden file inputs */}
-    <input type="file" id="patientPhotoUpload" style={{ display: 'none' }} accept="image/png, image/jpeg" onChange={(e) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const reader = new FileReader(); reader.onloadend = () => { setPatientPhoto(reader.result); }; reader.readAsDataURL(file); } }} />
-    <input type="file" id="patientCameraUpload" style={{ display: 'none' }} accept="image/png, image/jpeg" capture="environment" onChange={(e) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const reader = new FileReader(); reader.onloadend = () => { setPatientPhoto(reader.result); }; reader.readAsDataURL(file); } }} />
-
-    {/* Left: Patient Avatar & Summary */}
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-      <div style={{
-        width: '36px',
-        height: '36px',
-        borderRadius: '8px',
-        border: '1.5px dashed #CBD5E1',
-        background: '#F8FAFC',
-        overflow: 'hidden',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0
-      }}>
-        {patientPhoto ? (
-          <img src={patientPhoto} alt="Patient" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         )}
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <button
-          type="button"
-          onClick={() => document.getElementById('patientCameraUpload').click()}
-          style={{ fontSize: '11px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', borderRadius: '5px', padding: '3px 8px', fontWeight: 750, cursor: 'pointer' }}
+        <button type="button"
+          onClick={() => { setSelectedPatient(null); setIsExistingPatient(null); setFormData({title:"",name:"",age:"",gender:"",contact:"",email:"",doctorId:"",bloodGroup:"",address:"",medicalHistory:"",referredBy:"",allergies:"None",currentMedications:""}); }}
+          style={{ padding: "10px 24px", fontSize: "13px", fontWeight: 700, background: "#FFFFFF", color: "#475569", border: "1.5px solid #CBD5E1", borderRadius: "9px", cursor: "pointer", transition: "all 0.15s" }}
+          onMouseOver={e => e.currentTarget.style.background="#F1F5F9"}
+          onMouseOut={e => e.currentTarget.style.background="#FFFFFF"}
+        >Cancel</button>
+        <button type="button" className="rx-btn-register"
+          style={{ padding: "10px 28px", fontSize: "13px", borderRadius: "9px" }}
+          onClick={reschedulingAppointment?handleRescheduleSubmit:(bookingType==="lab"?handleCreateLabOrder:bookingType==="service"?handleCreateServiceOrder:handleCreateAppointment)}
+          disabled={loading}
         >
-          📷 Photo
-        </button>
-        <button
-          type="button"
-          onClick={() => document.getElementById('patientPhotoUpload').click()}
-          style={{ fontSize: '11px', background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', borderRadius: '5px', padding: '3px 8px', fontWeight: 750, cursor: 'pointer' }}
-        >
-          📄 Document
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          {loading?"Processing...":(reschedulingAppointment?"Confirm Reschedule":"Register & Book Slot")}
         </button>
       </div>
 
-      <div style={{ width: '1px', height: '16px', background: '#CBD5E1', margin: '0 4px' }}></div>
-
-      <div style={{ fontSize: '12px', color: '#334155', fontWeight: 700 }}>
-        {formData.name ? (
-          <span>Patient: <strong style={{ color: '#0F172A' }}>{formData.name}</strong> {formData.contact ? `(${formData.contact})` : ''}</span>
-        ) : (
-          <span style={{ color: '#94A3B8' }}>Fill patient details to proceed</span>
-        )}
-      </div>
     </div>
-
-    {/* Right: OTP & Submit Buttons */}
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-      {!isExistingPatient && otpSent && !otpVerified && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FEF2F2', padding: '3px 8px', borderRadius: '6px', border: '1px solid #FECACA' }}>
-          <input 
-            type="text" 
-            maxLength={6} 
-            placeholder="OTP #" 
-            className="rx-input" 
-            style={{ width: '68px', height: '28px', textAlign: 'center', fontSize: '12px', fontWeight: 800 }} 
-            value={verificationOtp} 
-            onChange={e => setVerificationOtp(e.target.value.replace(/\D/g, ''))} 
-          />
-          <button 
-            type="button" 
-            onClick={handleVerifyOtp} 
-            disabled={otpVerifying} 
-            style={{ background: '#EF4444', color: 'white', border: 'none', padding: '5px 8px', borderRadius: '5px', fontWeight: 800, cursor: 'pointer', fontSize: '11px' }}
-          >
-            {otpVerifying ? '...' : 'Verify'}
-          </button>
-        </div>
-      )}
-
-      <button 
-        type="button" 
-        onClick={() => { 
-          setSelectedPatient(null); 
-          setIsExistingPatient(null); 
-          setFormData({title: '', name: '', age: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: ''}); 
-        }} 
-        style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 750, background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', borderRadius: '7px', cursor: 'pointer', transition: 'all 0.15s' }}
-        onMouseOver={e => e.target.style.background = '#E2E8F0'}
-        onMouseOut={e => e.target.style.background = '#F1F5F9'}
-      >
-        Cancel
-      </button>
-      
-      <button 
-        type="button" 
-        className="rx-btn-register"
-        onClick={reschedulingAppointment ? handleRescheduleSubmit : (bookingType === 'lab' ? handleCreateLabOrder : bookingType === 'service' ? handleCreateServiceOrder : handleCreateAppointment)} 
-        disabled={loading}
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-        {loading ? 'Processing...' : (reschedulingAppointment ? 'Confirm Reschedule' : 'Register & Book Slot')}
-      </button>
-    </div>
-
   </div>
 
 </div>

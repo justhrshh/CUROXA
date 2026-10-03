@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Upload, 
   FileSpreadsheet, 
@@ -10,40 +10,66 @@ import {
   Building2,
   Calendar,
   Layers,
-  ChevronRight
+  ChevronRight,
+  Download,
+  Info,
+  ShieldCheck,
+  Check,
+  Package
 } from 'lucide-react';
-import UploadContextSelector from './UploadContextSelector';
 import ExcelDropzone from './ExcelDropzone';
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportResultSummary from './ImportResultSummary';
+import { getAllCategories, getCategoryConfig } from '../../../config/masterSchemaRegistry';
 import { getApiUrl } from '../../../utils/api';
 
 export default function HospitalMasterUploadView({ onSwitchTab }) {
   const [hospitals, setHospitals] = useState([]);
   const [loadingHospitals, setLoadingHospitals] = useState(false);
 
-  // Upload Context
-  const [selectedHospital, setSelectedHospital] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedDepartment, setSelectedDepartment] = useState('');
+  // SECTION A: Download State
+  const [downloadHospital, setDownloadHospital] = useState('');
+  const [downloadCategory, setDownloadCategory] = useState('');
+  const [downloadDepartment, setDownloadDepartment] = useState('');
+  const [downloadingMaster, setDownloadingMaster] = useState(false);
 
-  // Dropzone and Parsing
+  // SECTION B: Upload State
+  const [uploadHospital, setUploadHospital] = useState('');
+  const [uploadCategory, setUploadCategory] = useState('');
+  const [uploadDepartment, setUploadDepartment] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
-  const [error, setError] = useState('');
 
-  // Preview Modal
+  // Feedback & Preview
+  const [error, setError] = useState('');
   const [previewData, setPreviewData] = useState(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-
-  // Final Ingestion Result
   const [importResult, setImportResult] = useState(null);
 
   // Audit History
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  const categories = useMemo(() => getAllCategories(), []);
+
+  const downloadCatConfig = useMemo(() => {
+    return downloadCategory ? getCategoryConfig(downloadCategory) : null;
+  }, [downloadCategory]);
+
+  const downloadDepartments = useMemo(() => {
+    if (!downloadCatConfig || !downloadCatConfig.hasDepartment) return [];
+    return Object.keys(downloadCatConfig.departments || {});
+  }, [downloadCatConfig]);
+
+  const uploadCatConfig = useMemo(() => {
+    return uploadCategory ? getCategoryConfig(uploadCategory) : null;
+  }, [uploadCategory]);
+
+  const uploadDepartments = useMemo(() => {
+    if (!uploadCatConfig || !uploadCatConfig.hasDepartment) return [];
+    return Object.keys(uploadCatConfig.departments || {});
+  }, [uploadCatConfig]);
 
   // Fetch Hospitals
   useEffect(() => {
@@ -55,16 +81,12 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
         const res = await fetch(getApiUrl('/superadmin/masters/hospitals-list'), {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
-        const contentType = res.headers.get('content-type') || '';
-        if (!contentType.includes('application/json')) {
-          throw new Error(`Non-JSON response (Status ${res.status})`);
-        }
         const data = await res.json();
         if (isMounted && data.success && Array.isArray(data.data)) {
           setHospitals(data.data);
         }
       } catch (err) {
-        console.error('[UPLOAD VIEW] Load hospitals error:', err);
+        console.error('[ITEM MASTER UPLOAD] Load hospitals error:', err);
       } finally {
         if (isMounted) setLoadingHospitals(false);
       }
@@ -73,86 +95,57 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
     return () => { isMounted = false; };
   }, []);
 
-  // Selection Dependency Handlers (Hospital -> Category -> Department)
-  const handleHospitalChange = (hospCode) => {
-    setSelectedHospital(hospCode);
-    setSelectedCategory('');
-    setSelectedDepartment('');
-    setSelectedFile(null);
-    setPreviewData(null);
-    setIsPreviewOpen(false);
-    setError('');
-  };
-
-  const handleCategoryChange = (catName) => {
-    setSelectedCategory(catName);
-    setSelectedDepartment('');
-    setSelectedFile(null);
-    setPreviewData(null);
-    setIsPreviewOpen(false);
-    setError('');
-  };
-
-  const handleDepartmentChange = (deptName) => {
-    setSelectedDepartment(deptName);
-    setSelectedFile(null);
-    setPreviewData(null);
-    setIsPreviewOpen(false);
-    setError('');
-  };
-
-  // Fetch Audit History
+  // Fetch History
   const fetchHistory = useCallback(async () => {
     try {
       setLoadingHistory(true);
       const token = localStorage.getItem('token');
-      const url = selectedHospital 
-        ? `/superadmin/masters/upload/history?tenantId=${encodeURIComponent(selectedHospital)}&limit=10`
+      const url = uploadHospital 
+        ? `/superadmin/masters/upload/history?tenantId=${encodeURIComponent(uploadHospital)}&limit=10`
         : '/superadmin/masters/upload/history?limit=10';
       const res = await fetch(getApiUrl(url), {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error(`Non-JSON response (Status ${res.status})`);
-      }
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
         setHistory(data.data);
       }
     } catch (err) {
-      console.error('[UPLOAD VIEW] Load audit history error:', err);
+      console.error('[ITEM MASTER UPLOAD] Load history error:', err);
     } finally {
       setLoadingHistory(false);
     }
-  }, [selectedHospital]);
+  }, [uploadHospital]);
 
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
 
-  // Handle Download Template with JWT Bearer Token
-  const handleDownloadTemplate = async () => {
-    if (!selectedHospital) {
-      setError('Please select a target hospital first.');
+  // ─────────────────────────────────────────────────────────────────────────────
+  // DOWNLOAD ACTION
+  // ─────────────────────────────────────────────────────────────────────────────
+  const handleDownloadMaster = async () => {
+    if (!downloadCategory) {
+      setError('Please select a category to download.');
       return;
     }
-    if (!selectedCategory) {
-      setError('Please select a category to download its exact template.');
-      return;
-    }
-    if (selectedCategory === 'Radiology') {
-      setError('Radiology template unavailable: Category remains SOURCE-CONFIRMATION-REQUIRED.');
+    if (downloadCategory === 'Radiology') {
+      setError('Radiology download is unavailable: Category remains SOURCE-CONFIRMATION-REQUIRED.');
       return;
     }
 
     try {
-      setDownloadingTemplate(true);
+      setDownloadingMaster(true);
       setError('');
       const token = localStorage.getItem('token');
-      let url = `/superadmin/masters/upload/template?category=${encodeURIComponent(selectedCategory)}`;
-      if (selectedDepartment) {
-        url += `&department=${encodeURIComponent(selectedDepartment)}`;
+      let url = `/superadmin/masters/upload/download?category=${encodeURIComponent(downloadCategory)}`;
+      if (downloadHospital) {
+        url += `&tenantId=${encodeURIComponent(downloadHospital)}`;
+      }
+      if (downloadDepartment && downloadDepartment !== 'all') {
+        url += `&department=${encodeURIComponent(downloadDepartment)}`;
+      } else {
+        url += `&department=all`;
       }
 
       const res = await fetch(getApiUrl(url), {
@@ -165,7 +158,11 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
       }
 
       const blob = await res.blob();
-      const safeFilename = `${selectedCategory.replace(/\s+/g, '_')}_Master_Template.xlsx`;
+      const safeCat = downloadCategory.replace(/\s+/g, '_');
+      const deptSuffix = downloadDepartment && downloadDepartment !== 'all' ? `_${downloadDepartment.replace(/\s+/g, '_')}` : '_All_Departments';
+      const hospPrefix = downloadHospital ? `Hospital_${downloadHospital}_` : 'Quroxa_';
+      const safeFilename = `${hospPrefix}${safeCat}${deptSuffix}.xlsx`;
+
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = safeFilename;
@@ -174,28 +171,30 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
       document.body.removeChild(link);
       URL.revokeObjectURL(link.href);
     } catch (err) {
-      setError(err.message || 'Error downloading Excel template');
+      setError(err.message || 'Error downloading Item Master Excel workbook');
     } finally {
-      setDownloadingTemplate(false);
+      setDownloadingMaster(false);
     }
   };
 
-  // Handle File Selection and Parsing
+  // ─────────────────────────────────────────────────────────────────────────────
+  // UPLOAD & PREVIEW ACTION
+  // ─────────────────────────────────────────────────────────────────────────────
   const handleParsePreview = async (fileToUpload) => {
     const file = fileToUpload || selectedFile;
     if (!file) {
       setError('Please select an Excel workbook (.xlsx or .xls) to upload.');
       return;
     }
-    if (!selectedHospital) {
-      setError('Please select a target hospital.');
+    if (!uploadHospital) {
+      setError('Target Hospital is mandatory for upload. Please select a hospital.');
       return;
     }
-    if (!selectedCategory) {
-      setError('Please select a master category.');
+    if (!uploadCategory) {
+      setError('Category is required for upload. Please select a category.');
       return;
     }
-    if (selectedCategory === 'Radiology') {
+    if (uploadCategory === 'Radiology') {
       setError('Radiology uploads are blocked: Category remains SOURCE-CONFIRMATION-REQUIRED.');
       return;
     }
@@ -206,10 +205,12 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
 
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('tenantId', selectedHospital);
-      formData.append('category', selectedCategory);
-      if (selectedDepartment) {
-        formData.append('department', selectedDepartment);
+      formData.append('tenantId', uploadHospital);
+      formData.append('category', uploadCategory);
+      if (uploadDepartment && uploadDepartment !== 'all') {
+        formData.append('department', uploadDepartment);
+      } else {
+        formData.append('department', '');
       }
 
       const token = localStorage.getItem('token');
@@ -218,27 +219,24 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData
       });
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error(`Non-JSON response (Status ${res.status})`);
-      }
-      const data = await res.json();
 
+      const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || data.message || 'Failed to parse workbook for preview');
+        throw new Error(data.error || 'Failed to parse workbook for preview');
       }
 
       setPreviewData(data.data || data);
       setIsPreviewOpen(true);
     } catch (err) {
-      console.error('[UPLOAD VIEW] Parse preview error:', err);
       setError(err.message || 'Error processing Excel file');
     } finally {
       setIsUploading(false);
     }
   };
 
-  // Handle Ingestion Confirmation
+  // ─────────────────────────────────────────────────────────────────────────────
+  // CONFIRM IMPORT ACTION
+  // ─────────────────────────────────────────────────────────────────────────────
   const handleConfirmImport = async ({ sessionId, allowRepricing, ambiguousResolutions }) => {
     try {
       setIsImporting(true);
@@ -254,30 +252,25 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
         body: JSON.stringify({
           sessionId: sessionId || previewData?.previewId,
           previewId: sessionId || previewData?.previewId,
-          tenantId: selectedHospital,
-          category: selectedCategory,
-          department: selectedDepartment,
+          tenantId: uploadHospital,
+          category: uploadCategory,
+          department: uploadDepartment && uploadDepartment !== 'all' ? uploadDepartment : '',
           allowRepricing,
           ambiguousResolutions
         })
       });
 
       const data = await res.json();
-
       if (!res.ok || !data.success) {
-        throw new Error(data.error || data.message || 'Catalog ingestion failed');
+        throw new Error(data.error || 'Catalog ingestion failed');
       }
 
-      // Close modal and display result
       setIsPreviewOpen(false);
       setPreviewData(null);
       setSelectedFile(null);
       setImportResult(data.data || data);
-
-      // Refresh recent audit history
       fetchHistory();
     } catch (err) {
-      console.error('[UPLOAD VIEW] Confirm import error:', err);
       setError(err.message || 'Error executing import');
     } finally {
       setIsImporting(false);
@@ -292,44 +285,8 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-      {/* Compact Top Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '10px 16px',
-        background: '#FFFFFF',
-        borderRadius: '10px',
-        border: '1px solid #E2E8F0',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '8px',
-            background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)',
-            color: '#FFFFFF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 1px 3px rgba(13,148,136,0.2)'
-          }}>
-            <Upload size={16} />
-          </div>
-          <div>
-            <h2 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Hospital Master Uploads & Catalog Import
-            </h2>
-            <p style={{ fontSize: '11px', color: '#64748B', margin: 0 }}>
-              Select target hospital, category, and department, download the exact template, and upload the completed Excel workbook.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Error Alert */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(14px, 2vh, 24px)', paddingBottom: 'clamp(20px, 3vh, 40px)' }}>
+      {/* Error alert */}
       {error && (
         <div style={{
           padding: '10px 14px',
@@ -356,85 +313,384 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
         </div>
       )}
 
-      {/* Upload & Configuration Section (or Result Summary if complete) */}
-      {importResult ? (
+      {/* Import Result Summary */}
+      {importResult && (
         <ImportResultSummary
           result={importResult}
           onReset={handleReset}
           onViewCatalog={onSwitchTab ? () => onSwitchTab('hospital-pricing') : null}
         />
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {/* Step 1-3: Context Selection (Hospital -> Category -> Department) */}
-          <UploadContextSelector
-            hospitals={hospitals}
-            selectedHospital={selectedHospital}
-            onChangeHospital={handleHospitalChange}
-            selectedCategory={selectedCategory}
-            onChangeCategory={handleCategoryChange}
-            selectedDepartment={selectedDepartment}
-            onChangeDepartment={handleDepartmentChange}
-            onDownloadTemplate={handleDownloadTemplate}
-            downloadingTemplate={downloadingTemplate}
-          />
+      )}
 
-          {/* Step 4: Excel Dropzone */}
+      {/* Main Two-Section Workflow: SECTION A (Download) vs SECTION B (Upload) */}
+      {!importResult && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 'clamp(14px, 2vh, 24px)' }}>
+          
+          {/* ══════════════════════════════════════════════════════════════════════════ */}
+          {/* SECTION A — DOWNLOAD MASTER                                               */}
+          {/* ══════════════════════════════════════════════════════════════════════════ */}
           <div style={{
             background: '#FFFFFF',
-            border: '1px solid #E2E8F0',
             borderRadius: '12px',
-            padding: '16px',
+            border: '1.5px solid #E2E8F0',
+            padding: 'clamp(16px, 2.2vh, 26px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'clamp(12px, 1.8vh, 18px)',
+            minHeight: 'clamp(440px, 58vh, 580px)',
             boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-              <div>
-                <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Step 4: Upload Completed Hospital Workbook (.xlsx / .xls)
-                </h3>
-                <p style={{ fontSize: '11px', color: '#64748B', margin: 0 }}>
-                  Headers must strictly match the verified client schema for {selectedCategory || 'the selected category'}.
-                </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', pb: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '30px', height: '30px', borderRadius: '7px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Download size={16} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                    SECTION A — DOWNLOAD MASTER
+                  </h3>
+                  <span style={{ fontSize: '11px', color: '#64748B' }}>
+                    Category-wise master catalog with commercial columns
+                  </span>
+                </div>
               </div>
-              {selectedFile && (
-                <button
-                  type="button"
-                  onClick={() => handleParsePreview(selectedFile)}
-                  disabled={isUploading || !selectedHospital || !selectedCategory}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '6px 14px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: '#FFFFFF',
-                    background: '#2563EB',
-                    borderRadius: '6px',
-                    border: 'none',
-                    cursor: (isUploading || !selectedHospital || !selectedCategory) ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 1px 2px rgba(37,99,235,0.2)',
-                    opacity: (isUploading || !selectedHospital || !selectedCategory) ? 0.6 : 1
-                  }}
-                >
-                  {isUploading ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Parsing & Matching...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Inspect & Preview Match</span>
-                      <ArrowRight size={13} />
-                    </>
-                  )}
-                </button>
-              )}
+              <span style={{ fontSize: '10px', fontWeight: 800, color: '#2563EB', background: '#DBEAFE', padding: '2px 8px', borderRadius: '4px' }}>
+                MRP + Net Rate
+              </span>
             </div>
 
+            {/* Target Hospital Selector (Optional for download) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
+                Target Hospital (Optional — Pre-populates Existing Pricing):
+              </label>
+              <select
+                value={downloadHospital}
+                onChange={(e) => setDownloadHospital(e.target.value)}
+                style={{
+                  width: '100%',
+                  height: '36px',
+                  borderRadius: '7px',
+                  border: '1px solid #CBD5E1',
+                  padding: '0 10px',
+                  fontSize: '12.5px',
+                  fontWeight: 650,
+                  color: '#0F172A',
+                  background: '#FFFFFF',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="">Blank Commercial Template (Initial Pricing Entry)</option>
+                {hospitals.map(h => (
+                  <option key={h.code || h.hospitalId} value={h.code || h.hospitalId}>
+                    {h.name} ({h.code || h.hospitalId}) — Pre-populate Configured Rates
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Category Selector (Required) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ color: '#DC2626' }}>*</span> Category:
+              </label>
+              <select
+                value={downloadCategory}
+                onChange={(e) => {
+                  setDownloadCategory(e.target.value);
+                  setDownloadDepartment('');
+                }}
+                style={{
+                  width: '100%',
+                  height: '36px',
+                  borderRadius: '7px',
+                  border: downloadCategory ? '1.5px solid #2563EB' : '1px solid #CBD5E1',
+                  padding: '0 10px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  color: downloadCategory ? '#0F172A' : '#64748B',
+                  background: '#FFFFFF',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="">-- Select Category (Required) --</option>
+                {categories.map(cat => {
+                  const isBlocked = cat.name === 'Radiology' || cat.status === 'SOURCE-CONFIRMATION-REQUIRED';
+                  return (
+                    <option key={cat.name} value={cat.name} disabled={isBlocked}>
+                      {cat.name} {isBlocked ? '(Pending Confirmation)' : `(${cat.fieldCount} fields)`}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Department Selector (Optional) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
+                Department (Optional):
+              </label>
+              <select
+                value={downloadDepartment}
+                disabled={!downloadCategory || !downloadCatConfig?.hasDepartment}
+                onChange={(e) => setDownloadDepartment(e.target.value)}
+                style={{
+                  width: '100%',
+                  height: '36px',
+                  borderRadius: '7px',
+                  border: '1px solid #CBD5E1',
+                  padding: '0 10px',
+                  fontSize: '12.5px',
+                  fontWeight: 650,
+                  color: (!downloadCategory || !downloadCatConfig?.hasDepartment) ? '#94A3B8' : '#0F172A',
+                  background: (!downloadCategory || !downloadCatConfig?.hasDepartment) ? '#F1F5F9' : '#FFFFFF',
+                  outline: 'none',
+                  cursor: (!downloadCategory || !downloadCatConfig?.hasDepartment) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {downloadCategory === 'Assets' ? (
+                  <option value="">No Department (15 Standard Columns)</option>
+                ) : !downloadCategory ? (
+                  <option value="">-- Select Category First --</option>
+                ) : (
+                  <>
+                    <option value="">All Departments (All {downloadDepartments.length} depts in ONE workbook)</option>
+                    {downloadDepartments.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </>
+                )}
+              </select>
+            </div>
+
+            {/* Specifications Card */}
+            <div style={{
+              background: '#F8FAFC',
+              borderRadius: '8px',
+              padding: '12px',
+              border: '1px solid #E2E8F0',
+              fontSize: '11.5px',
+              color: '#475569',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              lineHeight: 1.4
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, color: '#1E293B' }}>
+                <Info size={14} color="#2563EB" />
+                Export Workbook Characteristics
+              </div>
+              <div>• <strong>Scope:</strong> {(!downloadDepartment || downloadDepartment === 'all') && downloadCatConfig?.hasDepartment ? `Exports ALL ${downloadDepartments.length} departments into ONE workbook; preserves Department in each row.` : downloadDepartment ? `Exports only ${downloadDepartment} department.` : 'Standard category catalogue.'}</div>
+              <div>• <strong>Commercial Columns:</strong> Always includes <strong>MRP</strong> and <strong>Net Rate</strong>.</div>
+              <div>• <strong>Pricing State:</strong> {downloadHospital ? `Populates configured prices for ${downloadHospital}.` : 'Blank commercial columns ready for hospital price entry.'}</div>
+            </div>
+
+            {/* Action Button */}
+            <div style={{ marginTop: 'auto', paddingTop: '8px' }}>
+              <button
+                type="button"
+                onClick={handleDownloadMaster}
+                disabled={downloadingMaster || !downloadCategory}
+                style={{
+                  width: '100%',
+                  height: '38px',
+                  borderRadius: '7px',
+                  border: 'none',
+                  background: '#2563EB',
+                  color: '#FFFFFF',
+                  fontSize: '12.5px',
+                  fontWeight: 750,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: (downloadingMaster || !downloadCategory) ? 'not-allowed' : 'pointer',
+                  opacity: (!downloadCategory) ? 0.6 : 1,
+                  boxShadow: '0 1px 3px rgba(37,99,235,0.2)'
+                }}
+              >
+                {downloadingMaster ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Generating Category Workbook...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={15} />
+                    <span>Download Master Excel</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* ══════════════════════════════════════════════════════════════════════════ */}
+          {/* SECTION B — UPLOAD MASTER                                                 */}
+          {/* ══════════════════════════════════════════════════════════════════════════ */}
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '12px',
+            border: '1.5px solid #E2E8F0',
+            padding: 'clamp(16px, 2.2vh, 26px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'clamp(12px, 1.8vh, 18px)',
+            minHeight: 'clamp(440px, 58vh, 580px)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', pb: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '30px', height: '30px', borderRadius: '7px', background: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Upload size={16} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                    SECTION B — UPLOAD MASTER
+                  </h3>
+                  <span style={{ fontSize: '11px', color: '#64748B' }}>
+                    Hospital commercial selection & repricing ingestion
+                  </span>
+                </div>
+              </div>
+              <span style={{ fontSize: '10px', fontWeight: 800, color: '#059669', background: '#D1FAE5', padding: '2px 8px', borderRadius: '4px' }}>
+                Registry Matched
+              </span>
+            </div>
+
+            {/* Target Hospital (Required) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ color: '#DC2626' }}>*</span> Target Hospital:
+              </label>
+              <select
+                value={uploadHospital}
+                onChange={(e) => setUploadHospital(e.target.value)}
+                style={{
+                  width: '100%',
+                  height: '36px',
+                  borderRadius: '7px',
+                  border: uploadHospital ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                  padding: '0 10px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  color: uploadHospital ? '#0F172A' : '#64748B',
+                  background: '#FFFFFF',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="">-- Select Target Hospital (Required) --</option>
+                {hospitals.map(h => (
+                  <option key={h.code || h.hospitalId} value={h.code || h.hospitalId}>
+                    {h.name} ({h.code || h.hospitalId})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Category (Required) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ color: '#DC2626' }}>*</span> Category:
+              </label>
+              <select
+                value={uploadCategory}
+                onChange={(e) => {
+                  setUploadCategory(e.target.value);
+                  setUploadDepartment('');
+                }}
+                style={{
+                  width: '100%',
+                  height: '36px',
+                  borderRadius: '7px',
+                  border: uploadCategory ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                  padding: '0 10px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  color: uploadCategory ? '#0F172A' : '#64748B',
+                  background: '#FFFFFF',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="">-- Select Category (Required) --</option>
+                {categories.map(cat => {
+                  const isBlocked = cat.name === 'Radiology' || cat.status === 'SOURCE-CONFIRMATION-REQUIRED';
+                  return (
+                    <option key={cat.name} value={cat.name} disabled={isBlocked}>
+                      {cat.name} {isBlocked ? '(Pending Confirmation)' : `(${cat.fieldCount} fields)`}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Department (Optional) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
+                Department (Optional — All Departments if not specified):
+              </label>
+              <select
+                value={uploadDepartment}
+                disabled={!uploadCategory || !uploadCatConfig?.hasDepartment}
+                onChange={(e) => setUploadDepartment(e.target.value)}
+                style={{
+                  width: '100%',
+                  height: '36px',
+                  borderRadius: '7px',
+                  border: '1px solid #CBD5E1',
+                  padding: '0 10px',
+                  fontSize: '12.5px',
+                  fontWeight: 650,
+                  color: (!uploadCategory || !uploadCatConfig?.hasDepartment) ? '#94A3B8' : '#0F172A',
+                  background: (!uploadCategory || !uploadCatConfig?.hasDepartment) ? '#F1F5F9' : '#FFFFFF',
+                  outline: 'none',
+                  cursor: (!uploadCategory || !uploadCatConfig?.hasDepartment) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {uploadCategory === 'Assets' ? (
+                  <option value="">No Department (15 Standard Columns)</option>
+                ) : !uploadCategory ? (
+                  <option value="">-- Select Category First --</option>
+                ) : (
+                  <>
+                    <option value="">All Departments (Category-wide Upload)</option>
+                    {uploadDepartments.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </>
+                )}
+              </select>
+            </div>
+
+            {/* Commercial Semantics Callout */}
+            <div style={{
+              background: '#F0FDF4',
+              borderRadius: '8px',
+              padding: '10px 12px',
+              border: '1px solid #BBF7D0',
+              fontSize: '11px',
+              color: '#166534',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 800 }}>
+                <ShieldCheck size={14} color="#16a34a" />
+                Commercial Selection Rules
+              </div>
+              <div>• <strong>Selection Rule:</strong> MRP entered (including 0) selects item. Blank MRP = unselected.</div>
+              <div>• <strong>Validation:</strong> Net Rate cannot exceed MRP. Negative pricing is forbidden.</div>
+              <div>• <strong>Non-Destructive:</strong> Existing pricing retained untouched if row has blank prices.</div>
+            </div>
+
+            {/* Excel Dropzone */}
             <ExcelDropzone
               onFileSelect={(file) => {
                 setSelectedFile(file);
-                if (selectedHospital && selectedCategory) {
+                if (uploadHospital && uploadCategory) {
                   handleParsePreview(file);
                 }
               }}
@@ -442,11 +698,49 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
               selectedFile={selectedFile}
               onClearFile={() => setSelectedFile(null)}
             />
+
+            {/* Action Button */}
+            <div style={{ marginTop: 'auto', paddingTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => handleParsePreview(selectedFile)}
+                disabled={isUploading || !uploadHospital || !uploadCategory || !selectedFile}
+                style={{
+                  width: '100%',
+                  height: '38px',
+                  borderRadius: '7px',
+                  border: 'none',
+                  background: '#059669',
+                  color: '#FFFFFF',
+                  fontSize: '12.5px',
+                  fontWeight: 750,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: (isUploading || !uploadHospital || !uploadCategory || !selectedFile) ? 'not-allowed' : 'pointer',
+                  opacity: (!uploadHospital || !uploadCategory || !selectedFile) ? 0.6 : 1,
+                  boxShadow: '0 1px 3px rgba(5,150,105,0.2)'
+                }}
+              >
+                {isUploading ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Parsing & Inspecting Commercials...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Upload & Preview</span>
+                    <ArrowRight size={14} />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Step 3: Server-Authoritative Preview Modal */}
+      {/* Preview Modal */}
       <ImportPreviewModal
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
@@ -455,12 +749,20 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
         isImporting={isImporting}
       />
 
-      {/* Recent Upload Audit History */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <History className="w-4 h-4 text-slate-500" />
-            <h3 className="text-sm font-bold text-slate-800">
+      {/* ══════════════════════════════════════════════════════════════════════════ */}
+      {/* SECTION C — RECENT CATALOG INGESTION HISTORY                               */}
+      {/* ══════════════════════════════════════════════════════════════════════════ */}
+      <div style={{
+        background: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: '12px',
+        padding: '18px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <History size={16} color="#64748B" />
+            <h3 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
               Recent Hospital Catalog Ingestion History
             </h3>
           </div>
@@ -468,75 +770,89 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
             type="button"
             onClick={fetchHistory}
             disabled={loadingHistory}
-            className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 font-medium px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11.5px',
+              color: '#475569',
+              fontWeight: 650,
+              padding: '4px 10px',
+              borderRadius: '6px',
+              border: '1px solid #CBD5E1',
+              background: '#FFFFFF',
+              cursor: 'pointer'
+            }}
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingHistory ? 'animate-spin' : ''}`} />
+            <RefreshCw size={12} className={loadingHistory ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
 
         {history.length === 0 ? (
-          <div className="text-center py-8 text-slate-400 text-xs italic">
-            No hospital upload history found for this view.
+          <div style={{ textAlign: 'center', padding: '24px', color: '#94A3B8', fontSize: '12px', fontStyle: 'italic' }}>
+            No recent hospital catalog ingestion batches found.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-                <tr>
-                  <th className="py-2.5 px-3">Batch ID / Timestamp</th>
-                  <th className="py-2.5 px-3">Hospital</th>
-                  <th className="py-2.5 px-3">Category & Scope</th>
-                  <th className="py-2.5 px-3">Original File</th>
-                  <th className="py-2.5 px-3 text-center">Assigned / Repriced</th>
-                  <th className="py-2.5 px-3 text-center">Retained / Skipped</th>
-                  <th className="py-2.5 px-3 text-right">Status</th>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontWeight: 700 }}>
+                  <th style={{ padding: '8px 10px' }}>Batch ID & Date</th>
+                  <th style={{ padding: '8px 10px' }}>Target Hospital</th>
+                  <th style={{ padding: '8px 10px' }}>Category & Scope</th>
+                  <th style={{ padding: '8px 10px' }}>Original File</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'center' }}>New / Repriced</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'center' }}>Retained / Skipped</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-normal text-slate-700">
+              <tbody>
                 {history.map((item) => (
-                  <tr key={item._id || item.batchId} className="hover:bg-slate-50/70">
-                    <td className="py-2.5 px-3">
-                      <div className="font-mono text-[11px] font-bold text-slate-800">
-                        {item.batchId?.substring(0, 10)}...
+                  <tr key={item._id || item.importBatchId} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                    <td style={{ padding: '8px 10px' }}>
+                      <div style={{ fontFamily: 'monospace', fontWeight: 750, color: '#0F172A' }}>
+                        {item.importBatchId || item.batchId}
                       </div>
-                      <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                        <Calendar className="w-3 h-3" />
+                      <div style={{ fontSize: '10px', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                        <Calendar size={10} />
                         {item.createdAt ? new Date(item.createdAt).toLocaleString() : '—'}
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 font-medium text-slate-900">
+                    <td style={{ padding: '8px 10px', fontWeight: 650, color: '#0F172A' }}>
                       {item.hospitalName || item.tenantId}
                     </td>
-                    <td className="py-2.5 px-3">
-                      <span className="font-semibold text-slate-800">{item.category}</span>
+                    <td style={{ padding: '8px 10px' }}>
+                      <span style={{ fontWeight: 700, color: '#0F172A' }}>{item.category}</span>
                       {item.department && (
-                        <span className="text-slate-500 block text-[11px]">
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '10.5px' }}>
                           Dept: {item.department}
                         </span>
                       )}
                     </td>
-                    <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600 truncate max-w-[160px]">
-                      {item.sourceFilename}
+                    <td style={{ padding: '8px 10px', fontFamily: 'monospace', color: '#475569', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.sourceFilename || item.originalFileName || '—'}
                     </td>
-                    <td className="py-2.5 px-3 text-center font-mono">
-                      <span className="text-emerald-700 font-bold">{item.createdCount || 0}</span>
+                    <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: 'monospace' }}>
+                      <span style={{ color: '#059669', fontWeight: 800 }}>{item.createdCount || item.newConfigsCount || 0}</span>
                       {' / '}
-                      <span className="text-purple-700 font-bold">{item.repricedCount || 0}</span>
+                      <span style={{ color: '#7C3AED', fontWeight: 800 }}>{item.repricedCount || 0}</span>
                     </td>
-                    <td className="py-2.5 px-3 text-center font-mono">
-                      <span className="text-slate-600">{item.retainedCount || 0}</span>
+                    <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: 'monospace' }}>
+                      <span style={{ color: '#475569' }}>{item.retainedCount || 0}</span>
                       {' / '}
-                      <span className="text-rose-600 font-bold">{item.skippedCount || 0}</span>
+                      <span style={{ color: '#DC2626', fontWeight: 800 }}>{item.skippedCount || 0}</span>
                     </td>
-                    <td className="py-2.5 px-3 text-right">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        item.status === 'SUCCESS' 
-                          ? 'bg-emerald-100 text-emerald-800' 
-                          : item.status === 'PARTIAL'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-rose-100 text-rose-800'
-                      }`}>
+                    <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                      <span style={{
+                        display: 'inline-flex',
+                        padding: '2px 7px',
+                        borderRadius: '4px',
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        background: item.status === 'SUCCESS' ? '#D1FAE5' : '#FEF3C7',
+                        color: item.status === 'SUCCESS' ? '#065F46' : '#92400E'
+                      }}>
                         {item.status}
                       </span>
                     </td>

@@ -3065,7 +3065,7 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
               <i data-lucide="database"></i> Item Master
             </button>
             <button className={`proc-menu-item ${activeTab === 'item-requests' ? 'active' : ''}`} onClick={() => setActiveTab('item-requests')}>
-              <i data-lucide="clipboard-list"></i> Item Requests
+              <i data-lucide="clipboard-list"></i> Master Requests
             </button>
             <button className={`proc-menu-item ${activeTab === 'quotations' ? 'active' : ''}`} onClick={() => setActiveTab('quotations')}>
               <i data-lucide="tag"></i> Vendor Quotations
@@ -3209,7 +3209,7 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                   <span style={{ fontSize: '18.5px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}>
                     {activeTab === 'dashboard' && 'Procurement Command Center'}
                     {activeTab === 'item-master' && (isItemMasterNew ? 'Item Master — Add New Item' : isItemMasterEdit ? 'Item Master — Edit Catalog Item' : 'Item Master Catalog')}
-                    {activeTab === 'item-requests' && 'Item Requests — Global Catalog'}
+                    {(activeTab === 'item-requests' || activeTab === 'master-requests') && 'Master Requests — Item Master & Vendor Master'}
                     {activeTab === 'quotations' && 'Vendor Quotations'}
                     {activeTab === 'vendors' && 'Vendor Master'}
                     {activeTab === 'pos' && (isCreatingPO ? (editingDraftPO ? 'Resume Purchase Order' : 'Create Purchase Order') : 'Purchase Orders')}
@@ -4352,8 +4352,8 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
             )}
 
             {/* VIEW: ITEM REQUESTS */}
-            {activeTab === 'item-requests' && (
-              <ItemRequestsPanel showToast={showToast} />
+            {(activeTab === 'item-requests' || activeTab === 'master-requests') && (
+              <ItemRequestsPanel showToast={showToast} onSwitchTab={setActiveTab} />
             )}
 
             {/* VIEW: VENDOR QUOTATIONS */}

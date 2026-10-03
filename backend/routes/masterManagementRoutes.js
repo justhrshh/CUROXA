@@ -641,7 +641,7 @@ router.get('/export/excel', async (req, res) => {
 
     const result = exportType === 'GLOBAL_CANONICAL'
       ? await generateCanonicalMasterExportWorkbook(category, effectiveDept)
-      : await generateHospitalCommercialExportWorkbook(category, effectiveDept);
+      : await generateHospitalCommercialExportWorkbook(category, effectiveDept, null, { tenantId: req.query.tenantId });
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);

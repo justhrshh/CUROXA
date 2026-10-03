@@ -282,7 +282,7 @@ async function matchParsedRows(parsedRows, tenantIdOrGlobalCandidates, categoryO
     let selectionStatus = isSelected ? 'SELECTED' : 'NOT_SELECTED';
 
     if (matchedItem) {
-      const existingConfig = existingConfigMap.get(matchedItem._id.toString());
+      const existingConfig = matchedItem._id ? existingConfigMap.get(matchedItem._id.toString()) : null;
       if (existingConfig) {
         existingPricing = {
           mrp: existingConfig.mrp !== undefined ? existingConfig.mrp : null,
