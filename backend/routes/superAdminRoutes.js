@@ -1043,6 +1043,68 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
     await writeAudit(req, 'create_hospital', `Created hospital profile ${hospital.name} (${hospital.code}) and provisioned admin user '${adminName}'`);
     await createNotification('Hospital Activated', `Hospital '${hospital.name}' (${hospital.code}) has been activated on plan '${hospital.plan}'`, 'success', 'billing');
     
+    // Provision onboarding employees / staff into User collection for this hospital
+    try {
+      let usersToProvision = Array.isArray(req.body.provisionedUsers) && req.body.provisionedUsers.length > 0
+        ? req.body.provisionedUsers
+        : [];
+
+      if (usersToProvision.length === 0 && (req.body.onboardingId || hospital.code)) {
+        const onbDraft = req.body.onboardingId 
+          ? await SuperAdminOnboarding.findById(req.body.onboardingId)
+          : await SuperAdminOnboarding.findOne({ code: hospital.code });
+        if (onbDraft && Array.isArray(onbDraft.provisionedUsers)) {
+          usersToProvision = onbDraft.provisionedUsers;
+        }
+      }
+
+      for (const pu of usersToProvision) {
+        const staffId = (pu.staff_id || pu.phone || pu.email || '').trim().toLowerCase();
+        if (!staffId) continue;
+
+        const existingUser = await User.findOne({
+          $or: [
+            { tenantId: hospital.code, staff_id: staffId },
+            { staff_id: staffId }
+          ]
+        });
+
+        if (!existingUser) {
+          const staffPass = pu.password || 'Staff@123';
+          const pHash = await bcrypt.hash(staffPass, salt);
+          await User.create({
+            tenantId: hospital.code,
+            staff_id: staffId,
+            password_hash: pHash,
+            role: pu.role || 'staff',
+            name: pu.name || `${pu.firstName || ''} ${pu.lastName || ''}`.trim() || 'Employee',
+            email: pu.email ? pu.email.toLowerCase().trim() : '',
+            phone: pu.phone || staffId,
+            department: pu.department || (pu.role === 'doctor' ? (pu.specialty || 'General Medicine') : 'Administration'),
+            designation: pu.designation || (pu.role ? pu.role.charAt(0).toUpperCase() + pu.role.slice(1) : 'Employee'),
+            employmentType: pu.employmentType || 'Full-Time',
+            joiningDate: pu.joiningDate || new Date().toISOString().split('T')[0],
+            weeklyOff: pu.weeklyOff || ['Sunday'],
+            specialty: pu.specialty || '',
+            consultationFee: Number(pu.consultationFee) || 500,
+            max_slots: Number(pu.max_slots) || 10,
+            doctorSlots: pu.doctorSlots || [],
+            hasSetPassword: true,
+            isSetupComplete: true
+          });
+
+          if (pu.role === 'doctor') {
+            hospital.limits.doctorsUsed = (hospital.limits.doctorsUsed || 0) + 1;
+          } else {
+            hospital.limits.staffUsed = (hospital.limits.staffUsed || 0) + 1;
+          }
+        }
+      }
+      await hospital.save();
+    } catch (provErr) {
+      console.error('Error provisioning onboarding staff users:', provErr);
+    }
+
     // Auto-delete corresponding onboarding draft from SuperAdminOnboarding
     try {
       if (req.body.onboardingId) {

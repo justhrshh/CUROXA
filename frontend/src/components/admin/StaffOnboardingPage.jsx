@@ -58,7 +58,10 @@ export default function StaffOnboardingPage({
   onCancel = () => {}, 
   onStaffCreated = () => {}, 
   showToast = () => {},
-  availableRoles = [] 
+  availableRoles = [],
+  onSubmit = null,
+  hospitalName = null,
+  backLabel = null
 }) {
   const formRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -369,14 +372,19 @@ export default function StaffOnboardingPage({
 
     try {
       setIsSubmitting(true);
-      const res = await api.post('/admin/users', payload);
-      const createdUser = res.data;
+      let createdUser;
+      if (onSubmit) {
+        createdUser = await onSubmit(payload);
+      } else {
+        const res = await api.post('/admin/users', payload);
+        createdUser = res.data;
+      }
 
       // Requirement 21: Show Success Toast
       showToast('✓ Employee added successfully.', 'success');
 
       // Return to employee list and ensure visibility
-      onStaffCreated(createdUser);
+      onStaffCreated(createdUser || payload);
     } catch (err) {
       console.error('Employee creation error:', err);
       const msg = err.response?.data?.error || err.message || 'Unable to add employee. Please try again.';
@@ -400,13 +408,13 @@ export default function StaffOnboardingPage({
               className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-300 hover:border-slate-400 px-3 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer mb-2"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Employees</span>
+              <span>{backLabel || 'Back to Employees'}</span>
             </button>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
               Add New Employee
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Create login credentials, assign role and configure employee access.
+              Create login credentials, assign role and configure employee access{hospitalName ? ` for ${hospitalName}` : ''}.
             </p>
           </div>
 

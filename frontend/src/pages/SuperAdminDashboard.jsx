@@ -10,6 +10,7 @@ import VendorMasterView from '../components/superadmin/masters/VendorMasterView'
 import StockMasterView from '../components/superadmin/masters/StockMasterView';
 import CommonMasterUploadView from '../components/superadmin/masters/CommonMasterUploadView';
 import SuperAdminMasterApprovalsView from '../components/superadmin/masters/SuperAdminMasterApprovalsView';
+import StaffOnboardingPage from '../components/admin/StaffOnboardingPage';
 import { TopbarContext } from '../context/TopbarContext';
 
 const fetch = (...args) => window.fetch(...args);
@@ -3627,63 +3628,148 @@ const SuperAdminDashboard = ({ initialTab }) => {
       }
     };
 
+    const handleAddOnboardingStaff = async (payload) => {
+      if (!wizardHospital) {
+        showToast('No active hospital found.', 'error');
+        return;
+      }
+
+      const newStaff = {
+        name: payload.name,
+        firstName: payload.name.trim().split(' ')[0],
+        lastName: payload.name.trim().split(' ').slice(1).join(' ') || '',
+        phone: payload.phone,
+        staff_id: payload.staff_id || payload.phone,
+        email: payload.email || '',
+        joiningDate: payload.joiningDate || new Date().toISOString().split('T')[0],
+        password: payload.password || 'Staff@123',
+        role: payload.role || 'staff',
+        department: payload.department || (payload.role === 'doctor' ? (payload.specialty || 'General Medicine') : 'Administration'),
+        designation: payload.designation || (payload.role ? payload.role.charAt(0).toUpperCase() + payload.role.slice(1) : 'Employee'),
+        employmentType: payload.employmentType || 'Full-Time',
+        workLocation: payload.workLocation || 'Main Wing',
+        shift: payload.shiftName || 'General Shift',
+        weeklyOff: payload.weeklyOff || ['Sunday'],
+        specialty: payload.specialty || '',
+        consultationFee: payload.consultationFee,
+        max_slots: payload.max_slots,
+        doctorSlots: payload.doctorSlots || [],
+        status: 'Active'
+      };
+
+      const updatedUsers = [...(wizardHospital.provisionedUsers || []), newStaff];
+
+      // If active hospital code exists in SuperAdminHospital, create directly in User collection as well
+      if (wizardHospital.code) {
+        try {
+          await fetch(`/api/superadmin/hospitals/${wizardHospital.code.toLowerCase()}/staff`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            body: JSON.stringify({
+              staff_id: newStaff.staff_id,
+              name: newStaff.name,
+              email: newStaff.email,
+              role: newStaff.role,
+              department: newStaff.department,
+              designation: newStaff.designation,
+              password: newStaff.password
+            })
+          });
+        } catch (directErr) {
+          console.warn("Direct staff creation note:", directErr.message);
+        }
+      }
+
+      // Persist to onboarding draft in database
+      if (wizardHospital._id) {
+        try {
+          const updateData = {
+            ...wizardHospital,
+            provisionedUsers: updatedUsers,
+            currentStep: wizardStep
+          };
+          delete updateData._id;
+          delete updateData.__v;
+          const res = await fetch(`/api/superadmin/onboarding/${wizardHospital._id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            body: JSON.stringify(updateData)
+          });
+          if (res.ok) {
+            const updated = await res.json();
+            setOnboardingHospitals(prev => prev.map(o => o._id === updated._id ? updated : o));
+            setWizardHospital(prev => ({
+              ...updated,
+              confirmAdminPassword: prev ? prev.confirmAdminPassword : ''
+            }));
+          }
+        } catch (draftErr) {
+          console.error("Error saving onboarding draft user:", draftErr);
+        }
+      } else {
+        setWizardHospital(prev => ({
+          ...prev,
+          provisionedUsers: updatedUsers
+        }));
+      }
+
+      setIsAddUserDrawerOpen(false);
+      showToast(`✓ Employee '${newStaff.name}' added to ${wizardHospital.name || 'hospital'} successfully!`, 'success');
+      return newStaff;
+    };
+
+    const handleRemoveProvisionedUser = async (userIndex) => {
+      if (!wizardHospital || !wizardHospital.provisionedUsers) return;
+      const removedUser = wizardHospital.provisionedUsers[userIndex];
+      const updatedUsers = wizardHospital.provisionedUsers.filter((_, idx) => idx !== userIndex);
+
+      if (wizardHospital._id) {
+        try {
+          const updateData = {
+            ...wizardHospital,
+            provisionedUsers: updatedUsers,
+            currentStep: wizardStep
+          };
+          delete updateData._id;
+          delete updateData.__v;
+          const res = await fetch(`/api/superadmin/onboarding/${wizardHospital._id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            body: JSON.stringify(updateData)
+          });
+          if (res.ok) {
+            const updated = await res.json();
+            setOnboardingHospitals(prev => prev.map(o => o._id === updated._id ? updated : o));
+            setWizardHospital(prev => ({
+              ...updated,
+              confirmAdminPassword: prev ? prev.confirmAdminPassword : ''
+            }));
+          }
+        } catch (err) {
+          console.error("Error removing provisioned user:", err);
+        }
+      } else {
+        setWizardHospital(prev => ({
+          ...prev,
+          provisionedUsers: updatedUsers
+        }));
+      }
+      showToast(`Removed ${removedUser?.name || 'employee'} from provisioned list.`, 'info');
+    };
+
     const handleCreateOnboardingUser = async () => {
       if (!drawerForm.firstName || !drawerForm.email || !drawerForm.role) {
         showToast('Please fill out required fields (First Name, Email, Role).', 'error');
         return;
       }
-      
-      const newStaff = {
-        firstName: drawerForm.firstName,
-        lastName: drawerForm.lastName,
+      return handleAddOnboardingStaff({
+        name: `${drawerForm.firstName} ${drawerForm.lastName}`.trim(),
+        phone: drawerForm.phone || drawerForm.secPhone || '9999999999',
         email: drawerForm.email,
-        phone: drawerForm.phone,
-        secPhone: drawerForm.secPhone,
-        branch: drawerForm.branch,
-        department: drawerForm.department,
-        manager: drawerForm.manager,
-        shift: drawerForm.shift,
-        role: drawerForm.role,
-        avatar: drawerForm.avatar || '',
-        password: drawerForm.password || 'Staff@123',
-        status: 'Pending Invite'
-      };
-
-      const updatedUsers = [...(wizardHospital.provisionedUsers || []), newStaff];
-      
-      try {
-        const updateData = {
-          ...wizardHospital,
-          provisionedUsers: updatedUsers,
-          currentStep: wizardStep
-        };
-        delete updateData._id;
-        delete updateData.__v;
-        const res = await fetch(`/api/superadmin/onboarding/${wizardHospital._id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-          body: JSON.stringify(updateData)
-        });
-        if (res.ok) {
-          const updated = await res.json();
-          setOnboardingHospitals(prev => prev.map(o => o._id === updated._id ? updated : o));
-          setWizardHospital(prev => ({
-            ...updated,
-            confirmAdminPassword: prev ? prev.confirmAdminPassword : ''
-          }));
-          setIsAddUserDrawerOpen(false);
-          setDrawerForm({
-            firstName: '', lastName: '', email: '', phone: '', secPhone: '',
-            branch: '', department: '', manager: '', shift: '', role: '', password: '', avatar: ''
-          });
-          showToast('Onboarding staff user created successfully!', 'success');
-        } else {
-          showToast('Failed to save staff user.', 'error');
-        }
-      } catch (err) {
-        console.error(err);
-        showToast('Error saving staff user.', 'error');
-      }
+        role: drawerForm.role.toLowerCase(),
+        department: drawerForm.department || 'Administration',
+        password: drawerForm.password || 'Staff@123'
+      });
     };
 
     const getStepValidation = (step) => {
@@ -5209,37 +5295,64 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>Provisioned Staff Registry <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'none' }}>(Optional)</span></h4>
                       <button 
                         type="button" 
-                        style={{ ...styles.btnPrimary, height: '30px', padding: '0 10px', fontSize: '11px' }}
+                        style={{ ...styles.btnPrimary, height: '32px', padding: '0 12px', fontSize: '11.5px', fontWeight: 750, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                         onClick={() => setIsAddUserDrawerOpen(true)}
                       >
-                        <LucideIcon name="plus" style={{ width: '12px', height: '12px', marginRight: '4px' }} />
+                        <LucideIcon name="plus" style={{ width: '13px', height: '13px' }} />
                         Add Onboarding User
                       </button>
                     </div>
                     
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
                       {(!wizardHospital.provisionedUsers || wizardHospital.provisionedUsers.length === 0) ? (
-                        <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', background: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: '10px' }}>
-                          <span style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>No staff members provisioned yet.</span>
+                        <div style={{ gridColumn: '1 / -1', padding: '24px', textAlign: 'center', background: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: '10px' }}>
+                          <span style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>No staff members provisioned yet. Click "+ Add Onboarding User" above to add staff to this hospital.</span>
                         </div>
                       ) : (
-                        wizardHospital.provisionedUsers.map((u, i) => (
-                          <div key={i} style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                              <div>
-                                <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>{u.firstName} {u.lastName}</div>
-                                <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 650 }}>{u.role}</div>
+                        wizardHospital.provisionedUsers.map((u, i) => {
+                          const displayName = u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Employee';
+                          const roleLabel = u.role ? (u.role.charAt(0).toUpperCase() + u.role.slice(1)) : 'Staff';
+                          return (
+                            <div key={i} style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div style={{ paddingRight: '20px' }}>
+                                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>{displayName}</div>
+                                  <div style={{ fontSize: '11px', color: '#2563EB', fontWeight: 700, marginTop: '1px' }}>
+                                    {roleLabel} {u.specialty ? `• ${u.specialty}` : ''}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveProvisionedUser(i)}
+                                  title="Remove employee"
+                                  style={{ background: '#FEE2E2', border: 'none', color: '#DC2626', borderRadius: '6px', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+                                >
+                                  <LucideIcon name="x" style={{ width: '13px', height: '13px' }} />
+                                </button>
                               </div>
-                              <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: u.status === 'Active' ? '#ECFDF5' : '#FFFBEB', color: u.status === 'Active' ? '#10B981' : '#F59E0B', fontWeight: 700 }}>
-                                {u.status || 'Pending'}
-                              </span>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11px', color: '#64748B' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <LucideIcon name="phone" style={{ width: '12px', height: '12px', color: '#94A3B8' }} />
+                                  <span>{u.phone || u.staff_id || '—'}</span>
+                                  {u.employmentType && <span style={{ color: '#94A3B8', fontSize: '10px' }}>• {u.employmentType}</span>}
+                                </div>
+                                {u.email && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <LucideIcon name="mail" style={{ width: '12px', height: '12px', color: '#94A3B8' }} />
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</span>
+                                  </div>
+                                )}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: '#94A3B8', marginTop: '2px' }}>
+                                  <LucideIcon name="calendar" style={{ width: '11px', height: '11px' }} />
+                                  <span>Joined: {u.joiningDate || 'Immediate'}</span>
+                                  <span style={{ marginLeft: 'auto', padding: '1px 6px', borderRadius: '4px', background: '#ECFDF5', color: '#059669', fontWeight: 750, fontSize: '9px' }}>
+                                    {u.status || 'Active'}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
-                            <div style={{ fontSize: '10.5px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <LucideIcon name="mail" style={{ width: '12px', height: '12px' }} />
-                              {u.email}
-                            </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
@@ -6162,456 +6275,41 @@ const SuperAdminDashboard = ({ initialTab }) => {
           </div>
         </footer>
 
-        <div style={{ ...styles.drawerOverlay, background: isAddUserDrawerOpen ? 'rgba(15, 23, 42, 0.3)' : 'rgba(15, 23, 42, 0)', backdropFilter: isAddUserDrawerOpen ? 'blur(4px)' : 'blur(0)', pointerEvents: isAddUserDrawerOpen ? 'auto' : 'none', transition: 'background 0.3s ease, backdrop-filter 0.3s ease' }} onClick={() => setIsAddUserDrawerOpen(false)}>
-          <div style={{ ...styles.drawerContainer, width: '980px', maxWidth: '95vw', display: 'flex', flexDirection: 'column', height: '100%', background: '#FFFFFF', borderRadius: '0', boxShadow: '-10px 0 30px rgba(0,0,0,0.05)', transform: isAddUserDrawerOpen ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }} onClick={e => e.stopPropagation()}>
-              
-              {/* Drawer Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid #E2E8F0', flexShrink: 0 }}>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Add New User</h3>
-                  <p style={{ fontSize: '11.5px', color: '#64748B', margin: '2px 0 0 0', fontWeight: 500 }}>Create new user account and assign active permissions</p>
-                </div>
-                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', borderRadius: '4px' }} onClick={() => setIsAddUserDrawerOpen(false)}>
-                  <LucideIcon name="x" style={{ width: '20px', height: '20px' }} />
-                </button>
-              </div>
-
-              {/* Main Body Columns */}
-              <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                
-                {/* Left Panel: Form Content */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '28px', background: '#FFFFFF' }}>
-                  
-                  {/* Basic Information */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
-                      <LucideIcon name="user" style={{ width: '16px', height: '16px', color: '#2563EB' }} />
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#1E293B', letterSpacing: '0.05em' }}>BASIC INFORMATION</span>
-                    </div>
-
-                    {/* Avatar Upload */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <input 
-                        type="file" 
-                        ref={drawerAvatarInputRef} 
-                        accept="image/*" 
-                        style={{ display: 'none' }} 
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            if (file.size > 5 * 1024 * 1024) {
-                              showToast('Image file size must be less than 5MB.', 'error');
-                              return;
-                            }
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setDrawerForm(prev => ({ ...prev, avatar: reader.result }));
-                              showToast('Avatar image loaded successfully!', 'success');
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                      />
-                      <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#EFF6FF', border: '2px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB', fontSize: '15px', fontWeight: 700, overflow: 'hidden', flexShrink: 0 }}>
-                        {drawerForm.avatar ? (
-                          <img src={drawerForm.avatar} alt="Avatar Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : drawerForm.firstName || drawerForm.lastName ? (
-                          `${drawerForm.firstName ? drawerForm.firstName.charAt(0).toUpperCase() : ''}${drawerForm.lastName ? drawerForm.lastName.charAt(0).toUpperCase() : ''}`
-                        ) : (
-                          <LucideIcon name="user" style={{ width: '22px', height: '22px', color: '#3B82F6' }} />
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                        <button 
-                          type="button" 
-                          onClick={() => drawerAvatarInputRef.current?.click()}
-                          style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
-                        >
-                          {drawerForm.avatar ? 'Change Image' : 'Upload Image'}
-                        </button>
-                        {drawerForm.avatar && (
-                          <>
-                            <span style={{ color: '#E2E8F0' }}>|</span>
-                            <button 
-                              type="button" 
-                              onClick={() => {
-                                setDrawerForm(prev => ({ ...prev, avatar: '' }));
-                                if (drawerAvatarInputRef.current) drawerAvatarInputRef.current.value = '';
-                              }}
-                              style={{ background: 'none', border: 'none', color: '#EF4444', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', padding: 0 }}
-                            >
-                              Remove
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Name Inputs */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>FIRST NAME</label>
-                        <div style={{ position: 'relative' }}>
-                          <LucideIcon name="user" style={{ position: 'absolute', left: '12px', top: '13px', width: '14px', height: '14px', color: '#94A3B8' }} />
-                          <input 
-                            type="text" 
-                            style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px 0 34px', fontSize: '13px', fontWeight: 600, color: '#1E293B', outline: 'none' }}
-                            placeholder="e.g. John"
-                            value={drawerForm.firstName}
-                            onChange={e => setDrawerForm(prev => ({ ...prev, firstName: e.target.value }))}
-                          />
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>LAST NAME</label>
-                        <input 
-                          type="text" 
-                          style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', fontSize: '13px', fontWeight: 600, color: '#1E293B', outline: 'none' }}
-                          placeholder="e.g. Doe"
-                          value={drawerForm.lastName}
-                          onChange={e => setDrawerForm(prev => ({ ...prev, lastName: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Email and Password Inputs */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>EMAIL ADDRESS</label>
-                        <div style={{ position: 'relative' }}>
-                          <LucideIcon name="mail" style={{ position: 'absolute', left: '12px', top: '13px', width: '14px', height: '14px', color: '#94A3B8' }} />
-                          <input 
-                            type="email" 
-                            style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px 0 34px', fontSize: '13px', fontWeight: 600, color: '#1E293B', outline: 'none' }}
-                            placeholder="e.g. john.doe@clinic.com"
-                            value={drawerForm.email}
-                            onChange={e => setDrawerForm(prev => ({ ...prev, email: e.target.value }))}
-                          />
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>PASSWORD</label>
-                        <div style={{ position: 'relative' }}>
-                          <LucideIcon name="lock" style={{ position: 'absolute', left: '12px', top: '13px', width: '14px', height: '14px', color: '#94A3B8' }} />
-                          <input 
-                            type={showPasswords['addUserDrawer'] ? 'text' : 'password'} 
-                            style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 40px 0 34px', fontSize: '13px', fontWeight: 600, color: '#1E293B', outline: 'none' }}
-                            placeholder="Set temporary password"
-                            value={drawerForm.password}
-                            onChange={e => setDrawerForm(prev => ({ ...prev, password: e.target.value }))}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => togglePasswordVisibility('addUserDrawer')}
-                            style={{
-                              position: 'absolute',
-                              right: '10px',
-                              top: '12px',
-                              background: 'none',
-                              border: 'none',
-                              cursor: 'pointer',
-                              padding: '4px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#64748B'
-                            }}
-                          >
-                            <LucideIcon name={showPasswords['addUserDrawer'] ? 'eye-off' : 'eye'} style={{ width: '15px', height: '15px' }} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Phone Inputs */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>PHONE NUMBER</label>
-                        <div style={{ position: 'relative' }}>
-                          <LucideIcon name="phone" style={{ position: 'absolute', left: '12px', top: '13px', width: '14px', height: '14px', color: '#94A3B8' }} />
-                          <input 
-                            type="text" 
-                            style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px 0 34px', fontSize: '13px', fontWeight: 600, color: '#1E293B', outline: 'none' }}
-                            placeholder="e.g. +1 (555) 000-0000"
-                            value={drawerForm.phone}
-                            onChange={e => setDrawerForm(prev => ({ ...prev, phone: e.target.value }))}
-                          />
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>SECONDARY PHONE</label>
-                        <div style={{ position: 'relative' }}>
-                          <LucideIcon name="phone" style={{ position: 'absolute', left: '12px', top: '13px', width: '14px', height: '14px', color: '#94A3B8' }} />
-                          <input 
-                            type="text" 
-                            style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px 0 34px', fontSize: '13px', fontWeight: 600, color: '#1E293B', outline: 'none' }}
-                            placeholder="e.g. +1 (555)"
-                            value={drawerForm.secPhone}
-                            onChange={e => setDrawerForm(prev => ({ ...prev, secPhone: e.target.value }))}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Role Assignment */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
-                      <LucideIcon name="key" style={{ width: '16px', height: '16px', color: '#2563EB' }} />
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#1E293B', letterSpacing: '0.05em' }}>ROLE ASSIGNMENT</span>
-                    </div>
-
-                    {/* Roles Grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-                      {[
-                        { id: 'Administrator', icon: 'shield', desc: 'Full access & administrative controls' },
-                        { id: 'Doctor', icon: 'stethoscope', desc: 'Clinical documentation & workflows' },
-                        { id: 'Receptionist', icon: 'phone', desc: 'Front-desk booking & appointments' },
-                        { id: 'Pharmacist', icon: 'pill', desc: 'Inventory control & dispensing' },
-                        { id: 'Laboratory', icon: 'beaker', desc: 'Diagnostic testing & reporting' }
-                      ].map(role => {
-                        const isSelected = drawerForm.role === role.id;
-                        return (
-                          <div 
-                            key={role.id}
-                            onClick={() => setDrawerForm(prev => ({ ...prev, role: role.id }))}
-                            style={{ 
-                              border: isSelected ? '1px solid #2563EB' : '1px solid #E2E8F0', 
-                              borderRadius: '10px', 
-                              padding: '14px', 
-                              cursor: 'pointer', 
-                              position: 'relative', 
-                              background: '#FFFFFF',
-                              boxShadow: isSelected ? '0 0 0 3px rgba(37, 99, 235, 0.1)' : 'none',
-                              transition: 'all 0.2s ease-in-out'
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                              <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: isSelected ? '#EFF6FF' : '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <LucideIcon name={role.icon} style={{ width: '14px', height: '14px', color: isSelected ? '#2563EB' : '#64748B' }} />
-                              </div>
-                              <div style={{ 
-                                width: '12px', 
-                                height: '12px', 
-                                borderRadius: '50%', 
-                                border: isSelected ? '3px solid #2563EB' : '1.5px solid #CBD5E1', 
-                                background: '#FFFFFF' 
-                              }} />
-                            </div>
-                            <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#1E293B', display: 'block' }}>{role.id}</span>
-                            <span style={{ fontSize: '10px', fontWeight: 500, color: '#64748B', marginTop: '2px', display: 'block', lineHeight: '1.2' }}>{role.desc}</span>
-                          </div>
-                        );
-                      })}
-                      
-                      {/* More Roles Button */}
-                      <div style={{ border: '1px dashed #CBD5E1', borderRadius: '10px', padding: '14px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', background: '#F8FAFC' }}>
-                        <LucideIcon name="plus" style={{ width: '14px', height: '14px', color: '#64748B' }} />
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B' }}>+ More Roles</span>
-                      </div>
-                    </div>
-
-                    {/* Restricted Departments */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <select style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', fontSize: '13px', fontWeight: 600, color: '#1E293B', outline: 'none', background: '#FFFFFF' }}>
-                        <option>Select restricted departments...</option>
-                        <option>Pediatrics</option>
-                        <option>Cardiology</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Recommended Module Permissions */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
-                      <LucideIcon name="shield-check" style={{ width: '16px', height: '16px', color: '#2563EB' }} />
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#1E293B', letterSpacing: '0.05em' }}>RECOMMENDED MODULE PERMISSIONS</span>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                      {/* Clinical Columns */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.05em' }}>-- CLINICAL</span>
-                        
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>EHR Access</span>
-                            <span style={{ fontSize: '9.5px', color: '#94A3B8', fontWeight: 500 }}>Read & write patient logs</span>
-                          </div>
-                          <ToggleSwitch checked={drawerForm.ehrAccess} onChange={val => setDrawerForm(prev => ({ ...prev, ehrAccess: val }))} />
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>Prescriptions</span>
-                            <span style={{ fontSize: '9.5px', color: '#94A3B8', fontWeight: 500 }}>Issue medicine & pharmacy orders</span>
-                          </div>
-                          <ToggleSwitch checked={drawerForm.prescriptions} onChange={val => setDrawerForm(prev => ({ ...prev, prescriptions: val }))} />
-                        </div>
-                      </div>
-
-                      {/* Admin Columns */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.05em' }}>-- ADMINISTRATION</span>
-                        
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>User Management</span>
-                            <span style={{ fontSize: '9.5px', color: '#94A3B8', fontWeight: 500 }}>Manage staff accounts</span>
-                          </div>
-                          <ToggleSwitch checked={drawerForm.userMgmt} onChange={val => setDrawerForm(prev => ({ ...prev, userMgmt: val }))} />
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>System Settings</span>
-                            <span style={{ fontSize: '9.5px', color: '#94A3B8', fontWeight: 500 }}>Access system configuration panel</span>
-                          </div>
-                          <ToggleSwitch checked={drawerForm.systemSettings} onChange={val => setDrawerForm(prev => ({ ...prev, systemSettings: val }))} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Right Panel: Live User Summary */}
-                <div style={{ width: '320px', background: '#F8FAFC', borderLeft: '1px solid #E2E8F0', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', flexShrink: 0, overflowY: 'auto' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px' }}>
-                    <LucideIcon name="eye" style={{ width: '14px', height: '14px', color: '#64748B' }} />
-                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', letterSpacing: '0.05em' }}>LIVE USER SUMMARY</span>
-                  </div>
-
-                  <div>
-                    <h4 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                      {drawerForm.firstName || ''} {drawerForm.lastName || ''}
-                    </h4>
-                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, display: 'block', marginTop: '2px' }}>
-                      EMPLOYEE ID: <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>EMP-2026-003</span>
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px' }}>
-                    <div>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#94A3B8', display: 'block', textTransform: 'uppercase' }}>ROLE</span>
-                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#2563EB', background: '#EFF6FF', padding: '2px 8px', borderRadius: '4px', display: 'inline-block', marginTop: '4px' }}>
-                        {drawerForm.role}
-                      </span>
-                    </div>
-
-                    <div>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#94A3B8', display: 'block', textTransform: 'uppercase' }}>DEPARTMENT</span>
-                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155', display: 'block', marginTop: '2px' }}>
-                        {drawerForm.department}
-                      </span>
-                    </div>
-
-                    <div>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#94A3B8', display: 'block', textTransform: 'uppercase' }}>ACCOUNT STATUS</span>
-                      <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#10B981', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
-                        ACTIVE
-                      </span>
-                    </div>
-
-                    <div>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#94A3B8', display: 'block', textTransform: 'uppercase' }}>ACCESS PRIVILEGES</span>
-                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155', display: 'block', marginTop: '2px' }}>
-                        {(() => {
-                          const activePerms = [drawerForm.ehrAccess, drawerForm.prescriptions, drawerForm.userMgmt, drawerForm.systemSettings].filter(Boolean).length;
-                          return `${activePerms * 3} Modules`;
-                        })()}
-                      </span>
-                    </div>
-
-                    <div>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#94A3B8', display: 'block', textTransform: 'uppercase' }}>LICENSING ALLOCATION</span>
-                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155', display: 'block', marginTop: '2px' }}>
-                        12 / {(wizardHospital && wizardHospital.staffLimit) || 100} Seats
-                      </span>
-                    </div>
-
-                    <div>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#94A3B8', display: 'block', textTransform: 'uppercase' }}>SECURITY LEVEL</span>
-                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155', display: 'block', marginTop: '2px' }}>
-                        {(() => {
-                          if (drawerForm.role === 'Administrator') return 'LEVEL 01';
-                          if (drawerForm.role === 'Doctor') return 'LEVEL 02';
-                          if (drawerForm.role === 'Pharmacist') return 'LEVEL 03';
-                          return 'LEVEL 04';
-                        })()}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Profile Completeness progress bar */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: 'auto' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 700, color: '#475569' }}>
-                      <span>Profile Completeness</span>
-                      <span>
-                        {(() => {
-                          let comp = 0;
-                          if (drawerForm.firstName) comp += 15;
-                          if (drawerForm.lastName) comp += 15;
-                          if (drawerForm.email) comp += 20;
-                          if (drawerForm.phone) comp += 20;
-                          if (drawerForm.secPhone) comp += 10;
-                          if (drawerForm.department) comp += 10;
-                          if (drawerForm.role) comp += 10;
-                          return `${comp}%`;
-                        })()}
-                      </span>
-                    </div>
-                    <div style={{ height: '6px', width: '100%', background: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{ 
-                        height: '100%', 
-                        width: (() => {
-                          let comp = 0;
-                          if (drawerForm.firstName) comp += 15;
-                          if (drawerForm.lastName) comp += 15;
-                          if (drawerForm.email) comp += 20;
-                          if (drawerForm.phone) comp += 20;
-                          if (drawerForm.secPhone && drawerForm.secPhone !== '+1 (555)') comp += 10;
-                          if (drawerForm.department) comp += 10;
-                          if (drawerForm.role) comp += 10;
-                          return `${comp}%`;
-                        })(), 
-                        background: '#10B981', 
-                        borderRadius: '3px',
-                        transition: 'width 0.3s ease'
-                      }} />
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Drawer Footer */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderTop: '1px solid #E2E8F0', background: '#FFFFFF', flexShrink: 0 }}>
-                <div style={{ display: 'flex', gap: '16px' }}>
-                  <button type="button" onClick={() => setIsAddUserDrawerOpen(false)} style={{ background: 'none', border: 'none', color: '#64748B', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
-                  <button type="button" onClick={() => { showToast('Draft saved successfully.', 'success'); setIsAddUserDrawerOpen(false); }} style={{ background: 'none', border: 'none', color: '#64748B', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>Save Draft</button>
-                </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <button 
-                    type="button" 
-                    onClick={handleCreateOnboardingUser}
-                    style={{ background: '#FFFFFF', border: '1.5px solid #2563EB', color: '#2563EB', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Create & Invite
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={handleCreateOnboardingUser}
-                    style={{ background: '#2563EB', border: 'none', color: '#FFFFFF', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Create User
-                  </button>
-                </div>
-              </div>
-
-            </div>
+        {/* Add Employee Full-Screen Overlay (opens StaffOnboardingPage) */}
+        {isAddUserDrawerOpen && (
+          <div 
+            style={{ 
+              position: 'fixed', 
+              top: 0, 
+              left: 0, 
+              right: 0, 
+              bottom: 0, 
+              zIndex: 99999, 
+              background: '#F8FAFC', 
+              overflowY: 'auto'
+            }}
+          >
+            <StaffOnboardingPage 
+              hospitalName={wizardHospital?.name || 'Hospital'}
+              backLabel="Back to Hospital Onboarding"
+              availableRoles={[
+                { value: 'doctor', label: 'Doctor' },
+                { value: 'receptionist', label: 'Receptionist' },
+                { value: 'nurse', label: 'Nurse' },
+                { value: 'hr', label: 'HR Manager' },
+                { value: 'pharmacist', label: 'Pharmacist' },
+                { value: 'laboratory', label: 'Lab Technician' },
+                { value: 'admin', label: 'Hospital Admin' },
+                { value: 'staff', label: 'Other Employee' }
+              ]}
+              showToast={showToast}
+              onCancel={() => setIsAddUserDrawerOpen(false)}
+              onSubmit={handleAddOnboardingStaff}
+              onStaffCreated={() => setIsAddUserDrawerOpen(false)}
+            />
           </div>
+        )}
+
       {toast && (
         <div style={{
           position: 'fixed',
