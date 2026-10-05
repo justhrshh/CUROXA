@@ -169,18 +169,48 @@ const allocateDoctorToken = async ({ tenantId, doctorId, date, time }) => {
     }
   }
 
-  // Atomic findOneAndUpdate with capacity check on slot counter
+  // Check slot capacity limit
+  const queueDocCheck = await DoctorQueue.findOne({
+    tenantId: normalizedTenant,
+    doctorId,
+    date: dateStr
+  });
+
+  const currentSlotCount = queueDocCheck && queueDocCheck.slotCounters
+    ? (typeof queueDocCheck.slotCounters.get === 'function'
+        ? queueDocCheck.slotCounters.get(slotKey)
+        : queueDocCheck.slotCounters[slotKey]) || 0
+    : 0;
+
+  if (currentSlotCount >= slotCapacity) {
+    throw new Error(`Slot '${targetSlot.cleanSlot}' has reached its maximum capacity of ${slotCapacity} patients for ${dateStr}.`);
+  }
+
+  // Token starts from 1 daily per doctor.
+  // Find highest assigned token in Appointment for this doctor on this date
+  const maxExistingApp = await Appointment.findOne({
+    tenantId: normalizedTenant,
+    doctorId,
+    tokenDate: dateStr,
+    tokenNumber: { $type: 'number' }
+  }).sort({ tokenNumber: -1 });
+
+  const currentMaxToken = (maxExistingApp && maxExistingApp.tokenNumber > 0)
+    ? maxExistingApp.tokenNumber
+    : 0;
+
+  const baseToken = Math.max(queueDocCheck?.lastIssuedToken || 0, currentMaxToken);
+  const tokenNumber = baseToken + 1; // Strictly 1, 2, 3... daily sequential per doctor
+
+  // Atomically update DoctorQueue with new lastIssuedToken and slot counter
   const queueDoc = await DoctorQueue.findOneAndUpdate(
     {
       tenantId: normalizedTenant,
       doctorId,
-      date: dateStr,
-      $or: [
-        { [`slotCounters.${slotKey}`]: { $exists: false } },
-        { [`slotCounters.${slotKey}`]: { $lt: slotCapacity } }
-      ]
+      date: dateStr
     },
     {
+      $set: { lastIssuedToken: tokenNumber },
       $inc: { [`slotCounters.${slotKey}`]: 1 }
     },
     {
@@ -188,34 +218,11 @@ const allocateDoctorToken = async ({ tenantId, doctorId, date, time }) => {
     }
   );
 
-  if (!queueDoc) {
-    throw new Error(`Slot '${targetSlot.cleanSlot}' has reached its maximum capacity of ${slotCapacity} patients for ${dateStr}.`);
-  }
-
-  // Get the counter value for this slot
-  const slotCount = queueDoc.slotCounters ? (
-    typeof queueDoc.slotCounters.get === 'function'
-      ? queueDoc.slotCounters.get(slotKey)
-      : queueDoc.slotCounters[slotKey]
-  ) : 1;
-
-  const tokenNumber = slotStart + (slotCount - 1);
-
-  if (tokenNumber > slotEnd) {
-    throw new Error(`Allocated token ${tokenNumber} exceeds slot ending boundary ${slotEnd}`);
-  }
-
-  // Update lastIssuedToken if higher
-  if (!queueDoc.lastIssuedToken || tokenNumber > queueDoc.lastIssuedToken) {
-    queueDoc.lastIssuedToken = tokenNumber;
-  }
-
   // If no patient is currently serving, initialize currentToken to this token
   if (queueDoc.currentToken === null) {
     queueDoc.currentToken = tokenNumber;
+    await queueDoc.save();
   }
-
-  await queueDoc.save();
 
   // Refresh live queue calculations
   await syncDoctorQueueState(normalizedTenant, doctorId, dateStr);
@@ -423,6 +430,19 @@ const getDoctorQueueState = async (tenantId, doctorId, date, patientToken = null
     }
   }
 
+  // Count total patients checked in today for this doctor across all statuses
+  const startOfDay = new Date(`${dateStr}T00:00:00.000Z`);
+  const endOfDay = new Date(`${dateStr}T23:59:59.999Z`);
+  const totalCheckedInToday = await Appointment.countDocuments({
+    tenantId: normalizedTenant,
+    doctorId,
+    tokenNumber: { $ne: null },
+    $or: [
+      { tokenDate: dateStr },
+      { date: { $gte: startOfDay, $lte: endOfDay } }
+    ]
+  });
+
   return {
     tenantId: normalizedTenant,
     doctorId,
@@ -440,6 +460,7 @@ const getDoctorQueueState = async (tenantId, doctorId, date, patientToken = null
     waitingCount: syncResult.waitingCount,
     patientsAhead,
     lastIssuedToken: queueDoc.lastIssuedToken || 0,
+    totalCheckedInToday,
     slotCounters: queueDoc.slotCounters || {},
     queueAppointments: (syncResult.eligibleAppointments || []).map(a => {
       const p = a.patientId;

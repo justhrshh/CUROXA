@@ -2242,11 +2242,11 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     else if (['patients', 'patient-details'].includes(activeTab)) { main = "Patients"; sub = "Global hospital patient registry & EMR records"; }
     else if (activeTab === 'workforce') {
       if (selectedStaffProfile) {
-        main = "Staff Profile Workspace";
+        main = "Employee Profile Workspace";
         sub = `Employee details & metrics for ${selectedStaffProfile.name}`;
       } else {
         main = "Workforce";
-        sub = "Staff directory & active employee accounts";
+        sub = "Employee directory & active employee accounts";
       }
     }
     else if (activeTab === 'financials') { main = "Revenue"; sub = "Hospital financial ledger & revenue analytics"; }
@@ -11505,7 +11505,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                       </div>
                       <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'workforce' ? 700 : 600, color: activeTab === 'workforce' ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
-                        Staff
+                        Employees
                       </span>
                     </div>
                     <div 
@@ -12240,7 +12240,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 }}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                <span>Manage / Add Staff</span>
+                <span>Manage / Add Employee</span>
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '-2px' }}><polyline points="9 18 15 12 9 6"/></svg>
               </button>
             </div>
@@ -13806,7 +13806,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                         </div>
-                        <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">Total Staff</span>
+                        <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">Total Employees</span>
                       </div>
 
                       <div className="mt-3 flex items-end justify-between">
@@ -13996,7 +13996,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       <input
                         type="text"
                         className="w-full h-9 pl-9 pr-8 bg-slate-50/80 border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                        placeholder="Search staff by name, role, department..."
+                        placeholder="Search employees by name, role, department..."
                         value={staffSearchQuery}
                         onChange={e => {
                           setStaffSearchQuery(e.target.value);
@@ -14034,7 +14034,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                           <option value="receptionist">Receptionists</option>
                           <option value="hr">HR Managers</option>
                           <option value="dpo">DPO Managers</option>
-                          <option value="staff">Other Staff</option>
+                          <option value="staff">Other Employees</option>
                         </select>
                         <svg className="absolute right-2.5 w-3.5 h-3.5 text-slate-500 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                           <path d="m6 9 6 6 6-6"/>
@@ -14099,7 +14099,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         </button>
                       )}
 
-                      {/* + Add Staff CTA */}
+                      {/* + Add Employee CTA */}
                       <button
                         className="h-9 px-4 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-md shadow-blue-500/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
                         onClick={() => {
@@ -14108,21 +14108,21 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         }}
                       >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                        Add Staff Member
+                        Add Employee
                       </button>
                     </div>
                   </div>
 
-                  {/* 3. STAFF DIRECTORY CARD */}
+                  {/* 3. EMPLOYEE DIRECTORY CARD */}
                   <div className="staff-dir-card">
                     <div className="staff-dir-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                       <div className="staff-dir-title-box">
                         <h3 className="staff-dir-title">
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                          Staff Directory
+                          Employee Directory
                         </h3>
                         <span className="staff-dir-badge">
-                          {filteredStaffList.length} {filteredStaffList.length === 1 ? 'staff member' : 'staff members'}
+                          {filteredStaffList.length} {filteredStaffList.length === 1 ? 'employee' : 'employees'}
                         </span>
                       </div>
 
@@ -14153,7 +14153,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                           e.currentTarget.style.background = '#FFFFFF';
                           e.currentTarget.style.borderColor = '#BFDBFE';
                         }}
-                        title="Export filtered staff records"
+                        title="Export filtered employee records"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -14169,7 +14169,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         <thead>
                           <tr>
                             <th style={{ width: '44px', textAlign: 'center' }}>#</th>
-                            <th>STAFF</th>
+                            <th>EMPLOYEE</th>
                             <th>ROLE</th>
                             <th>DEPARTMENT</th>
                             <th>CONTACT</th>
@@ -14185,7 +14185,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                           {paginatedStaff.length === 0 ? (
                             <tr>
                               <td colSpan="11" style={{ padding: '36px 0', textAlign: 'center', color: '#94A3B8', fontWeight: 700, fontSize: '13px' }}>
-                                No staff members found matching the selected filters.
+                                No employees found matching the selected filters.
                               </td>
                             </tr>
                           ) : (
@@ -14224,7 +14224,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                                           {item.name}
                                         </div>
                                         <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 550, marginTop: '1px', whiteSpace: 'nowrap' }}>
-                                          {item.designation || (item.role === 'doctor' ? 'Consultant Practitioner' : item.role === 'hr' ? 'HR Manager' : item.role === 'receptionist' ? 'Front Desk Staff' : 'Staff Member')}
+                                          {item.designation || (item.role === 'doctor' ? 'Consultant Practitioner' : item.role === 'hr' ? 'HR Manager' : item.role === 'receptionist' ? 'Front Desk Staff' : 'Employee')}
                                         </div>
                                       </div>
                                     </div>
@@ -14308,7 +14308,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                                       <button
                                         className="staff-btn-view"
                                         onClick={() => setSelectedStaffProfile(item)}
-                                        title="View Full Staff Profile"
+                                        title="View Full Employee Profile"
                                       >
                                         View Profile
                                       </button>
@@ -14332,7 +14332,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                                             doctorSlots: item.doctorSlots || []
                                           });
                                         }}
-                                        title="Edit Staff Information"
+                                        title="Edit Employee Information"
                                       >
                                         Edit
                                       </button>
@@ -14372,7 +14372,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                                               }}
                                             >
                                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-                                              Notify Staff
+                                              Notify Employee
                                             </button>
 
                                             {item.role !== 'admin' && (
@@ -14405,8 +14405,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     <div className="pat-pagination-footer">
                       <div className="pat-pagination-info">
                         {filteredStaffList.length > 0
-                          ? `Showing ${(staffPage - 1) * staffPageSize + 1}–${Math.min(staffPage * staffPageSize, filteredStaffList.length)} of ${filteredStaffList.length} staff`
-                          : 'Showing 0 staff'}
+                          ? `Showing ${(staffPage - 1) * staffPageSize + 1}–${Math.min(staffPage * staffPageSize, filteredStaffList.length)} of ${filteredStaffList.length} employees`
+                          : 'Showing 0 employees'}
                       </div>
 
                       {totalStaffPages > 1 && (
@@ -16097,38 +16097,48 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             filterEnd = new Date(now.getTime());
           }
 
-                    // --- 1B. COMBINED FINANCIAL LEDGER (BILLS + PHARMACY SALES) ---
+          // --- 1B. COMBINED FINANCIAL LEDGER (BILLS + PHARMACY SALES) ---
           const combinedRevenueLedger = [
-            ...bills.map(b => ({
-              ...b,
-              _sourceType: 'BILL',
-              _recordDate: b.createdAt || b.date || new Date().toISOString(),
-              _patientName: b.patientId?.name || 'Walk-in Patient',
-              _totalAmt: Number(b.totalAmount) || 0,
-              _paidAmt: b.status === 'Paid' ? (Number(b.totalAmount) || 0) : 0,
-              _discAmt: Number(b.discountAmount || b.discount) || 0,
-              _status: b.status === 'Paid' ? 'Paid' : (b.status === 'Cancelled' ? 'Cancelled' : 'Unpaid'),
-              _payMode: b.paymentMethod || b.paymentMode || 'Cash',
-              _dept: b.department || 'OPD'
-            })),
-            ...(pharmacySales || []).map(s => ({
-              ...s,
-              _sourceType: 'PHARMACY_SALE',
-              _recordDate: s.saleDate || s.createdAt || new Date().toISOString(),
-              _patientName: s.customerName || s.patientId?.name || 'Walk-in Customer',
-              _totalAmt: Number(s.grandTotal) || 0,
-              _paidAmt: s.status === 'COMPLETED' ? (Number(s.grandTotal) || 0) : 0,
-              _discAmt: Number(s.totalDiscount) || 0,
-              _status: s.status === 'COMPLETED' ? 'Paid' : (s.status === 'CANCELLED' ? 'Cancelled' : 'Unpaid'),
-              _payMode: s.paymentMethod || 'Cash',
-              _dept: 'Pharmacy',
-              items: (s.items || []).map(it => ({
-                description: it.medicineName || 'Medicine Item',
-                amount: Number(it.netAmount) || (Number(it.quantity) * Number(it.mrp)) || 0,
-                quantity: it.quantity || 1,
-                department: 'Pharmacy'
-              }))
-            }))
+            ...bills.map(b => {
+              const isPaid = (b.status || '').toLowerCase() === 'paid';
+              const isCancelled = (b.status || '').toLowerCase() === 'cancelled';
+              const totAmt = Number(b.totalAmount) || 0;
+              return {
+                ...b,
+                _sourceType: 'BILL',
+                _recordDate: b.createdAt || b.date || new Date().toISOString(),
+                _patientName: b.patientId?.name || 'Walk-in Patient',
+                _totalAmt: totAmt,
+                _paidAmt: isPaid ? totAmt : 0,
+                _discAmt: Number(b.discountAmount || b.discount) || 0,
+                _status: isPaid ? 'Paid' : (isCancelled ? 'Cancelled' : 'Unpaid'),
+                _payMode: b.paymentMethod || b.paymentMode || 'Cash',
+                _dept: b.department || 'OPD'
+              };
+            }),
+            ...(pharmacySales || []).map(s => {
+              const isPaid = (s.paymentStatus || '').toUpperCase() === 'PAID' || (s.status || '').toUpperCase() === 'COMPLETED';
+              const isCancelled = (s.status || '').toUpperCase() === 'CANCELLED' || (s.paymentStatus || '').toUpperCase() === 'REFUNDED';
+              const grandTot = Number(s.grandTotal) || 0;
+              return {
+                ...s,
+                _sourceType: 'PHARMACY_SALE',
+                _recordDate: s.saleDate || s.createdAt || new Date().toISOString(),
+                _patientName: s.customerName || s.patientId?.name || 'Walk-in Customer',
+                _totalAmt: grandTot,
+                _paidAmt: isPaid ? grandTot : 0,
+                _discAmt: Number(s.totalDiscount) || 0,
+                _status: isPaid ? 'Paid' : (isCancelled ? 'Cancelled' : 'Unpaid'),
+                _payMode: s.paymentMethod || 'Cash',
+                _dept: 'Pharmacy',
+                items: (s.items || []).map(it => ({
+                  description: it.medicineName || 'Medicine Item',
+                  amount: Number(it.netAmount) || (Number(it.quantity) * Number(it.mrp)) || 0,
+                  quantity: it.quantity || 1,
+                  department: 'Pharmacy'
+                }))
+              };
+            })
           ];
 
           // --- 2. FILTERING ENGINE ---
@@ -16225,39 +16235,152 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           const activePaymentMix = Object.values(paymentCollectionCounts).filter(p => p.amount > 0);
           const paymentMixTotal = Math.max(collectedRevenue, 1);
 
-          // --- 5. REVENUE BY DEPARTMENT (WHERE MONEY WAS GENERATED) ---
-          let opdRevenue = 0;
-          let labsRevenue = 0;
-          let pharmacyRevenue = 0;
-          let proceduresRevenue = 0;
+          // --- 5. DEPARTMENT-WISE COLLECTIONS & FINANCIAL AGGREGATIONS ---
+          const deptStats = {
+            opd: {
+              key: 'opd',
+              label: 'OPD / Consultation',
+              shortLabel: 'OPD Consultation',
+              filterValue: 'opd',
+              collected: 0,
+              total: 0,
+              pending: 0,
+              paidCount: 0,
+              totalCount: 0,
+              color: '#2563EB',
+              badgeColor: 'text-blue-700 bg-blue-50 border-blue-200'
+            },
+            labs: {
+              key: 'labs',
+              label: 'Laboratory & Diagnostics',
+              shortLabel: 'Lab Tests',
+              filterValue: 'lab',
+              collected: 0,
+              total: 0,
+              pending: 0,
+              paidCount: 0,
+              totalCount: 0,
+              color: '#8B5CF6',
+              badgeColor: 'text-purple-700 bg-purple-50 border-purple-200'
+            },
+            pharmacy: {
+              key: 'pharmacy',
+              label: 'Pharmacy Dispense',
+              shortLabel: 'Pharmacy Store',
+              filterValue: 'pharmacy',
+              collected: 0,
+              total: 0,
+              pending: 0,
+              paidCount: 0,
+              totalCount: 0,
+              color: '#10B981',
+              badgeColor: 'text-emerald-700 bg-emerald-50 border-emerald-200'
+            },
+            procedures: {
+              key: 'procedures',
+              label: 'Services & Procedures',
+              shortLabel: 'Booked Services',
+              filterValue: 'procedures',
+              collected: 0,
+              total: 0,
+              pending: 0,
+              paidCount: 0,
+              totalCount: 0,
+              color: '#F59E0B',
+              badgeColor: 'text-amber-700 bg-amber-50 border-amber-200'
+            }
+          };
 
           filteredRevenueBills.forEach(b => {
+            const isPaid = (b._status || '').toLowerCase() === 'paid';
+            const totalAmt = Number(b._totalAmt) || 0;
+            const paidAmt = isPaid ? (Number(b._paidAmt) || totalAmt) : 0;
+            const pendingAmt = isPaid ? 0 : totalAmt;
+
+            // Direct Pharmacy Sales or explicit Pharmacy department bills
             if (b._dept === 'Pharmacy' || b._sourceType === 'PHARMACY_SALE') {
-              pharmacyRevenue += (b._totalAmt || 0);
-            } else {
-              (b.items || []).forEach(item => {
-                const desc = (item.description || '').toLowerCase();
-                const amt = item.amount || 0;
-                if (desc.includes('consult') || desc.includes('regis')) {
-                  opdRevenue += amt;
-                } else if (desc.includes('lab') || desc.includes('diagnost') || desc.includes('test')) {
-                  labsRevenue += amt;
-                } else if (desc.includes('rx') || desc.includes('dispense') || desc.includes('pharmacy') || desc.includes('medicine')) {
-                  pharmacyRevenue += amt;
-                } else {
-                  proceduresRevenue += amt;
-                }
-              });
+              deptStats.pharmacy.total += totalAmt;
+              deptStats.pharmacy.collected += paidAmt;
+              deptStats.pharmacy.pending += pendingAmt;
+              deptStats.pharmacy.totalCount += 1;
+              if (isPaid) deptStats.pharmacy.paidCount += 1;
+              return;
             }
+
+            // Bills with line items
+            if (Array.isArray(b.items) && b.items.length > 0) {
+              const rawItemsSum = b.items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+              const scaleFactor = rawItemsSum > 0 ? (totalAmt / rawItemsSum) : 1;
+
+              const touchedDepts = new Set();
+              b.items.forEach(it => {
+                const desc = (it.description || '').toLowerCase();
+                const rawAmt = Number(it.amount) || 0;
+                const netItemAmt = rawAmt * scaleFactor;
+                const netPaidItemAmt = isPaid ? netItemAmt : 0;
+                const netPendingItemAmt = isPaid ? 0 : netItemAmt;
+
+                let targetKey = 'procedures';
+                if (desc.includes('procedure') || desc.includes('service') || desc.includes('dental') || desc.includes('physio') || desc.includes('therapy')) {
+                  targetKey = 'procedures';
+                } else if (desc.includes('consult') || desc.includes('regis') || desc.includes('doctor') || desc.includes('opd') || desc.includes('visit') || desc.includes('follow')) {
+                  targetKey = 'opd';
+                } else if (desc.includes('lab') || desc.includes('diagnost') || desc.includes('test') || desc.includes('blood') || desc.includes('urine') || desc.includes('patholog') || desc.includes('scan') || desc.includes('x-ray') || desc.includes('mri') || desc.includes('ct') || desc.includes('ecg')) {
+                  targetKey = 'labs';
+                } else if (desc.includes('rx') || desc.includes('dispense') || desc.includes('pharmacy') || desc.includes('medicine') || desc.includes('tablet') || desc.includes('capsule') || desc.includes('syrup') || desc.includes('pharma') || desc.includes('inj')) {
+                  targetKey = 'pharmacy';
+                } else {
+                  targetKey = 'procedures';
+                }
+
+                deptStats[targetKey].total += netItemAmt;
+                deptStats[targetKey].collected += netPaidItemAmt;
+                deptStats[targetKey].pending += netPendingItemAmt;
+                touchedDepts.add(targetKey);
+              });
+
+              touchedDepts.forEach(k => {
+                deptStats[k].totalCount += 1;
+                if (isPaid) deptStats[k].paidCount += 1;
+              });
+              return;
+            }
+
+            // Fallback for bills without line items
+            let fallbackKey = 'opd';
+            const deptLower = (b._dept || '').toLowerCase();
+            if (deptLower.includes('lab') || deptLower.includes('test') || deptLower.includes('diagnos')) {
+              fallbackKey = 'labs';
+            } else if (deptLower.includes('pharmacy') || deptLower.includes('med')) {
+              fallbackKey = 'pharmacy';
+            } else if (deptLower.includes('procedure') || deptLower.includes('surger') || deptLower.includes('service') || deptLower.includes('dental')) {
+              fallbackKey = 'procedures';
+            } else {
+              fallbackKey = 'opd';
+            }
+
+            deptStats[fallbackKey].total += totalAmt;
+            deptStats[fallbackKey].collected += paidAmt;
+            deptStats[fallbackKey].pending += pendingAmt;
+            deptStats[fallbackKey].totalCount += 1;
+            if (isPaid) deptStats[fallbackKey].paidCount += 1;
           });
 
+          const opdRevenue = deptStats.opd.total;
+          const labsRevenue = deptStats.labs.total;
+          const pharmacyRevenue = deptStats.pharmacy.total;
+          const proceduresRevenue = deptStats.procedures.total;
+
+          const totalDeptCollected = Object.values(deptStats).reduce((sum, d) => sum + d.collected, 0);
+          const safeTotalDeptCollected = Math.max(totalDeptCollected, 1);
+
           const deptItems = [
-            { label: 'OPD / Consultation', amount: opdRevenue, color: '#2563EB', key: 'opd' },
-            { label: 'Laboratory Tests', amount: labsRevenue, color: '#8B5CF6', key: 'labs' },
-            { label: 'Pharmacy Dispense', amount: pharmacyRevenue, color: '#10B981', key: 'pharmacy' },
-            { label: 'Procedures & Other', amount: proceduresRevenue, color: '#F59E0B', key: 'procedures' }
+            { label: 'OPD / Consultation', amount: Math.round(deptStats.opd.collected), totalBilled: Math.round(deptStats.opd.total), pending: Math.round(deptStats.opd.pending), color: '#2563EB', key: 'opd', count: deptStats.opd.paidCount, totalCount: deptStats.opd.totalCount },
+            { label: 'Laboratory Tests', amount: Math.round(deptStats.labs.collected), totalBilled: Math.round(deptStats.labs.total), pending: Math.round(deptStats.labs.pending), color: '#8B5CF6', key: 'labs', count: deptStats.labs.paidCount, totalCount: deptStats.labs.totalCount },
+            { label: 'Pharmacy Dispense', amount: Math.round(deptStats.pharmacy.collected), totalBilled: Math.round(deptStats.pharmacy.total), pending: Math.round(deptStats.pharmacy.pending), color: '#10B981', key: 'pharmacy', count: deptStats.pharmacy.paidCount, totalCount: deptStats.pharmacy.totalCount },
+            { label: 'Services & Procedures', amount: Math.round(deptStats.procedures.collected), totalBilled: Math.round(deptStats.procedures.total), pending: Math.round(deptStats.procedures.pending), color: '#F59E0B', key: 'procedures', count: deptStats.procedures.paidCount, totalCount: deptStats.procedures.totalCount }
           ];
-          const deptTotal = Math.max(totalGenerated, 1);
+          const deptTotal = Math.max(collectedRevenue, 1);
           const rankedDepts = [...deptItems].sort((a, b) => b.amount - a.amount);
 
           // --- 6. SMART CHART GRANULARITY ENGINE ---
@@ -16412,29 +16535,38 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           return (
             <div className="admin-dashboard-content active" style={{ animation: 'slideUp 0.35s ease-out' }}>
 
-              {/* 1. TOP 5 KPI CARDS ROW MATCHING DASHBOARD VISUAL LANGUAGE */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full mb-5">
-                {/* Card 1: Total Revenue (Electric Blue Gradient with Bottom-Right Radial Glow) */}
+              {/* 1. TOP DEPARTMENT-WISE COLLECTION KPI CARDS ROW */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full mb-4">
+                {/* Card 1: OPD / Consultation Collection */}
                 <div
-                  className="p-4 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer ${
+                    revenueSelectedDeptFilter.toLowerCase() === 'opd'
+                      ? 'border-blue-500 ring-2 ring-blue-500 shadow-lg shadow-blue-500/20 -translate-y-1'
+                      : 'border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5'
+                  }`}
                   style={{
                     background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)'
                   }}
-                  onClick={() => { setRevenueSelectedStatusFilter('All'); }}
-                  title="Filter all revenue transactions"
+                  onClick={() => setRevenueSelectedDeptFilter(revenueSelectedDeptFilter === 'opd' ? 'All' : 'opd')}
+                  title="Click to filter OPD / Consultation bills"
                 >
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                      </div>
+                      <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">OPD Collection</span>
                     </div>
-                    <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">Total Revenue</span>
+                    <span className="text-[10px] font-black text-blue-800 bg-blue-100/90 px-1.5 py-0.5 rounded-md border border-blue-200">
+                      {totalDeptCollected > 0 ? Math.round((deptStats.opd.collected / safeTotalDeptCollected) * 100) : 0}% share
+                    </span>
                   </div>
 
                   <div className="mt-3 flex items-end justify-between">
                     <div>
-                      <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">₹{totalGenerated.toLocaleString()}</div>
+                      <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">₹{Math.round(deptStats.opd.collected).toLocaleString()}</div>
                       <div className="text-xs text-blue-700 font-bold mt-1.5 truncate">
-                        Billed in period
+                        {deptStats.opd.paidCount} paid · ₹{Math.round(deptStats.opd.pending).toLocaleString()} pending
                       </div>
                     </div>
 
@@ -16442,12 +16574,12 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     <div className="w-14 h-8 shrink-0 relative">
                       <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                         <defs>
-                          <linearGradient id="revBlueGrad" x1="0" y1="0" x2="0" y2="1">
+                          <linearGradient id="revOpdGrad" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
                             <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
                           </linearGradient>
                         </defs>
-                        <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#revBlueGrad)" />
+                        <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#revOpdGrad)" />
                         <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
                       </svg>
                     </div>
@@ -16462,122 +16594,36 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   />
                 </div>
 
-                {/* Card 2: Collected Revenue (Emerald Gradient with Top-Right Radial Glow) */}
+                {/* Card 2: Laboratory Tests Collection */}
                 <div
-                  className="p-4 rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
-                  style={{
-                    background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)'
-                  }}
-                  onClick={() => { setRevenueSelectedStatusFilter('Paid'); }}
-                  title="Filter paid collections"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    </div>
-                    <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider">Collected Revenue</span>
-                  </div>
-
-                  <div className="mt-3 flex items-end justify-between">
-                    <div>
-                      <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">₹{collectedRevenue.toLocaleString()}</div>
-                      <div className="text-xs text-emerald-700 font-bold mt-1.5 truncate">
-                        {collectionRate}% efficiency
-                      </div>
-                    </div>
-
-                    {/* Green Mini Sparkline */}
-                    <div className="w-14 h-8 shrink-0 relative">
-                      <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                        <defs>
-                          <linearGradient id="revGreenGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#059669" stopOpacity="0.45"/>
-                            <stop offset="100%" stopColor="#059669" stopOpacity="0.05"/>
-                          </linearGradient>
-                        </defs>
-                        <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#revGreenGrad)" />
-                        <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#059669" strokeWidth="2.4" strokeLinecap="round" />
-                      </svg>
-                    </div>
-                  </div>
-
-                  {/* Half Gradient Accent Line Beneath Card */}
-                  <div 
-                    className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
-                    style={{
-                      background: 'linear-gradient(90deg, transparent 0%, #059669 100%)'
-                    }}
-                  />
-                </div>
-
-                {/* Card 3: Pending Collections (Amber Gradient with Bottom-Left Radial Glow) */}
-                <div
-                  className="p-4 rounded-2xl border border-amber-200/90 shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
-                  style={{
-                    background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)'
-                  }}
-                  onClick={() => { setRevenueSelectedStatusFilter('Pending'); }}
-                  title="Filter pending collections"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/25">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
-                    </div>
-                    <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">Pending Collections</span>
-                  </div>
-
-                  <div className="mt-3 flex items-end justify-between">
-                    <div>
-                      <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">₹{pendingRevenue.toLocaleString()}</div>
-                      <div className="text-xs text-amber-700 font-bold mt-1.5 truncate">
-                        {unpaidTransactions} invoice{unpaidTransactions !== 1 ? 's' : ''} due
-                      </div>
-                    </div>
-
-                    {/* Amber Mini Sparkline */}
-                    <div className="w-14 h-8 shrink-0 relative">
-                      <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                        <defs>
-                          <linearGradient id="revAmberGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#D97706" stopOpacity="0.45"/>
-                            <stop offset="100%" stopColor="#D97706" stopOpacity="0.05"/>
-                          </linearGradient>
-                        </defs>
-                        <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22 L 64 32 L 0 32 Z" fill="url(#revAmberGrad)" />
-                        <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22" fill="none" stroke="#D97706" strokeWidth="2.4" strokeLinecap="round" />
-                      </svg>
-                    </div>
-                  </div>
-
-                  {/* Half Gradient Accent Line Beneath Card */}
-                  <div 
-                    className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
-                    style={{
-                      background: 'linear-gradient(90deg, transparent 0%, #D97706 100%)'
-                    }}
-                  />
-                </div>
-
-                {/* Card 4: Transactions (Purple Gradient with Top-Left Radial Glow) */}
-                <div
-                  className="p-4 rounded-2xl border border-purple-200/90 shadow-[0_12px_28px_rgba(139,92,246,0.08)] hover:shadow-[0_16px_36px_rgba(139,92,246,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer ${
+                    revenueSelectedDeptFilter.toLowerCase() === 'lab'
+                      ? 'border-purple-500 ring-2 ring-purple-500 shadow-lg shadow-purple-500/20 -translate-y-1'
+                      : 'border-purple-200/90 shadow-[0_12px_28px_rgba(139,92,246,0.08)] hover:shadow-[0_16px_36px_rgba(139,92,246,0.16)] hover:-translate-y-0.5'
+                  }`}
                   style={{
                     background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)'
                   }}
-                  title="Transaction volume"
+                  onClick={() => setRevenueSelectedDeptFilter(revenueSelectedDeptFilter === 'lab' ? 'All' : 'lab')}
+                  title="Click to filter Laboratory bills"
                 >
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/25">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/25">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2v7.31L4.66 18.2a2 2 0 0 0 1.71 2.8h11.26a2 2 0 0 0 1.71-2.8L14 9.31V2"/><line x1="8.5" y1="2" x2="15.5" y2="2"/></svg>
+                      </div>
+                      <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider">Lab Collection</span>
                     </div>
-                    <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider">Transactions</span>
+                    <span className="text-[10px] font-black text-purple-800 bg-purple-100/90 px-1.5 py-0.5 rounded-md border border-purple-200">
+                      {totalDeptCollected > 0 ? Math.round((deptStats.labs.collected / safeTotalDeptCollected) * 100) : 0}% share
+                    </span>
                   </div>
 
                   <div className="mt-3 flex items-end justify-between">
                     <div>
-                      <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{totalTransactions}</div>
+                      <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">₹{Math.round(deptStats.labs.collected).toLocaleString()}</div>
                       <div className="text-xs text-purple-700 font-bold mt-1.5 truncate">
-                        {paidTransactions} paid · {unpaidTransactions} pend
+                        {deptStats.labs.paidCount} paid · ₹{Math.round(deptStats.labs.pending).toLocaleString()} pending
                       </div>
                     </div>
 
@@ -16585,12 +16631,12 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     <div className="w-14 h-8 shrink-0 relative">
                       <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                         <defs>
-                          <linearGradient id="revPurpleGrad" x1="0" y1="0" x2="0" y2="1">
+                          <linearGradient id="revLabGrad" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.45"/>
                             <stop offset="100%" stopColor="#7C3AED" stopOpacity="0.05"/>
                           </linearGradient>
                         </defs>
-                        <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#revPurpleGrad)" />
+                        <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#revLabGrad)" />
                         <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#7C3AED" strokeWidth="2.4" strokeLinecap="round" />
                       </svg>
                     </div>
@@ -16605,40 +16651,50 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   />
                 </div>
 
-                {/* Card 5: Discounts / Adjustments (Slate Gradient with Bottom-Right Radial Glow) */}
+                {/* Card 3: Pharmacy Dispense Collection */}
                 <div
-                  className="p-4 rounded-2xl border border-slate-200/90 shadow-[0_12px_28px_rgba(100,116,139,0.08)] hover:shadow-[0_16px_36px_rgba(100,116,139,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer ${
+                    revenueSelectedDeptFilter.toLowerCase() === 'pharmacy'
+                      ? 'border-emerald-500 ring-2 ring-emerald-500 shadow-lg shadow-emerald-500/20 -translate-y-1'
+                      : 'border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5'
+                  }`}
                   style={{
-                    background: 'radial-gradient(circle at 100% 100%, rgba(100, 116, 139, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 50%, #E2E8F0 100%)'
+                    background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)'
                   }}
-                  title="Discounts & fee adjustments"
+                  onClick={() => setRevenueSelectedDeptFilter(revenueSelectedDeptFilter === 'pharmacy' ? 'All' : 'pharmacy')}
+                  title="Click to filter Pharmacy sales & items"
                 >
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-slate-700 to-slate-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-slate-500/25">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>
+                      </div>
+                      <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider">Pharmacy Collection</span>
                     </div>
-                    <span className="text-[10px] font-extrabold text-slate-900 uppercase tracking-wider">Discounts</span>
+                    <span className="text-[10px] font-black text-emerald-800 bg-emerald-100/90 px-1.5 py-0.5 rounded-md border border-emerald-200">
+                      {totalDeptCollected > 0 ? Math.round((deptStats.pharmacy.collected / safeTotalDeptCollected) * 100) : 0}% share
+                    </span>
                   </div>
 
                   <div className="mt-3 flex items-end justify-between">
                     <div>
-                      <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">₹{totalDiscount.toLocaleString()}</div>
-                      <div className="text-xs text-slate-700 font-bold mt-1.5 truncate">
-                        Cap: {allowedDiscountPercent}% limit
+                      <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">₹{Math.round(deptStats.pharmacy.collected).toLocaleString()}</div>
+                      <div className="text-xs text-emerald-700 font-bold mt-1.5 truncate">
+                        {deptStats.pharmacy.paidCount} paid · ₹{Math.round(deptStats.pharmacy.pending).toLocaleString()} pending
                       </div>
                     </div>
 
-                    {/* Slate Mini Sparkline */}
+                    {/* Green Mini Sparkline */}
                     <div className="w-14 h-8 shrink-0 relative">
                       <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                         <defs>
-                          <linearGradient id="revSlateGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#475569" stopOpacity="0.45"/>
-                            <stop offset="100%" stopColor="#475569" stopOpacity="0.05"/>
+                          <linearGradient id="revPharmGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#059669" stopOpacity="0.45"/>
+                            <stop offset="100%" stopColor="#059669" stopOpacity="0.05"/>
                           </linearGradient>
                         </defs>
-                        <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#revSlateGrad)" />
-                        <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#475569" strokeWidth="2.4" strokeLinecap="round" />
+                        <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#revPharmGrad)" />
+                        <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#059669" strokeWidth="2.4" strokeLinecap="round" />
                       </svg>
                     </div>
                   </div>
@@ -16647,9 +16703,184 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   <div 
                     className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
                     style={{
-                      background: 'linear-gradient(90deg, transparent 0%, #475569 100%)'
+                      background: 'linear-gradient(90deg, transparent 0%, #059669 100%)'
                     }}
                   />
+                </div>
+
+                {/* Card 4: Services & Procedures (Booked Services) Collection */}
+                <div
+                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer ${
+                    revenueSelectedDeptFilter.toLowerCase() === 'procedures'
+                      ? 'border-amber-500 ring-2 ring-amber-500 shadow-lg shadow-amber-500/20 -translate-y-1'
+                      : 'border-amber-200/90 shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5'
+                  }`}
+                  style={{
+                    background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)'
+                  }}
+                  onClick={() => setRevenueSelectedDeptFilter(revenueSelectedDeptFilter === 'procedures' ? 'All' : 'procedures')}
+                  title="Click to filter Booked Services & Clinical Procedures (Dental, Physiotherapy, Nursing, Minor Surgeries, etc.)"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/25">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                      </div>
+                      <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">Booked Services</span>
+                    </div>
+                    <span className="text-[10px] font-black text-amber-800 bg-amber-100/90 px-1.5 py-0.5 rounded-md border border-amber-200">
+                      {totalDeptCollected > 0 ? Math.round((deptStats.procedures.collected / safeTotalDeptCollected) * 100) : 0}% share
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex items-end justify-between">
+                    <div>
+                      <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">₹{Math.round(deptStats.procedures.collected).toLocaleString()}</div>
+                      <div className="text-xs text-amber-700 font-bold mt-1.5 truncate">
+                        {deptStats.procedures.paidCount} paid · ₹{Math.round(deptStats.procedures.pending).toLocaleString()} pending
+                      </div>
+                    </div>
+
+                    {/* Amber Mini Sparkline */}
+                    <div className="w-14 h-8 shrink-0 relative">
+                      <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                        <defs>
+                          <linearGradient id="revProcGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#D97706" stopOpacity="0.45"/>
+                            <stop offset="100%" stopColor="#D97706" stopOpacity="0.05"/>
+                          </linearGradient>
+                        </defs>
+                        <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22 L 64 32 L 0 32 Z" fill="url(#revProcGrad)" />
+                        <path d="M 0 28 Q 12 28, 20 26 T 38 18 T 50 14 T 64 22" fill="none" stroke="#D97706" strokeWidth="2.4" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Half Gradient Accent Line Beneath Card */}
+                  <div 
+                    className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                    style={{
+                      background: 'linear-gradient(90deg, transparent 0%, #D97706 100%)'
+                    }}
+                  />
+                </div>
+
+                {/* Card 5: Total Hospital Collections (Grand Realized Total) */}
+                <div
+                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer ${
+                    revenueSelectedDeptFilter === 'All'
+                      ? 'border-teal-400 ring-2 ring-teal-500/60 shadow-lg shadow-teal-500/15'
+                      : 'border-teal-200/90 shadow-[0_12px_28px_rgba(13,148,136,0.08)] hover:shadow-[0_16px_36px_rgba(13,148,136,0.16)] hover:-translate-y-0.5'
+                  }`}
+                  style={{
+                    background: 'radial-gradient(circle at 100% 100%, rgba(13, 148, 136, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F0FDFA 50%, #CCFBF1 100%)'
+                  }}
+                  onClick={() => setRevenueSelectedDeptFilter('All')}
+                  title="Click to view all collections across hospital"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-teal-700 to-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-teal-500/25">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+                      </div>
+                      <span className="text-[10px] font-extrabold text-teal-900 uppercase tracking-wider">Total Collections</span>
+                    </div>
+                    <span className="text-[10px] font-black text-teal-800 bg-teal-100/90 px-1.5 py-0.5 rounded-md border border-teal-200">
+                      {collectionRate}% realized
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex items-end justify-between">
+                    <div>
+                      <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">₹{collectedRevenue.toLocaleString()}</div>
+                      <div className="text-xs text-teal-800 font-bold mt-1.5 truncate">
+                        Billed: ₹{totalGenerated.toLocaleString()} · {paidTransactions} paid
+                      </div>
+                    </div>
+
+                    {/* Teal Mini Sparkline */}
+                    <div className="w-14 h-8 shrink-0 relative">
+                      <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                        <defs>
+                          <linearGradient id="revTotGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#0D9488" stopOpacity="0.45"/>
+                            <stop offset="100%" stopColor="#0D9488" stopOpacity="0.05"/>
+                          </linearGradient>
+                        </defs>
+                        <path d="M 0 24 Q 14 22, 22 18 T 38 12 T 50 16 T 64 8 L 64 32 L 0 32 Z" fill="url(#revTotGrad)" />
+                        <path d="M 0 24 Q 14 22, 22 18 T 38 12 T 50 16 T 64 8" fill="none" stroke="#0D9488" strokeWidth="2.4" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Half Gradient Accent Line Beneath Card */}
+                  <div 
+                    className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                    style={{
+                      background: 'linear-gradient(90deg, transparent 0%, #0D9488 100%)'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* 1B. EXECUTIVE FINANCIAL SUMMARY BANNER */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-3.5 bg-gradient-to-r from-slate-50 via-white to-slate-50 rounded-2xl border border-slate-200/90 shadow-2xs mb-5">
+                <div className="flex items-center gap-3 px-2 border-r border-slate-200/70 last:border-none">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200/80 flex items-center justify-center shrink-0 text-blue-600">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Total Billed</div>
+                    <div className="text-base font-black text-slate-900 tracking-tight leading-tight">₹{totalGenerated.toLocaleString()}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 px-2 border-r border-slate-200/70 last:border-none">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center shrink-0 text-emerald-600">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Recovery Efficiency</div>
+                    <div className="text-base font-black text-emerald-700 tracking-tight leading-tight">
+                      {collectionRate}% <span className="text-[10.5px] font-bold text-slate-400">realized</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 px-2 border-r border-slate-200/70 last:border-none">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-center shrink-0 text-amber-600">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Pending Receivables</div>
+                    <div className="text-base font-black text-amber-700 tracking-tight leading-tight">
+                      ₹{pendingRevenue.toLocaleString()} <span className="text-[10.5px] font-bold text-slate-400">({unpaidTransactions} due)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 px-2 border-r border-slate-200/70 last:border-none">
+                  <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-200/80 flex items-center justify-center shrink-0 text-purple-600">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Total Transactions</div>
+                    <div className="text-base font-black text-slate-900 tracking-tight leading-tight">
+                      {totalTransactions} <span className="text-[10.5px] font-bold text-slate-400">({paidTransactions} paid)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 px-2 col-span-2 sm:col-span-1 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-600">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Discounts Given</div>
+                    <div className="text-base font-black text-slate-900 tracking-tight leading-tight">
+                      ₹{totalDiscount.toLocaleString()} <span className="text-[10.5px] font-bold text-slate-400">(Cap: {allowedDiscountPercent}%)</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -16814,7 +17045,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         <option value="opd">OPD / Consultation</option>
                         <option value="lab">Laboratory</option>
                         <option value="pharmacy">Pharmacy</option>
-                        <option value="procedures">Procedures</option>
+                        <option value="procedures">Booked Services & Procedures</option>
                       </select>
                       <svg className="absolute right-2.5 w-3.5 h-3.5 text-slate-500 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="m6 9 6 6 6-6"/>
@@ -16848,7 +17079,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         <option value="consultation">Consultation Fees</option>
                         <option value="lab">Diagnostic & Tests</option>
                         <option value="pharmacy">Medicine Purchases</option>
-                        <option value="procedures">Clinical Procedures</option>
+                        <option value="procedures">Booked Services & Procedures</option>
                       </select>
                       <svg className="absolute right-2.5 w-3.5 h-3.5 text-slate-500 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="m6 9 6 6 6-6"/>
@@ -16879,7 +17110,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 {/* Active Ledger Badge */}
                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200/70 rounded-xl text-xs text-slate-600 font-semibold shrink-0">
                   <span>Active Ledger:</span>
-                  <strong className="text-slate-900 font-extrabold">{currentUser?.tenantName || subscription?.name || 'clinic-2'}</strong>
+                  <strong className="text-slate-900 font-extrabold">{currentUser?.tenantName || subscription?.name || localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE'}</strong>
                 </div>
               </div>
 
@@ -17235,25 +17466,39 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </button>
                 </div>
 
-                {/* 7. REVENUE BY DEPARTMENT (WHERE MONEY WAS GENERATED) */}
+                {/* 7. COLLECTIONS BY DEPARTMENT (WHERE MONEY WAS REALIZED) */}
                 <div className="rev-card">
                   <div className="rev-card-header">
                     <h3 className="rev-card-title">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                      Revenue by Department
+                      Collections by Department
                     </h3>
-                    <span className="rev-card-badge" style={{ background: '#FFFBEB', color: '#D97706' }}>
-                      Ranked
+                    <span className="rev-card-badge" style={{ background: '#EFF6FF', color: '#2563EB', border: '1px solid #DBEAFE' }}>
+                      {rankedDepts.length} Units
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
                     {rankedDepts.map((dept, idx) => {
                       const pct = Math.round((dept.amount / deptTotal) * 100);
+                      const isFiltered = revenueSelectedDeptFilter.toLowerCase() === dept.key.toLowerCase();
                       return (
-                        <div key={idx} className="rev-dept-row">
+                        <div 
+                          key={idx} 
+                          className="rev-dept-row"
+                          style={{
+                            cursor: 'pointer',
+                            padding: '4px 6px',
+                            borderRadius: '8px',
+                            background: isFiltered ? '#F8FAFC' : 'transparent',
+                            border: isFiltered ? `1px solid ${dept.color}40` : '1px solid transparent',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onClick={() => setRevenueSelectedDeptFilter(isFiltered ? 'All' : dept.key)}
+                          title={`Click to filter ${dept.label}`}
+                        >
                           <div className="rev-dept-meta">
-                            <span style={{ fontSize: '11.5px', color: '#334155' }}>
+                            <span style={{ fontSize: '11.5px', color: '#334155', display: 'flex', alignItems: 'center' }}>
                               <strong style={{ color: '#94A3B8', marginRight: '5px' }}>#{idx + 1}</strong>
                               {dept.label}
                             </span>
@@ -17261,9 +17506,14 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                               ₹{dept.amount.toLocaleString()} <span style={{ color: '#94A3B8', fontWeight: 600 }}>({pct}%)</span>
                             </span>
                           </div>
-                          <div className="rev-dept-track">
-                            <div className="rev-dept-fill" style={{ width: `${pct}%`, background: dept.color }} />
+                          <div className="rev-dept-track" style={{ marginTop: '4px' }}>
+                            <div className="rev-dept-fill" style={{ width: `${Math.min(pct, 100)}%`, background: dept.color }} />
                           </div>
+                          {dept.pending > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2px', fontSize: '9.5px', color: '#D97706', fontWeight: 700 }}>
+                              ₹{dept.pending.toLocaleString()} pending
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -26729,9 +26979,9 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
               // Dynamic breakdown based on selected timeframe
               const breakdown = (() => {
                 const paidBills = bills.filter(b => {
-                  if (b.status !== 'Paid') return false;
+                  if ((b.status || '').toLowerCase() !== 'paid') return false;
                   if (revenueTimeframe === 'today') {
-                    const bd = new Date(b.createdAt);
+                    const bd = new Date(b.createdAt || b.date);
                     const today = new Date();
                     return bd.getDate() === today.getDate() &&
                            bd.getMonth() === today.getMonth() &&
@@ -26746,27 +26996,47 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 let discountAmount = 0;
                 
                 paidBills.forEach(b => {
-                  discountAmount += (b.discountAmount || 0);
-                  (b.items || []).forEach(item => {
-                    const desc = (item.description || '').toLowerCase();
-                    const amt = item.amount || 0;
-                    if (desc.includes('consult') || desc.includes('regis')) {
-                      opd += amt;
-                    } else if (desc.includes('lab') || desc.includes('diagnost')) {
-                      labsVal += amt;
-                    } else if (desc.includes('rx') || desc.includes('dispense') || desc.includes('pharmacy')) {
-                      pharmacy += amt;
-                    } else {
-                      procedures += amt;
+                  discountAmount += (Number(b.discountAmount || b.discount) || 0);
+                  const isPharmDept = (b.department || '').toLowerCase().includes('pharm');
+                  if (isPharmDept) {
+                    pharmacy += (Number(b.totalAmount) || 0);
+                  } else {
+                    (b.items || []).forEach(item => {
+                      const desc = (item.description || '').toLowerCase();
+                      const amt = Number(item.amount) || 0;
+                      if (desc.includes('consult') || desc.includes('regis')) {
+                        opd += amt;
+                      } else if (desc.includes('lab') || desc.includes('diagnost') || desc.includes('test')) {
+                        labsVal += amt;
+                      } else if (desc.includes('rx') || desc.includes('dispense') || desc.includes('pharmacy') || desc.includes('medicine')) {
+                        pharmacy += amt;
+                      } else {
+                        procedures += amt;
+                      }
+                    });
+                  }
+                });
+
+                // Also incorporate completed pharmacy sales
+                (pharmacySales || []).forEach(s => {
+                  const isPaidSale = (s.paymentStatus || '').toUpperCase() === 'PAID' || (s.status || '').toUpperCase() === 'COMPLETED';
+                  if (!isPaidSale) return;
+                  if (revenueTimeframe === 'today') {
+                    const sd = new Date(s.saleDate || s.createdAt);
+                    const today = new Date();
+                    if (!(sd.getDate() === today.getDate() && sd.getMonth() === today.getMonth() && sd.getFullYear() === today.getFullYear())) {
+                      return;
                     }
-                  });
+                  }
+                  pharmacy += (Number(s.grandTotal) || 0);
+                  discountAmount += (Number(s.totalDiscount) || 0);
                 });
                 
                 const pending = bills
                   .filter(b => {
-                    if (b.status !== 'Unpaid') return false;
+                    if ((b.status || '').toLowerCase() !== 'unpaid') return false;
                     if (revenueTimeframe === 'today') {
-                      const bd = new Date(b.createdAt);
+                      const bd = new Date(b.createdAt || b.date);
                       const today = new Date();
                       return bd.getDate() === today.getDate() &&
                              bd.getMonth() === today.getMonth() &&
@@ -26774,7 +27044,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     }
                     return true;
                   })
-                  .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+                  .reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
                   
                 return { opd, labs: labsVal, pharmacy, procedures, pending, discountAmount };
               })();

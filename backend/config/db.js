@@ -145,7 +145,8 @@ const initializeDatabase = async (conn) => {
   const dropIndexPromises = [
     mongoose.connection.db.collection('users').dropIndex('staff_id_1').catch(() => {}),
     mongoose.connection.db.collection('medicines').dropIndex('sku_1').catch(() => {}),
-    mongoose.connection.db.collection('indents').dropIndex('indentId_1').catch(() => {})
+    mongoose.connection.db.collection('indents').dropIndex('indentId_1').catch(() => {}),
+    mongoose.connection.db.collection('vendorquotations').dropIndex('tenantId_1_quotationNo_1').catch(() => {})
   ];
   await Promise.all(dropIndexPromises);
   console.log('Stale global unique indexes dropped in background.');

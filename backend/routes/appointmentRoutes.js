@@ -1560,6 +1560,7 @@ router.get('/doctor-queue/:doctorId', async (req, res) => {
       waitingCount: queueState.waitingCount,
       patientsAhead: queueState.patientsAhead,
       lastIssuedToken: queueState.lastIssuedToken,
+      totalCheckedInToday: queueState.totalCheckedInToday || 0,
       slotRanges,
       slotCounters: queueState.slotCounters || {},
       queueAppointments: isPatientRole ? undefined : (queueState.queueAppointments || [])

@@ -2617,36 +2617,61 @@ const DoctorDashboard = () => {
   };
 
   const handleLoadPrescriptionForEdit = (rx, relatedLabs) => {
+    if (!rx) return;
     setEditingPrescriptionId(rx._id);
-    setEditingAppointmentId(rx.appointmentId);
-    if (rx.appointmentId) {
-      setActiveAppointmentId(rx.appointmentId);
-    }
-    const patientRef = rx.patientId?._id || rx.patientId;
-    const relatedPatient = patientRef ? (patients.find(p => p._id === patientRef) || patientsList.find(p => p._id === patientRef)) : null;
-    if (relatedPatient) {
-      setSelectedPatient(relatedPatient);
+
+    // Resolve appointment ID (can be object or string)
+    const rawAppId = rx.appointmentId?._id || rx.appointmentId;
+    const appIdStr = rawAppId ? String(rawAppId) : null;
+    setEditingAppointmentId(appIdStr);
+    if (appIdStr) {
+      setActiveAppointmentId(appIdStr);
     }
 
+    // Resolve patient object comprehensively
+    const patientRef = rx.patientId?._id || rx.patientId;
+    const patientIdStr = patientRef ? String(patientRef) : '';
+    const foundPatient = (patients || []).find(p => String(p._id) === patientIdStr) || 
+                         (patientsList || []).find(p => String(p._id) === patientIdStr) ||
+                         (typeof rx.patientId === 'object' && rx.patientId?.name ? rx.patientId : null);
+    
+    if (foundPatient) {
+      setSelectedPatient(foundPatient);
+    } else if (patientRef) {
+      setSelectedPatient({
+        _id: patientIdStr,
+        name: typeof rx.patientId === 'object' ? rx.patientId.name : 'Patient',
+        gender: rx.patientId?.gender || 'Unknown',
+        age: rx.patientId?.age || ''
+      });
+    }
+
+    // Map medicines safely with defaults for frequency & timing
     if (rx.items && rx.items.length > 0) {
       const loadedMeds = rx.items.map((item, idx) => {
         let freq = 'Once a Day';
         if (item.instructions) {
-          if (item.instructions.includes('Twice') || item.instructions.includes('BD')) freq = 'Twice a Day';
-          else if (item.instructions.includes('Thrice') || item.instructions.includes('TDS')) freq = 'Thrice a Day';
-          else if (item.instructions.includes('Four') || item.instructions.includes('QD')) freq = 'Four times a Day';
+          const instUpper = item.instructions.toUpperCase();
+          if (instUpper.includes('TWICE') || instUpper.includes('BD')) freq = 'Twice a Day';
+          else if (instUpper.includes('THRICE') || instUpper.includes('TDS')) freq = 'Thrice a Day';
+          else if (instUpper.includes('FOUR') || instUpper.includes('QD') || instUpper.includes('QID')) freq = 'Four Times a Day';
+          else if (instUpper.includes('ONCE') || instUpper.includes('OD')) freq = 'Once a Day';
         }
         let timing = 'After Food';
-        if (item.instructions && item.instructions.includes('Before Food')) timing = 'Before Food';
+        if (item.instructions) {
+          const instUpper = item.instructions.toUpperCase();
+          if (instUpper.includes('BEFORE FOOD') || instUpper.includes('EMPTY STOMACH')) timing = 'Before Food';
+          else if (instUpper.includes('WITH FOOD')) timing = 'With Food';
+        }
 
         return {
-          id: idx + 1,
-          name: item.medicine,
-          dose: item.dosage,
+          id: Date.now() + idx + 1,
+          name: item.medicine || item.name || '',
+          dose: item.dosage || item.dose || '500 mg',
           freq: freq,
-          duration: item.duration,
+          duration: item.duration || '5 Days',
           timing: timing,
-          notes: ''
+          notes: item.notes || ''
         };
       });
       setMedicines(loadedMeds);
@@ -2654,27 +2679,35 @@ const DoctorDashboard = () => {
       setMedicines([]);
     }
 
-    if (relatedLabs && relatedLabs.length > 0) {
-      setLabs(relatedLabs.map(l => l.testName));
+    // Map labs from argument or rx.labs
+    const sourceLabs = relatedLabs || rx.labs || [];
+    if (sourceLabs && sourceLabs.length > 0) {
+      setLabs(sourceLabs.map(l => (typeof l === 'string' ? l : (l.testName || l.name || ''))).filter(Boolean));
     } else {
       setLabs([]);
     }
 
-    const relatedApp = rx.appointmentId ? appointments.find(a => a._id.toString() === rx.appointmentId.toString() || a._id === rx.appointmentId) : null;
-    if (relatedApp) {
-      setDiagnosisText(relatedApp.diagnosis || '');
-      setSoap({
-        subjective: '',
-        objective: '',
-        assessment: relatedApp.notes || '',
-        plan: ''
-      });
+    // Resolve appointment clinical notes & diagnosis
+    const relatedApp = appIdStr ? (appointments || []).find(a => String(a._id) === appIdStr) : null;
+    const resolvedDiagnosis = rx.diagnosis || relatedApp?.diagnosis || '';
+    const resolvedNotes = rx.notes || relatedApp?.notes || '';
+
+    setDiagnosisText(resolvedDiagnosis);
+    setSoap({
+      subjective: '',
+      objective: '',
+      assessment: resolvedNotes,
+      plan: ''
+    });
+
+    if (rx.status) {
+      setSendToPharmacy(rx.status !== 'Direct Patient');
     }
 
     setActiveTab('prescriptions');
     setShowTimelineModal(false);
-    showToastNotification("Prescription loaded for editing!", "info");
-    addLog(`Editing prescription ID: ${rx._id}`);
+    showToastNotification("Prescription loaded for editing! You can update medicines, labs, or diagnosis.", "info");
+    addLog(`Loaded prescription ${rx._id} for edit.`);
   };
 
   // Prescription Print & Formatting Settings
@@ -4355,6 +4388,23 @@ const DoctorDashboard = () => {
           notes: soap.plan || soap.assessment || ''
         });
         window.dispatchEvent(new CustomEvent('curoxa_sync', { detail: { type: 'appointments' } }));
+      }
+
+      // Explicitly broadcast prescription sync across all portals (Reception, Pharmacy, Patient, Doctor)
+      window.dispatchEvent(new CustomEvent('curoxa_sync', { 
+        detail: { 
+          type: 'prescriptions', 
+          action: editingPrescriptionId ? 'prescription_updated' : 'prescription_created',
+          prescriptionId: editingPrescriptionId || rxRecord?._id,
+          patientId: patientId,
+          appointmentId: resolvedAppId
+        } 
+      }));
+
+      // Broadcast billing and labs update to all open portals
+      window.dispatchEvent(new CustomEvent('curoxa_sync', { detail: { type: 'billing' } }));
+      if (validLabs.length > 0) {
+        window.dispatchEvent(new CustomEvent('curoxa_sync', { detail: { type: 'labs' } }));
       }
     };
 
@@ -9525,6 +9575,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
                 handleDoctorLetterheadUpload={handleDoctorLetterheadUpload}
                 handleRemoveDoctorLetterhead={handleRemoveDoctorLetterhead}
                 handlePrintPrescription={handlePrintPrescription}
+                editingPrescriptionId={editingPrescriptionId}
               />
             </div>
           ) : (() => {

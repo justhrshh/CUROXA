@@ -225,7 +225,7 @@ export default function MasterManagementView() {
 
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: viewMode === 'list' ? '8px' : '4px', width: '100%', minWidth: 0, paddingBottom: '4px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: viewMode === 'list' ? '8px' : '4px', width: '100%', minWidth: 0, paddingBottom: viewMode === 'list' ? '12px' : '90px' }}>
       {/* ── 1. SUB-NAVIGATION TABS (COMPACT) ── */}
       <div style={{
         display: 'flex',

@@ -753,9 +753,10 @@ router.post('/', async (req, res) => {
   } catch (err) {
     console.error('[VENDOR QUOTATION] Creation error:', err);
     if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern || err.keyValue || {}).join(', ');
       return res.status(409).json({
         success: false,
-        error: 'Duplicate line item detected: this quotation already contains this item.'
+        error: `Duplicate line item detected: this quotation already contains this item (${field || 'quotation item duplicate'}).`
       });
     }
     return res.status(500).json({

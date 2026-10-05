@@ -95,6 +95,7 @@ export default function StaffOnboardingPage({
     phone: '',
     staff_id: '',
     email: '',
+    joiningDate: new Date().toISOString().split('T')[0],
     password: '',
     confirmPassword: '',
     role: rolesList[0]?.value || 'doctor',
@@ -287,10 +288,11 @@ export default function StaffOnboardingPage({
       errors.phone = 'Phone number must be exactly 10 digits.';
     }
 
-    if (!formData.email.trim()) {
-      errors.email = 'Email address is required.';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
-      errors.email = 'Enter a valid email address.';
+    // Validate Email only if provided (Optional)
+    if (formData.email && formData.email.trim()) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+        errors.email = 'Enter a valid email address.';
+      }
     }
 
     if (!formData.password) {
@@ -332,7 +334,8 @@ export default function StaffOnboardingPage({
       name: formData.name.trim(),
       phone: formData.phone.trim(),
       staff_id: formData.phone.trim(),
-      email: formData.email.trim().toLowerCase(),
+      email: formData.email ? formData.email.trim().toLowerCase() : '',
+      joiningDate: formData.joiningDate || new Date().toISOString().split('T')[0],
       password: formData.password,
       role: formData.role,
       department: formData.department || (formData.role === 'doctor' ? (formData.specialty || 'General Medicine') : 'Administration'),
@@ -370,13 +373,13 @@ export default function StaffOnboardingPage({
       const createdUser = res.data;
 
       // Requirement 21: Show Success Toast
-      showToast('✓ Staff member added successfully.', 'success');
+      showToast('✓ Employee added successfully.', 'success');
 
-      // Requirement 23: Return to staff list and ensure visibility
+      // Return to employee list and ensure visibility
       onStaffCreated(createdUser);
     } catch (err) {
-      console.error('Staff creation error:', err);
-      const msg = err.response?.data?.error || err.message || 'Unable to add staff member. Please try again.';
+      console.error('Employee creation error:', err);
+      const msg = err.response?.data?.error || err.message || 'Unable to add employee. Please try again.';
       setFormError(msg);
       showToast(msg, 'error');
     } finally {
@@ -397,13 +400,13 @@ export default function StaffOnboardingPage({
               className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-300 hover:border-slate-400 px-3 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer mb-2"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Staff</span>
+              <span>Back to Employees</span>
             </button>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Add New Staff
+              Add New Employee
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Create login credentials, assign role and configure staff access.
+              Create login credentials, assign role and configure employee access.
             </p>
           </div>
 
@@ -440,7 +443,7 @@ export default function StaffOnboardingPage({
                   1. Account & Security
                 </h2>
                 <p className="text-xs text-slate-500 m-0 mt-0.5">
-                  Core login credentials and staff identity
+                  Core login credentials and employee identity
                 </p>
               </div>
             </div>
@@ -505,10 +508,10 @@ export default function StaffOnboardingPage({
                 )}
               </div>
 
-              {/* System Login ID / Staff ID (Auto-populated from phone) */}
+              {/* System Login ID / Employee ID (Auto-populated from phone) */}
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  System Login ID / Staff ID
+                  System Login ID / Employee ID
                 </label>
                 <div className="relative flex items-center">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 absolute left-3 pointer-events-none" />
@@ -636,7 +639,7 @@ export default function StaffOnboardingPage({
               </p>
             </div>
 
-            <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
               
               {/* Access Role - NO overlapping left icon */}
               <div>
@@ -658,17 +661,17 @@ export default function StaffOnboardingPage({
                 </div>
               </div>
 
-              {/* Hospital / Work Email */}
+              {/* Hospital / Work Email (Optional) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Work Email <span className="text-rose-500 font-black text-sm ml-0.5 select-none leading-none">*</span>
+                  Work Email <span className="text-slate-400 font-normal text-xs ml-1">(Optional)</span>
                 </label>
                 <div className="relative flex items-center">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
                   <input
                     type="email"
                     name="email"
-                    placeholder="staff.name@hospital.com"
+                    placeholder="employee.name@hospital.com"
                     value={formData.email}
                     onChange={e => {
                       setFormData({ ...formData, email: e.target.value });
@@ -702,6 +705,23 @@ export default function StaffOnboardingPage({
                     <option value="Visiting">Visiting Consultant</option>
                   </select>
                   <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Joining Date */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Joining Date
+                </label>
+                <div className="relative flex items-center">
+                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+                  <input
+                    type="date"
+                    name="joiningDate"
+                    value={formData.joiningDate}
+                    onChange={e => setFormData({ ...formData, joiningDate: e.target.value })}
+                    className="w-full h-9.5 pl-9 pr-3 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer"
+                  />
                 </div>
               </div>
 
@@ -802,7 +822,7 @@ export default function StaffOnboardingPage({
                     Weekly Off Days
                   </label>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Select the day(s) this staff member is not scheduled to attend duty.
+                    Select the day(s) this employee is not scheduled to attend duty.
                   </p>
                 </div>
 
@@ -1217,7 +1237,7 @@ export default function StaffOnboardingPage({
                 Cancel
               </button>
               <button
-                id="onboard-staff-submit-btn"
+                id="onboard-employee-submit-btn"
                 type="submit"
                 onClick={handleSubmit}
                 disabled={isSubmitting}
@@ -1226,10 +1246,10 @@ export default function StaffOnboardingPage({
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Adding Staff...</span>
+                    <span>Adding Employee...</span>
                   </>
                 ) : (
-                  <span>Add Staff</span>
+                  <span>Add Employee</span>
                 )}
               </button>
             </div>

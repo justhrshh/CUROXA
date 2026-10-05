@@ -14945,7 +14945,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             {/* SUPER ADMIN ITEM MASTER MODULE */}
             {isTabAllowed && (activeTab === 'item-master' || activeTab === 'masters' || activeTab === 'global-item-master') && (
-              <MasterManagementView />
+              <div style={{ width: '100%', minWidth: 0, paddingBottom: '60px' }}>
+                <MasterManagementView />
+              </div>
             )}
 
             {/* SUPER ADMIN VENDOR MASTER MODULE */}

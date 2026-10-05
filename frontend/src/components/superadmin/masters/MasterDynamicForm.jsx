@@ -78,6 +78,25 @@ function formatLabelDisplay(header) {
     .trim();
 }
 
+function getCategoryFallbackCode(cat) {
+  const rules = {
+    'Lab Operation': { prefix: '99', digits: 9 },
+    'Pharmacy': { prefix: '98', digits: 9 },
+    'Pathology': { prefix: '95', digits: 8 },
+    'Service': { prefix: '94', digits: 9 },
+    'Assets': { prefix: '73', digits: 10 }
+  };
+  const rule = rules[cat];
+  if (!rule) {
+    const year = new Date().getFullYear();
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    return `ITM-${year}-${rand}`;
+  }
+  const seqDigits = rule.digits - rule.prefix.length;
+  const seq = (Date.now() % Math.pow(10, seqDigits)).toString().padStart(seqDigits, '0');
+  return `${rule.prefix}${seq}`;
+}
+
 export default function MasterDynamicForm({
   category,
   department = '',
@@ -120,9 +139,6 @@ export default function MasterDynamicForm({
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState('');
   const [isDirty, setIsDirty] = useState(false);
-
-  // Stepper state: 1, 2, 3, 4, or 'all'
-  const [currentStep, setCurrentStep] = useState(1);
 
   const initialSnapshot = useRef(null);
 
@@ -171,6 +187,9 @@ export default function MasterDynamicForm({
     if (!initialValues['status']) {
       initialValues['status'] = 'Active';
     }
+    if (isCreate) {
+      initialValues['itemCode'] = initialValues['itemCode'] || formData.itemCode || getCategoryFallbackCode(category);
+    }
 
     setFormData(initialValues);
     initialSnapshot.current = JSON.stringify(initialValues);
@@ -178,12 +197,11 @@ export default function MasterDynamicForm({
     if (onDirtyChange) onDirtyChange(false);
     setErrors({});
     setServerError('');
-    setCurrentStep(1);
   }, [category, activeDepartment, initialData, fields]);
 
-  // Fetch concurrency-safe itemCode in create mode if empty
+  // Fetch concurrency-safe itemCode in create mode
   useEffect(() => {
-    if (isCreate && category && !formData.itemCode && !loadingCode) {
+    if (isCreate && category) {
       let isMounted = true;
       const fetchNextCode = async () => {
         try {
@@ -191,29 +209,39 @@ export default function MasterDynamicForm({
           const token = localStorage.getItem('token');
           const targetUrl = getApiUrl(`/superadmin/masters/next-code?category=${encodeURIComponent(category)}`);
           const res = await fetch(targetUrl, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {}
+            headers: token ? { Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}` } : {}
           });
           const contentType = res.headers.get('content-type') || '';
-          if (!contentType.includes('application/json')) {
-            throw new Error(`Non-JSON response (Status ${res.status})`);
-          }
-          const data = await res.json();
-          if (isMounted && data.success && data.nextCode) {
-            setFormData((prev) => ({
-              ...prev,
-              itemCode: data.nextCode
-            }));
+          if (contentType.includes('application/json')) {
+            const data = await res.json();
+            if (isMounted && data.success && data.nextCode) {
+              setFormData((prev) => ({
+                ...prev,
+                itemCode: data.nextCode
+              }));
+              return;
+            }
           }
         } catch (err) {
           console.warn('[MASTER FORM] Failed to fetch next code:', err.message);
         } finally {
           if (isMounted) setLoadingCode(false);
         }
+
+        // Fallback local code if server response wasn't set
+        if (isMounted) {
+          setFormData((prev) => {
+            if (!prev.itemCode || !String(prev.itemCode).trim()) {
+              return { ...prev, itemCode: getCategoryFallbackCode(category) };
+            }
+            return prev;
+          });
+        }
       };
       fetchNextCode();
       return () => { isMounted = false; };
     }
-  }, [isCreate, category, formData.itemCode]);
+  }, [isCreate, category]);
 
   // Handle department change within form
   const handleDepartmentChange = (newDept) => {
@@ -302,130 +330,6 @@ export default function MasterDynamicForm({
     ].filter((s) => s.fields.length > 0);
   }, [fields]);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // DYNAMIC STEP WIZARD DEFINITION (MATCHING VENDOR MASTER)
-  // ─────────────────────────────────────────────────────────────────────────────
-  const formSteps = useMemo(() => {
-    const stepsConfig = [];
-
-    // Step 1: Item Profile (General + Clinical)
-    const profileSections = sections.filter(s => s.id === 'general' || s.id === 'clinical');
-    if (profileSections.length > 0) {
-      const stepFields = profileSections.flatMap(s => s.fields);
-      const isMissingCode = !formData.itemCode?.toString().trim();
-      const isMissingName = !formData.itemName?.toString().trim();
-      const reqCount = 2; // itemCode + itemName
-      const missingCount = (isMissingCode ? 1 : 0) + (isMissingName ? 1 : 0);
-
-      stepsConfig.push({
-        step: 1,
-        id: 'profile',
-        shortTitle: '1. Item Profile',
-        title: 'Item Profile & Classification',
-        icon: 'package',
-        fieldCount: stepFields.length,
-        hasRequired: true,
-        requiredCount: reqCount,
-        isMissingRequired: missingCount > 0,
-        missingCount,
-        sections: profileSections
-      });
-    }
-
-    // Step 2: Manufacture & Equipment
-    const mfgSections = sections.filter(s => s.id === 'manufacturing');
-    if (mfgSections.length > 0) {
-      const stepFields = mfgSections.flatMap(s => s.fields);
-      stepsConfig.push({
-        step: stepsConfig.length + 1,
-        id: 'manufacturing',
-        shortTitle: `${stepsConfig.length + 1}. Manufacture & Model`,
-        title: 'Manufacture Detail & Equipment',
-        icon: 'factory',
-        fieldCount: stepFields.length,
-        hasRequired: false,
-        requiredCount: 0,
-        isMissingRequired: false,
-        missingCount: 0,
-        sections: mfgSections
-      });
-    }
-
-    // Step 3: Unit & Packaging
-    const unitSections = sections.filter(s => s.id === 'units');
-    if (unitSections.length > 0) {
-      const stepFields = unitSections.flatMap(s => s.fields);
-      stepsConfig.push({
-        step: stepsConfig.length + 1,
-        id: 'units',
-        shortTitle: `${stepsConfig.length + 1}. Unit & Packaging`,
-        title: 'Unit & Packaging Specification',
-        icon: 'boxes',
-        fieldCount: stepFields.length,
-        hasRequired: false,
-        requiredCount: 0,
-        isMissingRequired: false,
-        missingCount: 0,
-        sections: unitSections
-      });
-    }
-
-    // Step 4: Tax, Regulatory & Pricing
-    const regSections = sections.filter(s => s.id === 'regulatory' || s.id === 'pricing' || s.id === 'other');
-    if (regSections.length > 0) {
-      const stepFields = regSections.flatMap(s => s.fields);
-      stepsConfig.push({
-        step: stepsConfig.length + 1,
-        id: 'regulatory',
-        shortTitle: `${stepsConfig.length + 1}. Tax & Regulatory`,
-        title: 'Tax, Regulatory Compliance & Pricing',
-        icon: 'shield-check',
-        fieldCount: stepFields.length,
-        hasRequired: false,
-        requiredCount: 0,
-        isMissingRequired: false,
-        missingCount: 0,
-        sections: regSections
-      });
-    }
-
-    // Re-index steps to ensure 1, 2, 3, 4 sequential numbering
-    const indexed = stepsConfig.map((s, idx) => ({
-      ...s,
-      step: idx + 1,
-      shortTitle: s.shortTitle.replace(/^\d+/, `${idx + 1}`)
-    }));
-
-    // Add 'all' overview tab at the end
-    const totalFieldsCount = fields.length;
-    const isStep1Missing = !formData.itemCode?.toString().trim() || !formData.itemName?.toString().trim();
-    indexed.push({
-      step: 'all',
-      id: 'all',
-      shortTitle: 'All Sections',
-      title: 'Complete Overview (All Sections)',
-      icon: 'layers',
-      fieldCount: totalFieldsCount,
-      hasRequired: true,
-      requiredCount: 2,
-      isMissingRequired: isStep1Missing,
-      missingCount: isStep1Missing ? 1 : 0,
-      sections: sections
-    });
-
-    return indexed;
-  }, [sections, fields, formData.itemCode, formData.itemName]);
-
-  const activeStepConfig = useMemo(() => {
-    return formSteps.find(s => s.step === currentStep) || formSteps[0];
-  }, [formSteps, currentStep]);
-
-  // Determine which sections to render based on currentStep
-  const visibleSections = useMemo(() => {
-    if (currentStep === 'all') return sections;
-    return activeStepConfig?.sections || [];
-  }, [currentStep, activeStepConfig, sections]);
-
   // Form Submission
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -450,8 +354,7 @@ export default function MasterDynamicForm({
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      setServerError('Please fill all required fields (marked with red line) in Item Profile.');
-      setCurrentStep(1);
+      setServerError('Please fill all required fields (marked with red line).');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -748,14 +651,16 @@ export default function MasterDynamicForm({
               id={field.fieldKey}
               type={field.inputType === 'number' ? 'number' : 'text'}
               step={field.inputType === 'number' ? 'any' : undefined}
-              disabled={isFieldDisabled}
+              disabled={isFieldDisabled || field.fieldKey === 'itemCode'}
+              readOnly={field.fieldKey === 'itemCode'}
               placeholder={
                 field.fieldKey === 'itemCode' && loadingCode
-                  ? 'Auto-generating code...'
+                  ? 'Generating code...'
                   : field.placeholder || `Enter ${displayLabel}...`
               }
               value={value}
               onChange={e => {
+                if (field.fieldKey === 'itemCode') return; // Cannot edit itemCode
                 const val = e.target.value;
                 handleFieldChange(field.fieldKey, field.inputType === 'number' ? (val === '' ? '' : Number(val)) : val);
               }}
@@ -763,20 +668,44 @@ export default function MasterDynamicForm({
                 width: '100%',
                 height: '30px',
                 boxSizing: 'border-box',
-                padding: '0 8px',
+                padding: field.fieldKey === 'itemCode' ? '0 100px 0 8px' : '0 8px',
                 borderRadius: '4px',
                 border: errors[field.fieldKey] ? '1.5px solid #DC2626' : '1px solid #CBD5E1',
-                borderBottom: isRequired 
-                  ? (isMissingRequired ? '2.5px solid #DC2626' : '2px solid #10B981') 
-                  : '1px solid #CBD5E1',
-                background: isFieldDisabled ? '#F8FAFC' : '#FFFFFF',
+                borderBottom: field.fieldKey === 'itemCode'
+                  ? '2px solid #10B981'
+                  : isRequired 
+                    ? (isMissingRequired ? '2.5px solid #DC2626' : '2px solid #10B981') 
+                    : '1px solid #CBD5E1',
+                background: field.fieldKey === 'itemCode' ? '#F8FAFC' : (isFieldDisabled ? '#F8FAFC' : '#FFFFFF'),
                 fontSize: '11px',
                 color: '#0F172A',
                 outline: 'none',
+                cursor: field.fieldKey === 'itemCode' ? 'not-allowed' : (isFieldDisabled ? 'default' : 'text'),
                 fontFamily: field.fieldKey === 'itemCode' ? 'monospace' : 'inherit',
                 fontWeight: field.fieldKey === 'itemCode' ? 700 : 'normal'
               }}
             />
+          )}
+
+          {field.fieldKey === 'itemCode' && (
+            <span style={{
+              position: 'absolute',
+              right: '6px',
+              fontSize: '9px',
+              fontWeight: 750,
+              color: '#047857',
+              background: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              padding: '1.5px 6px',
+              borderRadius: '3px',
+              pointerEvents: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px'
+            }}>
+              <LucideIcon name="lock" size={9} />
+              Auto-Generated
+            </span>
           )}
 
           {errors[field.fieldKey] && (
@@ -796,12 +725,10 @@ export default function MasterDynamicForm({
     );
   };
 
-  const totalStepsCount = formSteps.filter(s => s.step !== 'all').length;
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', minWidth: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', minWidth: 0, paddingBottom: '90px' }}>
       
-      {/* ── 1. MODERN TOP ACTION BAR (MATCHING VENDOR MASTER) ── */}
+      {/* ── 1. MODERN TOP ACTION BAR ── */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -840,7 +767,7 @@ export default function MasterDynamicForm({
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>
-              {isCreate ? 'Add Master Item (Step Wizard)' : isEdit ? 'Edit Master Item' : 'View Master Item Details'}
+              {isCreate ? 'Add Master Item' : isEdit ? 'Edit Master Item' : 'View Master Item Details'}
             </span>
             <span style={{
               fontSize: '10px',
@@ -906,114 +833,76 @@ export default function MasterDynamicForm({
           >
             {isView ? 'Back' : 'Cancel'}
           </button>
-
-          {!isView && (
-            <button
-              type="button"
-              disabled={saving}
-              onClick={handleSubmit}
-              style={{
-                padding: '5px 18px',
-                borderRadius: '5px',
-                border: 'none',
-                background: '#2563EB',
-                color: '#FFFFFF',
-                fontSize: '12px',
-                fontWeight: 750,
-                cursor: saving ? 'not-allowed' : 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 1px 3px rgba(37,99,235,0.3)',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              {saving && <LucideIcon name="loader-2" size={13} style={{ animation: 'spin 1s linear infinite' }} />}
-              {!saving && <LucideIcon name="save" size={13} />}
-              {saving ? 'Saving...' : (isEdit ? 'Update Item' : 'Save Item')}
-            </button>
-          )}
         </div>
       </div>
 
-      {/* ── 2. MODERN INTERACTIVE STEPPER BAR (MATCHING VENDOR MASTER) ── */}
+      {/* ── 2. QUICK SECTION ANCHOR NAV (SINGLE-PAGE FORM) ── */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        gap: '6px',
+        overflowX: 'auto',
+        padding: '6px 10px',
         background: '#FFFFFF',
         border: '1px solid #E2E8F0',
         borderRadius: '8px',
-        padding: '6px 10px',
-        gap: '6px',
         boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
       }}>
-        {formSteps.map((s) => {
-          const isAll = s.step === 'all';
-          const isCurrent = currentStep === s.step;
-          const isCompleted = typeof currentStep === 'number' && typeof s.step === 'number' && currentStep > s.step;
-          const isStepMissing = s.hasRequired && s.isMissingRequired;
-
-          return (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setCurrentStep(s.step)}
-              style={{
-                flex: isAll ? '0 0 auto' : 1,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '6px 10px',
-                borderRadius: '6px',
-                border: isCurrent ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
-                background: isCurrent ? '#EFF6FF' : (isCompleted ? '#F8FAFC' : '#FFFFFF'),
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              {!isAll && (
-                <div style={{
-                  width: '22px',
-                  height: '22px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  background: isCurrent ? '#2563EB' : (isCompleted ? '#10B981' : (isStepMissing ? '#FEE2E2' : '#F1F5F9')),
-                  color: isCurrent || isCompleted ? '#FFFFFF' : (isStepMissing ? '#DC2626' : '#64748B'),
-                  flexShrink: 0
-                }}>
-                  {isCompleted && !isCurrent ? '✓' : s.step}
-                </div>
-              )}
-              {isAll && (
-                <LucideIcon name="layers" size={14} color={isCurrent ? '#2563EB' : '#64748B'} />
-              )}
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{
-                    fontSize: '11.5px',
-                    fontWeight: isCurrent ? 800 : 650,
-                    color: isCurrent ? '#1D4ED8' : '#1E293B',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {s.shortTitle}
-                  </span>
-                  {s.hasRequired && isStepMissing && (
-                    <span style={{ fontSize: '10px', color: '#DC2626', fontWeight: 900 }} title="Contains required field">*</span>
-                  )}
-                </div>
-                <div style={{ fontSize: '10px', color: '#64748B', whiteSpace: 'nowrap' }}>
-                  {s.fieldCount} fields {s.hasRequired ? `• ${s.requiredCount} Required` : ''}
-                </div>
-              </div>
-            </button>
-          );
-        })}
+        <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.3px', marginRight: '4px', whiteSpace: 'nowrap' }}>
+          Form Sections:
+        </span>
+        {sections.map((s, idx) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => {
+              const el = document.getElementById(`section-${s.id}`);
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '4px 10px',
+              borderRadius: '5px',
+              border: '1px solid #E2E8F0',
+              background: '#F8FAFC',
+              color: '#334155',
+              fontSize: '11px',
+              fontWeight: 650,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = '#EFF6FF';
+              e.currentTarget.style.borderColor = '#BFDBFE';
+              e.currentTarget.style.color = '#1D4ED8';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = '#F8FAFC';
+              e.currentTarget.style.borderColor = '#E2E8F0';
+              e.currentTarget.style.color = '#334155';
+            }}
+          >
+            <span style={{
+              width: '16px',
+              height: '16px',
+              borderRadius: '50%',
+              background: '#2563EB',
+              color: '#FFFFFF',
+              fontSize: '9.5px',
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              {idx + 1}
+            </span>
+            {s.title}
+            <span style={{ fontSize: '10px', color: '#94A3B8' }}>({s.fields.length})</span>
+          </button>
+        ))}
       </div>
 
       {/* Server / Validation Error Banner */}
@@ -1035,18 +924,18 @@ export default function MasterDynamicForm({
         </div>
       )}
 
-      {/* ── 3. FORM STEP CONTENT CARDS (ZERO-SCROLL 3-COLUMN CARDS) ── */}
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {visibleSections.map((section) => {
+      {/* ── 3. SINGLE-PAGE CONTINUOUS SECTIONS (ALL FIELDS FULLY RENDERED) ── */}
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {sections.map((section, sIdx) => {
           const sectionRequiredCount = section.fields.filter(f => f.systemRequired || f.fieldKey === 'itemCode' || f.fieldKey === 'itemName').length;
 
           return (
-            <div key={section.id} style={{ display: 'flex', flexDirection: 'column' }}>
+            <div id={`section-${section.id}`} key={section.id} style={{ display: 'flex', flexDirection: 'column', scrollMarginTop: '80px' }}>
               {/* Dark Blue Header Banner */}
               <div style={{
                 background: 'linear-gradient(90deg, #1E3A8A 0%, #2563EB 100%)',
                 color: '#FFFFFF',
-                padding: '6px 14px',
+                padding: '7px 14px',
                 borderRadius: '6px 6px 0 0',
                 display: 'flex',
                 alignItems: 'center',
@@ -1059,7 +948,7 @@ export default function MasterDynamicForm({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                   <LucideIcon name={section.icon || 'layers'} size={13} style={{ color: '#93C5FD' }} />
-                  <span>{section.title}</span>
+                  <span>{sIdx + 1}. {section.title}</span>
                 </div>
                 <span style={{
                   fontSize: '9.5px',
@@ -1071,7 +960,7 @@ export default function MasterDynamicForm({
                   letterSpacing: '0.2px',
                   textTransform: 'none'
                 }}>
-                  {section.fields.length} {section.fields.length === 1 ? 'FIELD' : 'FIELDS'} {sectionRequiredCount > 0 ? `· ${sectionRequiredCount} REQUIRED (RED LINE)` : ''}
+                  {section.fields.length} {section.fields.length === 1 ? 'FIELD' : 'FIELDS'} {sectionRequiredCount > 0 ? `· ${sectionRequiredCount} REQUIRED` : ''}
                 </span>
               </div>
 
@@ -1081,7 +970,7 @@ export default function MasterDynamicForm({
                 border: '1px solid #E2E8F0',
                 borderTop: 'none',
                 borderRadius: '0 0 6px 6px',
-                padding: '10px 14px',
+                padding: '12px 14px',
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
                 columnGap: '20px',
@@ -1094,69 +983,57 @@ export default function MasterDynamicForm({
           );
         })}
 
-        {/* ── 4. STICKY BOTTOM NAVIGATION BAR (MATCHING VENDOR MASTER) ── */}
-        <div style={{
-          position: 'sticky',
-          bottom: 0,
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, #FFFFFF 100%)',
-          backdropFilter: 'blur(8px)',
-          borderTop: '1px solid #E2E8F0',
-          padding: '8px 14px',
-          marginTop: '4px',
+        {/* ── 4. BOTTOM ACTION BAR (SINGLE-PAGE FORM) ── */}
+        <div id="form-actions-bottom" style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          borderRadius: '0 0 8px 8px',
-          boxShadow: '0 -2px 8px rgba(0,0,0,0.04)',
-          zIndex: 30
+          background: '#FFFFFF',
+          border: '1px solid #CBD5E1',
+          borderRadius: '8px',
+          padding: '12px 18px',
+          marginTop: '12px',
+          marginBottom: '24px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          flexShrink: 0
         }}>
-          {/* Previous Step Button */}
-          <button
-            type="button"
-            disabled={currentStep === 1 || currentStep === 'all'}
-            onClick={() => setCurrentStep(prev => typeof prev === 'number' ? Math.max(1, prev - 1) : 1)}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '5px',
-              border: '1px solid #CBD5E1',
-              background: (currentStep === 1 || currentStep === 'all') ? '#F8FAFC' : '#FFFFFF',
-              color: (currentStep === 1 || currentStep === 'all') ? '#94A3B8' : '#334155',
-              fontSize: '12px',
-              fontWeight: 650,
-              cursor: (currentStep === 1 || currentStep === 'all') ? 'not-allowed' : 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <LucideIcon name="arrow-left" size={13} />
-            Previous Step
-          </button>
-
-          {/* Center Indicator */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#475569' }}>
-            {typeof currentStep === 'number' ? (
-              <>
-                <span>Step <strong>{currentStep}</strong> of <strong>{totalStepsCount}</strong>:</span>
-                <span style={{ fontWeight: 700, color: '#0F172A' }}>{activeStepConfig?.title}</span>
-                {activeStepConfig?.hasRequired && activeStepConfig?.isMissingRequired ? (
-                  <span style={{ color: '#DC2626', fontSize: '11px', fontWeight: 750, background: '#FEE2E2', padding: '2px 8px', borderRadius: '4px' }}>
-                    * {activeStepConfig.missingCount} Required field{activeStepConfig.missingCount > 1 ? 's' : ''} with red line incomplete
-                  </span>
-                ) : activeStepConfig?.hasRequired ? (
-                  <span style={{ color: '#15803D', fontSize: '11px', fontWeight: 750, background: '#DCFCE7', padding: '2px 8px', borderRadius: '4px' }}>
-                    ✓ Required fields complete
-                  </span>
-                ) : null}
-              </>
+          {/* Left: Summary */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: '#475569' }}>
+            <span style={{ fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <LucideIcon name="check-circle-2" size={14} color="#2563EB" />
+              All Sections ({fields.length} Fields)
+            </span>
+            {(!formData.itemName?.toString().trim()) ? (
+              <span style={{ color: '#DC2626', fontSize: '11px', fontWeight: 750, background: '#FEE2E2', padding: '2px 8px', borderRadius: '4px' }}>
+                * Item Name required (marked with red line)
+              </span>
             ) : (
-              <span style={{ fontWeight: 700, color: '#0F172A' }}>Complete Overview (All Sections)</span>
+              <span style={{ color: '#15803D', fontSize: '11px', fontWeight: 750, background: '#DCFCE7', padding: '2px 8px', borderRadius: '4px' }}>
+                ✓ All mandatory fields complete
+              </span>
             )}
           </div>
 
-          {/* Right: Next Step / Save Controls */}
+          {/* Right: Actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={saving}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '5px',
+                border: '1px solid #CBD5E1',
+                background: '#FFFFFF',
+                color: '#475569',
+                fontSize: '12px',
+                fontWeight: 650,
+                cursor: 'pointer'
+              }}
+            >
+              Cancel
+            </button>
+
             {!isView && (
               <button
                 type="button"
@@ -1177,55 +1054,30 @@ export default function MasterDynamicForm({
               </button>
             )}
 
-            {typeof currentStep === 'number' && currentStep < totalStepsCount && (
-              <button
-                type="button"
-                onClick={() => setCurrentStep(prev => prev + 1)}
-                style={{
-                  padding: '6px 16px',
-                  borderRadius: '5px',
-                  border: 'none',
-                  background: '#2563EB',
-                  color: '#FFFFFF',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 1px 2px rgba(37,99,235,0.25)',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                Next Step
-                <LucideIcon name="arrow-right" size={13} />
-              </button>
-            )}
-
-            {(!isView && (currentStep === totalStepsCount || currentStep === 'all')) && (
+            {!isView && (
               <button
                 type="button"
                 disabled={saving}
                 onClick={handleSubmit}
                 style={{
-                  padding: '6px 18px',
-                  borderRadius: '5px',
+                  padding: '7px 24px',
+                  borderRadius: '6px',
                   border: 'none',
                   background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
                   color: '#FFFFFF',
-                  fontSize: '12px',
-                  fontWeight: 750,
+                  fontSize: '12.5px',
+                  fontWeight: 800,
                   cursor: saving ? 'not-allowed' : 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 1px 3px rgba(37,99,235,0.3)',
+                  gap: '7px',
+                  boxShadow: '0 2px 4px rgba(37,99,235,0.35)',
                   transition: 'all 0.15s ease'
                 }}
               >
-                {saving && <LucideIcon name="loader-2" size={13} style={{ animation: 'spin 1s linear infinite' }} />}
-                {!saving && <LucideIcon name="save" size={13} />}
-                {saving ? 'Saving...' : (isEdit ? 'Update Master Item' : 'Save Master Item')}
+                {saving && <LucideIcon name="loader-2" size={14} style={{ animation: 'spin 1s linear infinite' }} />}
+                {!saving && <LucideIcon name="save" size={14} />}
+                {saving ? 'Saving...' : (isEdit ? 'Update Item' : 'Save Item')}
               </button>
             )}
           </div>

@@ -63,7 +63,8 @@ export default function PrescriptionMakerTab({
   setLetterheadMode: propSetLetterheadMode,
   handleDoctorLetterheadUpload: propHandleDoctorLetterheadUpload,
   handleRemoveDoctorLetterhead: propHandleRemoveDoctorLetterhead,
-  handlePrintPrescription
+  handlePrintPrescription,
+  editingPrescriptionId = null
 }) {
   // Letterhead controls and popover states
   const [showLetterheadPopover, setShowLetterheadPopover] = useState(false);
@@ -1919,7 +1920,11 @@ export default function PrescriptionMakerTab({
               onClick={handleLockPrescription}
               disabled={isSavingPrescription}
               style={{
-                background: isSavingPrescription ? '#94A3B8' : 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 60%, #3B82F6 100%)',
+                background: isSavingPrescription 
+                  ? '#94A3B8' 
+                  : (editingPrescriptionId 
+                      ? 'linear-gradient(135deg, #059669 0%, #10B981 60%, #34D399 100%)' 
+                      : 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 60%, #3B82F6 100%)'),
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '12px',
@@ -1930,18 +1935,22 @@ export default function PrescriptionMakerTab({
                 alignItems: 'center',
                 gap: '8px',
                 cursor: isSavingPrescription ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+                boxShadow: editingPrescriptionId ? '0 4px 14px rgba(16, 185, 129, 0.3)' : '0 4px 14px rgba(37, 99, 235, 0.3)',
                 transition: 'all 0.2s'
               }}
               onMouseEnter={e => !isSavingPrescription && (e.currentTarget.style.transform = 'translateY(-1px)')}
               onMouseLeave={e => !isSavingPrescription && (e.currentTarget.style.transform = 'translateY(0)')}
             >
               {isSavingPrescription ? (
-                <>Sending...</>
+                <>{editingPrescriptionId ? 'Updating...' : 'Sending...'}</>
               ) : (
                 <>
-                  <Send style={{ width: '15px', height: '15px' }} />
-                  Send Prescription
+                  {editingPrescriptionId ? (
+                    <Check style={{ width: '16px', height: '16px' }} />
+                  ) : (
+                    <Send style={{ width: '15px', height: '15px' }} />
+                  )}
+                  {editingPrescriptionId ? 'Update Prescription' : 'Send Prescription'}
                 </>
               )}
             </button>

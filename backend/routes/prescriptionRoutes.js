@@ -246,27 +246,47 @@ router.put("/:id", async (req, res) => {
     }).catch(() => {});
 
     const io = req.app.get("io");
-    if (io && req.tenantId) {
-      io.to(req.tenantId).emit("data_changed", { type: "prescriptions" });
-      if (stockModified) {
-        io.to(req.tenantId).emit("data_changed", { type: "medicines" });
+    if (io) {
+      const emitPayload = { 
+        type: "prescriptions", 
+        action: "prescription_updated", 
+        prescriptionId: prescription._id,
+        patientId: prescription.patientId?._id || prescription.patientId,
+        appointmentId: activeAppId
+      };
+
+      if (req.tenantId) {
+        io.to(req.tenantId).emit("data_changed", emitPayload);
+        io.to(req.tenantId).emit("data_changed", { type: "appointments" });
+        if (stockModified) {
+          io.to(req.tenantId).emit("data_changed", { type: "medicines" });
+        }
+        if (labTechChanged) {
+          io.to(req.tenantId).emit("data_changed", { type: "labs" });
+        }
       }
+      
+      // Also broadcast globally across active connected sockets
+      io.emit("data_changed", emitPayload);
+      io.emit("data_changed", { type: "appointments" });
       if (labTechChanged) {
-        io.to(req.tenantId).emit("data_changed", { type: "labs" });
+        io.emit("data_changed", { type: "labs" });
       }
 
       // If changes are related to pharmacist or lab technician, emit specific notification event
-      if (pharmacistChanged || labTechChanged) {
-        const patientName = prescription.patientId?.name || "Patient";
-        io.to(req.tenantId).emit("data_changed", {
-          type: "prescription_updated",
-          message: `Prescription for Patient "${patientName}" has been edited by Dr. ${req.user.name || 'Sarah'}`,
-          changes: {
-            pharmacist: pharmacistChanged,
-            labTech: labTechChanged
-          }
-        });
+      const patientName = prescription.patientId?.name || "Patient";
+      const notifPayload = {
+        type: "prescription_updated",
+        message: `Prescription for Patient "${patientName}" has been updated by Dr. ${req.user.name || 'Doctor'}`,
+        changes: {
+          pharmacist: pharmacistChanged,
+          labTech: labTechChanged
+        }
+      };
+      if (req.tenantId) {
+        io.to(req.tenantId).emit("data_changed", notifPayload);
       }
+      io.emit("data_changed", notifPayload);
     }
     res.json(prescription);
   } catch (error) {

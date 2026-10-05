@@ -317,7 +317,7 @@ const WaitingQueuePanel = ({
     });
   }, [actualDoctors, selectedDoctorFilter, selectedCategoryPill, searchQuery, queueDataMap]);
 
-  // Overall KPIs
+  // Overall KPIs & Live Watch metrics
   const totalWaitingAllDoctors = useMemo(() => {
     return Object.values(queueDataMap).reduce((sum, q) => sum + (q?.waitingCount || 0), 0);
   }, [queueDataMap]);
@@ -327,8 +327,84 @@ const WaitingQueuePanel = ({
   }, [queueDataMap]);
 
   const totalIdleDoctors = useMemo(() => {
-    return actualDoctors.length - totalServingAllDoctors;
+    return Math.max(0, actualDoctors.length - totalServingAllDoctors);
   }, [actualDoctors.length, totalServingAllDoctors]);
+
+  const totalCheckedInToday = useMemo(() => {
+    // 1. Direct count from appointments prop for selectedDate
+    const checkedInApptIds = new Set();
+    if (Array.isArray(appointments)) {
+      appointments.forEach(a => {
+        if (!a) return;
+        const apptDateStr = a.tokenDate || (a.date ? getLocalDateString(a.date) : '');
+        const hasToken = a.tokenNumber !== null && a.tokenNumber !== undefined;
+        if (hasToken && (!selectedDate || apptDateStr === selectedDate)) {
+          checkedInApptIds.add(String(a._id || a.id));
+        }
+      });
+    }
+
+    // 2. Count from queueDataMap
+    let serverTotalCheckedIn = 0;
+    let hasServerCount = false;
+    Object.values(queueDataMap).forEach(q => {
+      if (typeof q?.totalCheckedInToday === 'number') {
+        serverTotalCheckedIn += q.totalCheckedInToday;
+        hasServerCount = true;
+      }
+      (q?.queueAppointments || []).forEach(a => {
+        if (a?.tokenNumber) checkedInApptIds.add(String(a._id || a.id));
+      });
+    });
+
+    if (hasServerCount && serverTotalCheckedIn > checkedInApptIds.size) {
+      return serverTotalCheckedIn;
+    }
+    return checkedInApptIds.size;
+  }, [appointments, queueDataMap, selectedDate]);
+
+  // List of all active serving sessions across all doctors
+  const activeServingList = useMemo(() => {
+    const list = [];
+    actualDoctors.forEach((doc, idx) => {
+      const docId = String(doc._id || doc.id);
+      const q = queueDataMap[docId];
+      if (q && q.currentToken !== null && q.currentToken !== undefined) {
+        list.push({
+          docId,
+          docName: formatDoctorName(doc.name),
+          specialty: doc.specialty || 'General OPD',
+          currentToken: q.currentToken,
+          patientName: q.currentPatient?.name || 'In Consultation',
+          currentAppointmentId: q.currentAppointmentId,
+          nextToken: q.nextToken,
+          waitingCount: q.waitingCount || 0,
+          themeIndex: idx
+        });
+      }
+    });
+    return list;
+  }, [actualDoctors, queueDataMap]);
+
+  // Next tokens in line across all doctors
+  const upcomingTokensList = useMemo(() => {
+    const list = [];
+    actualDoctors.forEach(doc => {
+      const docId = String(doc._id || doc.id);
+      const q = queueDataMap[docId];
+      if (q && q.nextToken) {
+        const nextAppt = (q.queueAppointments || []).find(a => a.tokenNumber === q.nextToken);
+        list.push({
+          docId,
+          docName: formatDoctorName(doc.name),
+          tokenNumber: q.nextToken,
+          patientName: nextAppt?.patientName || 'Next Patient',
+          specialty: doc.specialty || 'OPD'
+        });
+      }
+    });
+    return list;
+  }, [actualDoctors, queueDataMap]);
 
   return (
     <div className="tab-content active" style={{ animation: 'slideUp 0.3s ease-out', paddingBottom: '40px' }}>
@@ -427,7 +503,277 @@ const WaitingQueuePanel = ({
         </div>
       </div>
 
-      {/* 2. DOCTOR LIVE STATUS CARDS (RICH COLORFUL GRADIENTS LIKE ADMIN CARDS) */}
+      {/* 2. TOP KPI OVERVIEW CARDS */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: '14px',
+        marginBottom: '16px'
+      }}>
+        {/* KPI 1: Currently Waiting */}
+        <div style={{
+          background: 'radial-gradient(circle at 100% 100%, rgba(245, 158, 11, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 45%, #FEF3C7 100%)',
+          borderRadius: '16px',
+          border: '1.5px solid #FDE68A',
+          boxShadow: '0 8px 24px rgba(245, 158, 11, 0.08)',
+          padding: '16px 18px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Currently Waiting
+            </span>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 3px 8px rgba(217, 119, 6, 0.3)'
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+          </div>
+          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <span style={{ fontSize: '32px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", lineHeight: 1 }}>
+              {totalWaitingAllDoctors}
+            </span>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#B45309' }}>
+              patients in line
+            </span>
+          </div>
+          <div style={{ fontSize: '11.5px', color: '#78350F', fontWeight: 650, marginTop: '6px' }}>
+            Across {actualDoctors.length} clinical chambers
+          </div>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, #F59E0B, #D97706)' }} />
+        </div>
+
+        {/* KPI 2: Active In Consultation */}
+        <div style={{
+          background: 'radial-gradient(circle at 100% 100%, rgba(37, 99, 235, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 45%, #DBEAFE 100%)',
+          borderRadius: '16px',
+          border: '1.5px solid #BFDBFE',
+          boxShadow: '0 8px 24px rgba(37, 99, 235, 0.08)',
+          padding: '16px 18px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, color: '#1D4ED8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Currently Serving
+            </span>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%)',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 3px 8px rgba(37, 99, 235, 0.3)'
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+          </div>
+          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <span style={{ fontSize: '32px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", lineHeight: 1 }}>
+              {totalServingAllDoctors}
+            </span>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#1D4ED8' }}>
+              doctors consulting
+            </span>
+          </div>
+          <div style={{ fontSize: '11.5px', color: '#1E40AF', fontWeight: 650, marginTop: '6px' }}>
+            {totalIdleDoctors > 0 ? `${totalIdleDoctors} doctor${totalIdleDoctors === 1 ? '' : 's'} idle/available` : 'All doctors with active patients'}
+          </div>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, #3B82F6, #1D4ED8)' }} />
+        </div>
+
+        {/* KPI 3: Total Patients Checked In Today */}
+        <div style={{
+          background: 'radial-gradient(circle at 100% 100%, rgba(16, 185, 129, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 45%, #D1FAE5 100%)',
+          borderRadius: '16px',
+          border: '1.5px solid #A7F3D0',
+          boxShadow: '0 8px 24px rgba(16, 185, 129, 0.08)',
+          padding: '16px 18px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Patients Checked In Today
+            </span>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 3px 8px rgba(16, 185, 129, 0.3)'
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <polyline points="16 11 18 13 22 9"/>
+              </svg>
+            </div>
+          </div>
+          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <span style={{ fontSize: '32px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", lineHeight: 1 }}>
+              {totalCheckedInToday}
+            </span>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#047857' }}>
+              patients checked in
+            </span>
+          </div>
+          <div style={{ fontSize: '11.5px', color: '#065F46', fontWeight: 650, marginTop: '6px' }}>
+            Total check-ins across all doctors today
+          </div>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, #10B981, #059669)' }} />
+        </div>
+
+        {/* KPI 4: Queue Velocity / Flow */}
+        <div style={{
+          background: 'radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 45%, #EDE9FE 100%)',
+          borderRadius: '16px',
+          border: '1.5px solid #DDD6FE',
+          boxShadow: '0 8px 24px rgba(139, 92, 246, 0.08)',
+          padding: '16px 18px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, color: '#6D28D9', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Live Queue Flow
+            </span>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%)',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 3px 8px rgba(124, 58, 237, 0.3)'
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </div>
+          </div>
+          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <span style={{ fontSize: '32px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", lineHeight: 1 }}>
+              ~10-15m
+            </span>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#6D28D9' }}>
+              avg turn
+            </span>
+          </div>
+          <div style={{ fontSize: '11.5px', color: '#5B21B6', fontWeight: 650, marginTop: '6px' }}>
+            {upcomingTokensList.length} patient{upcomingTokensList.length === 1 ? '' : 's'} on deck next
+          </div>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, #8B5CF6, #6D28D9)' }} />
+        </div>
+      </div>
+
+      {/* 2B. LIVE TOKEN TICKER / NOW SERVING SUMMARY BANNER */}
+      {activeServingList.length > 0 && (
+        <div style={{
+          background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
+          borderRadius: '14px',
+          padding: '12px 18px',
+          marginBottom: '18px',
+          border: '1px solid #334155',
+          boxShadow: '0 4px 18px rgba(15, 23, 42, 0.12)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '20px',
+              background: 'rgba(239, 68, 68, 0.2)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              color: '#FCA5A5',
+              fontSize: '11px',
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#EF4444', boxShadow: '0 0 8px #EF4444' }}></span>
+              LIVE TOKENS CALLED
+            </div>
+            <span style={{ color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>
+              Now inside consultation rooms:
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {activeServingList.map(item => (
+              <div
+                key={item.docId}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  backdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: '10px',
+                  padding: '5px 12px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <span style={{
+                  background: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)',
+                  color: '#FFFFFF',
+                  fontWeight: 900,
+                  fontSize: '13px',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  fontFamily: "'Outfit', sans-serif"
+                }}>
+                  #{item.currentToken}
+                </span>
+                <div style={{ lineHeight: 1.2 }}>
+                  <div style={{ color: '#FFFFFF', fontWeight: 800, fontSize: '11.5px' }}>
+                    {item.patientName}
+                  </div>
+                  <div style={{ color: '#94A3B8', fontWeight: 600, fontSize: '10px' }}>
+                    {item.docName} ({item.specialty})
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 3. DOCTOR LIVE STATUS CARDS (RICH COLORFUL GRADIENTS LIKE ADMIN CARDS) */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(235px, 1fr))',
@@ -548,29 +894,55 @@ const WaitingQueuePanel = ({
 
                 {/* Frosted Middle Banner: CURRENTLY SERVING */}
                 <div style={{
-                  background: 'rgba(255, 255, 255, 0.82)',
+                  background: isServing ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(240, 249, 255, 0.9) 100%)' : 'rgba(255, 255, 255, 0.7)',
                   backdropFilter: 'blur(6px)',
-                  borderRadius: '10px',
-                  padding: '7px 10px',
-                  border: isServing ? `1px solid ${theme.border}` : '1px solid rgba(226, 232, 240, 0.8)',
-                  marginBottom: '8px',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
+                  borderRadius: '12px',
+                  padding: '9px 12px',
+                  border: isServing ? `1.5px solid ${theme.borderActive}` : '1px solid rgba(226, 232, 240, 0.8)',
+                  marginBottom: '10px',
+                  boxShadow: isServing ? '0 4px 12px rgba(37, 99, 235, 0.08)' : '0 2px 6px rgba(0,0,0,0.02)'
                 }}>
-                  <div style={{ fontSize: '8.5px', fontWeight: 800, color: isServing ? theme.badgeColor : '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    CURRENTLY SERVING
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3px' }}>
+                    <div style={{ fontSize: '9px', fontWeight: 850, color: isServing ? theme.badgeColor : '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {isServing && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: theme.badgeColor, boxShadow: `0 0 6px ${theme.badgeColor}` }}></span>}
+                      CURRENTLY SERVING
+                    </div>
+                    {isServing && (
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: '#059669', background: '#ECFDF5', padding: '1px 5px', borderRadius: '4px', border: '1px solid #A7F3D0' }}>
+                        In Consultation
+                      </span>
+                    )}
                   </div>
+
                   {isServing ? (
-                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: '2px' }}>
-                      <div style={{ fontSize: '15px', fontWeight: 900, color: theme.badgeColor, fontFamily: "'Outfit', sans-serif" }}>
-                        Token #{q.currentToken}
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                        <div style={{
+                          fontSize: '20px',
+                          fontWeight: 950,
+                          color: theme.badgeColor,
+                          fontFamily: "'Outfit', sans-serif",
+                          letterSpacing: '-0.02em',
+                          lineHeight: 1
+                        }}>
+                          Token #{q.currentToken}
+                        </div>
                       </div>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#1E293B', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {q.currentPatient?.name || 'In Consultation'}
+                      <div style={{
+                        fontSize: '12px',
+                        fontWeight: 750,
+                        color: '#0F172A',
+                        marginTop: '4px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }} title={q.currentPatient?.name}>
+                        {q.currentPatient?.name || 'Patient in Room'}
                       </div>
                     </div>
                   ) : (
-                    <div style={{ fontSize: '11.5px', fontWeight: 650, color: '#94A3B8', marginTop: '2px' }}>
-                      No Patient in Queue
+                    <div style={{ fontSize: '12px', fontWeight: 650, color: '#94A3B8', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span>Chamber Ready (No active patient)</span>
                     </div>
                   )}
                 </div>
@@ -1040,25 +1412,31 @@ const WaitingQueuePanel = ({
                         {/* Currently Serving */}
                         <td>
                           {isServing ? (
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                               <span style={{
-                                padding: '2px 7px',
-                                borderRadius: '5px',
-                                background: theme.badgeBg,
-                                color: theme.badgeColor,
-                                border: `1px solid ${theme.badgeBorder}`,
-                                fontWeight: 850,
-                                fontSize: '11px',
+                                padding: '3px 9px',
+                                borderRadius: '6px',
+                                background: theme.accentGrad,
+                                color: '#FFFFFF',
+                                fontWeight: 900,
+                                fontSize: '12px',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '4px'
+                                gap: '5px',
+                                boxShadow: theme.avatarShadow,
+                                fontFamily: "'Outfit', sans-serif"
                               }}>
-                                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: theme.badgeColor }}></span>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#FFFFFF', boxShadow: '0 0 6px #FFFFFF' }}></span>
                                 #{q.currentToken}
                               </span>
-                              <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '11.5px' }}>
-                                {q.currentPatient?.name || 'In Consultation'}
-                              </span>
+                              <div>
+                                <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '12px', lineHeight: 1.2 }}>
+                                  {q.currentPatient?.name || 'In Consultation'}
+                                </div>
+                                <div style={{ fontSize: '10px', color: '#059669', fontWeight: 700 }}>
+                                  Active Consultation
+                                </div>
+                              </div>
                               {doctorClinicalMode === 'OFFLINE' && q.currentAppointmentId && (
                                 <button
                                   type="button"
@@ -1092,8 +1470,9 @@ const WaitingQueuePanel = ({
                               )}
                             </div>
                           ) : (
-                            <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>
-                              No Patient
+                            <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 650, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#CBD5E1' }}></span>
+                              Chamber Idle
                             </span>
                           )}
                         </td>

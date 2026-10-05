@@ -19,6 +19,28 @@ const {
   generateCanonicalMasterExportWorkbook
 } = require('../services/masterExportService');
 
+/**
+ * GET /api/superadmin/masters/next-code
+ * Query params: ?category=...
+ * Returns next concurrency-safe itemCode respecting client numbering prefix
+ */
+router.get('/next-code', async (req, res) => {
+  try {
+    const { category } = req.query;
+    if (!category) {
+      return res.status(400).json({ error: 'category query parameter is required' });
+    }
+    const catConfig = getCategoryConfig(category);
+    if (!catConfig) {
+      return res.status(404).json({ error: `Category '${category}' not found in registry` });
+    }
+    const nextCode = await getNextMasterItemCode(category, '__global__');
+    res.json({ success: true, category, nextCode });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.use(verifyToken);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,29 +99,6 @@ router.get('/category-fields', (req, res) => {
     fields
   });
 });
-
-/**
- * GET /api/superadmin/masters/next-code
- * Query params: ?category=...
- * Returns next concurrency-safe itemCode respecting client numbering prefix
- */
-router.get('/next-code', async (req, res) => {
-  try {
-    const { category } = req.query;
-    if (!category) {
-      return res.status(400).json({ error: 'category query parameter is required' });
-    }
-    const catConfig = getCategoryConfig(category);
-    if (!catConfig) {
-      return res.status(404).json({ error: `Category '${category}' not found in registry` });
-    }
-    const nextCode = await getNextMasterItemCode(category, '__global__');
-    res.json({ success: true, category, nextCode });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ─────────────────────────────────────────────────────────────────────────────
 // CANONICAL GLOBAL MASTER ITEMS (SuperAdmin only)
 // ─────────────────────────────────────────────────────────────────────────────
