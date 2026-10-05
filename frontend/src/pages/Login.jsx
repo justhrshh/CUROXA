@@ -164,6 +164,11 @@ const Login = () => {
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
       localStorage.setItem('tenantId', user.tenantId || 'city_hospital');
+      localStorage.setItem('tenantName', user.tenantName || user.hospitalName || 'Beta Beacon Specialty Care');
+      if (user.hospitalLogo) localStorage.setItem('hospitalLogo', user.hospitalLogo);
+      if (user.hospitalAddress) localStorage.setItem('hospitalAddress', user.hospitalAddress);
+      if (user.hospitalGstin) localStorage.setItem('hospitalGstin', user.hospitalGstin);
+      if (user.hospitalPhone) localStorage.setItem('hospitalPhone', user.hospitalPhone);
       localStorage.setItem('tenantModules', JSON.stringify(tenantModules || {}));
       localStorage.setItem('doctorClinicalMode', doctorClinicalMode || 'ONLINE');
       localStorage.setItem('plan', plan || '');

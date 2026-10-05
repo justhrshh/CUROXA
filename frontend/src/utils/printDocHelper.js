@@ -1,7 +1,10 @@
 /**
  * Helper utility to generate and download/print PO and GRN documents as PDF using browser's print engine.
  * Matches exact ERP / Standard Medical Diagnostics Purchase Order layout.
+ * Dynamic Hospital Name, Logo, Address, and State.
  */
+
+import { getActivePortalBranding } from '../context/PortalBrandingContext';
 
 export function numberToWordsIndian(num) {
   if (num === null || num === undefined || isNaN(num)) return '';
@@ -84,7 +87,105 @@ function formatPoDate(dateVal) {
   return `${day}-${month}-${year}`;
 }
 
-export const printPO = (po, clinicName = 'Oncquest Gurugram', options = {}) => {
+/**
+ * Resolves hospital identity, logo, address, state and theme color dynamically.
+ */
+function resolveDynamicHospital(clinicName, options = {}) {
+  let activeHospital = options.hospital || null;
+  if (!activeHospital) {
+    try {
+      activeHospital = getActivePortalBranding();
+    } catch (e) {}
+  }
+  if (!activeHospital) {
+    try {
+      const selected = localStorage.getItem('curoxa_selected_hospital');
+      if (selected) activeHospital = JSON.parse(selected);
+    } catch (e) {}
+  }
+  if (!activeHospital) {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('curoxa_portal_')) {
+          const val = localStorage.getItem(key);
+          if (val) {
+            activeHospital = JSON.parse(val);
+            break;
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 1. Hospital Name
+  let name = options.hospitalName || activeHospital?.name || clinicName || localStorage.getItem('tenantName');
+  if (!name || name === 'QUROXA HEALTHCARE') {
+    if (activeHospital?.name) {
+      name = activeHospital.name;
+    } else {
+      try {
+        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        name = storedUser.tenantName || storedUser.hospitalName || 'Beta Beacon Specialty Care';
+      } catch (e) {
+        name = 'Beta Beacon Specialty Care';
+      }
+    }
+  }
+
+  // 2. Hospital Logo (URL, Data URI, Base64, or Dynamic Monogram SVG)
+  const rawLogo = options.hospitalLogo || options.logo || activeHospital?.logo || localStorage.getItem('hospitalLogo') || '';
+  const cleanLogo = typeof rawLogo === 'string' ? rawLogo.trim() : '';
+
+  let logoImageSrc = null;
+  if (cleanLogo && cleanLogo !== 'H') {
+    if (
+      cleanLogo.startsWith('data:image/') ||
+      cleanLogo.startsWith('http://') ||
+      cleanLogo.startsWith('https://') ||
+      cleanLogo.startsWith('/uploads/') ||
+      cleanLogo.startsWith('blob:')
+    ) {
+      logoImageSrc = cleanLogo;
+    } else if (cleanLogo.startsWith('/9j/')) {
+      logoImageSrc = `data:image/jpeg;base64,${cleanLogo}`;
+    } else if (cleanLogo.startsWith('iVBOR')) {
+      logoImageSrc = `data:image/png;base64,${cleanLogo}`;
+    } else if (cleanLogo.startsWith('R0lGOD')) {
+      logoImageSrc = `data:image/gif;base64,${cleanLogo}`;
+    } else if (cleanLogo.startsWith('PHN2Zw')) {
+      logoImageSrc = `data:image/svg+xml;base64,${cleanLogo}`;
+    }
+  }
+
+  // Derived monogram (e.g. "BB" for Beta Beacon, "IC" for Ishita's Clinic)
+  const monogram = (cleanLogo && cleanLogo !== 'H' && cleanLogo.length <= 4 && !logoImageSrc)
+    ? cleanLogo.toUpperCase()
+    : (name ? name.split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() : 'HP');
+
+  const themeColor = activeHospital?.theme_color || '#004F9E';
+
+  // 3. Hospital Address, Contact, GSTIN, State & City
+  const address = options.hospitalAddress || activeHospital?.address || localStorage.getItem('hospitalAddress') || 'Medical District, Health City Sector 34';
+  const phone = options.hospitalPhone || options.hospitalContact || activeHospital?.phone || localStorage.getItem('hospitalPhone') || '0122142434';
+  const gstin = options.hospitalGstin || activeHospital?.gst || activeHospital?.gstVerificationDetails?.gstin || localStorage.getItem('hospitalGstin') || '';
+  const state = options.deliveryState || activeHospital?.state || activeHospital?.gstVerificationDetails?.state || 'Haryana';
+  const city = activeHospital?.city || (address && address.includes(',') ? address.split(',').slice(-2, -1)[0].trim() : 'Gurugram');
+
+  return {
+    name,
+    logoImageSrc,
+    monogram,
+    themeColor,
+    address,
+    phone,
+    gstin,
+    state,
+    city
+  };
+}
+
+export const printPO = (po, clinicName = 'QUROXA HEALTHCARE', options = {}) => {
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.left = '-9999px';
@@ -94,7 +195,10 @@ export const printPO = (po, clinicName = 'Oncquest Gurugram', options = {}) => {
 
   const printWindow = iframe.contentWindow;
 
-  // 1. Resolve Vendor Details
+  // 1. Resolve Dynamic Hospital Info
+  const hospital = resolveDynamicHospital(clinicName, options);
+
+  // 2. Resolve Vendor Details
   const matchedVendor = (() => {
     if (options.vendor) return options.vendor;
     if (Array.isArray(options.vendors) && options.vendors.length > 0) {
@@ -127,15 +231,15 @@ export const printPO = (po, clinicName = 'Oncquest Gurugram', options = {}) => {
   const paymentMode = po.paymentMode || matchedVendor?.paymentMethod || '';
   const deliveryTerms = po.deliveryTerms || 'Delivered at Place';
 
-  // 2. Resolve Clinic / Billing / Shipping Details
-  const billToName = clinicName || 'Oncquest Gurugram';
-  const billToAddress = options.hospitalAddress || localStorage.getItem('hospitalAddress') || 'A-17, 1, INFO TECHNOLOGY PARK, SECTOR 34, GURUGRAM';
-  const billToContact = options.hospitalContact || localStorage.getItem('hospitalPhone') || '0122142434';
-  const billToGstin = options.hospitalGstin || localStorage.getItem('hospitalGstin') || '';
-  const deliveryState = options.deliveryState || 'Haryana';
-  const deliveryCentre = options.deliveryCentre || `C4400~${billToName.toUpperCase().replace(/\s+/g, ' ')}`;
+  // 3. Billing & Shipping Details
+  const billToName = hospital.name;
+  const billToAddress = hospital.address;
+  const billToContact = hospital.phone;
+  const billToGstin = hospital.gstin;
+  const deliveryState = hospital.state;
+  const deliveryCentre = options.deliveryCentre || `C4400~${hospital.name.toUpperCase().replace(/\s+/g, ' ')}`;
 
-  // 3. User & Signatures
+  // 4. User & Signatures
   const currentUser = options.currentUser || (() => {
     try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch (e) { return {}; }
   })();
@@ -143,7 +247,7 @@ export const printPO = (po, clinicName = 'Oncquest Gurugram', options = {}) => {
   const checkedBy = po.checkedBy || 'ISHAN SHUKLA';
   const approvedBy = po.approvedBy || 'ISHAN SHUKLA';
 
-  // 4. Line Items Calculations & Rows
+  // 5. Line Items Calculations & Rows
   let runningSubtotal = 0;
   let runningGstTotal = 0;
   let runningGrandTotal = 0;
@@ -203,10 +307,6 @@ export const printPO = (po, clinicName = 'Oncquest Gurugram', options = {}) => {
   const amountInWords = numberToWordsIndian(finalGrandTotal);
   const poDateFormatted = formatPoDate(po.createdAt || po.date);
 
-  // 5. Logo Branding
-  const brandTitle = billToName.toLowerCase().includes('oncquest') ? 'oncquest' : billToName;
-  const brandSub = billToName.toLowerCase().includes('oncquest') ? 'laboratories' : 'HEALTHCARE & DIAGNOSTICS';
-
   const htmlContent = `
     <!DOCTYPE html>
     <html>
@@ -256,35 +356,32 @@ export const printPO = (po, clinicName = 'Oncquest Gurugram', options = {}) => {
     </head>
     <body>
       <div class="po-container">
-        <!-- Top Logo and Centered Title -->
+        <!-- Top Dynamic Hospital Logo and Centered Title -->
         <table style="border-bottom: 1px solid #000000;">
           <tr>
-            <td style="width: 35%; padding: 6px 8px; vertical-align: middle;">
+            <td style="width: 45%; padding: 6px 8px; vertical-align: middle;">
               <div style="display: flex; align-items: center; gap: 8px;">
-                <svg width="34" height="34" viewBox="0 0 42 42" fill="none" style="vertical-align: middle; flex-shrink: 0;">
-                  <rect width="42" height="42" rx="4" fill="#004F9E"/>
-                  <circle cx="12" cy="12" r="3.5" fill="#FFC000"/>
-                  <circle cx="30" cy="12" r="3.5" fill="#FFFFFF"/>
-                  <circle cx="21" cy="21" r="4.5" fill="#FFFFFF"/>
-                  <circle cx="12" cy="30" r="3.5" fill="#FFFFFF"/>
-                  <circle cx="30" cy="30" r="3.5" fill="#FFC000"/>
-                  <circle cx="21" cy="10" r="2.5" fill="#FFFFFF"/>
-                  <circle cx="10" cy="21" r="2.5" fill="#FFC000"/>
-                  <line x1="12" y1="12" x2="21" y2="21" stroke="#FFFFFF" stroke-width="2"/>
-                  <line x1="30" y1="12" x2="21" y2="21" stroke="#FFFFFF" stroke-width="2"/>
-                  <line x1="12" y1="30" x2="21" y2="21" stroke="#FFFFFF" stroke-width="2"/>
-                  <line x1="30" y1="30" x2="21" y2="21" stroke="#FFFFFF" stroke-width="2"/>
-                  <line x1="21" y1="10" x2="21" y2="21" stroke="#FFFFFF" stroke-width="1.5"/>
-                  <line x1="10" y1="21" x2="21" y2="21" stroke="#FFFFFF" stroke-width="1.5"/>
-                </svg>
+                ${hospital.logoImageSrc ? `
+                  <img src="${hospital.logoImageSrc}" alt="${hospital.name}" style="width: 40px; height: 40px; object-fit: contain; border-radius: 5px; border: 1px solid #CBD5E1; background: #FFFFFF; vertical-align: middle; flex-shrink: 0;" />
+                ` : `
+                  <svg width="40" height="40" viewBox="0 0 42 42" fill="none" style="vertical-align: middle; flex-shrink: 0;">
+                    <rect width="42" height="42" rx="6" fill="${hospital.themeColor}"/>
+                    <rect x="1.5" y="1.5" width="39" height="39" rx="4.5" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1"/>
+                    <text x="50%" y="54%" dominant-baseline="central" text-anchor="middle" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="900" letter-spacing="0.5">${hospital.monogram}</text>
+                  </svg>
+                `}
                 <div style="line-height: 1.15;">
-                  <span style="display: block; font-size: ${brandTitle.length > 15 ? '14px' : '18px'}; font-weight: 800; color: #004F9E; letter-spacing: -0.3px;">${brandTitle}</span>
-                  <span style="display: block; font-size: 10px; font-weight: 600; color: #004F9E; letter-spacing: 0.6px;">${brandSub}</span>
+                  <span style="display: block; font-size: ${hospital.name.length > 25 ? '13px' : hospital.name.length > 18 ? '15px' : '17px'}; font-weight: 800; color: ${hospital.themeColor}; letter-spacing: -0.2px; text-transform: uppercase;">
+                    ${hospital.name}
+                  </span>
+                  <span style="display: block; font-size: 9.5px; font-weight: 700; color: ${hospital.themeColor}; letter-spacing: 0.6px; margin-top: 1px;">
+                    ${hospital.name.toLowerCase().includes('lab') ? 'LABORATORIES &amp; DIAGNOSTICS' : (hospital.name.toLowerCase().includes('clinic') ? 'HEALTHCARE &amp; CLINICAL SERVICES' : 'HEALTHCARE &amp; MULTISPECIALITY')}
+                  </span>
                 </div>
               </div>
             </td>
-            <td style="width: 65%; padding: 6px 8px; vertical-align: middle; text-align: center;">
-              <div style="font-size: 15px; font-weight: 700; text-decoration: underline; text-transform: capitalize; color: #000000; margin-right: 35%;">
+            <td style="width: 55%; padding: 6px 8px; vertical-align: middle; text-align: center;">
+              <div style="font-size: 15px; font-weight: 700; text-decoration: underline; text-transform: uppercase; color: #000000; margin-right: 25%;">
                 Purchase Order
               </div>
             </td>
@@ -407,9 +504,9 @@ export const printPO = (po, clinicName = 'Oncquest Gurugram', options = {}) => {
               <th style="padding: 3px 2px; font-size: 9px; font-weight: 700; border-right: 1px solid #000000; width: 58px; text-align: center;">Pack Size</th>
               <th style="padding: 3px 2px; font-size: 9px; font-weight: 700; border-right: 1px solid #000000; width: 30px; text-align: center;">Qty</th>
               <th style="padding: 3px 3px; font-size: 9px; font-weight: 700; border-right: 1px solid #000000; width: 54px; text-align: right;">Price</th>
-              <th style="padding: 3px 2px; font-size: 9px; font-weight: 700; border-right: 1px solid #000000; width: 30px; text-align: center;">Disc.</th>
-              <th style="padding: 3px 2px; font-size: 9px; font-weight: 700; border-right: 1px solid #000000; width: 34px; text-align: center;">Tax %</th>
-              <th style="padding: 3px 3px; font-size: 9px; font-weight: 700; border-right: 1px solid #000000; width: 68px; text-align: right;">GST Amnt.(Rs)</th>
+              <th style="padding: 3px 2px; font-size: 9px; border-right: 1px solid #000000; width: 30px; text-align: center;">Disc.</th>
+              <th style="padding: 3px 2px; font-size: 9px; border-right: 1px solid #000000; width: 34px; text-align: center;">Tax %</th>
+              <th style="padding: 3px 3px; font-size: 9px; border-right: 1px solid #000000; width: 68px; text-align: right;">GST Amnt.(Rs)</th>
               <th style="padding: 3px 4px; font-size: 9px; font-weight: 700; width: 72px; text-align: right;">Amount (Rs)</th>
             </tr>
           </thead>
@@ -444,7 +541,7 @@ export const printPO = (po, clinicName = 'Oncquest Gurugram', options = {}) => {
               <div>a - Copy of the PO with signature &amp; stamp of vendor's</div>
               <div>b - Printed GST Invoice from vendor with PO number on it</div>
             </li>
-            <li>All disputes between the parties will be governed by the laws of India and subject to jurisdiction of Gurugram Court.</li>
+            <li>All disputes between the parties will be governed by the laws of India and subject to jurisdiction of ${hospital.city || hospital.state} Court.</li>
             <li>${billToName}. reserves the right to reject the goods whenever the product is not adhering to quality</li>
             <li>Purchase order number must be mentioned in the invoice for each material.</li>
             <li>Please revert within 24 hours for any changes you may require.</li>

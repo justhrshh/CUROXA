@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import api, { clearPortalAuthContext, performLogout } from '../utils/api';
 import { printPO, printGRN } from '../utils/printDocHelper';
+import { getActivePortalBranding } from '../context/PortalBrandingContext';
 import quroxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import ExportModal from '../components/export/ExportModal';
 import { grnExportColumns, poExportColumns, flattenGrnForExport, flattenPoForExport, vendorExportColumns } from '../utils/exportEngine';
@@ -4974,12 +4975,15 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                                       }}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        printPO(po, localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE', {
+                                        const activeHospital = getActivePortalBranding();
+                                        printPO(po, activeHospital?.name || localStorage.getItem('tenantName') || currentUser?.tenantName || 'Beta Beacon Specialty Care', {
                                           vendors,
                                           currentUser,
-                                          hospitalAddress: localStorage.getItem('hospitalAddress'),
-                                          hospitalPhone: localStorage.getItem('hospitalPhone'),
-                                          hospitalGstin: localStorage.getItem('hospitalGstin')
+                                          hospital: activeHospital,
+                                          hospitalLogo: activeHospital?.logo,
+                                          hospitalAddress: activeHospital?.address || localStorage.getItem('hospitalAddress'),
+                                          hospitalPhone: activeHospital?.phone || localStorage.getItem('hospitalPhone'),
+                                          hospitalGstin: activeHospital?.gst || localStorage.getItem('hospitalGstin')
                                         });
                                       }}
                                       title="Download / Print PO PDF"
