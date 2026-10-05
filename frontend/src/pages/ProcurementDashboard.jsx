@@ -4974,7 +4974,13 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                                       }}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        printPO(po, localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE');
+                                        printPO(po, localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE', {
+                                          vendors,
+                                          currentUser,
+                                          hospitalAddress: localStorage.getItem('hospitalAddress'),
+                                          hospitalPhone: localStorage.getItem('hospitalPhone'),
+                                          hospitalGstin: localStorage.getItem('hospitalGstin')
+                                        });
                                       }}
                                       title="Download / Print PO PDF"
                                     >
@@ -6099,7 +6105,30 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                             <button 
                               className="proc-btn proc-btn-secondary" 
                               style={{ padding: '11px 14px', borderRadius: '10px' }} 
-                              onClick={() => window.print()}
+                              onClick={() => {
+                                const currentDraftPo = {
+                                  poId: poScreenNumber || 'PO-DRAFT',
+                                  createdAt: new Date(),
+                                  vendorName: (activeScreenItems && activeScreenItems.length > 0 && activeScreenItems[0].vendorName) || 'Consolidated Multiple Suppliers',
+                                  requestedBy: currentUser?.name || 'Pharmacist',
+                                  items: (activeScreenItems || []).map(it => ({
+                                    ...it,
+                                    name: it.name || it.itemName || it.genericName,
+                                    requiredQty: it.qty,
+                                    price: it.price,
+                                    discount: it.discount,
+                                    tax: it.tax
+                                  })),
+                                  totalAmount: totalOverallAmount
+                                };
+                                printPO(currentDraftPo, localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE', {
+                                  vendors,
+                                  currentUser,
+                                  hospitalAddress: localStorage.getItem('hospitalAddress'),
+                                  hospitalPhone: localStorage.getItem('hospitalPhone'),
+                                  hospitalGstin: localStorage.getItem('hospitalGstin')
+                                });
+                              }}
                               title="Print Purchase Order Sheet"
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
