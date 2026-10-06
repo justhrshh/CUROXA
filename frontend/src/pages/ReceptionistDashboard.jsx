@@ -20668,9 +20668,9 @@ const ReceptionistDashboard = () => {
               </div>
 
               {/* Hospital Sender Info Note */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F1F5F9', padding: '10px 14px', borderRadius: '8px', fontSize: '11.5px', color: '#475569' }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
-                <span>Sent from <strong>{currentUser?.tenantName || 'Hospital'}</strong> with official hospital branding & digital verification.</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '10px 14px', borderRadius: '8px', fontSize: '11.5px', color: '#065F46' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+                <span>Sent from <strong>{currentUser?.tenantName || 'Hospital'}</strong> as an official PDF attachment with digital verification.</span>
               </div>
             </div>
 

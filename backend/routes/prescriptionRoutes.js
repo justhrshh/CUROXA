@@ -8,6 +8,7 @@ const { validateAndPlanFEFO, commitFEFOConsumption } = require("../utils/invento
 const { sendEmail } = require("../utils/emailService");
 const { resolveEmailLogoUrl } = require("../config/urls");
 const { resolveTrustedHospitalBranding } = require("../utils/hospitalBrandingHelper");
+const { generatePrescriptionPdf } = require("../utils/prescriptionPdfGenerator");
 const { verifyToken } = require("../middleware/authMiddleware");
 const { checkDoctorClinicalMode } = require("../middleware/subscriptionMiddleware");
 const router = express.Router();
@@ -543,6 +544,25 @@ function buildPrescriptionEmailHtml({ hospital, patient, doctor, appointment, pr
           </p>
         </div>
 
+        <!-- PDF Attached Banner -->
+        <div style="margin: 18px 24px 0; background: #ECFDF5; border: 1.5px solid #A7F3D0; border-radius: 12px; padding: 12px 16px; display: flex; align-items: center;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="width: 32px; vertical-align: middle;">
+                <span style="font-size: 22px;">📎</span>
+              </td>
+              <td style="vertical-align: middle; padding-left: 8px;">
+                <div style="font-size: 13px; font-weight: 800; color: #065F46;">
+                  Official Prescription PDF Attached
+                </div>
+                <div style="font-size: 11px; color: #047857; margin-top: 2px;">
+                  Your doctor's digitally verified prescription is attached below as a printable PDF document.
+                </div>
+              </td>
+            </tr>
+          </table>
+        </div>
+
         ${customNote ? `
           <div style="background-color: #EFF6FF; border-left: 4px solid #2563EB; padding: 14px 20px; margin: 18px 24px 0 24px; border-radius: 6px;">
             <p style="margin: 0; font-size: 13px; color: #1E40AF; line-height: 1.5;"><strong>Note:</strong> ${customNote}</p>
@@ -752,14 +772,40 @@ async function handleSharePrescription(req, res) {
     });
 
     const subject = `Prescription & Clinical Summary - ${resolvedPatient.name} - ${senderName}`;
-    const plainText = `Prescription & Clinical Summary for ${resolvedPatient.name} from ${senderName}. Please view this email using an HTML-compatible email client to read your complete medication instructions.`;
+    const plainText = `Prescription & Clinical Summary for ${resolvedPatient.name} from ${senderName}. Your official digital prescription PDF is attached to this email.`;
+
+    // Generate official Prescription PDF attachment
+    let pdfAttachment = null;
+    try {
+      const pdfBuffer = await generatePrescriptionPdf({
+        hospital,
+        patient: resolvedPatient,
+        doctor: resolvedDoctor,
+        appointment: appointment || {},
+        prescription: resolvedPrescription,
+        items: resolvedItems,
+        labs: resolvedLabs,
+        customNote
+      });
+
+      const cleanFileName = `Prescription_${resolvedPatient.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      pdfAttachment = {
+        filename: cleanFileName,
+        name: cleanFileName,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      };
+    } catch (pdfErr) {
+      console.error('[PRESCRIPTION PDF GENERATION ERROR]:', pdfErr);
+    }
 
     const sendResult = await sendEmail({
       to: email.trim(),
       subject,
       text: plainText,
       html: emailHtml,
-      senderName
+      senderName,
+      attachments: pdfAttachment ? [pdfAttachment] : []
     });
 
     if (!sendResult.success) {
