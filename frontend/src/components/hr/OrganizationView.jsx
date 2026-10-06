@@ -27,10 +27,10 @@ export default function OrganizationView({ employees = [], onSelectEmployee }) {
     id: 'EMP-2026-100',
     name: 'Dr. Michael Vance',
     designation: 'Chief Executive Officer (CEO)',
-    department: 'Hospital Administration',
+    department: 'Clinic Administration',
     photoUrl: '',
     directReportsCount: 3,
-    email: 'michael.vance@hospital.com',
+    email: 'michael.vance@clinic.com',
     performanceScore: 4.9,
     attendanceRate: '99.1%',
     leaveBalance: 12
@@ -40,10 +40,10 @@ export default function OrganizationView({ employees = [], onSelectEmployee }) {
     id: 'EMP-2026-110',
     name: 'Alisha Chinai',
     designation: 'Operations Director',
-    department: 'Hospital Administration',
+    department: 'Clinic Administration',
     photoUrl: '',
     directReportsCount: 4,
-    email: 'alisha.chinai@hospital.com',
+    email: 'alisha.chinai@clinic.com',
     performanceScore: 4.7,
     attendanceRate: '98.5%',
     leaveBalance: 20
@@ -94,7 +94,7 @@ export default function OrganizationView({ employees = [], onSelectEmployee }) {
     { name: 'Outpatient Services', code: 'OPD', head: 'Alisha Chinai', headcount: employees.filter(e => e.department === 'Outpatient Services').length, budget: '₹7,50,000 / mo', status: 'Optimal' },
     { name: 'Pharmacy', code: 'PHAR', head: 'Kevin Smith', headcount: employees.filter(e => e.department === 'Pharmacy').length, budget: '₹10,00,000 / mo', status: 'Optimal' },
     { name: 'Pathology & Lab', code: 'PATH', head: 'Dr. Evelyn Martinez', headcount: employees.filter(e => e.department === 'Pathology & Lab').length, budget: '₹9,50,000 / mo', status: 'Under-staffed' },
-    { name: 'Hospital Administration', code: 'ADMIN', head: 'Dr. Michael Vance', headcount: employees.filter(e => e.department === 'Hospital Administration').length, budget: '₹12,50,000 / mo', status: 'Optimal' },
+    { name: 'Clinic Administration', code: 'ADMIN', head: 'Dr. Michael Vance', headcount: employees.filter(e => e.department === 'Clinic Administration').length, budget: '₹12,50,000 / mo', status: 'Optimal' },
   ];
 
   // Designations Matrix
@@ -142,7 +142,7 @@ export default function OrganizationView({ employees = [], onSelectEmployee }) {
       {/* Header tab switcher */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-display font-bold text-slate-900">Hospital Hierarchy & Departments</h1>
+          <h1 className="text-xl font-display font-bold text-slate-900">Clinic Hierarchy & Departments</h1>
           <p className="text-slate-400 text-xs mt-0.5">Explore institutional reporting lines, clinical directorates, and nursing designations.</p>
         </div>
         
@@ -164,7 +164,7 @@ export default function OrganizationView({ employees = [], onSelectEmployee }) {
             }`}
           >
             <Building2 className="w-4 h-4" />
-            Hospital Departments
+            Clinic Departments
           </button>
           <button
             onClick={() => setOrgTab('Designations')}
@@ -184,7 +184,7 @@ export default function OrganizationView({ employees = [], onSelectEmployee }) {
           
           {/* Visual Reporting Tree block */}
           <div className="xl:col-span-2 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col justify-center">
-            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">Hospital Executive Reporting Lines</h2>
+            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">Clinic Executive Reporting Lines</h2>
             <p className="text-slate-400 text-xs mb-8">Click on any officer block to inspect clinical status, direct reports, and active leave balances.</p>
 
             {/* Tree Chart */}
@@ -555,7 +555,7 @@ export default function OrganizationView({ employees = [], onSelectEmployee }) {
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <th className="px-6 py-4">Official Designation Title</th>
-                  <th className="px-6 py-4">Hospital Grade Tier</th>
+                  <th className="px-6 py-4">Clinic Grade Tier</th>
                   <th className="px-6 py-4">Functional Cadre Band</th>
                   <th className="px-6 py-4">Required State Credentials / Licenses</th>
                   <th className="px-6 py-4 text-right">Settings</th>

@@ -152,7 +152,7 @@ export default function PayrollView({ employees = [], onRefresh }) {
       {/* Header section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-display font-bold text-slate-900">Hospital Payroll & Salary Dashboard</h1>
+          <h1 className="text-xl font-display font-bold text-slate-900">Clinic Payroll & Salary Dashboard</h1>
           <p className="text-slate-400 text-xs mt-0.5">Automated tax structures, provident fund compliance, and bank dispatch summaries.</p>
         </div>
       </div>

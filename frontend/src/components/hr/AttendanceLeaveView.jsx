@@ -986,7 +986,7 @@ export default function AttendanceLeaveView({
       {activeSubTab === 'Holidays' && (
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
           <div>
-            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Hospital Holiday Schedule 2026</h3>
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Clinic Holiday Schedule 2026</h3>
             <p className="text-[11px] text-slate-400 mt-0.5">Mandatory clinical closure or restricted duty roster dates.</p>
           </div>
 

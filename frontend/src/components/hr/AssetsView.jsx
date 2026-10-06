@@ -65,7 +65,7 @@ export default function AssetsView({ assets = [], employees = [], onRefreshAsset
         assignedDate: ''
       });
       if (onRefreshAssets) onRefreshAssets();
-      showToast(`Asset returned successfully to hospital supply closet. Re-indexed as "Available".`, 'success');
+      showToast(`Asset returned successfully to clinic supply closet. Re-indexed as "Available".`, 'success');
     } catch (err) {
       console.error(err);
       showToast('Failed to return asset.', 'error');
@@ -106,7 +106,7 @@ export default function AssetsView({ assets = [], employees = [], onRefreshAsset
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-display font-bold text-slate-900">Hospital Physical Asset Allocation</h1>
+          <h1 className="text-xl font-display font-bold text-slate-900">Clinic Physical Asset Allocation</h1>
           <p className="text-slate-400 text-xs mt-0.5">Track RFID badges, clinical tablets, and medical monitors allocated across medical staff.</p>
         </div>
         

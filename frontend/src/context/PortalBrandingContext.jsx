@@ -63,13 +63,13 @@ export const HospitalBrandLogo = ({
   // Derive monogram fallback: ignore schema default 'H' when computing monogram
   const monogram = (cleanLogo && cleanLogo !== 'H' && cleanLogo.length <= 4 && !isImageUrl)
     ? cleanLogo.toUpperCase()
-    : (hospital.name ? hospital.name.slice(0, 2).toUpperCase() : 'HP');
+    : (hospital.name ? hospital.name.slice(0, 2).toUpperCase() : 'CL');
 
   if (isImageUrl) {
     return (
       <img
         src={imageSrc}
-        alt={hospital.name || 'Hospital Logo'}
+        alt={hospital.name || 'Clinic Logo'}
         onError={() => setImgError(true)}
         className={className}
         style={{

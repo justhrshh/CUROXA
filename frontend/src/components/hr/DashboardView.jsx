@@ -197,7 +197,7 @@ export default function DashboardView({
           </div>
 
           <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Hospital Command Center</h1>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Clinic Command Center</h1>
             <p className="text-slate-500 text-xs mt-1 font-medium">Workforce status, staffing activity, and HR actions at a glance.</p>
           </div>
         </div>
@@ -750,7 +750,7 @@ export default function DashboardView({
                   <ShieldAlert className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 leading-tight">Hospital Alerts</h3>
+                  <h3 className="text-base font-bold text-slate-900 leading-tight">Clinic Alerts</h3>
                   <p className="text-slate-500 text-xs mt-0.5 font-medium">Compliance risks, anniversary triggers, and license tracking.</p>
                 </div>
               </div>
@@ -780,7 +780,7 @@ export default function DashboardView({
                     <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
                   </div>
                   <h5 className="font-extrabold text-slate-900 text-sm tracking-tight">No active alerts</h5>
-                  <p className="text-slate-600 text-xs mt-1 leading-relaxed font-medium">Hospital compliance and staff records are completely up to date.</p>
+                  <p className="text-slate-600 text-xs mt-1 leading-relaxed font-medium">Clinic compliance and staff records are completely up to date.</p>
                 </div>
               ) : (
                 notifications.map(notif => (
@@ -835,7 +835,7 @@ export default function DashboardView({
             </span>
           </div>
           <h3 className="text-base font-bold text-slate-900 leading-tight mt-1.5">WORKFORCE DISTRIBUTION</h3>
-          <p className="text-slate-500 text-xs mt-0.5 font-medium">Staff allocation across hospital roles and specialties.</p>
+          <p className="text-slate-500 text-xs mt-0.5 font-medium">Staff allocation across clinic roles and specialties.</p>
         </div>
 
         {isLoading ? (

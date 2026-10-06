@@ -17,7 +17,7 @@ const HospitalPortal = () => {
             <RefreshCw className="w-7 h-7 text-blue-600 animate-spin" />
           </div>
           <h2 className="text-xl font-bold text-slate-800 tracking-tight mb-1">
-            Loading Hospital Portal
+            Loading Clinic Portal
           </h2>
           <p className="text-sm text-slate-500 font-mono">
             Resolving {hospitalId ? hospitalId.toUpperCase() : 'portal'}...
@@ -38,7 +38,7 @@ const HospitalPortal = () => {
             Connection Error
           </h1>
           <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-            Unable to reach the hospital portal server. Please check your connection and try again.
+            Unable to reach the clinic portal server. Please check your connection and try again.
           </p>
           <button
             onClick={() => window.location.reload()}
@@ -65,11 +65,11 @@ const HospitalPortal = () => {
           </div>
 
           <h1 className="text-2xl font-black text-slate-900 tracking-tight mb-2">
-            Hospital Portal Not Found
+            Clinic Portal Not Found
           </h1>
 
           <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-            The hospital identifier <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{hospitalId || 'UNKNOWN'}</span> does not exist or may have been decommissioned.
+            The clinic identifier <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{hospitalId || 'UNKNOWN'}</span> does not exist or may have been decommissioned.
           </p>
 
           <div className="space-y-3">
@@ -104,7 +104,7 @@ const HospitalPortal = () => {
           </h1>
 
           <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-            Access to <strong className="text-slate-900">{hospital?.name || 'this hospital portal'}</strong> has been temporarily suspended. Please contact your hospital administrator or Quroxa platform support.
+            Access to <strong className="text-slate-900">{hospital?.name || 'this clinic portal'}</strong> has been temporarily suspended. Please contact your clinic administrator or Quroxa platform support.
           </p>
 
           <Link

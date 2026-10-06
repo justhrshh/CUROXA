@@ -1213,7 +1213,7 @@ export const printGRN = (grn, clinicName = null, options = {}) => {
 
       <!-- Footer Note -->
       <div class="footer-note">
-        ${hospital.name} — Confidential Authorized Hospital Document &nbsp;|&nbsp; Page 1 of 1 &nbsp;|&nbsp; Generated on ${new Date().toLocaleString('en-IN')}
+        ${hospital.name} — Confidential Authorized Clinic Document &nbsp;|&nbsp; Page 1 of 1 &nbsp;|&nbsp; Generated on ${new Date().toLocaleString('en-IN')}
       </div>
 
       <script>

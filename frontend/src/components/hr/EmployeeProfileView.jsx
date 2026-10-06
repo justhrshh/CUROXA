@@ -496,7 +496,7 @@ export default function EmployeeProfileView({
             </button>
           )}
           <div>
-            <h1 className="text-lg font-display font-bold text-slate-900">Hospital Employee Workspace</h1>
+            <h1 className="text-lg font-display font-bold text-slate-900">Clinic Employee Workspace</h1>
             <p className="text-slate-400 text-xs">Direct personnel configuration and performance metrics logging.</p>
           </div>
         </div>
@@ -634,7 +634,7 @@ export default function EmployeeProfileView({
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed">
                   {employee.name} serves as a {employee.designation || 'Staff Practitioner'} in the {employee.department || 'Clinical Operations'} division. 
-                  Having joined our hospital on {employee.joiningDate || 'recently'}, {employee.gender === 'Male' ? 'he' : employee.gender === 'Female' ? 'she' : 'they'} maintains an active operational footprint 
+                  Having joined our clinic on {employee.joiningDate || 'recently'}, {employee.gender === 'Male' ? 'he' : employee.gender === 'Female' ? 'she' : 'they'} maintains an active operational footprint 
                   with {employee.experienceYears || 0} years of professional experience in healthcare operations.
                 </p>
               </div>
@@ -650,7 +650,7 @@ export default function EmployeeProfileView({
                     <span className="text-xs font-semibold text-slate-800">{employee.reportingManagerName || 'None assigned'}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-blue-500 font-extrabold block mb-0.5 uppercase tracking-wider">Hospital Shift Work</span>
+                    <span className="text-[10px] text-blue-500 font-extrabold block mb-0.5 uppercase tracking-wider">Clinic Shift Work</span>
                     <span className="text-xs font-semibold text-slate-800">{employee.shiftName || 'General Shift'}</span>
                   </div>
                   <div>
@@ -838,7 +838,7 @@ export default function EmployeeProfileView({
                     <Phone className="w-3 h-3" />
                   </div>
                   <span className="text-xs font-extrabold text-blue-900 uppercase tracking-wider">
-                    Emergency Hospital Contact
+                    Emergency Clinic Contact
                   </span>
                 </div>
                 <p className="text-[11px] text-blue-700 leading-relaxed">This contact is flagged for critical shift/medical alerts.</p>
@@ -885,7 +885,7 @@ export default function EmployeeProfileView({
                 <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-amber-500 to-orange-400 text-white flex items-center justify-center shadow-xs shrink-0">
                   <Shield className="w-3.5 h-3.5" />
                 </div>
-                <h3 className="text-xs font-extrabold text-amber-900 uppercase tracking-wider">Hospital Assignment Metadata</h3>
+                <h3 className="text-xs font-extrabold text-amber-900 uppercase tracking-wider">Clinic Assignment Metadata</h3>
               </div>
               {isAdminOrHR && !isEditingProfessional && (
                 <button onClick={() => setIsEditingProfessional(true)} className="px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 shadow-sm transition-all flex items-center gap-1.5">
@@ -2063,7 +2063,7 @@ export default function EmployeeProfileView({
             {/* Header branding */}
             <div className="flex justify-between items-start border-b border-slate-100 pb-4">
               <div>
-                <h3 className="font-display font-bold text-blue-600 text-base">Metro Community Hospital & Clinics</h3>
+                <h3 className="font-display font-bold text-blue-600 text-base">CUROXA Clinic Network</h3>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">Official Monthly Payslip</p>
               </div>
               <button 

@@ -7,7 +7,7 @@ import {
 // Inline constant (formerly from constants.js)
 const HOSPITAL_DEPARTMENTS = [
   'Cardiology', 'Pediatrics', 'Emergency Medicine', 'Critical Care / ICU',
-  'Outpatient Services', 'Pathology & Lab', 'Pharmacy', 'Hospital Administration',
+  'Outpatient Services', 'Pathology & Lab', 'Pharmacy', 'Clinic Administration',
   'Obstetrics & Gynecology'
 ];
 
@@ -130,7 +130,7 @@ export default function RecruitmentView({
       {/* Subheader navigator */}
       <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 pb-3 gap-4">
         <div>
-          <h1 className="text-xl font-display font-bold text-slate-900">Hospital Recruitment & Sourcing Portal</h1>
+          <h1 className="text-xl font-display font-bold text-slate-900">Clinic Recruitment & Sourcing Portal</h1>
           <p className="text-slate-400 text-xs mt-0.5">Track specialized nurse and clinician applicant pipelines and issue contract offer letters.</p>
         </div>
 
@@ -268,7 +268,7 @@ export default function RecruitmentView({
                   </div>
 
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Hospital Department</label>
+                    <label className="block text-slate-500 font-semibold mb-1">Clinic Department</label>
                     <select
                       value={newJob.department}
                       onChange={(e) => setNewJob({...newJob, department: e.target.value})}
@@ -556,7 +556,7 @@ export default function RecruitmentView({
                 {/* Visual Official Letterhead */}
                 <div className="border-b border-blue-500 pb-3 flex justify-between items-center">
                   <div>
-                    <h3 className="font-display font-extrabold text-blue-600 text-xs">METRO COMMUNITY HOSPITAL GROUP</h3>
+                    <h3 className="font-display font-extrabold text-blue-600 text-xs">CUROXA CLINICAL CARE GROUP</h3>
                     <p className="text-[9px] text-slate-400">100 Clinical Parkway, Admin Block, Suite 400</p>
                   </div>
                   <span className="text-[10px] text-slate-400 font-mono font-semibold">REF: OFF-2026-NUR</span>

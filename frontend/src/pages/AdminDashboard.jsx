@@ -50,7 +50,7 @@ const pmModules = [
   { id: 'dr-consult',    name: 'Patient consultation notes', desc: 'Write SOAP notes, diagnosis, history', group: 'Doctor — clinical', coreFor: ['doctor'] },
   { id: 'dr-rx',         name: 'Prescription writer',        desc: 'Prescribe medicines, generate slip',   group: 'Doctor — clinical', coreFor: ['doctor'] },
   { id: 'dr-laborder',   name: 'Test order / lab referral',  desc: 'Order tests, track reports',           group: 'Doctor — clinical', coreFor: ['doctor'] },
-  { id: 'dr-history',    name: 'Patient visit history',      desc: 'View past visits across hospitals',    group: 'Doctor — clinical', coreFor: ['doctor'] },
+  { id: 'dr-history',    name: 'Patient visit history',      desc: 'View past visits across clinics',    group: 'Doctor — clinical', coreFor: ['doctor'] },
   { id: 'dr-discharge',  name: 'Discharge summary',          desc: 'Generate & sign discharge summary',    group: 'Doctor — clinical', coreFor: [] },
   { id: 'dr-stockview',  name: 'Pharmacy stock view',        desc: 'Read-only view of medicine levels',    group: 'Doctor — clinical', coreFor: [] },
   /* ---- RECEPTIONIST ---- */
@@ -598,7 +598,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         ticketId: ticket.id || `#TKT-${String(ticketKey).slice(-4)}`,
         category: 'ticket',
         title: `System Ticket: ${ticket.category || 'Support'} (${ticket.id || 'Ticket'})`,
-        raisedBy: `${ticket.contact || ticket.hospital || 'Hospital Staff'} • ${ticket.department || 'General'}`,
+        raisedBy: `${ticket.contact || ticket.hospital || 'Clinic Staff'} • ${ticket.department || 'General'}`,
         status: ticket.status || 'Open',
         details: ticket.description || 'No description provided.',
         rawTicket: ticket,
@@ -863,7 +863,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     setPricingCatalog(updatedCatalog);
     localStorage.setItem('curoxa_clinic_pricing_catalog', JSON.stringify(updatedCatalog));
     window.dispatchEvent(new Event('storage'));
-    showToast("Hospital Pricing & Services Catalog updated & published live!", "success");
+    showToast("Clinic Pricing & Services Catalog updated & published live!", "success");
   };
 
   // Hospital Lab Test Catalog & Dynamic Prices State
@@ -1990,7 +1990,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           }
           await api.post(`/dpo/requests/${requestId}/approve`);
         } else if (status === 'Rejected') {
-          await api.post(`/dpo/requests/${requestId}/reject`, { reason: dpdpResolutionNotes || 'Rejected by DPO / Hospital Admin' });
+          await api.post(`/dpo/requests/${requestId}/reject`, { reason: dpdpResolutionNotes || 'Rejected by DPO / Clinic Admin' });
         } else if (status === 'Hold') {
           await api.post(`/dpo/requests/${requestId}/cancel-by-dpo`, { reason: dpdpResolutionNotes || 'Placed on hold / cancelled by DPO Manager' });
         }
@@ -2239,10 +2239,10 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
     if (activeTab === 'dashboard') { main = "Dashboard"; }
     else if (activeTab === 'supply') { main = "Alerts & Tasks"; sub = "Real-time enterprise alerts & system tracking"; }
-    else if (activeTab === 'approvals') { main = "Approvals"; sub = "Pending hospital administrative decisions & requests"; }
+    else if (activeTab === 'approvals') { main = "Approvals"; sub = "Pending clinic administrative decisions & requests"; }
     else if (activeTab === 'po-approvals') { main = "PO Approvals"; sub = "Pharmacy & medical supply purchase orders"; }
     else if (activeTab === 'appointments') { main = "Appointments"; sub = "Daily OPD clinic schedule & patient queue"; }
-    else if (['patients', 'patient-details'].includes(activeTab)) { main = "Patients"; sub = "Global hospital patient registry & EMR records"; }
+    else if (['patients', 'patient-details'].includes(activeTab)) { main = "Patients"; sub = "Global clinic patient registry & EMR records"; }
     else if (activeTab === 'workforce') {
       if (selectedStaffProfile) {
         main = "Employee Profile Workspace";
@@ -2252,7 +2252,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         sub = "Employee directory & active employee accounts";
       }
     }
-    else if (activeTab === 'financials') { main = "Revenue"; sub = "Hospital financial ledger & revenue analytics"; }
+    else if (activeTab === 'financials') { main = "Revenue"; sub = "Clinic financial ledger & revenue analytics"; }
     else if (activeTab === 'audit') { main = "Audit Logs"; sub = "Security audit trail & administrative access logs"; }
     else if (activeTab === 'services-catalog') { main = "Pricing & Procedures Catalog"; sub = "Configure procedure costs & OPD fees"; }
     else if (activeTab === 'lab-catalog') { main = "Lab Tests Catalog"; sub = "Configure diagnostic test prices & codes"; }
@@ -2525,8 +2525,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           id: user._id || user.id,
           name: user.name,
           role: user.role,
-          dept: user.department || user.specialty || (user.role === 'doctor' ? 'General Medicine' : user.role === 'hr' ? 'Hospital Administration' : 'Administration'),
-          department: user.department || user.specialty || (user.role === 'doctor' ? 'General Medicine' : user.role === 'hr' ? 'Hospital Administration' : 'Administration'),
+          dept: user.department || user.specialty || (user.role === 'doctor' ? 'General Medicine' : user.role === 'hr' ? 'Clinic Administration' : 'Administration'),
+          department: user.department || user.specialty || (user.role === 'doctor' ? 'General Medicine' : user.role === 'hr' ? 'Clinic Administration' : 'Administration'),
           designation: user.designation || (user.role === 'doctor' ? 'Consultant Practitioner' : user.role === 'hr' ? 'HR Manager' : (user.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Staff Member')),
           joined: user.createdAt ? new Date(user.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently',
           createdAt: user.createdAt,
@@ -2642,7 +2642,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     if (newStaff.role === 'receptionist') dept = 'Outpatient Services';
     if (newStaff.role === 'lab') dept = 'Pathology & Lab';
     if (newStaff.role === 'pharmacy') dept = 'Pharmacy';
-    if (newStaff.role === 'hr') dept = 'Hospital Administration';
+    if (newStaff.role === 'hr') dept = 'Clinic Administration';
     if (newStaff.role === 'dpo') dept = 'Data Protection & Compliance';
 
     let avatarColor = 'blue';
@@ -2905,7 +2905,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       emergencyContact: user.emergencyContact || { name: '', relation: '', phone: '' },
       aadhaar: user.aadhaar || '',
       pan: user.pan || '',
-      department: user.department || user.specialty || user.dept || (user.role === 'doctor' ? 'General Medicine' : user.role === 'hr' ? 'Hospital Administration' : 'Administration'),
+      department: user.department || user.specialty || user.dept || (user.role === 'doctor' ? 'General Medicine' : user.role === 'hr' ? 'Clinic Administration' : 'Administration'),
       designation: user.designation || (user.role === 'doctor' ? 'Consultant Practitioner' : user.role === 'hr' ? 'HR Manager' : roleName),
       employmentType: user.employmentType || 'Full-Time',
       joiningDate: formattedJoiningDate,
@@ -4338,7 +4338,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i data-lucide="shield-alert" style={{ width: '18px', height: '18px', color: '#F59E0B' }}></i>
-            <span>You are currently impersonating this hospital workspace as a <strong>Platform SuperAdmin</strong>. All actions reflect on the real tenant database.</span>
+            <span>You are currently impersonating this clinic workspace as a <strong>Platform SuperAdmin</strong>. All actions reflect on the real tenant database.</span>
           </div>
           <button 
             onClick={handleExitImpersonation}
@@ -12313,10 +12313,10 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#991B1B' }}>
                     {subscription?.isTrial || subscription?.trialUsed
                       ? "Your trial has ended. Choose a paid plan to continue using QUROXA."
-                      : "Hospital Subscription Expired — Restricted Mode Active"}
+                      : "Clinic Subscription Expired — Restricted Mode Active"}
                   </h4>
                   <p style={{ margin: '3px 0 0 0', fontSize: '13px', color: '#B91C1C', fontWeight: 500 }}>
-                    Clinical and operational modules (Patients, Appointments, Pharmacy, Lab, Staff) are temporarily locked. Choose a paid plan to restore immediate hospital access.
+                    Clinical and operational modules (Patients, Appointments, Pharmacy, Lab, Staff) are temporarily locked. Choose a paid plan to restore immediate clinic access.
                   </p>
                 </div>
               </div>
@@ -16789,7 +16789,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     background: 'radial-gradient(circle at 100% 100%, rgba(13, 148, 136, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F0FDFA 50%, #CCFBF1 100%)'
                   }}
                   onClick={() => setRevenueSelectedDeptFilter('All')}
-                  title="Click to view all collections across hospital"
+                  title="Click to view all collections across clinic"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
@@ -20337,7 +20337,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 {
                   name: "Professional",
                   matchKey: "professional",
-                  description: "Complete solution for integrated hospitals",
+                  description: "Complete solution for integrated clinics",
                   monthlyPrice: "₹24,000",
                   annualPrice: "₹19,200",
                   annualBilled: "₹2,30,400 billed annually",
@@ -20674,7 +20674,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                           </h4>
                           <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: (subscription?.isTrial || subscription?.trialUsed) ? '#B91C1C' : '#1E40AF' }}>
                             {(subscription?.isTrial || subscription?.trialUsed)
-                              ? "Trial plans are one-time only. Select a monthly or annual plan below to activate full hospital access."
+                              ? "Trial plans are one-time only. Select a monthly or annual plan below to activate full clinic access."
                               : `Renew before ${renewalDateString} to avoid service disruption. Contact your MediFlow admin.`}
                           </p>
                         </div>
@@ -20802,7 +20802,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   <div id="pricing-plans-section" className="subscription-plans-section">
                     <div style={{ textAlign: 'center', marginBottom: '32px' }}>
                       <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', marginBottom: '8px', fontFamily: "'Outfit', sans-serif" }}>
-                        Choose the Perfect Scale for Your Hospital
+                        Choose the Perfect Scale for Your Clinic
                       </h3>
                       <p style={{ fontSize: '13.5px', color: '#64748B', fontWeight: 600, margin: 0 }}>
                         Switch seamlessly between monthly and annual plans. Click the toggle to see annual savings.
@@ -21468,7 +21468,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             <div className="dashboard-widget-card" style={{ padding: '28px', background: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
               <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: '0 0 8px 0' }}>Clinic Letterhead Configuration</h3>
               <p style={{ color: '#64748B', fontSize: '13px', margin: '0 0 20px 0', lineHeight: 1.5 }}>
-                Upload a premium quality PDF or image (PNG/JPG) of your hospital/clinic letterhead. Doctor prescriptions will be automatically layered onto this letterhead.
+                Upload a premium quality PDF or image (PNG/JPG) of your clinic letterhead. Doctor prescriptions will be automatically layered onto this letterhead.
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '30px', alignItems: 'start' }}>
@@ -22517,7 +22517,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     <div className="pm-overrides-card animate-in">
                       <h3 className="pm-overrides-title">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                        Hospital Active Coverage Overrides Ledger ({activeOverridesList.length})
+                        Clinic Active Coverage Overrides Ledger ({activeOverridesList.length})
                       </h3>
                       
                       {activeOverridesList.length > 0 ? (
@@ -24016,14 +24016,14 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', padding: '24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
                 <div>
-                  <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: '0 0 4px 0' }}>Hospital Lab Test Tariff Catalog</h2>
-                  <p style={{ fontSize: '13px', color: '#64748B', margin: 0, fontWeight: 600 }}>Globally configure diagnostic lab test prices, specimens, codes, and turnaround times for your hospital.</p>
+                  <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: '0 0 4px 0' }}>Clinic Lab Test Tariff Catalog</h2>
+                  <p style={{ fontSize: '13px', color: '#64748B', margin: 0, fontWeight: 600 }}>Globally configure diagnostic lab test prices, specimens, codes, and turnaround times for your clinic.</p>
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button
                     type="button"
                     onClick={async () => {
-                      if (window.confirm("Reset hospital lab catalog to standard default pricing?")) {
+                      if (window.confirm("Reset clinic lab catalog to standard default pricing?")) {
                         try {
                           setLoading(true);
                           await api.post('/lab-tests/seed-default');
@@ -24125,7 +24125,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                       <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 800, color: '#64748B' }}>TEST DETAILS</th>
                       <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 800, color: '#64748B' }}>CATEGORY</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 800, color: '#64748B' }}>HOSPITAL TARIFF</th>
+                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 800, color: '#64748B' }}>CLINIC TARIFF</th>
                       <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 800, color: '#64748B' }}>SPECIMEN</th>
                       <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 800, color: '#64748B' }}>TAT</th>
                       <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 800, color: '#64748B', textAlign: 'right' }}>ACTIONS</th>
@@ -24285,7 +24285,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                       <div>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>
-                          {editingCatalogItem ? 'Edit Hospital Lab Test & Price' : 'Add New Hospital Lab Test'}
+                          {editingCatalogItem ? 'Edit Clinic Lab Test & Price' : 'Add New Clinic Lab Test'}
                         </h3>
                         <span style={{ fontSize: '12px', color: '#64748B' }}>Configure test code, tariff price, and collection sample</span>
                       </div>
@@ -24355,7 +24355,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                           </select>
                         </div>
                         <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '4px' }}>HOSPITAL PRICE (₹)</label>
+                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '4px' }}>CLINIC PRICE (₹)</label>
                           <input 
                             type="number" 
                             min="0"
@@ -25035,14 +25035,14 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     </div>
                     <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Work Cadence & Hospital Shift
+                      Work Cadence & Clinic Shift
                     </span>
                   </div>
 
-                  {/* Hospital Shift */}
+                  {/* Clinic Shift */}
                   <div>
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Hospital Shift <span style={{ color: '#EF4444' }}>*</span>
+                      Clinic Shift <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <select 
                       className="admin-text-input" 
@@ -28116,7 +28116,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 <div>
                   <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Requester</div>
                   <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
-                    {selectedTicketModal.contact || selectedTicketModal.hospital || 'Hospital Staff'}
+                    {selectedTicketModal.contact || selectedTicketModal.hospital || 'Clinic Staff'}
                   </div>
                 </div>
                 <div>

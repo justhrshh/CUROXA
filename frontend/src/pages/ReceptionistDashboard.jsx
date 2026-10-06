@@ -1406,7 +1406,7 @@ const ReceptionistDashboard = () => {
           contact: patientObj.contact || 'N/A',
           ageGender: `${patientObj.age || 'N/A'} / ${patientObj.gender || 'N/A'}`,
           testName: (selectedBillForPayment.items || []).map(i => i.description).join(', ') || 'Medical Services',
-          items: selectedBillForPayment.items || [{ description: 'Hospital Services', amount: finalAmt }],
+          items: selectedBillForPayment.items || [{ description: 'Clinic Services', amount: finalAmt }],
           originalAmount: origAmt,
           discountAmount: discAmt,
           totalAmount: finalAmt,
@@ -1904,7 +1904,7 @@ const ReceptionistDashboard = () => {
   };
 
   const handleDeleteAllPatients = async () => {
-    if (!window.confirm("WARNING: Are you absolutely sure you want to delete ALL patients in this hospital? This action is irreversible and for testing purposes only.")) {
+    if (!window.confirm("WARNING: Are you absolutely sure you want to delete ALL patients in this clinic? This action is irreversible and for testing purposes only.")) {
       return;
     }
     try {
@@ -4030,7 +4030,7 @@ const ReceptionistDashboard = () => {
       contact: p.contact || 'N/A',
       ageGender: `${p.age || 'N/A'} / ${p.gender || 'N/A'}`,
       testName: (billToPrint.items || []).map(i => i.description).join(', ') || 'Medical Services',
-      items: billToPrint.items || [{ description: 'Hospital Services', amount: billToPrint.totalAmount }],
+      items: billToPrint.items || [{ description: 'Clinic Services', amount: billToPrint.totalAmount }],
       originalAmount: billToPrint.originalAmount || billToPrint.totalAmount,
       discountAmount: billToPrint.discountAmount || 0,
       totalAmount: billToPrint.totalAmount,
@@ -7653,7 +7653,7 @@ const ReceptionistDashboard = () => {
                                   border: '1px solid #E2E8F0',
                                   display: 'inline-block',
                                   width: 'fit-content'
-                                }} title="Hospital-scoped Patient ID">
+                                }} title="Clinic-scoped Patient ID">
                                   {getFormattedPatientId(p._id, p)}
                                 </span>
                               </div>
@@ -8149,7 +8149,7 @@ const ReceptionistDashboard = () => {
                               borderRadius: '20px',
                               border: '1px solid #93C5FD',
                               boxShadow: '0 2px 6px rgba(37,99,235,0.1)'
-                            }} title="Hospital-scoped Patient Identifier">
+                            }} title="Clinic-scoped Patient Identifier">
                               Patient ID: {getFormattedPatientId(selectedPatient._id, selectedPatient)}
                             </span>
                           </div>
@@ -9855,7 +9855,7 @@ const ReceptionistDashboard = () => {
                               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
-                              <span>Print Summary ({letterheadMode === 'custom' ? 'Doctor Custom' : letterheadMode === 'none' ? 'No Letterhead' : 'Hospital Letterhead'})</span>
+                              <span>Print Summary ({letterheadMode === 'custom' ? 'Doctor Custom' : letterheadMode === 'none' ? 'No Letterhead' : 'Clinic Letterhead'})</span>
                             </button>
 
                             {/* Separator */}
@@ -9948,10 +9948,10 @@ const ReceptionistDashboard = () => {
                                     />
                                     <div>
                                       <div style={{ fontSize: '12px', fontWeight: 800, color: letterheadMode === 'hospital' ? '#1D4ED8' : '#1E293B' }}>
-                                        Hospital Letterhead {customLetterhead ? '✓ Ready' : '(Default Safe Margin)'}
+                                        Clinic Letterhead {customLetterhead ? '✓ Ready' : '(Default Safe Margin)'}
                                       </div>
                                       <div style={{ fontSize: '10.5px', color: '#64748B' }}>
-                                        Includes verified hospital letterhead header and safe margins.
+                                        Includes verified clinic letterhead header and safe margins.
                                       </div>
                                     </div>
                                   </div>
@@ -10050,7 +10050,7 @@ const ReceptionistDashboard = () => {
                                     onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                                   >
                                     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
-                                    <span>Print Summary ({letterheadMode === 'custom' ? 'Doctor Custom' : letterheadMode === 'none' ? 'No Letterhead' : 'Hospital Letterhead'})</span>
+                                    <span>Print Summary ({letterheadMode === 'custom' ? 'Doctor Custom' : letterheadMode === 'none' ? 'No Letterhead' : 'Clinic Letterhead'})</span>
                                   </button>
                                   {(() => {
                                     const selectedTpl = adminTemplates.find(t => t._id === printSettings.template) || adminTemplates.find(t => t.isStandard) || adminTemplates[0];
@@ -19929,7 +19929,7 @@ const ReceptionistDashboard = () => {
               >
                 <option value="reminder">Appointment & Visit Reminder</option>
                 <option value="lab">Lab Test Result Ready Notification</option>
-                <option value="general">Hospital Announcement / OPD Schedule</option>
+                <option value="general">Clinic Announcement / OPD Schedule</option>
                 <option value="custom">Custom SMS Message</option>
               </select>
             </div>
@@ -20670,7 +20670,7 @@ const ReceptionistDashboard = () => {
               {/* Hospital Sender Info Note */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '10px 14px', borderRadius: '8px', fontSize: '11.5px', color: '#065F46' }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
-                <span>Sent from <strong>{currentUser?.tenantName || 'Hospital'}</strong> as an official PDF attachment with digital verification.</span>
+                <span>Sent from <strong>{currentUser?.tenantName || 'Clinic'}</strong> as an official PDF attachment with digital verification.</span>
               </div>
             </div>
 

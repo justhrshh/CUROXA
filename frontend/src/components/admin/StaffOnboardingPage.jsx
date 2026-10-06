@@ -16,7 +16,7 @@ export const DOCTOR_SPECIALIZATIONS = [
 
 export const ALL_DEPARTMENTS = [
   'General Medicine', 'Cardiology', 'Outpatient Services', 'Pathology & Lab',
-  'Pharmacy', 'Hospital Administration', 'Data Protection & Compliance',
+  'Pharmacy', 'Clinic Administration', 'Data Protection & Compliance',
   'Emergency Medicine', 'Pediatrics', 'Radiology', 'Critical Care / ICU',
   'Inpatient Nursing', 'Orthopedics', 'Dermatology'
 ];
@@ -146,10 +146,10 @@ export default function StaffOnboardingPage({
       dept = 'Pharmacy';
       desig = 'Pharmacist';
     } else if (newRole === 'hr') {
-      dept = 'Hospital Administration';
+      dept = 'Clinic Administration';
       desig = 'HR Manager';
     } else if (newRole === 'admin') {
-      dept = 'Hospital Administration';
+      dept = 'Clinic Administration';
       desig = 'System Administrator';
     }
 
@@ -669,7 +669,7 @@ export default function StaffOnboardingPage({
                 </div>
               </div>
 
-              {/* Hospital / Work Email (Optional) */}
+              {/* Clinic / Work Email (Optional) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Work Email <span className="text-slate-400 font-normal text-xs ml-1">(Optional)</span>
@@ -679,7 +679,7 @@ export default function StaffOnboardingPage({
                   <input
                     type="email"
                     name="email"
-                    placeholder="employee.name@hospital.com"
+                    placeholder="employee.name@clinic.com"
                     value={formData.email}
                     onChange={e => {
                       setFormData({ ...formData, email: e.target.value });

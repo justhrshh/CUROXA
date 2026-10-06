@@ -262,11 +262,11 @@ const DpoDashboard = () => {
                 Data Protection & Consent Office
               </h1>
               <span style={{ fontSize: '11px', fontWeight: 800, background: '#EFF6FF', color: '#2563EB', padding: '2px 8px', borderRadius: '6px' }}>
-                Hospital DPO Portal
+                Clinic DPO Portal
               </span>
             </div>
             <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-              {hospital?.name || currentUser?.tenantId || 'Hospital Tenant'} • Tenant ID: <strong style={{ color: '#0F172A' }}>{currentUser?.tenantId}</strong>
+              {hospital?.name || currentUser?.tenantId || 'Clinic Tenant'} • Tenant ID: <strong style={{ color: '#0F172A' }}>{currentUser?.tenantId}</strong>
             </div>
           </div>
         </div>
@@ -277,7 +277,7 @@ const DpoDashboard = () => {
               {currentUser?.name || 'DPO Manager'}
             </div>
             <div style={{ fontSize: '11px', color: '#64748B' }}>
-              Hospital Data Protection Officer
+              Clinic Data Protection Officer
             </div>
           </div>
           <button
@@ -308,7 +308,7 @@ const DpoDashboard = () => {
           <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
             <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>Total Requests</div>
             <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', marginTop: '6px' }}>{stats.total}</div>
-            <div style={{ fontSize: '11.5px', color: '#94A3B8', marginTop: '4px' }}>Hospital-scoped registry</div>
+            <div style={{ fontSize: '11.5px', color: '#94A3B8', marginTop: '4px' }}>Clinic-scoped registry</div>
           </div>
 
           <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '16px', border: '1.5px solid #FCD34D', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
@@ -623,7 +623,7 @@ const DpoDashboard = () => {
                   UH-ID: <strong style={{ fontFamily: 'monospace' }}>{selectedRequest.uhId}</strong>
                 </div>
                 <div style={{ fontSize: '12px', color: '#475569' }}>
-                  Hospital Patient ID: <strong style={{ fontFamily: 'monospace' }}>{selectedRequest.hospitalPatientId}</strong>
+                  Clinic Patient ID: <strong style={{ fontFamily: 'monospace' }}>{selectedRequest.hospitalPatientId}</strong>
                 </div>
               </div>
 

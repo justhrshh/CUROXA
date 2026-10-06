@@ -96,7 +96,7 @@ const ModuleUnavailableView = ({ moduleName, moduleKey }) => {
     if (stored) user = JSON.parse(stored);
   } catch (e) {}
 
-  const tenantName = user.tenantName || 'Hospital Node';
+  const tenantName = user.tenantName || 'Clinic Node';
   const tenantId = user.tenantId || localStorage.getItem('tenantId') || 'Current Tenant';
 
   const handleReturn = () => {
@@ -141,7 +141,7 @@ const ModuleUnavailableView = ({ moduleName, moduleKey }) => {
           }
         }
       }
-      setFeedback({ type: 'info', text: 'Module is still disabled by the hospital administrator.' });
+      setFeedback({ type: 'info', text: 'Module is still disabled by the clinic administrator.' });
     } catch (e) {
       setFeedback({ type: 'error', text: 'Could not connect to server. Please try again.' });
     } finally {
@@ -380,7 +380,7 @@ const ModuleUnavailableView = ({ moduleName, moduleKey }) => {
               color: '#475569',
               fontWeight: 400
             }}>
-              The <strong style={{ color: config.color, fontWeight: 700 }}>{config.name}</strong> module has been disabled for your hospital by the application administrator. Please contact your hospital administrator for assistance.
+              The <strong style={{ color: config.color, fontWeight: 700 }}>{config.name}</strong> module has been disabled for your clinic by the application administrator. Please contact your clinic administrator for assistance.
             </p>
 
             {/* Context Explanation Card */}
@@ -398,7 +398,7 @@ const ModuleUnavailableView = ({ moduleName, moduleKey }) => {
                   <span style={{ fontWeight: 600, color: '#1E293B', display: 'block', marginBottom: '3px' }}>
                     Why is this module restricted?
                   </span>
-                  Module access is governed by your hospital's active subscription tier and hospital administrator toggles. If your plan was recently renewed or updated, your administrator can enable this module from the Hospital Management console.
+                  Module access is governed by your clinic's active subscription tier and clinic administrator toggles. If your plan was recently renewed or updated, your administrator can enable this module from the Clinic Management console.
                 </div>
               </div>
             </div>

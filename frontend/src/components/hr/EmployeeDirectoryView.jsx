@@ -23,7 +23,7 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 // Inline constants (formerly from constants.js)
 const HOSPITAL_DEPARTMENTS = [
   'Cardiology', 'Pediatrics', 'Emergency Medicine', 'Critical Care / ICU',
-  'Outpatient Services', 'Pathology & Lab', 'Pharmacy', 'Hospital Administration',
+  'Outpatient Services', 'Pathology & Lab', 'Pharmacy', 'Clinic Administration',
   'Obstetrics & Gynecology'
 ];
 
@@ -281,7 +281,7 @@ export default function EmployeeDirectoryView({
             : (newEmp.role === 'receptionist' 
               ? 'Outpatient Services' 
               : (newEmp.role === 'hr' || newEmp.role === 'admin' 
-                ? 'Hospital Administration' 
+                ? 'Clinic Administration' 
                 : 'Administration')))),
       designation: newEmp.role === 'doctor' 
         ? 'Consultant Practitioner' 
@@ -304,8 +304,8 @@ export default function EmployeeDirectoryView({
       bankDetails: {
         accountHolder: newEmp.name,
         accountNumber: 'XXXXXXXXXXXX',
-        bankName: 'Hospital Core Bank',
-        ifsc: 'HCB0000101'
+        bankName: 'Clinic Partner Bank',
+        ifsc: 'CPB0000101'
       },
       ctcAnnual: newEmp.ctcAnnual !== '' && !isNaN(parseInt(newEmp.ctcAnnual)) ? parseInt(newEmp.ctcAnnual) : 0,
       pfEnrolled: true,
@@ -996,7 +996,7 @@ export default function EmployeeDirectoryView({
                   </div>
                   <div>
                     <div className="flex items-center gap-2.5">
-                      <h3 className="text-lg font-bold text-white tracking-tight leading-tight">Onboard New Hospital Staff</h3>
+                      <h3 className="text-lg font-bold text-white tracking-tight leading-tight">Onboard New Clinic Staff</h3>
                       <span className="text-[10px] uppercase font-black tracking-wider px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/25">
                         Clinic HR
                       </span>
@@ -1305,11 +1305,11 @@ export default function EmployeeDirectoryView({
                       </div>
                     </div>
 
-                    {/* Hospital Email */}
+                    {/* Clinic Email */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1">
-                          Hospital Email
+                          Clinic Email
                         </label>
                         <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
                           Required
@@ -1320,7 +1320,7 @@ export default function EmployeeDirectoryView({
                         <input 
                           type="email" 
                           required
-                          placeholder="e.g. allison.house@hospital.com"
+                          placeholder="e.g. allison.house@clinic.com"
                           value={newEmp.email}
                           onChange={(e) => setNewEmp({...newEmp, email: e.target.value})}
                           className="w-full h-10 pl-10 pr-3.5 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 transition-all shadow-2xs"

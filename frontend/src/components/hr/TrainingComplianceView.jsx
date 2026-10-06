@@ -56,7 +56,7 @@ export default function TrainingComplianceView() {
       
       {/* Header */}
       <div>
-        <h1 className="text-xl font-display font-bold text-slate-900">Hospital Certifications & Mandatory Training</h1>
+        <h1 className="text-xl font-display font-bold text-slate-900">Clinic Certifications & Mandatory Training</h1>
         <p className="text-slate-400 text-xs mt-0.5">Track HIPAA guidelines, safety compliance, and professional license validity timers.</p>
       </div>
 

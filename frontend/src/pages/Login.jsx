@@ -355,7 +355,7 @@ const Login = () => {
                   {hospital.name}
                 </h2>
                 <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100 uppercase tracking-wider">
-                  Hospital Portal • {hospital.hospitalId}
+                  Clinic Portal • {hospital.hospitalId}
                 </span>
               </div>
             </div>
@@ -532,7 +532,7 @@ const Login = () => {
               </h2>
               <p className="text-[14px] sm:text-[15px] text-slate-500 font-normal mt-1.5">
                 {hospital
-                  ? 'Enter your credentials to access this hospital portal'
+                  ? 'Enter your credentials to access this clinic portal'
                   : 'Enter your credentials to access your account'}
               </p>
             </div>

@@ -1373,7 +1373,7 @@ const DoctorDashboard = () => {
     setDoctorCustomLetterhead(null);
     setLetterheadMode('hospital');
     setPrintSettings(prev => ({ ...prev, letterheadMode: 'hospital' }));
-    showToastNotification("Custom letterhead removed. Reverted to Hospital default.", "info");
+    showToastNotification("Custom letterhead removed. Reverted to Clinic default.", "info");
   };
 
   const handleSetLetterheadMode = (mode) => {
@@ -1384,7 +1384,7 @@ const DoctorDashboard = () => {
     } catch (e) {}
     setPrintSettings(prev => ({ ...prev, letterheadMode: mode }));
     if (mode === 'hospital') {
-      showToastNotification("Hospital letterhead active (Admin safe margins applied).", "info");
+      showToastNotification("Clinic letterhead active (Admin safe margins applied).", "info");
     } else if (mode === 'custom') {
       if (!doctorCustomLetterhead) {
         showToastNotification("Custom Letterhead selected. Please upload your letterhead file.", "info");
@@ -5997,7 +5997,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#EA580C', display: 'inline-block' }}></span>
                   CLINICAL MODE OFFLINE
                 </div>
-                Clinical consultation & prescription access is disabled for this hospital. HR & self-service features remain active.
+                Clinical consultation & prescription access is disabled for this clinic. HR & self-service features remain active.
               </div>
             )}
 
@@ -6563,10 +6563,10 @@ I have scanned the medical reference databases, but couldn't find a direct match
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               </div>
               <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', marginBottom: '10px' }}>
-                Doctor Clinical Mode is currently OFFLINE for this hospital.
+                Doctor Clinical Mode is currently OFFLINE for this clinic.
               </h2>
               <p style={{ fontSize: '13.5px', color: '#64748B', lineHeight: 1.6, marginBottom: '24px' }}>
-                Clinical consultations and prescriptions are being handled through the hospital's offline workflow.
+                Clinical consultations and prescriptions are being handled through the clinic's offline workflow.
               </p>
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
                 <button
@@ -13267,7 +13267,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
                   </h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {[
-                      { val: 'hospital', label: '🏥 Hospital Letterhead (Default)', sub: customLetterhead ? 'Official admin letterhead active' : 'Standard header with admin margins' },
+                      { val: 'hospital', label: '🏥 Clinic Letterhead (Default)', sub: customLetterhead ? 'Official admin letterhead active' : 'Standard header with admin margins' },
                       { val: 'custom', label: '🩺 Doctor Custom Letterhead', sub: doctorCustomLetterhead ? 'Custom doctor letterhead active' : 'Upload in Prescription Maker' },
                       { val: 'none', label: '🚫 No Letterhead (Pre-printed Paper)', sub: 'Keeps exact Admin safe margins, blank graphic' }
                     ].map(opt => (
@@ -14805,7 +14805,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
-                      <span>Print Summary ({letterheadMode === 'custom' ? 'Doctor Custom' : letterheadMode === 'none' ? 'No Letterhead' : 'Hospital Letterhead'})</span>
+                      <span>Print Summary ({letterheadMode === 'custom' ? 'Doctor Custom' : letterheadMode === 'none' ? 'No Letterhead' : 'Clinic Letterhead'})</span>
                     </button>
 
                     {/* Separator */}
@@ -14899,11 +14899,11 @@ I have scanned the medical reference databases, but couldn't find a direct match
                                   </div>
                                   <div>
                                     <div style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                      Hospital Letterhead
+                                      Clinic Letterhead
                                       <span style={{ fontSize: '9px', fontWeight: 800, background: '#D1FAE5', color: '#065F46', padding: '1px 5px', borderRadius: '4px' }}>Default</span>
                                     </div>
                                     <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 500 }}>
-                                      {customLetterhead ? 'Official hospital letterhead from Admin' : 'Clean safe margin for pre-printed hospital stationery'}
+                                      {customLetterhead ? 'Official clinic letterhead from Admin' : 'Clean safe margin for pre-printed clinic stationery'}
                                     </div>
                                   </div>
                                 </div>
@@ -14911,8 +14911,8 @@ I have scanned the medical reference databases, but couldn't find a direct match
                               </div>
                               {customLetterhead && (
                                 <div style={{ marginTop: '2px', padding: '4px', background: '#FFFFFF', borderRadius: '6px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <img src={customLetterhead} alt="Hospital Letterhead Preview" style={{ width: '48px', height: '26px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #CBD5E1' }} />
-                                  <span style={{ fontSize: '10px', color: '#059669', fontWeight: 700 }}>Hospital letterhead configured in Admin</span>
+                                  <img src={customLetterhead} alt="Clinic Letterhead Preview" style={{ width: '48px', height: '26px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #CBD5E1' }} />
+                                  <span style={{ fontSize: '10px', color: '#059669', fontWeight: 700 }}>Clinic letterhead configured in Admin</span>
                                 </div>
                               )}
                             </div>
@@ -15070,7 +15070,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
                               <span style={{ fontSize: '13px' }}>🔒</span>
                               <div style={{ fontSize: '10.5px', color: '#475569', lineHeight: 1.4 }}>
                                 <span style={{ fontWeight: 800, color: '#0F172A' }}>Admin Safe Margins Kept: </span>
-                                <span>Top: <b>{aTop}mm</b> | Bottom: <b>{aBottom}mm</b> | Left: <b>{aLeft}mm</b> | Right: <b>{aRight}mm</b>. Preserved exactly across Hospital, Custom, and No Letterhead.</span>
+                                <span>Top: <b>{aTop}mm</b> | Bottom: <b>{aBottom}mm</b> | Left: <b>{aLeft}mm</b> | Right: <b>{aRight}mm</b>. Preserved exactly across Clinic, Custom, and No Letterhead.</span>
                               </div>
                             </div>
                           );
@@ -15105,7 +15105,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
                             onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
-                            <span>Print Summary ({letterheadMode === 'custom' ? 'Doctor Custom' : letterheadMode === 'none' ? 'No Letterhead' : 'Hospital Letterhead'})</span>
+                            <span>Print Summary ({letterheadMode === 'custom' ? 'Doctor Custom' : letterheadMode === 'none' ? 'No Letterhead' : 'Clinic Letterhead'})</span>
                           </button>
                           {(() => {
                             const selectedTpl = adminTemplates.find(t => t._id === printSettings.template) || adminTemplates.find(t => t.isStandard) || adminTemplates[0];
@@ -15240,7 +15240,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
               {/* Hospital Sender Info Note */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F1F5F9', padding: '10px 14px', borderRadius: '8px', fontSize: '11.5px', color: '#475569' }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
-                <span>Sent from <strong>{user?.tenantName || 'Hospital'}</strong> with official hospital branding & digital doctor verification.</span>
+                <span>Sent from <strong>{user?.tenantName || 'Clinic'}</strong> with official clinic branding & digital doctor verification.</span>
               </div>
             </div>
 

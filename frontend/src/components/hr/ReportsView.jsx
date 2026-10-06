@@ -139,7 +139,7 @@ export default function ReportsView({ employees = [], attendanceRecords = [], le
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-display font-bold text-slate-900">Hospital HR Intelligence & Audits</h1>
+          <h1 className="text-xl font-display font-bold text-slate-900">Clinic HR Intelligence & Audits</h1>
           <p className="text-slate-400 text-xs mt-0.5">Export payroll ledger statements, joint commission audits, and nurse attrition ratios.</p>
         </div>
 

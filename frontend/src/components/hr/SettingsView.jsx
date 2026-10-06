@@ -13,7 +13,7 @@ export default function SettingsView() {
   const [workflows, setWorkflows] = useState([
     { id: 'WF-1', name: 'Clinical Leave Approvals', description: 'Requires approval from both Department Head and Chief Medical Director.', stages: ['Dept Head', 'Chief Medical Director'], active: true },
     { id: 'WF-2', name: 'Biometric Attendance Adjustments', description: 'Immediate validation from Assigned HR Executive only.', stages: ['Assigned HR Executive'], active: true },
-    { id: 'WF-3', name: 'Clinical Recruitment Offers', description: 'Must receive endorsement from CFO and CEO prior to dispatch.', stages: ['Hospital CFO', 'Chief Executive Officer'], active: true }
+    { id: 'WF-3', name: 'Clinical Recruitment Offers', description: 'Must receive endorsement from CFO and CEO prior to dispatch.', stages: ['Clinic CFO', 'Chief Executive Officer'], active: true }
   ]);
 
   // Notifications setting state
@@ -76,7 +76,7 @@ export default function SettingsView() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 pb-3 gap-4">
         <div>
-          <h1 className="text-xl font-display font-bold text-slate-900">Hospital HRMS Global Configurations</h1>
+          <h1 className="text-xl font-display font-bold text-slate-900">Clinic HRMS Global Configurations</h1>
           <p className="text-slate-400 text-xs mt-0.5">Control hierarchical approval chains, automated credential alerts, and system compliance audit logs.</p>
         </div>
 
@@ -116,7 +116,7 @@ export default function SettingsView() {
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6">
           <div>
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Multi-Tier Approvals Board</h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">Define which hospital executives must sign off on operational changes.</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">Define which clinic executives must sign off on operational changes.</p>
           </div>
 
           <div className="space-y-4">
@@ -190,7 +190,7 @@ export default function SettingsView() {
             {/* Setting 2: Birthday announcement */}
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
-                <h4 className="font-bold text-slate-800">Hospital Birthday Broadcast</h4>
+                <h4 className="font-bold text-slate-800">Clinic Birthday Broadcast</h4>
                 <p className="text-[11px] text-slate-400 mt-0.5">Automate Slack/Email greetings on employee birthdays.</p>
               </div>
               <button 

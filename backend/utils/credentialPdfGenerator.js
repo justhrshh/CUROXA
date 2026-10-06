@@ -42,7 +42,7 @@ function generateCredentialPdf({
           annotating: false
         },
         info: {
-          Title: `Hospital Admin Credentials - ${hospitalName || 'Quroxa Tenant'}`,
+          Title: `Clinic Admin Credentials - ${hospitalName || 'Quroxa Tenant'}`,
           Author: 'Quroxa Healthcare Systems',
           Subject: 'Confidential Access Credentials'
         }
@@ -71,11 +71,11 @@ function generateCredentialPdf({
          .font('Helvetica-Bold')
          .text('CONFIDENTIAL DOCUMENT: Contains privileged administrator access keys. Do not distribute.', 55, 123);
 
-      // Section 1: Hospital Node Specification
+      // Section 1: Clinic Node Specification
       doc.fillColor('#1E293B')
          .fontSize(12)
          .font('Helvetica-Bold')
-         .text('1. Hospital Node Specification', 40, 155);
+         .text('1. Clinic Node Specification', 40, 155);
 
       doc.rect(40, 172, 515, 95).fill('#F8FAFC');
       doc.rect(40, 172, 515, 95).stroke('#E2E8F0');
@@ -84,7 +84,7 @@ function generateCredentialPdf({
       const col2X = 300;
       let curY = 185;
 
-      doc.fillColor('#64748B').fontSize(9.5).font('Helvetica').text('Hospital Name:', col1X, curY);
+      doc.fillColor('#64748B').fontSize(9.5).font('Helvetica').text('Clinic Name:', col1X, curY);
       doc.fillColor('#0F172A').font('Helvetica-Bold').text(hospitalName || 'N/A', col1X + 90, curY, { width: 145, ellipsis: true });
 
       doc.fillColor('#64748B').font('Helvetica').text('Subscription Tier:', col2X, curY);
@@ -130,7 +130,7 @@ function generateCredentialPdf({
       doc.fillColor('#B91C1C').font('Helvetica-Bold').fontSize(10.5).text(adminPassword || 'N/A', col1X + 130, credY);
 
       credY += 22;
-      doc.fillColor('#475569').fontSize(9.5).font('Helvetica').text('Hospital Portal URL:', col1X, credY);
+      doc.fillColor('#475569').fontSize(9.5).font('Helvetica').text('Clinic Portal URL:', col1X, credY);
       doc.fillColor('#2563EB').font('Helvetica-Bold').text(portalUrl || 'N/A', col1X + 130, credY, { link: portalUrl, underline: true });
 
       // Security Checklist Box
