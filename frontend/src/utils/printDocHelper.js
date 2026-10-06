@@ -278,16 +278,54 @@ export const printPO = (po, clinicName = null, options = {}) => {
   const placedBySnapshot = po.placedBy || {};
   const approvedBySnapshot = po.approvedBy && typeof po.approvedBy === 'object' ? po.approvedBy : {};
 
-  const preparedByName = placedBySnapshot.name || po.requestedBy || currentUser.name || 'JITESH KUMAR';
+  const preparedByName = placedBySnapshot.name || po.requestedBy || currentUser.name || 'PHARMACIST';
   const preparedByRole = placedBySnapshot.designation || placedBySnapshot.role || 'Pharmacist / In-Charge';
-  const preparedBySigUrl = placedBySnapshot.signatureUrl || '';
+  const preparedBySigUrl = placedBySnapshot.signatureUrl || 
+    options.pharmacistSignatureUrl || 
+    options.signatureUrl || 
+    currentUser.signatureUrl || 
+    localStorage.getItem('signatureUrl') || 
+    localStorage.getItem('pharmacistSignatureUrl') || 
+    '';
 
   const checkedByName = po.checkedBy || 'ISHAN SHUKLA';
 
-  const isApproved = String(po.status || '').toLowerCase() === 'approved';
-  const approvedByName = approvedBySnapshot.name || (typeof po.approvedBy === 'string' ? po.approvedBy : (isApproved ? 'SUPERINTENDENT / ADMIN' : 'Pending Approval'));
-  const approvedByRole = approvedBySnapshot.designation || approvedBySnapshot.role || (isApproved ? 'Medical Superintendent / Administrator' : '');
-  const approvedBySigUrl = isApproved && approvedBySnapshot.signatureUrl ? approvedBySnapshot.signatureUrl : '';
+  const statusStr = String(po.status || '').trim().toLowerCase();
+  const isExplicitPending = statusStr === 'pending' || statusStr === 'pending approval' || statusStr === 'draft' || statusStr === 'rejected';
+  const isApproved = !isExplicitPending || 
+    Boolean(po.isApproved) || 
+    Boolean(approvedBySnapshot.name && approvedBySnapshot.name !== 'Pending Approval') || 
+    Boolean(approvedBySnapshot.signatureUrl) ||
+    statusStr.includes('consolidated') ||
+    statusStr.includes('approved') ||
+    statusStr.includes('received') ||
+    statusStr.includes('delivered') ||
+    statusStr.includes('sent') ||
+    statusStr.includes('confirmed') ||
+    statusStr.includes('completed');
+
+  const approvedByName = (approvedBySnapshot.name && approvedBySnapshot.name !== 'Pending Approval') 
+    ? approvedBySnapshot.name 
+    : (typeof po.approvedBy === 'string' && po.approvedBy !== 'Pending Approval' && po.approvedBy.trim()
+        ? po.approvedBy 
+        : (isApproved ? (hospital.adminName || 'DR. ISHAN SHUKLA (ADMIN)') : 'PENDING APPROVAL'));
+
+  const approvedByRole = approvedBySnapshot.designation || approvedBySnapshot.role || 
+    (isApproved ? 'Medical Superintendent / Administrator' : 'Pending Administrative Sign-Off');
+
+  const isAdminUser = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const approvedBySigUrl = isApproved 
+    ? (approvedBySnapshot.signatureUrl || 
+       options.adminSignatureUrl || 
+       localStorage.getItem('adminSignatureUrl') || 
+       (isAdminUser ? (currentUser?.signatureUrl || localStorage.getItem('signatureUrl')) : '') || 
+       '')
+    : '';
+
+  // Prevent pharmacist signature from ever being mirrored as admin signature
+  const finalApprovedSig = (approvedBySigUrl && approvedBySigUrl === preparedBySigUrl && !approvedBySnapshot.signatureUrl && !isAdminUser)
+    ? ''
+    : approvedBySigUrl;
 
   // 5. Line Items Calculations & Rows
   let runningSubtotal = 0;
@@ -358,7 +396,7 @@ export const printPO = (po, clinicName = null, options = {}) => {
       <style>
         @page {
           size: A4 portrait;
-          margin: 8mm 10mm;
+          margin: 6mm 8mm;
         }
         * {
           box-sizing: border-box;
@@ -371,18 +409,23 @@ export const printPO = (po, clinicName = null, options = {}) => {
           background: #FFFFFF;
           margin: 0;
           padding: 0;
-          font-size: 10px;
-          line-height: 1.25;
+          font-size: 9.5px;
+          line-height: 1.2;
         }
         .po-container {
           width: 100%;
           border: 1.5px solid #000000;
           background: #FFFFFF;
+          page-break-inside: avoid;
         }
         table {
           width: 100%;
           border-collapse: collapse;
           border-spacing: 0;
+          page-break-inside: avoid;
+        }
+        tr, td, th {
+          page-break-inside: avoid;
         }
         th, td {
           vertical-align: top;
@@ -573,29 +616,21 @@ export const printPO = (po, clinicName = null, options = {}) => {
         </div>
 
         <!-- Terms and Conditions -->
-        <div style="padding: 4px 8px; border-bottom: 1px solid #000000;">
-          <div style="font-size: 10px; font-weight: 700; text-align: center; margin-bottom: 2px;">Terms and Conditions</div>
-          <ol style="margin: 0; padding-left: 16px; font-size: 8px; line-height: 1.3; color: #000000;">
-            <li>Please ensure that your invoice margin matches the margin shown in this PO. Product will be rejected if cost, GST, payment/delivery terms mismatches</li>
-            <li>Delivery is said to be completed only when goods inward receipt is made by ${billToName}, which
-              <div>a - Copy of the PO with signature &amp; stamp of vendor's</div>
-              <div>b - Printed GST Invoice from vendor with PO number on it</div>
-            </li>
-            <li>All disputes between the parties will be governed by the laws of India and subject to jurisdiction of ${hospital.city || hospital.state} Court.</li>
-            <li>${billToName}. reserves the right to reject the goods whenever the product is not adhering to quality</li>
-            <li>Purchase order number must be mentioned in the invoice for each material.</li>
-            <li>Please revert within 24 hours for any changes you may require.</li>
-            <li>Please ensure that you do not include more than one PO in one tax invoice. If one invoice includes more than one PO, we shall be constraint to reject your invoice.However you may include more than one delivery invoice against one PO</li>
-            <li>Product not found acceptable as per ${billToName} evaluation scale will be back.</li>
-            <li>Product should have 6 months expiry if applicable</li>
-            <li>Equipment Unloading would be on supplier scope</li>
+        <div style="padding: 3px 6px; border-bottom: 1px solid #000000;">
+          <div style="font-size: 9.5px; font-weight: 700; text-align: center; margin-bottom: 2px;">Terms and Conditions</div>
+          <ol style="margin: 0; padding-left: 14px; font-size: 7.5px; line-height: 1.2; color: #000000;">
+            <li>Please ensure invoice margin matches margin shown in this PO. Product will be rejected if cost, GST, or terms mismatch.</li>
+            <li>Delivery is complete only upon goods inward receipt by ${billToName} with vendor signed PO copy and printed GST Invoice.</li>
+            <li>All disputes will be governed by laws of India and subject to jurisdiction of ${hospital.city || hospital.state} Court.</li>
+            <li>${billToName} reserves right to reject goods whenever product is not adhering to quality standards or shelf life.</li>
+            <li>Purchase order number must be mentioned in invoice. Please revert within 24 hours for any required changes.</li>
           </ol>
         </div>
 
-        <!-- Signatures (Prepared By, Checked By, Approved By) -->
-        <table style="margin-top: 10px; margin-bottom: 20px;">
+        <!-- Signatures (Prepared By, Approved By) -->
+        <table style="margin-top: 6px; margin-bottom: 8px;">
           <tr>
-            <td style="width: 33.33%; text-align: left; padding-left: 12px; vertical-align: bottom;">
+            <td style="width: 50%; text-align: left; padding-left: 12px; vertical-align: bottom;">
               <div style="font-weight: 700; font-size: 9.5px; margin-bottom: 4px;">Prepared / Placed By</div>
               ${preparedBySigUrl ? `
                 <div style="margin-bottom: 4px;">
@@ -605,21 +640,17 @@ export const printPO = (po, clinicName = null, options = {}) => {
               <div style="font-weight: 700; font-size: 9px; text-transform: uppercase;">${preparedByName}</div>
               <div style="font-size: 8px; color: #475569;">${preparedByRole}</div>
             </td>
-            <td style="width: 33.33%; text-align: left; padding-left: 12px; vertical-align: bottom;">
-              <div style="font-weight: 700; font-size: 9.5px; margin-bottom: 4px;">Checked By</div>
-              <div style="height: 24px;"></div>
-              <div style="font-weight: 700; font-size: 9px; text-transform: uppercase;">${checkedByName}</div>
-              <div style="font-size: 8px; color: #475569;">Internal Audit / Stores</div>
-            </td>
-            <td style="width: 33.33%; text-align: left; padding-left: 12px; vertical-align: bottom;">
-              <div style="font-weight: 700; font-size: 9.5px; margin-bottom: 4px;">Approved By</div>
-              ${approvedBySigUrl ? `
-                <div style="margin-bottom: 4px;">
-                  <img src="${approvedBySigUrl}" alt="Approved By Signature" style="max-height: 44px; max-width: 140px; object-fit: contain; display: block;" />
-                </div>
-              ` : '<div style="height: 24px;"></div>'}
-              <div style="font-weight: 700; font-size: 9px; text-transform: uppercase; ${!isApproved ? 'color: #D97706;' : ''}">${approvedByName}</div>
-              <div style="font-size: 8px; color: #475569;">${approvedByRole}</div>
+            <td style="width: 50%; text-align: right; padding-right: 12px; vertical-align: bottom;">
+              <div style="display: inline-block; text-align: right;">
+                <div style="font-weight: 700; font-size: 9.5px; margin-bottom: 4px;">Approved By</div>
+                ${finalApprovedSig ? `
+                  <div style="margin-bottom: 4px; display: flex; justify-content: flex-end;">
+                    <img src="${finalApprovedSig}" alt="Approved By Signature" style="max-height: 44px; max-width: 140px; object-fit: contain; display: block;" />
+                  </div>
+                ` : '<div style="height: 24px;"></div>'}
+                <div style="font-weight: 700; font-size: 9px; text-transform: uppercase; ${!isApproved ? 'color: #D97706;' : ''}">${approvedByName}</div>
+                <div style="font-size: 8px; color: #475569;">${approvedByRole}</div>
+              </div>
             </td>
           </tr>
         </table>
@@ -794,10 +825,34 @@ export const printGRN = (grn, clinicName = null, options = {}) => {
 
   const formattedDate = formatGrnDisplayDate(grn.receivedDate || grn.grnDate || grn.createdAt);
 
+  const currentUser = options.currentUser || (() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch (e) { return {}; }
+  })();
+
   const receivedBySnapshot = grn.receivedByStaff || {};
-  const inspectorName = receivedBySnapshot.name || grn.receivedBy || 'Pharmacist';
+  const inspectorName = receivedBySnapshot.name || grn.receivedBy || currentUser.name || 'PHARMACIST';
   const inspectorRole = receivedBySnapshot.designation || receivedBySnapshot.role || 'Pharmacist / In-Charge';
-  const inspectorSigUrl = receivedBySnapshot.signatureUrl || '';
+  const inspectorSigUrl = receivedBySnapshot.signatureUrl || 
+    options.pharmacistSignatureUrl || 
+    options.signatureUrl || 
+    currentUser.signatureUrl || 
+    localStorage.getItem('pharmacistSignatureUrl') || 
+    localStorage.getItem('signatureUrl') || 
+    '';
+
+  const isAdminUser = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const storeInChargeName = grn.verifiedBy || options.adminName || hospital.adminName || 'DR. ISHAN SHUKLA';
+  const storeInChargeRole = 'Superintendent / Store Head';
+  const storeInChargeSigUrl = grn.adminSignatureUrl || 
+    options.adminSignatureUrl || 
+    localStorage.getItem('adminSignatureUrl') || 
+    (isAdminUser ? (currentUser?.signatureUrl || localStorage.getItem('signatureUrl')) : '') || 
+    '';
+
+  // Prevent pharmacist signature from ever being mirrored as store in-charge signature
+  const finalStoreInChargeSig = (storeInChargeSigUrl && storeInChargeSigUrl === inspectorSigUrl && !grn.adminSignatureUrl && !isAdminUser)
+    ? ''
+    : storeInChargeSigUrl;
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -1132,7 +1187,7 @@ export const printGRN = (grn, clinicName = null, options = {}) => {
         <div class="sig-col" style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center;">
           ${inspectorSigUrl ? `
             <div style="margin-bottom: 4px;">
-              <img src="${inspectorSigUrl}" alt="Staff Signature" style="max-height: 42px; max-width: 140px; object-fit: contain; display: block;" />
+              <img src="${inspectorSigUrl}" alt="Pharmacist Signature" style="max-height: 44px; max-width: 140px; object-fit: contain; display: block;" />
             </div>
           ` : '<div style="height: 24px;"></div>'}
           <strong style="text-transform: uppercase;">${inspectorName}</strong>
@@ -1140,14 +1195,19 @@ export const printGRN = (grn, clinicName = null, options = {}) => {
           <span style="margin-top: 2px;">Inspected &amp; Received By</span>
         </div>
         <div class="sig-col" style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center;">
-          <div style="height: 24px;"></div>
-          <strong>Store In-Charge</strong>
-          <span>Superintendent / Store Head</span>
+          ${finalStoreInChargeSig ? `
+            <div style="margin-bottom: 4px;">
+              <img src="${finalStoreInChargeSig}" alt="Store In-Charge Signature" style="max-height: 44px; max-width: 140px; object-fit: contain; display: block;" />
+            </div>
+          ` : '<div style="height: 24px;"></div>'}
+          <strong style="text-transform: uppercase;">${storeInChargeName}</strong>
+          <span style="font-size: 8.5px; color: #64748B;">${storeInChargeRole}</span>
+          <span style="margin-top: 2px;">Store In-Charge / Authorized</span>
         </div>
         <div class="sig-col" style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center;">
           <div style="height: 24px;"></div>
-          <strong>${grn.vendorName || 'Vendor Representative'}</strong>
-          <span>Authorized Signatory / Vendor Stamp</span>
+          <strong style="text-transform: uppercase;">${grn.vendorName || 'Vendor Representative'}</strong>
+          <span style="font-size: 8.5px; color: #64748B;">Authorized Signatory / Vendor Stamp</span>
         </div>
       </div>
 

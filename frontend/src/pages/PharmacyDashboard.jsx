@@ -107,6 +107,8 @@ const PharmacyDashboard = () => {
   const [profileEditLoading, setProfileEditLoading] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState('');
+  const [pharmacistSignatureUrl, setPharmacistSignatureUrl] = useState(() => currentUser.signatureUrl || '');
+  const [pharmacistSignatureUploading, setPharmacistSignatureUploading] = useState(false);
   const [customPharmacyLetterhead, setCustomPharmacyLetterhead] = useState(() => localStorage.getItem('curoxa_pharmacy_letterhead') || null);
 
   const handlePharmacyLetterheadUpload = (e) => {
@@ -4696,6 +4698,22 @@ const PharmacyDashboard = () => {
                     </div>
                     <span className="sidebar-link-text">Categories</span>
                   </div>
+                  <div 
+                    className={`sidebar-link ${activeTab === 'settings' ? 'active' : ''}`}
+                    onClick={(e) => { e.preventDefault(); setActiveTab('settings'); setMobileSidebarOpen(false); }}
+                  >
+                    {activeTab === 'settings' && (
+                      <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#EA580C' }} />
+                    )}
+                    <div className="sidebar-link-icon" style={{
+                      background: activeTab === 'settings' ? 'linear-gradient(135deg, #EA580C 0%, #F97316 100%)' : '#FFF7ED',
+                      color: activeTab === 'settings' ? '#FFFFFF' : '#EA580C',
+                      boxShadow: activeTab === 'settings' ? '0 3px 10px rgba(234, 88, 12, 0.25)' : 'none'
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    </div>
+                    <span className="sidebar-link-text">Settings</span>
+                  </div>
                 </>
               )}
             </div>
@@ -4795,11 +4813,11 @@ const PharmacyDashboard = () => {
                   onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
                   onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   onClick={() => {
-                    setShowProfileEditModal(true);
+                    setActiveTab('settings');
                     setShowProfileMenu(false);
                   }}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Edit Profile
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Profile &amp; Settings
                 </div>
                 <div 
                   style={{ 
@@ -4881,7 +4899,7 @@ const PharmacyDashboard = () => {
             </button>
             <div className="top-nav-left">
               <div className="top-nav-page-title">
-                {activeTab === 'dash' ? 'Pharmacy Overview' : activeTab === 'prescriptions' ? 'Prescriptions' : activeTab === 'sales' ? 'Pharmacy Sales' : activeTab === 'inventory' ? 'Inventory Management' : activeTab === 'review-dispense' ? 'Review & Dispense Prescription' : 'Pharmacy Workspace'}
+                {activeTab === 'dash' ? 'Pharmacy Overview' : activeTab === 'prescriptions' ? 'Prescriptions' : activeTab === 'sales' ? 'Pharmacy Sales' : activeTab === 'inventory' ? 'Inventory Management' : activeTab === 'review-dispense' ? 'Review & Dispense Prescription' : activeTab === 'settings' ? 'Settings' : 'Pharmacy Workspace'}
               </div>
               <div className="top-nav-greeting">
                 Good morning, {currentUser.name || 'Pharmacy-1'} 👋
@@ -9425,24 +9443,490 @@ const PharmacyDashboard = () => {
           </div>
         )}
 
-        {/* TAB 8: PROFILE */}
-        {activeTab === 'profile-tab' && (
-          <div style={{ animation: 'slideUp 0.3s ease-out' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', marginBottom: '24px' }}>Staff Profile</h2>
-            <div className="glass-card" style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
-              <img 
-                src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=200&auto=format&fit=crop&q=80" 
-                alt="Pharmacist Avatar" 
-                style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #EFF6FF' }} 
-              />
-              <div>
-                <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>{user.name}</h3>
-                <p style={{ margin: '4px 0 12px', fontSize: '13px', color: '#64748B', fontWeight: 700 }}>Pharmacy Operations Manager</p>
-                <div style={{ fontSize: '13px', color: '#334155', fontWeight: 600 }}>
-                  <div>Email: <b>{user.email || 'ankit.sharma@quroxa.com'}</b></div>
-                  <div style={{ marginTop: '4px' }}>Shift Status: <span style={{ color: '#10B981', fontWeight: 800 }}>Active Shift</span></div>
+        {/* TAB 8: SETTINGS & PROFILE (Matching Doctor Portal Layout) */}
+        {(activeTab === 'settings' || activeTab === 'profile-tab') && (
+          <div className="tab-content active" style={{ animation: 'slideUp 0.3s ease-out', padding: '0px' }}>
+            
+            {/* Header Title */}
+            <div style={{ marginBottom: '20px' }}>
+              <h1 style={{ fontSize: '24px', fontWeight: 900, margin: 0, color: '#0F172A', letterSpacing: '-0.025em' }}>Settings</h1>
+              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748B', fontWeight: 500 }}>
+                Manage your profile identity, credentials, and digital signing assets.
+              </p>
+            </div>
+
+            {/* Layout Grid: Left Profile Card, Right Digital Assets Card */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '24px' }}>
+              
+              {/* Card 1: Profile Details */}
+              <div 
+                className="glass-card" 
+                style={{ 
+                  padding: '24px', 
+                  borderRadius: '16px', 
+                  border: '1px solid #E2E8F0', 
+                  background: '#ffffff', 
+                  boxShadow: '0 4px 20px -2px rgba(15, 23, 42, 0.04)' 
+                }}
+              >
+                <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: '#2563EB' }}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  Profile Details
+                </h3>
+
+                {/* Profile Photo Row */}
+                <div 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '24px', 
+                    marginBottom: '28px', 
+                    background: '#F8FAFC', 
+                    padding: '20px', 
+                    borderRadius: '12px', 
+                    border: '1px solid #E2E8F0' 
+                  }}
+                >
+                  <div style={{ position: 'relative' }}>
+                    {currentUser.avatar ? (
+                      <img 
+                        src={currentUser.avatar} 
+                        alt="Pharmacist Profile" 
+                        style={{ 
+                          width: '80px', 
+                          height: '80px', 
+                          borderRadius: '50%', 
+                          objectFit: 'cover', 
+                          border: '3px solid #10B981', 
+                          boxShadow: '0 4px 14px rgba(16, 185, 129, 0.2)' 
+                        }}
+                      />
+                    ) : (
+                      <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 800, border: '3px solid #10B981', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.2)' }}>
+                        {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'PH'}
+                      </div>
+                    )}
+                    <label 
+                      htmlFor="pharmacy-profile-photo-upload" 
+                      style={{ 
+                        position: 'absolute', 
+                        bottom: '-2px', 
+                        right: '-2px', 
+                        background: '#10B981', 
+                        color: '#ffffff', 
+                        width: '28px', 
+                        height: '28px', 
+                        borderRadius: '50%', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        cursor: 'pointer', 
+                        border: '2px solid #ffffff', 
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.15)' 
+                      }}
+                      title="Upload New Photo"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                    </label>
+                    <input 
+                      type="file" 
+                      id="pharmacy-profile-photo-upload" 
+                      accept="image/*" 
+                      style={{ display: 'none' }} 
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          if (file.size > 5000000) {
+                            showToast("File size must be under 5MB", "error");
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = async (event) => {
+                            const newAvatar = event.target.result;
+                            try {
+                              await api.put(`/auth/profile/${currentUser.id || currentUser._id}`, {
+                                name: currentUser.name,
+                                email: currentUser.email,
+                                avatar: newAvatar
+                              });
+                              const updatedUser = { ...currentUser, avatar: newAvatar };
+                              localStorage.setItem('user', JSON.stringify(updatedUser));
+                              setCurrentUser(updatedUser);
+                              showToast('Profile photo updated successfully!', 'success');
+                            } catch (err) {
+                              showToast('Failed to save profile picture', 'error');
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: 800, color: '#1E293B' }}>Profile Picture</h4>
+                    <p style={{ margin: '0 0 10px 0', fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>JPG, PNG or GIF. Max 5MB.</p>
+                    <button 
+                      type="button" 
+                      onClick={() => document.getElementById('pharmacy-profile-photo-upload').click()}
+                      style={{ 
+                        background: 'white', 
+                        border: '1px solid #CBD5E1', 
+                        borderRadius: '8px', 
+                        padding: '6px 14px', 
+                        color: '#334155', 
+                        fontSize: '12px', 
+                        fontWeight: 800, 
+                        cursor: 'pointer', 
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                      Upload Photo
+                    </button>
+                  </div>
+                </div>
+
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  showToast('Profile updated successfully!', 'success');
+                }}>
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: '#64748B', marginBottom: '8px', letterSpacing: '0.05em' }}>
+                      Pharmacist Name
+                    </label>
+                    <input 
+                      type="text" 
+                      value={currentUser.name || 'Pharmacist'}
+                      style={{ 
+                        width: '100%', 
+                        boxSizing: 'border-box',
+                        padding: '12px 16px', 
+                        borderRadius: '10px', 
+                        border: '1px solid #CBD5E1', 
+                        background: '#F1F5F9', 
+                        cursor: 'not-allowed',
+                        fontSize: '14px', 
+                        color: '#1E293B', 
+                        fontWeight: 700,
+                        outline: 'none'
+                      }}
+                      disabled
+                      required
+                    />
+                    <span style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', display: 'block' }}>Managed by Administrator</span>
+                  </div>
+
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: '#64748B', marginBottom: '8px', letterSpacing: '0.05em' }}>
+                      Email Address
+                    </label>
+                    <input 
+                      type="text" 
+                      value={currentUser.email || 'pharmacy@quroxa.com'}
+                      style={{ 
+                        width: '100%', 
+                        boxSizing: 'border-box',
+                        padding: '12px 16px', 
+                        borderRadius: '10px', 
+                        border: '1px solid #CBD5E1', 
+                        background: '#F1F5F9', 
+                        cursor: 'not-allowed',
+                        fontSize: '14px', 
+                        color: '#1E293B', 
+                        fontWeight: 700,
+                        outline: 'none'
+                      }}
+                      disabled
+                      required
+                    />
+                    <span style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', display: 'block' }}>Managed by Administrator</span>
+                  </div>
+
+                  <div style={{ marginBottom: '28px' }}>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: '#64748B', marginBottom: '8px', letterSpacing: '0.05em' }}>
+                      Designation / Role
+                    </label>
+                    <div style={{ 
+                      width: '100%', 
+                      boxSizing: 'border-box',
+                      padding: '12px 16px', 
+                      borderRadius: '10px', 
+                      border: '1px solid #CBD5E1', 
+                      background: '#F1F5F9', 
+                      color: '#1E293B', 
+                      fontSize: '14px', 
+                      fontWeight: 700 
+                    }}>
+                      Pharmacy Operations Manager / Store In-Charge
+                    </div>
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    style={{ 
+                      width: '100%', 
+                      background: '#10B981', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '10px', 
+                      padding: '14px', 
+                      fontSize: '14px', 
+                      fontWeight: 800, 
+                      cursor: 'pointer', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      gap: '8px', 
+                      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.25)', 
+                      transition: 'background 0.2s' 
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#059669'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#10B981'}
+                  >
+                    Update Profile
+                  </button>
+                </form>
+              </div>
+
+              {/* Card 2: Digital Assets (Matching Doctor Dashboard exactly) */}
+              <div 
+                className="glass-card" 
+                style={{ 
+                  padding: '24px', 
+                  borderRadius: '16px', 
+                  border: '1px solid #E2E8F0', 
+                  background: '#ffffff', 
+                  boxShadow: '0 4px 20px -2px rgba(15, 23, 42, 0.04)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '20px'
+                }}
+              >
+                <div>
+                  <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: '#10B981' }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    Digital Assets
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Manage encryption keys, purchase order stamps, and clinical sigils.</p>
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: '#64748B', letterSpacing: '0.05em' }}>
+                      Digital Signature
+                    </label>
+                    <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>
+                      PNG, JPG (Max 2MB)
+                    </span>
+                  </div>
+                  <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#64748B' }}>
+                    Upload your signature to display it on placed Purchase Orders and Goods Receipt Notes (GRN).
+                  </p>
+                  
+                  {/* Hidden file input */}
+                  <input
+                    type="file"
+                    id="pharmacist-signature-file-input"
+                    accept="image/png, image/jpeg, image/jpg"
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+
+                      // Validate file type
+                      const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+                      if (!validTypes.includes(file.type)) {
+                        showToast('Please select a valid PNG or JPG/JPEG image.', 'error');
+                        e.target.value = '';
+                        return;
+                      }
+
+                      // Validate file size (2MB)
+                      if (file.size > 2 * 1024 * 1024) {
+                        showToast('Signature file exceeds the 2MB size limit.', 'error');
+                        e.target.value = '';
+                        return;
+                      }
+
+                      try {
+                        const formData = new FormData();
+                        formData.append('signature', file);
+
+                        const res = await api.post('/auth/staff/signature', formData, {
+                          headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+
+                        const newSigUrl = res.data.signatureUrl;
+                        setPharmacistSignatureUrl(newSigUrl);
+                        const updatedUser = { ...currentUser, signatureUrl: newSigUrl };
+                        localStorage.setItem('user', JSON.stringify(updatedUser));
+                        localStorage.setItem('signatureUrl', newSigUrl);
+                        localStorage.setItem('pharmacistSignatureUrl', newSigUrl);
+                        setCurrentUser(updatedUser);
+                        showToast('Digital signature uploaded successfully!', 'success');
+                      } catch (err) {
+                        console.error('Signature upload failed:', err);
+                        showToast(err.response?.data?.error || 'Failed to upload signature.', 'error');
+                      } finally {
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+
+                  {/* Signature Box */}
+                  <div 
+                    style={{ 
+                      width: '100%', 
+                      minHeight: '180px', 
+                      border: pharmacistSignatureUrl ? '1.5px solid #CBD5E1' : '2px dashed #CBD5E1', 
+                      borderRadius: '12px', 
+                      background: pharmacistSignatureUrl ? '#FFFFFF' : '#F8FAFC', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      gap: '14px',
+                      padding: '24px',
+                      boxSizing: 'border-box'
+                    }}
+                  >
+                    {pharmacistSignatureUrl ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '14px' }}>
+                        <div 
+                          style={{ 
+                            width: '100%', 
+                            maxWidth: '320px', 
+                            height: '90px', 
+                            background: '#F8FAFC', 
+                            border: '1px solid #E2E8F0', 
+                            borderRadius: '8px', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            padding: '8px'
+                          }}
+                        >
+                          <img 
+                            src={pharmacistSignatureUrl} 
+                            alt="Pharmacist Signature" 
+                            style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', display: 'block' }} 
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <button 
+                            type="button"
+                            onClick={() => document.getElementById('pharmacist-signature-file-input').click()}
+                            style={{ 
+                              border: '1px solid #10B981', 
+                              background: '#ECFDF5', 
+                              color: '#047857', 
+                              borderRadius: '8px', 
+                              padding: '8px 16px', 
+                              fontSize: '12px', 
+                              fontWeight: 800, 
+                              cursor: 'pointer', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '6px', 
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#D1FAE5'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#ECFDF5'}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                            Replace Signature
+                          </button>
+
+                          <button 
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm("Are you sure you want to remove your digital signature? Future POs and GRNs will omit the signature.")) {
+                                return;
+                              }
+                              try {
+                                await api.delete('/auth/staff/signature');
+                                setPharmacistSignatureUrl('');
+                                const updatedUser = { ...currentUser, signatureUrl: '' };
+                                localStorage.setItem('user', JSON.stringify(updatedUser));
+                                localStorage.removeItem('signatureUrl');
+                                localStorage.removeItem('pharmacistSignatureUrl');
+                                setCurrentUser(updatedUser);
+                                showToast('Digital signature removed.', 'info');
+                              } catch (err) {
+                                console.error('Signature deletion failed:', err);
+                                showToast(err.response?.data?.error || 'Failed to remove signature.', 'error');
+                              }
+                            }}
+                            style={{ 
+                              border: '1px solid #FCA5A5', 
+                              background: '#FEF2F2', 
+                              color: '#DC2626', 
+                              borderRadius: '8px', 
+                              padding: '8px 16px', 
+                              fontSize: '12px', 
+                              fontWeight: 800, 
+                              cursor: 'pointer', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '6px', 
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#FEE2E2'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#FEF2F2'}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            Remove Signature
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10B981' }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+                        </div>
+                        <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#334155' }}>
+                          No digital signature uploaded
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#94A3B8', maxWidth: '260px' }}>
+                          Upload a PNG with transparent background or high-contrast JPG image.
+                        </div>
+                        <button 
+                          type="button" 
+                          onClick={() => document.getElementById('pharmacist-signature-file-input').click()}
+                          style={{ 
+                            border: 'none', 
+                            background: '#10B981', 
+                            color: '#ffffff', 
+                            borderRadius: '8px', 
+                            padding: '10px 20px', 
+                            fontSize: '13px', 
+                            fontWeight: 800, 
+                            cursor: 'pointer', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px', 
+                            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)', 
+                            transition: 'all 0.2s',
+                            marginTop: '6px'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#059669'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#10B981'}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                          Upload Signature
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+
             </div>
           </div>
         )}
@@ -11989,111 +12473,248 @@ const PharmacyDashboard = () => {
 
       {/* Profile Edit Modal */}
       {showProfileEditModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.3)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: '440px', padding: '28px', borderRadius: '24px', border: '1px solid #E2E8F0', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Edit Pharmacist Profile</h2>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000, padding: '20px' }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: '720px', padding: '32px', borderRadius: '24px', border: '1px solid #E2E8F0', boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid #F1F5F9' }}>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Edit Pharmacist Profile</h2>
+                <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748B' }}>Manage your personal details and official digital signature.</p>
+              </div>
               <button 
                 onClick={() => setShowProfileEditModal(false)}
-                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', borderRadius: '50%' }}
+                style={{ background: '#F1F5F9', border: 'none', color: '#64748B', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', transition: 'all 0.2s' }}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
               </button>
             </div>
 
             {profileError && (
-              <div style={{ padding: '12px', borderRadius: '8px', background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#DC2626', fontSize: '13px', fontWeight: 600, marginBottom: '16px' }}>
+              <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#DC2626', fontSize: '13px', fontWeight: 600, marginBottom: '20px' }}>
                 {profileError}
               </div>
             )}
 
             {profileSuccess && (
-              <div style={{ padding: '12px', borderRadius: '8px', background: '#F0FDF4', border: '1px solid #86EFAC', color: '#16A34A', fontSize: '13px', fontWeight: 600, marginBottom: '16px' }}>
+              <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#F0FDF4', border: '1px solid #86EFAC', color: '#16A34A', fontSize: '13px', fontWeight: 600, marginBottom: '20px' }}>
                 {profileSuccess}
               </div>
             )}
 
             <form onSubmit={handleUpdateProfileSubmit}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', marginBottom: '24px' }}>
+              {/* Top Avatar Row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px', padding: '16px 20px', background: '#F8FAFC', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
                 {profileEditAvatar ? (
                   <img 
                     src={profileEditAvatar} 
                     alt="Preview" 
-                    style={{ width: '90px', height: '90px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #10B981', boxShadow: '0 8px 20px rgba(16,185,129,0.15)' }} 
+                    style={{ width: '76px', height: '76px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #10B981', boxShadow: '0 4px 14px rgba(16,185,129,0.2)' }} 
                   />
                 ) : (
-                  <div style={{ width: '90px', height: '90px', borderRadius: '50%', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 800, boxShadow: '0 8px 20px rgba(16,185,129,0.15)' }}>
+                  <div style={{ width: '76px', height: '76px', borderRadius: '50%', background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 800, boxShadow: '0 4px 14px rgba(16,185,129,0.2)' }}>
                     {profileEditName ? profileEditName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'PH'}
                   </div>
                 )}
                 
                 <div>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', background: '#ECFDF5', color: '#047857', borderRadius: '8px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', border: '1px dashed #10B981' }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-                    Upload Picture
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      style={{ display: 'none' }} 
-                      onChange={(e) => {
-                        const file = e.target.files[0];
-                        if (file) {
-                          if (file.size > 5000000) {
-                            showToast("File size must be under 5MB", "error");
-                            return;
+                  <div style={{ fontWeight: 800, fontSize: '15px', color: '#0F172A', marginBottom: '4px' }}>Profile Photo</div>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '10px' }}>JPG, GIF or PNG. Max size 5MB.</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', background: '#ECFDF5', color: '#047857', borderRadius: '8px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', border: '1px dashed #10B981' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                      Upload Picture
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        style={{ display: 'none' }} 
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            if (file.size > 5000000) {
+                              showToast("File size must be under 5MB", "error");
+                              return;
+                            }
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              setProfileEditAvatar(event.target.result);
+                            };
+                            reader.readAsDataURL(file);
                           }
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            setProfileEditAvatar(event.target.result);
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
+                        }}
+                      />
+                    </label>
+                    {profileEditAvatar && (
+                      <button
+                        type="button"
+                        onClick={() => setProfileEditAvatar('')}
+                        style={{ background: 'none', border: 'none', color: '#EF4444', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2-Column Grid: Left Column Info, Right Column Signature */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+                {/* Left Column: Account Details */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '6px', color: '#475569' }}>Full Name</label>
+                    <input 
+                      type="text" 
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #CBD5E1', borderRadius: '10px', height: '42px', padding: '0 14px', fontSize: '13px', fontWeight: 600, outline: 'none', backgroundColor: '#F8FAFC', cursor: 'not-allowed', color: '#334155' }}
+                      value={profileEditName} 
+                      disabled
+                      required 
                     />
-                  </label>
-                  {profileEditAvatar && (
-                    <button
-                      type="button"
-                      onClick={() => setProfileEditAvatar('')}
-                      style={{ display: 'block', margin: '6px auto 0', background: 'none', border: 'none', color: '#EF4444', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      Remove Picture
-                    </button>
+                    <span style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', display: 'block' }}>Managed by Administrator</span>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '6px', color: '#475569' }}>Email Address</label>
+                    <input 
+                      type="email" 
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #CBD5E1', borderRadius: '10px', height: '42px', padding: '0 14px', fontSize: '13px', fontWeight: 600, outline: 'none', backgroundColor: '#F8FAFC', cursor: 'not-allowed', color: '#334155' }}
+                      value={profileEditEmail} 
+                      disabled
+                      required 
+                    />
+                    <span style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', display: 'block' }}>Managed by Administrator</span>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '6px', color: '#475569' }}>Designation / Role</label>
+                    <div style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #CBD5E1', borderRadius: '10px', height: '42px', padding: '0 14px', fontSize: '13px', fontWeight: 600, backgroundColor: '#F8FAFC', color: '#334155', display: 'flex', alignItems: 'center' }}>
+                      Chief Pharmacist / In-Charge
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Digital Signature Card */}
+                <div style={{ padding: '18px', background: '#F8FAFC', borderRadius: '16px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: '#10B981' }}><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+                      Digital Signature
+                    </label>
+                    <span style={{ fontSize: '11px', color: '#059669', background: '#ECFDF5', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>POs &amp; GRNs</span>
+                  </div>
+                  <p style={{ fontSize: '11.5px', color: '#64748B', margin: '0 0 14px 0', lineHeight: 1.4 }}>
+                    Your official signature automatically attaches to placed POs and verified GRNs.
+                  </p>
+
+                  <input 
+                    type="file" 
+                    id="pharmacist-signature-modal-input" 
+                    accept="image/png,image/jpeg,image/jpg" 
+                    style={{ display: 'none' }} 
+                    onChange={async (e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      if (file.size > 2 * 1024 * 1024) {
+                        showToast("Signature file size must be under 2MB", "error");
+                        return;
+                      }
+                      const formData = new FormData();
+                      formData.append('signature', file);
+                      setPharmacistSignatureUploading(true);
+                      try {
+                        const res = await api.post('/auth/staff/signature', formData, {
+                          headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+                        const newSigUrl = res.data.signatureUrl;
+                        setPharmacistSignatureUrl(newSigUrl);
+                        const updatedUser = { ...currentUser, signatureUrl: newSigUrl };
+                        localStorage.setItem('user', JSON.stringify(updatedUser));
+                        localStorage.setItem('signatureUrl', newSigUrl);
+                        localStorage.setItem('pharmacistSignatureUrl', newSigUrl);
+                        setCurrentUser(updatedUser);
+                        showToast("Digital signature saved successfully!", "success");
+                      } catch (uploadErr) {
+                        console.error("Signature upload failed:", uploadErr);
+                        showToast(uploadErr.response?.data?.error || "Failed to upload digital signature", "error");
+                      } finally {
+                        setPharmacistSignatureUploading(false);
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+
+                  {pharmacistSignatureUrl ? (
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '100%', height: '90px', background: '#FFFFFF', border: '1.5px solid #CBD5E1', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', boxSizing: 'border-box' }}>
+                        <img src={pharmacistSignatureUrl} alt="Pharmacist Signature" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                        <button 
+                          type="button" 
+                          onClick={() => document.getElementById('pharmacist-signature-modal-input').click()} 
+                          disabled={pharmacistSignatureUploading}
+                          style={{ flex: 1, height: '36px', fontSize: '11.5px', fontWeight: 800, color: '#047857', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                        >
+                          {pharmacistSignatureUploading ? 'Uploading...' : 'Replace'}
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={async () => {
+                            if (!window.confirm("Remove your saved digital signature? Future POs and GRNs will omit it.")) return;
+                            try {
+                              await api.delete('/auth/staff/signature');
+                              setPharmacistSignatureUrl('');
+                              const updatedUser = { ...currentUser, signatureUrl: '' };
+                              localStorage.setItem('user', JSON.stringify(updatedUser));
+                              localStorage.removeItem('signatureUrl');
+                              localStorage.removeItem('pharmacistSignatureUrl');
+                              setCurrentUser(updatedUser);
+                              showToast("Digital signature removed.", "info");
+                            } catch (delErr) {
+                              showToast(delErr.response?.data?.error || "Failed to remove signature", "error");
+                            }
+                          }}
+                          style={{ height: '36px', padding: '0 14px', fontSize: '11.5px', fontWeight: 800, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', cursor: 'pointer' }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '20px 14px', border: '2px dashed #CBD5E1', borderRadius: '12px', background: '#FFFFFF' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#ECFDF5', color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+                      </div>
+                      <div style={{ fontSize: '12.5px', color: '#334155', fontWeight: 700, marginBottom: '2px' }}>No signature uploaded yet</div>
+                      <div style={{ fontSize: '11px', color: '#94A3B8', marginBottom: '12px' }}>PNG or JPG with transparent bg preferred</div>
+                      <button 
+                        type="button" 
+                        onClick={() => document.getElementById('pharmacist-signature-modal-input').click()} 
+                        disabled={pharmacistSignatureUploading}
+                        style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 800, color: '#FFFFFF', background: '#10B981', border: 'none', borderRadius: '8px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)' }}
+                      >
+                        {pharmacistSignatureUploading ? 'Uploading...' : '+ Upload Digital Signature'}
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
 
-               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '6px', color: '#475569' }}>Full Name</label>
-                <input 
-                  type="text" 
-                  style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: '8px', height: '40px', padding: '0 12px', fontSize: '13px', fontWeight: 600, outline: 'none', backgroundColor: '#F1F5F9', cursor: 'not-allowed' }}
-                  value={profileEditName} 
-                  disabled
-                  required 
-                />
-                <span style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', display: 'block' }}>Managed by Administrator</span>
+              {/* Bottom Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '16px', borderTop: '1px solid #F1F5F9' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowProfileEditModal(false)}
+                  style={{ height: '44px', padding: '0 22px', fontWeight: 700, fontSize: '13px', borderRadius: '10px', background: '#F1F5F9', color: '#475569', border: 'none', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  style={{ height: '44px', padding: '0 28px', fontWeight: 800, fontSize: '13px', borderRadius: '10px', background: '#10B981', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.25)' }} 
+                  disabled={profileEditLoading}
+                >
+                  {profileEditLoading ? 'Saving...' : 'Save Profile Changes'}
+                </button>
               </div>
-
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '6px', color: '#475569' }}>Email Address</label>
-                <input 
-                  type="email" 
-                  style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: '8px', height: '40px', padding: '0 12px', fontSize: '13px', fontWeight: 600, outline: 'none', backgroundColor: '#F1F5F9', cursor: 'not-allowed' }}
-                  value={profileEditEmail} 
-                  disabled
-                  required 
-                />
-                <span style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', display: 'block' }}>Managed by Administrator</span>
-              </div>
-
-              <button 
-                type="submit" 
-                style={{ width: '100%', height: '44px', fontWeight: 800, borderRadius: '8px', background: '#10B981', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)' }}
-                disabled={profileEditLoading}
-              >
-                {profileEditLoading ? 'Saving...' : 'Save Profile Changes'}
-              </button>
             </form>
           </div>
         </div>

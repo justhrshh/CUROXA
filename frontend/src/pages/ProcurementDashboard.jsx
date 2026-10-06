@@ -252,6 +252,93 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
   const [currentUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{"name":"Dr. Ramesh","role":"Pharmacy Admin","email":"ramesh@quroxa.com"}'));
   const [hospitalBranding, setHospitalBranding] = useState(null);
 
+  // Digital Signature Management
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [userSignatureUrl, setUserSignatureUrl] = useState(() => currentUser?.signatureUrl || localStorage.getItem('signatureUrl') || '');
+  const [signatureUploading, setSignatureUploading] = useState(false);
+
+  useEffect(() => {
+    // Purge any leaked admin signature key if current user is not a system admin
+    if (currentUser?.role !== 'admin' && currentUser?.role !== 'superadmin') {
+      const adminSig = localStorage.getItem('adminSignatureUrl');
+      const pharmSig = userSignatureUrl || localStorage.getItem('signatureUrl') || localStorage.getItem('pharmacistSignatureUrl');
+      if (adminSig && adminSig === pharmSig) {
+        localStorage.removeItem('adminSignatureUrl');
+      }
+    }
+  }, [currentUser, userSignatureUrl]);
+
+  const handleSignatureUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('Signature file size must be under 2MB', 'error');
+      return;
+    }
+    const formData = new FormData();
+    formData.append('signature', file);
+    setSignatureUploading(true);
+    try {
+      const res = await api.post('/auth/staff/signature', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const newSig = res.data.signatureUrl;
+      setUserSignatureUrl(newSig);
+      if (currentUser) currentUser.signatureUrl = newSig;
+      localStorage.setItem('signatureUrl', newSig);
+      localStorage.setItem('pharmacistSignatureUrl', newSig);
+      if (currentUser?.role === 'admin' || currentUser?.role === 'superadmin') {
+        localStorage.setItem('adminSignatureUrl', newSig);
+      } else {
+        localStorage.removeItem('adminSignatureUrl');
+      }
+      try {
+        const u = JSON.parse(localStorage.getItem('user') || '{}');
+        u.signatureUrl = newSig;
+        localStorage.setItem('user', JSON.stringify(u));
+      } catch (err) {}
+      showToast('Digital signature uploaded successfully!', 'success');
+    } catch (err) {
+      console.error('Signature upload failed:', err);
+      showToast(err.response?.data?.error || 'Failed to upload signature', 'error');
+    } finally {
+      setSignatureUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSignatureDelete = async () => {
+    if (!window.confirm('Are you sure you want to remove your digital signature? Future POs and GRNs will omit it.')) return;
+    try {
+      await api.delete('/auth/staff/signature');
+      setUserSignatureUrl('');
+      if (currentUser) currentUser.signatureUrl = '';
+      localStorage.removeItem('signatureUrl');
+      localStorage.removeItem('pharmacistSignatureUrl');
+      localStorage.removeItem('adminSignatureUrl');
+      try {
+        const u = JSON.parse(localStorage.getItem('user') || '{}');
+        delete u.signatureUrl;
+        localStorage.setItem('user', JSON.stringify(u));
+      } catch (err) {}
+      showToast('Digital signature removed.', 'info');
+    } catch (err) {
+      console.error('Signature delete failed:', err);
+      showToast(err.response?.data?.error || 'Failed to remove signature', 'error');
+    }
+  };
+
+  const handleApprovePO = async (poId) => {
+    try {
+      await api.put(`/purchase-orders/${poId}/approve`);
+      showToast('Purchase Order approved with digital signature snapshot!', 'success');
+      fetchData();
+    } catch (err) {
+      console.error('Failed to approve PO:', err);
+      showToast(err.response?.data?.error || 'Failed to approve purchase order', 'error');
+    }
+  };
+
   useEffect(() => {
     const fetchCurrentHospitalBranding = async () => {
       try {
@@ -3600,6 +3687,37 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                 })()}
               </div>
 
+              {/* Digital Signature Quick Button */}
+              <button 
+                type="button" 
+                onClick={() => setShowSignatureModal(true)} 
+                style={{ 
+                  height: '42px', 
+                  padding: '0 13px', 
+                  borderRadius: '12px', 
+                  border: userSignatureUrl ? '1px solid #BBF7D0' : '1px solid #BFDBFE', 
+                  background: userSignatureUrl ? '#F0FDF4' : '#EFF6FF', 
+                  color: userSignatureUrl ? '#15803D' : '#1D4ED8', 
+                  fontWeight: 750, 
+                  fontSize: '12px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  cursor: 'pointer', 
+                  boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)', 
+                  transition: 'all 0.15s ease' 
+                }}
+                title="Manage your digital signature for Purchase Orders & GRNs"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+                <span>Digital Signature</span>
+                {userSignatureUrl ? (
+                  <span style={{ width: '6.5px', height: '6.5px', borderRadius: '50%', background: '#22C55E', boxShadow: '0 0 5px #22C55E' }}></span>
+                ) : (
+                  <span style={{ fontSize: '10px', background: '#DBEAFE', color: '#1E40AF', padding: '1px 5px', borderRadius: '4px' }}>Upload</span>
+                )}
+              </button>
+
               {/* Flagship Bell Widget */}
               <div 
                 className="proc-notif-btn" 
@@ -4403,7 +4521,18 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                       <h1 className="proc-title">Purchase Orders</h1>
                       <p className="proc-subtitle">Create POs, compare vendor prices and track delivery status.</p>
                     </div>
-                    <button className="proc-btn proc-btn-primary" onClick={() => {
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <button 
+                        type="button" 
+                        className="proc-btn proc-btn-secondary" 
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: '10px', fontWeight: 750 }}
+                        onClick={() => setShowSignatureModal(true)}
+                        title="Manage your digital signature for Purchase Orders"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+                        <span>✍️ Digital Signature</span>
+                      </button>
+                      <button className="proc-btn proc-btn-primary" onClick={() => {
                       fetchNextPoNumber();
                       setPoScreenOrderDate(new Date().toISOString().split('T')[0]);
                       setPoScreenExpectedDelivery(new Date(Date.now() + 4*24*60*60*1000).toISOString().split('T')[0]);
@@ -4417,6 +4546,7 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                     }}>
                       <i data-lucide="plus"></i> Create Purchase Order
                     </button>
+                    </div>
                   </div>
 
                   {/* KPI CARDS ROW (MATCHING ADMIN PORTAL DESIGN LANGUAGE) */}
@@ -5011,7 +5141,9 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                                           hospitalLogo: hospitalBranding?.logo || localStorage.getItem('hospitalLogo'),
                                           hospitalAddress: hospitalBranding?.address || localStorage.getItem('hospitalAddress'),
                                           hospitalPhone: hospitalBranding?.phone || localStorage.getItem('hospitalPhone'),
-                                          hospitalGstin: hospitalBranding?.gst || localStorage.getItem('hospitalGstin')
+                                          hospitalGstin: hospitalBranding?.gst || localStorage.getItem('hospitalGstin'),
+                                          pharmacistSignatureUrl: userSignatureUrl || currentUser?.signatureUrl || localStorage.getItem('signatureUrl') || localStorage.getItem('pharmacistSignatureUrl'),
+                                          adminSignatureUrl: localStorage.getItem('adminSignatureUrl') || ((currentUser?.role === 'admin' || currentUser?.role === 'superadmin') ? userSignatureUrl : '') || ''
                                         });
                                       }}
                                       title="Download / Print PO PDF"
@@ -5053,34 +5185,65 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                                     ) : (
                                       <>
                                         {(po.status === 'Pending' || po.status === 'Pending Approval') && (
-                                          <button 
-                                            type="button"
-                                            style={{
-                                              display: 'inline-flex',
-                                              alignItems: 'center',
-                                              justifyContent: 'center',
-                                              gap: '5px',
-                                              height: '32px',
-                                              width: '142px',
-                                              minWidth: '142px',
-                                              padding: '0 8px',
-                                              fontSize: '12px',
-                                              fontWeight: 700,
-                                              background: '#FFF7ED',
-                                              color: '#C2410C',
-                                              border: '1px solid #FFEDD5',
-                                              borderRadius: '6px',
-                                              cursor: 'pointer',
-                                              whiteSpace: 'nowrap'
-                                            }}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setPreviewPoDetails(po);
-                                            }}
-                                          >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                                            <span>PO Copy</span>
-                                          </button>
+                                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                            <button 
+                                              type="button"
+                                              style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '4px',
+                                                height: '32px',
+                                                padding: '0 8px',
+                                                fontSize: '11.5px',
+                                                fontWeight: 700,
+                                                background: '#FFF7ED',
+                                                color: '#C2410C',
+                                                border: '1px solid #FFEDD5',
+                                                borderRadius: '6px',
+                                                cursor: 'pointer',
+                                                whiteSpace: 'nowrap'
+                                              }}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPreviewPoDetails(po);
+                                              }}
+                                              title="View PO Preview"
+                                            >
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                                              <span>Copy</span>
+                                            </button>
+                                            <button 
+                                              type="button"
+                                              style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '4px',
+                                                height: '32px',
+                                                padding: '0 9px',
+                                                fontSize: '11.5px',
+                                                fontWeight: 700,
+                                                background: '#ECFDF5',
+                                                color: '#047857',
+                                                border: '1px solid #A7F3D0',
+                                                borderRadius: '6px',
+                                                cursor: 'pointer',
+                                                boxShadow: '0 1px 2px rgba(4, 120, 87, 0.12)',
+                                                whiteSpace: 'nowrap'
+                                              }}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (window.confirm(`Approve Purchase Order ${po.poId || ''}? Your official digital signature will be stamped on this document.`)) {
+                                                  handleApprovePO(po._id);
+                                                }
+                                              }}
+                                              title="Approve PO with Digital Signature"
+                                            >
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                              <span>Approve</span>
+                                            </button>
+                                          </div>
                                         )}
                                         {['Approved', 'Sent', 'Confirmed', 'Partially Delivered', 'Partially Received'].includes(po.status) && !isMaster ? (
                                           <button 
@@ -6162,7 +6325,9 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                                   hospitalLogo: hospitalBranding?.logo || localStorage.getItem('hospitalLogo'),
                                   hospitalAddress: hospitalBranding?.address || localStorage.getItem('hospitalAddress'),
                                   hospitalPhone: hospitalBranding?.phone || localStorage.getItem('hospitalPhone'),
-                                  hospitalGstin: hospitalBranding?.gst || localStorage.getItem('hospitalGstin')
+                                  hospitalGstin: hospitalBranding?.gst || localStorage.getItem('hospitalGstin'),
+                                  pharmacistSignatureUrl: userSignatureUrl || currentUser?.signatureUrl || localStorage.getItem('signatureUrl') || localStorage.getItem('pharmacistSignatureUrl'),
+                                  adminSignatureUrl: localStorage.getItem('adminSignatureUrl') || ((currentUser?.role === 'admin' || currentUser?.role === 'superadmin') ? userSignatureUrl : '')
                                 });
                               }}
                               title="Print Purchase Order Sheet"
@@ -6742,7 +6907,9 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                                         hospitalAddress: hospitalBranding?.address || localStorage.getItem('hospitalAddress'),
                                         hospitalPhone: hospitalBranding?.phone || localStorage.getItem('hospitalPhone'),
                                         hospitalGstin: hospitalBranding?.gst || localStorage.getItem('hospitalGstin'),
-                                        currentUser
+                                        currentUser,
+                                        pharmacistSignatureUrl: userSignatureUrl || currentUser?.signatureUrl || localStorage.getItem('signatureUrl') || localStorage.getItem('pharmacistSignatureUrl'),
+                                        adminSignatureUrl: localStorage.getItem('adminSignatureUrl') || ((currentUser?.role === 'admin' || currentUser?.role === 'superadmin') ? userSignatureUrl : '') || ''
                                       });
                                     }}
                                     title="Print / Save GRN Document"
@@ -10364,10 +10531,45 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
             </div>
 
             <div className="proc-modal-footer" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
-              <button type="button" className="proc-btn proc-btn-secondary" style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }} onClick={() => window.print()}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Print
+              <button 
+                type="button" 
+                className="proc-btn proc-btn-secondary" 
+                style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700 }} 
+                onClick={() => {
+                  const activeHospName = currentUser?.tenantName || localStorage.getItem('tenantName') || hospitalBranding?.name || "Ishita's Clinic";
+                  printPO(previewPoDetails, activeHospName, {
+                    vendors,
+                    currentUser,
+                    hospital: hospitalBranding,
+                    hospitalName: activeHospName,
+                    hospitalLogo: hospitalBranding?.logo || localStorage.getItem('hospitalLogo'),
+                    hospitalAddress: hospitalBranding?.address || localStorage.getItem('hospitalAddress'),
+                    hospitalPhone: hospitalBranding?.phone || localStorage.getItem('hospitalPhone'),
+                    hospitalGstin: hospitalBranding?.gst || localStorage.getItem('hospitalGstin'),
+                    pharmacistSignatureUrl: userSignatureUrl || currentUser?.signatureUrl || localStorage.getItem('signatureUrl') || localStorage.getItem('pharmacistSignatureUrl'),
+                    adminSignatureUrl: localStorage.getItem('adminSignatureUrl') || ((currentUser?.role === 'admin' || currentUser?.role === 'superadmin') ? userSignatureUrl : '') || ''
+                  });
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Download / Print PDF
               </button>
-              <button type="button" className="proc-btn proc-btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => setPreviewPoDetails(null)}>Close</button>
+              {(previewPoDetails.status === 'Pending' || previewPoDetails.status === 'Pending Approval') && (
+                <button 
+                  type="button" 
+                  className="proc-btn proc-btn-primary" 
+                  style={{ background: '#059669', borderColor: '#047857', padding: '6px 14px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}
+                  onClick={async () => {
+                    if (window.confirm(`Approve Purchase Order ${previewPoDetails.poId}? Your official digital signature will be captured.`)) {
+                      await handleApprovePO(previewPoDetails._id);
+                      setPreviewPoDetails(null);
+                    }
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Approve PO
+                </button>
+              )}
+              <button type="button" className="proc-btn proc-btn-secondary" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setPreviewPoDetails(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -10655,7 +10857,9 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                       hospitalAddress: hospitalBranding?.address || localStorage.getItem('hospitalAddress'),
                       hospitalPhone: hospitalBranding?.phone || localStorage.getItem('hospitalPhone'),
                       hospitalGstin: hospitalBranding?.gst || localStorage.getItem('hospitalGstin'),
-                      currentUser
+                      currentUser,
+                      pharmacistSignatureUrl: userSignatureUrl || currentUser?.signatureUrl || localStorage.getItem('signatureUrl') || localStorage.getItem('pharmacistSignatureUrl'),
+                      adminSignatureUrl: localStorage.getItem('adminSignatureUrl') || ((currentUser?.role === 'admin' || currentUser?.role === 'superadmin') ? userSignatureUrl : '') || ''
                     });
                   }}
                 >
@@ -10761,6 +10965,128 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
           />
         );
       })()}
+
+      {/* MODAL: DIGITAL SIGNATURE UPLOAD & MANAGEMENT */}
+      {showSignatureModal && (
+        <div className="proc-modal-overlay" onClick={() => setShowSignatureModal(false)}>
+          <div className="proc-modal" style={{ maxWidth: '480px', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="proc-modal-header" style={{ borderBottom: '1px solid #E2E8F0', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>Official Digital Signature</h3>
+                  <div style={{ fontSize: '11px', color: '#64748B' }}>Used on Purchase Orders & GRN Documents</div>
+                </div>
+              </div>
+              <button type="button" className="proc-close-btn" onClick={() => setShowSignatureModal(false)}>✕</button>
+            </div>
+
+            <div className="proc-modal-body" style={{ padding: '16px 0' }}>
+              <div style={{ fontSize: '12px', color: '#475569', marginBottom: '14px', lineHeight: 1.45 }}>
+                Upload an image of your signature (<strong style={{ color: '#0F172A' }}>PNG or JPG, max 2MB</strong>, transparent background recommended). 
+                Once uploaded, it will automatically appear under <strong>Prepared By</strong> on POs you generate, and under <strong>Approved By</strong> when approved by an administrator.
+              </div>
+
+              <input
+                type="file"
+                id="proc-signature-upload-input"
+                accept="image/png,image/jpeg,image/jpg"
+                style={{ display: 'none' }}
+                onChange={handleSignatureUpload}
+              />
+
+              <div style={{
+                border: '1.5px dashed #CBD5E1',
+                borderRadius: '10px',
+                padding: '20px',
+                textAlign: 'center',
+                background: userSignatureUrl ? '#F8FAFC' : '#FAFAFA',
+                minHeight: '130px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                position: 'relative'
+              }}>
+                {userSignatureUrl ? (
+                  <>
+                    <div style={{
+                      height: '70px',
+                      maxWidth: '220px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '6px',
+                      padding: '6px 14px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                    }}>
+                      <img
+                        src={userSignatureUrl}
+                        alt="Digital Signature"
+                        style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
+                      />
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      Active Signature On File
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </div>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>
+                      No signature uploaded yet
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button
+                  type="button"
+                  className="proc-btn proc-btn-primary"
+                  style={{ flex: 1, padding: '9px 14px', fontSize: '12.5px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  onClick={() => document.getElementById('proc-signature-upload-input')?.click()}
+                  disabled={signatureUploading}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <span>{signatureUploading ? 'Uploading...' : (userSignatureUrl ? 'Replace Signature' : 'Upload Signature')}</span>
+                </button>
+
+                {userSignatureUrl && (
+                  <button
+                    type="button"
+                    className="proc-btn proc-btn-secondary"
+                    style={{ color: '#DC2626', borderColor: '#FECACA', background: '#FEF2F2', padding: '9px 12px', fontSize: '12.5px', fontWeight: 700 }}
+                    onClick={handleSignatureDelete}
+                    disabled={signatureUploading}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="proc-modal-footer" style={{ borderTop: '1px solid #E2E8F0', paddingTop: '12px', marginTop: 0 }}>
+              <button
+                type="button"
+                className="proc-btn proc-btn-secondary"
+                style={{ width: '100%', padding: '8px' }}
+                onClick={() => setShowSignatureModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

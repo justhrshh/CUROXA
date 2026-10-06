@@ -329,7 +329,13 @@ export const triggerPrintPrescriptionDocument = ({
               </ul>
             </div>
             <div class="sig-box">
-              <div class="sig-script">${docName.replace(/^Dr\.?\s*/i, '')}</div>
+              ${(prescription.doctorSignatureUrl || doctor.signatureUrl) ? `
+                <div style="height: 48px; display: flex; align-items: flex-end; justify-content: center; margin-bottom: 4px;">
+                  <img src="${prescription.doctorSignatureUrl || doctor.signatureUrl}" alt="Doctor Signature" style="max-height: 44px; max-width: 170px; width: auto; height: auto; object-fit: contain; display: inline-block;" />
+                </div>
+              ` : `
+                <div class="sig-script">${docName.replace(/^Dr\.?\s*/i, '')}</div>
+              `}
               <div style="border-bottom: 1.5px solid #0F172A; margin-bottom: 4px;"></div>
               <div class="sig-name">${docName}</div>
               <div class="sig-deg">${docDesignation}</div>

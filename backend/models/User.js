@@ -232,6 +232,10 @@ const userSchema = new mongoose.Schema({
     sparse: true,
     unique: true,
     trim: true
+  },
+  signatureUrl: {
+    type: String,
+    default: ''
   }
 }, { timestamps: true });
 

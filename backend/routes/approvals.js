@@ -381,11 +381,27 @@ router.patch('/:id', verifyToken, isAdmin, tenantMiddleware, async (req, res) =>
       } else if (approval.type === 'purchase_order_approval') {
         const PurchaseOrder = require('../models/PurchaseOrder');
         const Vendor = require('../models/Vendor');
+        const User = require('../models/User');
         const poId = approval.details.poId || approval.details.id;
         if (poId) {
+          const approvingUser = await User.findById(req.user.id || req.user._id).select('name role designation specialty signatureUrl staff_id');
+          const approvedBySnapshot = {
+            staffId: approvingUser?.staff_id || req.user.staff_id || req.user.id || '',
+            name: approvingUser?.name || req.user.name || 'Medical Administrator',
+            role: approvingUser?.role || req.user.role || 'admin',
+            designation: approvingUser?.designation || approvingUser?.specialty || 'Medical Superintendent / Administrator',
+            signatureUrl: approvingUser?.signatureUrl || '',
+            date: new Date()
+          };
+
           const po = await PurchaseOrder.findOneAndUpdate(
             { _id: poId, tenantId: req.tenantId },
-            { status: 'Approved' },
+            { 
+              $set: { 
+                status: 'Approved',
+                approvedBy: approvedBySnapshot
+              } 
+            },
             { returnDocument: 'after', ...sessionOpt }
           );
           if (po) {
@@ -418,10 +434,12 @@ router.patch('/:id', verifyToken, isAdmin, tenantMiddleware, async (req, res) =>
 
                 if (approvedCount === totalChildren) {
                   parentPO.status = 'Approved';
+                  parentPO.approvedBy = approvedBySnapshot;
                 } else if (rejectedCount === totalChildren) {
                   parentPO.status = 'Rejected';
                 } else if (approvedCount > 0) {
                   parentPO.status = 'Partially Approved';
+                  parentPO.approvedBy = approvedBySnapshot;
                 }
 
                 if (Array.isArray(parentPO.vendorOrders)) {

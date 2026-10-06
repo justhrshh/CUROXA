@@ -78,7 +78,15 @@ const goodsReceiptSchema = new mongoose.Schema({
   items: [goodsReceiptItemSchema],
   
   notes: { type: String, default: '' },
-  receivedBy: { type: String, default: '' }
+  receivedBy: { type: String, default: '' },
+  receivedByStaff: {
+    staffId: { type: String, default: '' },
+    name: { type: String, default: '' },
+    role: { type: String, default: '' },
+    designation: { type: String, default: '' },
+    signatureUrl: { type: String, default: '' },
+    date: { type: Date, default: null }
+  }
 }, { timestamps: true });
 
 // Compound unique index for local uniqueness within each tenant

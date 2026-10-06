@@ -5,6 +5,7 @@ const GlobalVendor = require('../models/GlobalVendor');
 const HospitalVendorAssociation = require('../models/HospitalVendorAssociation');
 const ItemMaster = require('../models/ItemMaster');
 const VendorQuotation = require('../models/VendorQuotation');
+const User = require('../models/User');
 const { verifyToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 
@@ -444,6 +445,17 @@ router.post('/', async (req, res) => {
     const Approval = require('../models/Approval');
     const generatedPoId = await getNextPoId(req.tenantId);
 
+    // Fetch placing user profile for immutable signature snapshot
+    const placingUser = await User.findById(req.user.id || req.user._id).select('name role designation specialty signatureUrl staff_id');
+    const placedBySnapshot = {
+      staffId: placingUser?.staff_id || req.user.staff_id || req.user.id || '',
+      name: placingUser?.name || req.user.name || requestedBy || 'Pharmacist',
+      role: placingUser?.role || req.user.role || 'pharmacist',
+      designation: placingUser?.designation || placingUser?.specialty || (req.user.role === 'pharmacist' ? 'Chief Pharmacist' : 'Procurement Officer'),
+      signatureUrl: placingUser?.signatureUrl || '',
+      date: new Date()
+    };
+
     // SCENARIO A — SINGLE VENDOR: Create a direct, normal Purchase Order (no Master PO, no sub-PO, no suffix)
     if (distinctVendorCount === 1) {
       const singleVendorKey = vendorKeys[0];
@@ -467,6 +479,7 @@ router.post('/', async (req, res) => {
         totalVendors: 1,
         vendorOrders: [],
         requestedBy: requestedBy || req.user.name || 'Pharmacist',
+        placedBy: placedBySnapshot,
         status: 'Pending Approval',
         expectedDelivery: expectedDelivery ? new Date(expectedDelivery) : null,
         notes: notes || ''
@@ -537,6 +550,7 @@ router.post('/', async (req, res) => {
         totalItems: grp.items.length,
         totalVendors: 1,
         requestedBy: requestedBy || req.user.name || 'Pharmacist',
+        placedBy: placedBySnapshot,
         status: 'Pending Approval',
         expectedDelivery: expectedDelivery ? new Date(expectedDelivery) : null,
         notes: notes || ''
@@ -589,6 +603,7 @@ router.post('/', async (req, res) => {
       totalVendors: vendorKeys.length,
       vendorOrders: childOrders,
       requestedBy: requestedBy || req.user.name || 'Pharmacist',
+      placedBy: placedBySnapshot,
       status: 'Pending Approval',
       expectedDelivery: expectedDelivery ? new Date(expectedDelivery) : null,
       notes: notes || ''
@@ -682,9 +697,24 @@ router.delete('/:id', async (req, res) => {
 // Approve Purchase Order
 router.put('/:id/approve', async (req, res) => {
   try {
+    const approvingUser = await User.findById(req.user.id || req.user._id).select('name role designation specialty signatureUrl staff_id');
+    const approvedBySnapshot = {
+      staffId: approvingUser?.staff_id || req.user.staff_id || req.user.id || '',
+      name: approvingUser?.name || req.user.name || 'Medical Administrator',
+      role: approvingUser?.role || req.user.role || 'admin',
+      designation: approvingUser?.designation || approvingUser?.specialty || 'Medical Superintendent / Administrator',
+      signatureUrl: approvingUser?.signatureUrl || '',
+      date: new Date()
+    };
+
     const po = await PurchaseOrder.findOneAndUpdate(
       { _id: req.params.id, tenantId: req.tenantId },
-      { status: 'Approved' },
+      { 
+        $set: { 
+          status: 'Approved',
+          approvedBy: approvedBySnapshot
+        } 
+      },
       { returnDocument: 'after' }
     );
     if (!po) return res.status(404).json({ error: 'Purchase Order not found' });

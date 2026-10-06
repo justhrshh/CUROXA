@@ -1,6 +1,7 @@
 const express = require("express");
 const Prescription = require("../models/Prescription");
 const Medicine = require("../models/Medicine");
+const User = require("../models/User");
 const AuditLog = require("../models/AuditLog");
 const Appointment = require("../models/Appointment");
 const LabRequest = require("../models/LabRequest");
@@ -26,10 +27,10 @@ router.get("/", async (req, res) => {
     // Projection: only fields the pharmacy queue / doctor history actually need
     const prescriptions = await Prescription.find(query)
       .select(
-        "patientId doctorId items status createdAt updatedAt appointmentId prescriptionType images offlineMetadata editableUntil isLocked correctionHistory",
+        "patientId doctorId items status createdAt updatedAt appointmentId doctorSignatureUrl prescriptionType images offlineMetadata editableUntil isLocked correctionHistory",
       )
       .populate("patientId", "name age gender contact email address uhId patientId bloodGroup")
-      .populate("doctorId", "name specialty department designation staff_id")
+      .populate("doctorId", "name specialty department designation staff_id signatureUrl")
       .populate("appointmentId", "diagnosis notes vitals date time status reason")
       .sort({ createdAt: -1 })
       .limit(parseInt(req.query.limit, 10) || 500)
@@ -45,13 +46,24 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   const { patientId, doctorId, items, status, appointmentId } = req.body;
   try {
+    // Snapshot prescribing doctor's digital signature at the time of creation
+    let signatureSnapshot = '';
+    const prescribingDocId = doctorId || req.user.id;
+    if (prescribingDocId) {
+      const doctorUser = await User.findById(prescribingDocId).select('signatureUrl').lean();
+      if (doctorUser && doctorUser.signatureUrl) {
+        signatureSnapshot = doctorUser.signatureUrl;
+      }
+    }
+
     const prescription = await Prescription.create({
       tenantId: req.tenantId,
       patientId,
-      doctorId,
+      doctorId: prescribingDocId,
       items,
       status: status || 'Pending',
-      appointmentId
+      appointmentId,
+      doctorSignatureUrl: signatureSnapshot
     });
 
     // Fire-and-forget audit log
@@ -669,9 +681,15 @@ function buildPrescriptionEmailHtml({ hospital, patient, doctor, appointment, pr
               </td>
               <td style="vertical-align: top; width: 40%; text-align: center;">
                 <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
-                  <div style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive, sans-serif; font-size: 24px; color: #1E3A8A; height: 32px; line-height: 32px; border-bottom: 1px dashed #CBD5E1; margin-bottom: 6px;">
-                    ${docName.replace(/^Dr\.?\s*/i, '')}
-                  </div>
+                  ${doctor?.signatureUrl ? `
+                    <div style="height: 45px; display: flex; align-items: center; justify-content: center; margin-bottom: 6px;">
+                      <img src="${doctor.signatureUrl}" alt="Doctor Signature" style="max-height: 42px; max-width: 150px; width: auto; height: auto; object-fit: contain; display: inline-block;" />
+                    </div>
+                  ` : `
+                    <div style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive, sans-serif; font-size: 24px; color: #1E3A8A; height: 32px; line-height: 32px; border-bottom: 1px dashed #CBD5E1; margin-bottom: 6px;">
+                      ${docName.replace(/^Dr\.?\s*/i, '')}
+                    </div>
+                  `}
                   <div style="font-size: 12.5px; font-weight: 700; color: #0F172A;">${docName}</div>
                   <div style="font-size: 10.5px; color: #64748B;">Reg. DMC-${docReg}</div>
                   <div style="margin-top: 6px; font-size: 10px; font-weight: 700; color: #059669; background: #ECFDF5; border: 1px solid #A7F3D0; padding: 2px 6px; border-radius: 4px; display: inline-block;">
@@ -741,7 +759,8 @@ async function handleSharePrescription(req, res) {
     const resolvedDoctor = {
       name: doctor?.name || prescriptionDoc?.doctorId?.name || req.user?.name || 'Attending Doctor',
       specialty: doctor?.specialty || doctor?.department || prescriptionDoc?.doctorId?.specialty || prescriptionDoc?.doctorId?.department || '',
-      staff_id: doctor?.staff_id || prescriptionDoc?.doctorId?.staff_id || req.user?.staff_id || ''
+      staff_id: doctor?.staff_id || prescriptionDoc?.doctorId?.staff_id || req.user?.staff_id || '',
+      signatureUrl: doctor?.signatureUrl || prescriptionDoc?.doctorSignatureUrl || prescriptionDoc?.doctorId?.signatureUrl || req.user?.signatureUrl || ''
     };
 
     // Merge items

@@ -727,6 +727,7 @@ const DoctorDashboard = () => {
     availability: 'Available',
     avatar: user.avatar || '',
     signature: user.name || 'Dr. Ankit Sharma',
+    signatureUrl: user.signatureUrl || currentUser.signatureUrl || '',
     realtimePharmacy: true
   });
 
@@ -735,7 +736,8 @@ const DoctorDashboard = () => {
       ...prev,
       name: currentUser.name || prev.name,
       specialty: currentUser.specialty || prev.specialty,
-      avatar: currentUser.avatar || ''
+      avatar: currentUser.avatar || '',
+      signatureUrl: currentUser.signatureUrl !== undefined ? currentUser.signatureUrl : prev.signatureUrl
     }));
   }, [currentUser]);
 
@@ -1679,6 +1681,7 @@ const DoctorDashboard = () => {
         doctorReg: user.staff_id ? (user.staff_id.match(/^\d+$/) ? user.staff_id.slice(-5) : user.staff_id.toUpperCase()) : '44442',
         doctorDept: cleanField(user.department || 'General Medicine'),
         doctorShift: user.shiftName || 'OPD Consultation',
+        doctorSignature: item.doctorSignatureUrl || rx?.doctorSignatureUrl || user.signatureUrl || docProfile.signatureUrl || '',
         clinicName: clinicName || 'Quroxa Healthcare',
         diagnosis: cleanDiagString(item.diagnosis),
         vitalsText: vitalsString,
@@ -1873,6 +1876,7 @@ const DoctorDashboard = () => {
             var doctorReg = '\u2014';
             var doctorDept = '\u2014';
             var doctorShift = '\u2014';
+            var doctorSignature = '';
             var clinicName = '\u2014';
             var diagnosis = '\u2014';
             var vitalsText = '\u2014';
@@ -1911,6 +1915,7 @@ const DoctorDashboard = () => {
                 doctorReg = printData.doctorReg || '\u2014';
                 doctorDept = printData.doctorDept || '\u2014';
                 doctorShift = printData.doctorShift || '\u2014';
+                doctorSignature = printData.doctorSignature || '';
                 clinicName = printData.clinicName || '\u2014';
                 diagnosis = printData.diagnosis || '\u2014';
                 vitalsText = printData.vitalsText || '\u2014';
@@ -2016,6 +2021,14 @@ const DoctorDashboard = () => {
               var sigName = (doctorName && doctorName !== '\u2014') ? (doctorName.toLowerCase().indexOf('dr.') === 0 ? doctorName.slice(3).trim() : doctorName) : 'Doctor';
               var fullDocName = (doctorName && doctorName !== '\u2014') ? (doctorName.indexOf('Dr.') === 0 ? doctorName : ('Dr. ' + doctorName)) : 'Consulting Doctor';
 
+              var sigTopContent = doctorSignature 
+                ? ('<div style="height: 44px; display: flex; align-items: flex-end; justify-content: flex-end; margin-bottom: 4px;">' +
+                    '<img src="' + doctorSignature + '" alt="Doctor Signature" style="max-height: 40px; max-width: 160px; object-fit: contain; display: inline-block;" />' +
+                   '</div>')
+                : ('<div style="height: 36px; display: flex; align-items: flex-end; justify-content: flex-end; margin-bottom: 4px;">' +
+                    '<span style="font-family: cursive, sans-serif; font-style: italic; font-size: 22px; color: #1E3A8A; font-weight: bold;">' + sigName + '</span>' +
+                   '</div>');
+
               return '<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 24px; padding-top: 14px; border-top: 1.5px solid #E2E8F0; page-break-inside: avoid; break-inside: avoid;">' +
                 '<div style="max-width: 58%; font-size: 10px; color: #64748B; line-height: 1.5;">' +
                   '<div style="display: inline-flex; align-items: center; gap: 6px; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 3px 8px; border-radius: 5px; font-weight: 700; color: #1E293B; margin-bottom: 5px;">' +
@@ -2024,9 +2037,7 @@ const DoctorDashboard = () => {
                   '<div style="font-weight: 500;">Take medicines as directed. Keep out of reach of children. In case of emergency or severe adverse reactions, report immediately to the nearest healthcare facility.</div>' +
                 '</div>' +
                 '<div style="text-align: right; min-width: 190px;">' +
-                  '<div style="height: 36px; display: flex; align-items: flex-end; justify-content: flex-end; margin-bottom: 4px;">' +
-                    '<span style="font-family: cursive, sans-serif; font-style: italic; font-size: 22px; color: #1E3A8A; font-weight: bold;">' + sigName + '</span>' +
-                  '</div>' +
+                  sigTopContent +
                   '<div style="border-top: 1.5px solid #0F172A; padding-top: 4px;">' +
                     '<div style="font-size: 12.5px; font-weight: 800; color: #0F172A;">' + fullDocName + '</div>' +
                     '<div style="font-size: 10.5px; font-weight: 600; color: #475569;">' + doctorDesignation + '</div>' +
@@ -11399,69 +11410,211 @@ I have scanned the medical reference databases, but couldn't find a direct match
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: '#64748B', marginBottom: '8px', letterSpacing: '0.05em' }}>
-                    Digital Signature
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: '#64748B', letterSpacing: '0.05em' }}>
+                      Digital Signature
+                    </label>
+                    <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>
+                      PNG, JPG (Max 2MB)
+                    </span>
+                  </div>
+                  <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#64748B' }}>
+                    Upload your signature to display it on prescriptions.
+                  </p>
                   
+                  {/* Hidden file input */}
+                  <input
+                    type="file"
+                    id="doctor-signature-file-input"
+                    accept="image/png, image/jpeg, image/jpg"
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+
+                      // Validate file type
+                      const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+                      if (!validTypes.includes(file.type)) {
+                        showToastNotification('Please select a valid PNG or JPG/JPEG image.', 'error');
+                        e.target.value = '';
+                        return;
+                      }
+
+                      // Validate file size (2MB)
+                      if (file.size > 2 * 1024 * 1024) {
+                        showToastNotification('Signature file exceeds the 2MB size limit.', 'error');
+                        e.target.value = '';
+                        return;
+                      }
+
+                      try {
+                        const formData = new FormData();
+                        formData.append('signature', file);
+
+                        const res = await api.post('/auth/doctor/signature', formData, {
+                          headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+
+                        const newSigUrl = res.data.signatureUrl;
+                        setDocProfile(prev => ({ ...prev, signatureUrl: newSigUrl }));
+                        const updatedUser = { ...currentUser, signatureUrl: newSigUrl };
+                        localStorage.setItem('user', JSON.stringify(updatedUser));
+                        setCurrentUser(updatedUser);
+                        showToastNotification('Digital signature uploaded successfully!', 'success');
+                      } catch (err) {
+                        console.error('Signature upload failed:', err);
+                        showToastNotification(err.response?.data?.error || 'Failed to upload signature.', 'error');
+                      } finally {
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+
                   {/* Signature Box */}
                   <div 
                     style={{ 
                       width: '100%', 
-                      height: '180px', 
-                      border: '2px dashed #E2E8F0', 
+                      minHeight: '160px', 
+                      border: docProfile.signatureUrl ? '1.5px solid #CBD5E1' : '2px dashed #CBD5E1', 
                       borderRadius: '12px', 
-                      background: '#F8FAFC', 
+                      background: docProfile.signatureUrl ? '#FFFFFF' : '#F8FAFC', 
                       display: 'flex', 
                       flexDirection: 'column', 
                       alignItems: 'center', 
                       justifyContent: 'center', 
-                      gap: '16px',
-                      padding: '16px'
+                      gap: '14px',
+                      padding: '20px',
+                      boxSizing: 'border-box'
                     }}
                   >
-                    <span 
-                      style={{ 
-                        fontFamily: '"Great Vibes", cursive', 
-                        fontSize: '36px', 
-                        color: '#2563EB', 
-                        letterSpacing: '1px', 
-                        textAlign: 'center', 
-                        width: '100%', 
-                        overflow: 'hidden', 
-                        textOverflow: 'ellipsis', 
-                        whiteSpace: 'nowrap',
-                        lineHeight: 1.2
-                      }}
-                    >
-                      {docProfile.signature}
-                    </span>
-                    
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        const newSig = prompt("Enter new signature text:", docProfile.signature);
-                        if (newSig && newSig.trim()) {
-                          setDocProfile(prev => ({ ...prev, signature: newSig.trim() }));
-                          showToastNotification('Digital signature asset updated successfully!', 'success');
-                        }
-                      }}
-                      style={{ 
-                        border: '1px solid #CBD5E1', 
-                        background: '#ffffff', 
-                        color: '#334155', 
-                        borderRadius: '8px', 
-                        padding: '8px 16px', 
-                        fontSize: '12px', 
-                        fontWeight: 800, 
-                        cursor: 'pointer', 
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        transition: 'background 0.2s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                      onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}
-                    >
-                      Change Signature
-                    </button>
+                    {docProfile.signatureUrl ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '14px' }}>
+                        <div 
+                          style={{ 
+                            width: '100%', 
+                            maxWidth: '280px', 
+                            height: '80px', 
+                            background: '#F8FAFC', 
+                            border: '1px solid #E2E8F0', 
+                            borderRadius: '8px', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            padding: '8px'
+                          }}
+                        >
+                          <img 
+                            src={docProfile.signatureUrl} 
+                            alt="Doctor Signature" 
+                            style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', display: 'block' }} 
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <button 
+                            type="button"
+                            onClick={() => document.getElementById('doctor-signature-file-input').click()}
+                            style={{ 
+                              border: '1px solid #2563EB', 
+                              background: '#EFF6FF', 
+                              color: '#1D4ED8', 
+                              borderRadius: '8px', 
+                              padding: '8px 16px', 
+                              fontSize: '12px', 
+                              fontWeight: 800, 
+                              cursor: 'pointer', 
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#DBEAFE'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#EFF6FF'}
+                          >
+                            <i data-lucide="refresh-cw" style={{ width: '13px', height: '13px' }}></i>
+                            Replace Signature
+                          </button>
+
+                          <button 
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm("Are you sure you want to remove your digital signature? Future prescriptions will omit the signature.")) {
+                                return;
+                              }
+                              try {
+                                await api.delete('/auth/doctor/signature');
+                                setDocProfile(prev => ({ ...prev, signatureUrl: '' }));
+                                const updatedUser = { ...currentUser, signatureUrl: '' };
+                                localStorage.setItem('user', JSON.stringify(updatedUser));
+                                setCurrentUser(updatedUser);
+                                showToastNotification('Digital signature removed.', 'info');
+                              } catch (err) {
+                                console.error('Signature deletion failed:', err);
+                                showToastNotification(err.response?.data?.error || 'Failed to remove signature.', 'error');
+                              }
+                            }}
+                            style={{ 
+                              border: '1px solid #FCA5A5', 
+                              background: '#FEF2F2', 
+                              color: '#DC2626', 
+                              borderRadius: '8px', 
+                              padding: '8px 16px', 
+                              fontSize: '12px', 
+                              fontWeight: 800, 
+                              cursor: 'pointer', 
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#FEE2E2'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#FEF2F2'}
+                          >
+                            <i data-lucide="trash-2" style={{ width: '13px', height: '13px' }}></i>
+                            Remove Signature
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB' }}>
+                          <i data-lucide="pen-tool" style={{ width: '22px', height: '22px' }}></i>
+                        </div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
+                          No digital signature uploaded
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#94A3B8', maxWidth: '240px' }}>
+                          Upload a PNG with transparent background or high-contrast JPG image.
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => document.getElementById('doctor-signature-file-input').click()}
+                          style={{ 
+                            border: 'none', 
+                            background: '#2563EB', 
+                            color: '#ffffff', 
+                            borderRadius: '8px', 
+                            padding: '9px 18px', 
+                            fontSize: '12.5px', 
+                            fontWeight: 800, 
+                            cursor: 'pointer', 
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 6px rgba(37,99,235,0.25)',
+                            transition: 'all 0.2s',
+                            marginTop: '4px'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#1D4ED8'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#2563EB'}
+                        >
+                          <i data-lucide="upload" style={{ width: '14px', height: '14px' }}></i>
+                          Upload Signature
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -14483,10 +14636,18 @@ I have scanned the medical reference databases, but couldn't find a direct match
                     </div>
                     
                     <div style={{ textAlign: 'center', width: '220px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px 16px' }}>
-                      <div style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1.5px dashed #CBD5E1', marginBottom: '8px' }}>
-                        <span style={{ fontFamily: "'Brush Script MT', 'Lucida Handwriting', cursive, sans-serif", fontSize: '26px', color: '#1E3A8A', fontWeight: 600 }}>
-                          {user.name ? user.name.replace('Dr. ', '') : 'Anil Sharma'}
-                        </span>
+                      <div style={{ minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1.5px dashed #CBD5E1', marginBottom: '8px', paddingBottom: '4px' }}>
+                        {(prescription?.doctorSignatureUrl || user.signatureUrl || docProfile.signatureUrl) ? (
+                          <img 
+                            src={prescription?.doctorSignatureUrl || user.signatureUrl || docProfile.signatureUrl} 
+                            alt="Doctor Signature" 
+                            style={{ maxHeight: '42px', maxWidth: '180px', width: 'auto', height: 'auto', objectFit: 'contain', display: 'inline-block' }} 
+                          />
+                        ) : (
+                          <span style={{ fontFamily: "'Brush Script MT', 'Lucida Handwriting', cursive, sans-serif", fontSize: '26px', color: '#1E3A8A', fontWeight: 600 }}>
+                            {user.name ? user.name.replace('Dr. ', '') : 'Anil Sharma'}
+                          </span>
+                        )}
                       </div>
                       <div style={{ color: '#0F172A', fontWeight: 800, fontSize: '13.5px' }}>{user.name || 'Dr. Anil Sharma'}</div>
                       <div style={{ color: '#64748B', fontWeight: 600, fontSize: '11px', marginTop: '2px' }}>{user.designation || 'MBBS, MD (Medicine)'}</div>

@@ -13,6 +13,7 @@ const prescriptionSchema = new mongoose.Schema({
     quantity: { type: Number, default: 1 }
   }],
   status: { type: String, enum: ['Pending', 'Pending Pharmacy Dispatch', 'Direct Patient', 'In Progress', 'Dispensed', 'Dispensed by Pharmacy'], default: 'Pending' },
+  doctorSignatureUrl: { type: String, default: '' },
   prescriptionType: {
     type: String,
     enum: ['digital', 'offline_handwritten'],

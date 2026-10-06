@@ -15,6 +15,7 @@ const { resolveTrustedHospitalBranding, buildBrandedOtpEmail, validateHospitalLo
 const { getHospitalSubscriptionStatus, checkAndDispatchExpiryNotifications } = require("../utils/subscriptionHelper");
 const { sendEmail } = require("../utils/emailService");
 const { getCanonicalLogoUrl } = require("../config/urls");
+const multer = require("multer");
 const router = express.Router();
 
 // Generate a unique, non-guessable placeholder hash for OAuth-created users.
@@ -327,6 +328,7 @@ router.post("/login", tenantMiddleware, async (req, res) => {
         name: user.name,
         email: user.email || '',
         avatar: user.avatar || '',
+        signatureUrl: user.signatureUrl || '',
         specialty: platformRole || user.specialty || '',
         platformRole: platformRole || user.platformRole || '',
         isSetupComplete: user.role === 'patient' ? isPatientComplete : user.isSetupComplete,
@@ -719,7 +721,7 @@ router.get("/doctors", tenantMiddleware, async (req, res) => {
   try {
     const doctors = await User.find(
       { role: "doctor", tenantId: req.tenantId },
-      "name specialty available consultationFee email phone avatar max_slots doctorSlots weeklyOff staff_id publicQueueId",
+      "name specialty available consultationFee email phone avatar max_slots doctorSlots weeklyOff staff_id publicQueueId signatureUrl",
     ).lean();
 
     const LeaveRequest = require("../models/LeaveRequest");
@@ -890,6 +892,7 @@ router.put("/profile/:id", tenantMiddleware, verifyToken, async (req, res) => {
       email: user.email,
       specialty: user.specialty,
       avatar: user.avatar,
+      signatureUrl: user.signatureUrl || '',
       isSetupComplete: user.isSetupComplete,
       tenantId: user.tenantId,
       createdAt: user.createdAt,
@@ -899,6 +902,156 @@ router.put("/profile/:id", tenantMiddleware, verifyToken, async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// ==================== STAFF DIGITAL SIGNATURE MANAGEMENT ====================
+// Multer configuration for staff signature image uploads (PNG/JPG/JPEG, max 2MB)
+const signatureStorage = multer.memoryStorage();
+const uploadStaffSignature = multer({
+  storage: signatureStorage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB strict limit
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ['image/png', 'image/jpeg', 'image/jpg'];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('INVALID_FILE_TYPE: Only PNG and JPG/JPEG images are allowed for digital signatures.'));
+    }
+  }
+});
+
+// Shared handler for uploading/replacing staff signature
+const handleStaffSignatureUpload = async (req, res) => {
+  try {
+    const role = String(req.user?.role || '').toLowerCase().trim();
+    const allowedRoles = ['doctor', 'pharmacist', 'pharmacy', 'admin', 'superadmin', 'nurse', 'staff', 'inventory', 'lab', 'receptionist'];
+    if (!allowedRoles.includes(role)) {
+      return res.status(403).json({ error: 'Access denied: Only hospital staff can manage digital signatures.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No signature image file uploaded.' });
+    }
+
+    // Convert image to clean base64 Data URL
+    const base64Data = req.file.buffer.toString('base64');
+    const signatureDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
+
+    const staffUserId = req.user.id || req.user._id || req.user.userId;
+    const query = {
+      $and: [
+        {
+          $or: [
+            ...(staffUserId ? [{ _id: staffUserId }] : []),
+            ...(req.user.staff_id ? [{ staff_id: req.user.staff_id }] : [])
+          ]
+        },
+        ...(req.tenantId ? [{ tenantId: req.tenantId }] : [])
+      ]
+    };
+
+    const user = await User.findOneAndUpdate(
+      query,
+      { $set: { signatureUrl: signatureDataUrl } },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: 'Staff account not found in current hospital context.' });
+    }
+
+    AuditLog.create({
+      tenantId: req.tenantId,
+      actor: user.staff_id || user.id,
+      actorName: user.name,
+      actorRole: user.role,
+      action: 'staff_signature_uploaded',
+      target: user._id.toString(),
+      metadata: {
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      }
+    }).catch(() => {});
+
+    res.json({
+      success: true,
+      message: 'Digital signature uploaded and saved successfully.',
+      signatureUrl: user.signatureUrl
+    });
+  } catch (error) {
+    console.error('Staff signature upload error:', error);
+    res.status(500).json({ error: error.message || 'Failed to upload digital signature.' });
+  }
+};
+
+// Shared handler for removing staff signature
+const handleStaffSignatureDelete = async (req, res) => {
+  try {
+    const role = String(req.user?.role || '').toLowerCase().trim();
+    const allowedRoles = ['doctor', 'pharmacist', 'pharmacy', 'admin', 'superadmin', 'nurse', 'staff', 'inventory', 'lab', 'receptionist'];
+    if (!allowedRoles.includes(role)) {
+      return res.status(403).json({ error: 'Access denied: Only hospital staff can manage digital signatures.' });
+    }
+
+    const staffUserId = req.user.id || req.user._id || req.user.userId;
+    const query = {
+      $and: [
+        {
+          $or: [
+            ...(staffUserId ? [{ _id: staffUserId }] : []),
+            ...(req.user.staff_id ? [{ staff_id: req.user.staff_id }] : [])
+          ]
+        },
+        ...(req.tenantId ? [{ tenantId: req.tenantId }] : [])
+      ]
+    };
+
+    const user = await User.findOneAndUpdate(
+      query,
+      { $set: { signatureUrl: '' } },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: 'Staff account not found in current hospital context.' });
+    }
+
+    AuditLog.create({
+      tenantId: req.tenantId,
+      actor: user.staff_id || user.id,
+      actorName: user.name,
+      actorRole: user.role,
+      action: 'staff_signature_removed',
+      target: user._id.toString()
+    }).catch(() => {});
+
+    res.json({
+      success: true,
+      message: 'Digital signature removed successfully.',
+      signatureUrl: ''
+    });
+  } catch (error) {
+    console.error('Staff signature delete error:', error);
+    res.status(500).json({ error: error.message || 'Failed to remove digital signature.' });
+  }
+};
+
+const signatureMulterMiddleware = (req, res, next) => {
+  uploadStaffSignature.single('signature')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'Signature file size exceeds maximum limit of 2MB.' });
+      }
+      return res.status(400).json({ error: err.message || 'Signature image upload failed.' });
+    }
+    next();
+  });
+};
+
+// Endpoints: Accessible via both /staff/signature and /doctor/signature
+router.post("/staff/signature", tenantMiddleware, verifyToken, signatureMulterMiddleware, handleStaffSignatureUpload);
+router.delete("/staff/signature", tenantMiddleware, verifyToken, handleStaffSignatureDelete);
+router.post("/doctor/signature", tenantMiddleware, verifyToken, signatureMulterMiddleware, handleStaffSignatureUpload);
+router.delete("/doctor/signature", tenantMiddleware, verifyToken, handleStaffSignatureDelete);
 
 // POST /api/auth/forgot-password - Send an OTP to the user's email
 router.post("/forgot-password", tenantMiddleware, async (req, res) => {
@@ -1616,6 +1769,7 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
         name: user.name,
         email: user.email || '',
         avatar: user.avatar || '',
+        signatureUrl: user.signatureUrl || '',
         specialty: platformRole || user.specialty || '',
         platformRole: platformRole || user.platformRole || '',
         isSetupComplete: user.role === 'patient' ? isPatientComplete : user.isSetupComplete,

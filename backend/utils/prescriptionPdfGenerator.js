@@ -295,30 +295,48 @@ function generatePrescriptionPdf({
       }
 
       // 7. SIGNATURE & VERIFICATION FOOTER
-      const footerY = 720;
+      const footerY = 705;
       doc.rect(margin, footerY, contentWidth, 1).fill(borderColor);
 
       // Left Footer: Patient Advice
       doc.fillColor(textMuted)
          .fontSize(7.5)
          .font('Helvetica')
-         .text('Instructions: Take all medicines as prescribed. Do not discontinue without medical consultation.', margin, footerY + 8, { width: 340 });
-      doc.text('This is an official digitally verified electronic prescription.', margin, footerY + 18, { width: 340 });
+         .text('Instructions: Take all medicines as prescribed. Do not discontinue without medical consultation.', margin, footerY + 8, { width: 330 });
+      doc.text('This is an official digitally verified electronic prescription.', margin, footerY + 18, { width: 330 });
 
       // Right Footer: Doctor Signature Box
-      const sigX = margin + contentWidth - 160;
+      const sigX = margin + contentWidth - 170;
+      let sigTextY = footerY + 10;
+
+      // Extract signature image buffer from doctor.signatureUrl or prescription.doctorSignatureUrl
+      const rawSig = doctor?.signatureUrl || prescription?.doctorSignatureUrl || '';
+      if (rawSig && typeof rawSig === 'string' && rawSig.startsWith('data:image/')) {
+        try {
+          const base64Data = rawSig.replace(/^data:image\/\w+;base64,/, '');
+          const imgBuffer = Buffer.from(base64Data, 'base64');
+          if (imgBuffer.length > 0) {
+            // Draw signature image above doctor's printed details
+            doc.image(imgBuffer, sigX + 20, footerY + 4, { fit: [150, 36], align: 'right' });
+            sigTextY = footerY + 44;
+          }
+        } catch (imgErr) {
+          console.warn('[PDF GENERATOR] Failed to embed signature image:', imgErr.message);
+        }
+      }
+
       doc.fillColor(primaryColor)
-         .fontSize(9)
+         .fontSize(8.5)
          .font('Helvetica-Bold')
-         .text(docName, sigX, footerY + 8, { width: 160, align: 'right' });
+         .text(docName, sigX, sigTextY, { width: 170, align: 'right' });
       doc.fillColor(textMuted)
-         .fontSize(7.5)
-         .font('Helvetica')
-         .text(`Reg. No: ${docReg}`, sigX, footerY + 20, { width: 160, align: 'right' });
-      doc.fillColor('#059669')
          .fontSize(7)
+         .font('Helvetica')
+         .text(`Reg. No: ${docReg}`, sigX, sigTextY + 11, { width: 170, align: 'right' });
+      doc.fillColor('#059669')
+         .fontSize(6.5)
          .font('Helvetica-Bold')
-         .text('DIGITALLY VERIFIED', sigX, footerY + 30, { width: 160, align: 'right' });
+         .text('DIGITALLY VERIFIED', sigX, sigTextY + 20, { width: 170, align: 'right' });
 
       doc.end();
     } catch (err) {

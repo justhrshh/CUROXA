@@ -6,6 +6,7 @@ const MedicineBatch = require('../models/MedicineBatch');
 const ItemMaster = require('../models/ItemMaster');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const AuditLog = require('../models/AuditLog');
+const User = require('../models/User');
 const { verifyToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 
@@ -346,6 +347,17 @@ router.post('/', async (req, res) => {
     const totalGst = Math.round(processedItems.reduce((acc, it) => acc + (it.gstAmount || 0), 0) * 100) / 100;
     const grandTotal = Math.round(processedItems.reduce((acc, it) => acc + (it.netAmount || 0), 0) * 100) / 100;
 
+    // Fetch receiving staff user for immutable signature snapshot
+    const receivingUser = await User.findById(req.user.id || req.user._id).select('name role designation specialty signatureUrl staff_id');
+    const receivedBySnapshot = {
+      staffId: receivingUser?.staff_id || req.user.staff_id || req.user.id || '',
+      name: receivingUser?.name || req.user.name || 'Pharmacy Staff',
+      role: receivingUser?.role || req.user.role || 'pharmacist',
+      designation: receivingUser?.designation || receivingUser?.specialty || 'Pharmacist / Store In-Charge',
+      signatureUrl: receivingUser?.signatureUrl || '',
+      date: new Date()
+    };
+
     // 4. Create the GRN record
     const grn = await GoodsReceipt.create({
       tenantId: req.tenantId,
@@ -370,7 +382,8 @@ router.post('/', async (req, res) => {
       grandTotal,
       items: processedItems,
       notes: notes || '',
-      receivedBy: req.user ? req.user.name : 'Pharmacy Staff'
+      receivedBy: req.user ? req.user.name : 'Pharmacy Staff',
+      receivedByStaff: receivedBySnapshot
     });
 
     // 5. Update inventory/stock & MedicineBatch (ONLY accepted quantity converted to consumption units)
@@ -784,9 +797,23 @@ router.put('/:id', async (req, res) => {
     oldGrn.totalDiscount = totalDiscount;
     oldGrn.totalGst = totalGst;
     oldGrn.grandTotal = grandTotal;
-    oldGrn.items = processedItems;
     oldGrn.receivedDate = new Date();
     oldGrn.receivedBy = req.user ? req.user.name : oldGrn.receivedBy;
+
+    // Refresh/attach signature snapshot on update if user is authenticated
+    if (req.user) {
+      const updatingUser = await User.findById(req.user.id || req.user._id).select('name role designation specialty signatureUrl staff_id');
+      if (updatingUser) {
+        oldGrn.receivedByStaff = {
+          staffId: updatingUser.staff_id || req.user.staff_id || req.user.id || '',
+          name: updatingUser.name || req.user.name || oldGrn.receivedBy,
+          role: updatingUser.role || req.user.role || 'pharmacist',
+          designation: updatingUser.designation || updatingUser.specialty || 'Pharmacist / Store In-Charge',
+          signatureUrl: updatingUser.signatureUrl || oldGrn.receivedByStaff?.signatureUrl || '',
+          date: new Date()
+        };
+      }
+    }
 
     const updatedGrn = await oldGrn.save();
 

@@ -46,7 +46,23 @@ const purchaseOrderSchema = new mongoose.Schema({
   status: { type: String, default: 'Pending Approval', index: true },
   expectedDelivery: { type: Date },
   requestedBy: { type: String, required: true },
-  notes: { type: String }
+  notes: { type: String },
+  placedBy: {
+    staffId: { type: String, default: '' },
+    name: { type: String, default: '' },
+    role: { type: String, default: '' },
+    designation: { type: String, default: '' },
+    signatureUrl: { type: String, default: '' },
+    date: { type: Date, default: null }
+  },
+  approvedBy: {
+    staffId: { type: String, default: '' },
+    name: { type: String, default: '' },
+    role: { type: String, default: '' },
+    designation: { type: String, default: '' },
+    signatureUrl: { type: String, default: '' },
+    date: { type: Date, default: null }
+  }
 }, { timestamps: true });
 
 // Compound unique index for local uniqueness within each tenant

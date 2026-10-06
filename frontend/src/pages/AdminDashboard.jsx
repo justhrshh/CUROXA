@@ -1176,6 +1176,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   const [profileEditLoading, setProfileEditLoading] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState('');
+  const [adminSignatureUrl, setAdminSignatureUrl] = useState('');
+  const [adminSignatureUploading, setAdminSignatureUploading] = useState(false);
 
   const [hrInitialTab, setHrInitialTab] = useState('Dashboard');
   const [hrInitialAdding, setHrInitialAdding] = useState(false);
@@ -1185,6 +1187,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       setProfileEditName(currentUser.name || '');
       setProfileEditEmail(currentUser.email || '');
       setProfileEditAvatar(currentUser.avatar || '');
+      setAdminSignatureUrl(currentUser.signatureUrl || '');
       setProfileError('');
       setProfileSuccess('');
     }
@@ -25922,12 +25925,114 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
               <div className="admin-input-group">
                 <label className="admin-input-label">Email Address</label>
                 <input 
-                  type="email" 
+                  type="text" 
                   className="admin-text-input" 
                   value={profileEditEmail} 
                   onChange={e => setProfileEditEmail(e.target.value)} 
                   required 
                 />
+              </div>
+
+              {/* Digital Signature Management */}
+              <div style={{ marginTop: '20px', padding: '16px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+                    Digital Signature
+                  </label>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Appears on Approved POs</span>
+                </div>
+                <p style={{ fontSize: '11px', color: '#64748B', margin: '0 0 12px 0' }}>
+                  Upload your signature (PNG/JPG, max 2MB). It will be permanently snapshot on Purchase Orders you approve.
+                </p>
+
+                <input 
+                  type="file" 
+                  id="admin-signature-upload-input" 
+                  accept="image/png,image/jpeg,image/jpg" 
+                  style={{ display: 'none' }} 
+                  onChange={async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    if (file.size > 2 * 1024 * 1024) {
+                      showToast("Signature file size must be under 2MB", "error");
+                      return;
+                    }
+                    const formData = new FormData();
+                    formData.append('signature', file);
+                    setAdminSignatureUploading(true);
+                    try {
+                      const res = await api.post('/auth/staff/signature', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' }
+                      });
+                      const newSigUrl = res.data.signatureUrl;
+                      setAdminSignatureUrl(newSigUrl);
+                      const updatedUser = { ...currentUser, signatureUrl: newSigUrl };
+                      localStorage.setItem('user', JSON.stringify(updatedUser));
+                      localStorage.setItem('adminSignatureUrl', newSigUrl);
+                      localStorage.setItem('signatureUrl', newSigUrl);
+                      setCurrentUser(updatedUser);
+                      showToast("Digital signature saved successfully!", "success");
+                    } catch (uploadErr) {
+                      console.error("Signature upload failed:", uploadErr);
+                      showToast(uploadErr.response?.data?.error || "Failed to upload digital signature", "error");
+                    } finally {
+                      setAdminSignatureUploading(false);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+
+                {adminSignatureUrl ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '100%', height: '70px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px' }}>
+                      <img src={adminSignatureUrl} alt="Admin Signature" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        type="button" 
+                        onClick={() => document.getElementById('admin-signature-upload-input').click()} 
+                        disabled={adminSignatureUploading}
+                        style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 800, color: '#2563EB', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        {adminSignatureUploading ? 'Uploading...' : 'Replace Signature'}
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={async () => {
+                          if (!window.confirm("Remove your saved digital signature? Future approved POs will omit it.")) return;
+                          try {
+                            await api.delete('/auth/staff/signature');
+                            setAdminSignatureUrl('');
+                            const updatedUser = { ...currentUser, signatureUrl: '' };
+                            localStorage.setItem('user', JSON.stringify(updatedUser));
+                            localStorage.removeItem('adminSignatureUrl');
+                            localStorage.removeItem('signatureUrl');
+                            setCurrentUser(updatedUser);
+                            showToast("Digital signature removed.", "info");
+                          } catch (delErr) {
+                            showToast(delErr.response?.data?.error || "Failed to remove signature", "error");
+                          }
+                        }}
+                        style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 800, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '14px', border: '1.5px dashed #CBD5E1', borderRadius: '8px', background: '#FFFFFF' }}>
+                    <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>No signature uploaded yet</div>
+                    <button 
+                      type="button" 
+                      onClick={() => document.getElementById('admin-signature-upload-input').click()} 
+                      disabled={adminSignatureUploading}
+                      style={{ padding: '7px 14px', fontSize: '11.5px', fontWeight: 800, color: '#FFFFFF', background: '#2563EB', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                    >
+                      {adminSignatureUploading ? 'Uploading...' : '+ Upload Digital Signature'}
+                    </button>
+                  </div>
+                )}
               </div>
 
               <button 
