@@ -250,6 +250,33 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
   }, [isAddingVendor, selectedVendorProfile, selectedGrnDetails, showGRNModal, showPaymentModal]);
 
   const [currentUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{"name":"Dr. Ramesh","role":"Pharmacy Admin","email":"ramesh@quroxa.com"}'));
+  const [hospitalBranding, setHospitalBranding] = useState(null);
+
+  useEffect(() => {
+    const fetchCurrentHospitalBranding = async () => {
+      try {
+        const tenantId = localStorage.getItem('tenantId') || currentUser?.tenantId;
+        if (!tenantId) return;
+        const res = await api.get('/public/portal/tenant/current');
+        if (res.data && res.data.name) {
+          setHospitalBranding(res.data);
+          try {
+            sessionStorage.setItem(`curoxa_portal_${res.data.hospitalId}`, JSON.stringify(res.data));
+            localStorage.setItem(`curoxa_portal_${res.data.hospitalId}`, JSON.stringify(res.data));
+            localStorage.setItem('curoxa_active_portal_id', res.data.hospitalId);
+            localStorage.setItem('tenantName', res.data.name);
+            if (res.data.logo) localStorage.setItem('hospitalLogo', res.data.logo);
+            if (res.data.address) localStorage.setItem('hospitalAddress', res.data.address);
+            if (res.data.gst) localStorage.setItem('hospitalGstin', res.data.gst);
+            if (res.data.phone) localStorage.setItem('hospitalPhone', res.data.phone);
+          } catch (_) {}
+        }
+      } catch (err) {
+        console.warn('Could not fetch active tenant hospital branding:', err);
+      }
+    };
+    fetchCurrentHospitalBranding();
+  }, [currentUser?.tenantId]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
@@ -4975,15 +5002,16 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                                       }}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        const activeHospital = getActivePortalBranding();
-                                        printPO(po, activeHospital?.name || localStorage.getItem('tenantName') || currentUser?.tenantName || 'Beta Beacon Specialty Care', {
+                                        const activeHospName = currentUser?.tenantName || localStorage.getItem('tenantName') || hospitalBranding?.name || "Ishita's Clinic";
+                                        printPO(po, activeHospName, {
                                           vendors,
                                           currentUser,
-                                          hospital: activeHospital,
-                                          hospitalLogo: activeHospital?.logo,
-                                          hospitalAddress: activeHospital?.address || localStorage.getItem('hospitalAddress'),
-                                          hospitalPhone: activeHospital?.phone || localStorage.getItem('hospitalPhone'),
-                                          hospitalGstin: activeHospital?.gst || localStorage.getItem('hospitalGstin')
+                                          hospital: hospitalBranding,
+                                          hospitalName: activeHospName,
+                                          hospitalLogo: hospitalBranding?.logo || localStorage.getItem('hospitalLogo'),
+                                          hospitalAddress: hospitalBranding?.address || localStorage.getItem('hospitalAddress'),
+                                          hospitalPhone: hospitalBranding?.phone || localStorage.getItem('hospitalPhone'),
+                                          hospitalGstin: hospitalBranding?.gst || localStorage.getItem('hospitalGstin')
                                         });
                                       }}
                                       title="Download / Print PO PDF"
@@ -6125,12 +6153,16 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                                   })),
                                   totalAmount: totalOverallAmount
                                 };
-                                printPO(currentDraftPo, localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE', {
+                                const activeHospName = currentUser?.tenantName || localStorage.getItem('tenantName') || hospitalBranding?.name || "Ishita's Clinic";
+                                printPO(currentDraftPo, activeHospName, {
                                   vendors,
                                   currentUser,
-                                  hospitalAddress: localStorage.getItem('hospitalAddress'),
-                                  hospitalPhone: localStorage.getItem('hospitalPhone'),
-                                  hospitalGstin: localStorage.getItem('hospitalGstin')
+                                  hospital: hospitalBranding,
+                                  hospitalName: activeHospName,
+                                  hospitalLogo: hospitalBranding?.logo || localStorage.getItem('hospitalLogo'),
+                                  hospitalAddress: hospitalBranding?.address || localStorage.getItem('hospitalAddress'),
+                                  hospitalPhone: hospitalBranding?.phone || localStorage.getItem('hospitalPhone'),
+                                  hospitalGstin: hospitalBranding?.gst || localStorage.getItem('hospitalGstin')
                                 });
                               }}
                               title="Print Purchase Order Sheet"

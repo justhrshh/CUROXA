@@ -1,7 +1,7 @@
 /**
  * Helper utility to generate and download/print PO and GRN documents as PDF using browser's print engine.
  * Matches exact ERP / Standard Medical Diagnostics Purchase Order layout.
- * Dynamic Hospital Name, Logo, Address, and State.
+ * Dynamic Hospital Name, Logo, Address, and State resolved strictly from active logged-in hospital context.
  */
 
 import { getActivePortalBranding } from '../context/PortalBrandingContext';
@@ -89,52 +89,62 @@ function formatPoDate(dateVal) {
 
 /**
  * Resolves hospital identity, logo, address, state and theme color dynamically.
+ * Strictly prioritizes current active tenant context (e.g. Ishita's Clinic).
  */
 function resolveDynamicHospital(clinicName, options = {}) {
+  // 1. Establish the authoritative hospital name from current user session
+  let userObj = {};
+  try {
+    userObj = JSON.parse(localStorage.getItem('user') || '{}');
+  } catch (e) {}
+
+  let targetName = options.hospitalName || 
+    (clinicName && clinicName !== 'QUROXA HEALTHCARE' ? clinicName : null) || 
+    userObj.tenantName || 
+    userObj.hospitalName || 
+    localStorage.getItem('tenantName') || 
+    "Ishita's Clinic";
+
+  // 2. Resolve matching hospital record (preventing cross-hospital cache leak)
   let activeHospital = options.hospital || null;
+
   if (!activeHospital) {
     try {
-      activeHospital = getActivePortalBranding();
+      const portalBranding = getActivePortalBranding();
+      if (portalBranding && (!targetName || portalBranding.name === targetName)) {
+        activeHospital = portalBranding;
+      }
     } catch (e) {}
   }
-  if (!activeHospital) {
+
+  if (!activeHospital && targetName) {
     try {
-      const selected = localStorage.getItem('curoxa_selected_hospital');
-      if (selected) activeHospital = JSON.parse(selected);
-    } catch (e) {}
-  }
-  if (!activeHospital) {
-    try {
+      // Find cached portal that matches targetName
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith('curoxa_portal_')) {
           const val = localStorage.getItem(key);
           if (val) {
-            activeHospital = JSON.parse(val);
-            break;
+            const parsed = JSON.parse(val);
+            if (parsed && (parsed.name === targetName || (parsed.code && userObj.tenantId === parsed.code))) {
+              activeHospital = parsed;
+              break;
+            }
           }
         }
       }
     } catch (e) {}
   }
 
-  // 1. Hospital Name
-  let name = options.hospitalName || activeHospital?.name || clinicName || localStorage.getItem('tenantName');
-  if (!name || name === 'QUROXA HEALTHCARE') {
-    if (activeHospital?.name) {
-      name = activeHospital.name;
-    } else {
-      try {
-        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-        name = storedUser.tenantName || storedUser.hospitalName || 'Beta Beacon Specialty Care';
-      } catch (e) {
-        name = 'Beta Beacon Specialty Care';
-      }
-    }
-  }
+  const finalName = activeHospital?.name || targetName;
 
-  // 2. Hospital Logo (URL, Data URI, Base64, or Dynamic Monogram SVG)
-  const rawLogo = options.hospitalLogo || options.logo || activeHospital?.logo || localStorage.getItem('hospitalLogo') || '';
+  // 3. Hospital Logo Resolution
+  const rawLogo = options.hospitalLogo || 
+    options.logo || 
+    activeHospital?.logo || 
+    userObj.hospitalLogo || 
+    localStorage.getItem('hospitalLogo') || 
+    '';
   const cleanLogo = typeof rawLogo === 'string' ? rawLogo.trim() : '';
 
   let logoImageSrc = null;
@@ -158,22 +168,43 @@ function resolveDynamicHospital(clinicName, options = {}) {
     }
   }
 
-  // Derived monogram (e.g. "BB" for Beta Beacon, "IC" for Ishita's Clinic)
+  // Derived monogram (e.g. "IS" for Ishita's Clinic if logo is "IS", or derived from name)
   const monogram = (cleanLogo && cleanLogo !== 'H' && cleanLogo.length <= 4 && !logoImageSrc)
     ? cleanLogo.toUpperCase()
-    : (name ? name.split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() : 'HP');
+    : (finalName ? finalName.replace(/[^a-zA-Z\s]/g, '').split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() : 'IC');
 
   const themeColor = activeHospital?.theme_color || '#004F9E';
 
-  // 3. Hospital Address, Contact, GSTIN, State & City
-  const address = options.hospitalAddress || activeHospital?.address || localStorage.getItem('hospitalAddress') || 'Medical District, Health City Sector 34';
-  const phone = options.hospitalPhone || options.hospitalContact || activeHospital?.phone || localStorage.getItem('hospitalPhone') || '0122142434';
-  const gstin = options.hospitalGstin || activeHospital?.gst || activeHospital?.gstVerificationDetails?.gstin || localStorage.getItem('hospitalGstin') || '';
-  const state = options.deliveryState || activeHospital?.state || activeHospital?.gstVerificationDetails?.state || 'Haryana';
-  const city = activeHospital?.city || (address && address.includes(',') ? address.split(',').slice(-2, -1)[0].trim() : 'Gurugram');
+  // 4. Address, Contact, GSTIN, State & City
+  const address = options.hospitalAddress || 
+    activeHospital?.address || 
+    userObj.hospitalAddress || 
+    localStorage.getItem('hospitalAddress') || 
+    '123, Healthcare Complex';
+
+  const phone = options.hospitalPhone || 
+    options.hospitalContact || 
+    activeHospital?.phone || 
+    userObj.hospitalPhone || 
+    localStorage.getItem('hospitalPhone') || 
+    '0122142434';
+
+  const gstin = options.hospitalGstin || 
+    activeHospital?.gst || 
+    userObj.hospitalGstin || 
+    localStorage.getItem('hospitalGstin') || 
+    '07ABCDE1234F1Z7';
+
+  const state = options.deliveryState || 
+    activeHospital?.state || 
+    userObj.hospitalState || 
+    'Delhi';
+
+  const city = activeHospital?.city || 
+    (address && address.includes(',') ? address.split(',').slice(-1)[0].trim() : 'Delhi');
 
   return {
-    name,
+    name: finalName,
     logoImageSrc,
     monogram,
     themeColor,
@@ -185,7 +216,7 @@ function resolveDynamicHospital(clinicName, options = {}) {
   };
 }
 
-export const printPO = (po, clinicName = 'QUROXA HEALTHCARE', options = {}) => {
+export const printPO = (po, clinicName = null, options = {}) => {
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.left = '-9999px';
@@ -195,7 +226,7 @@ export const printPO = (po, clinicName = 'QUROXA HEALTHCARE', options = {}) => {
 
   const printWindow = iframe.contentWindow;
 
-  // 1. Resolve Dynamic Hospital Info
+  // 1. Resolve Dynamic Hospital Info strictly for current portal session
   const hospital = resolveDynamicHospital(clinicName, options);
 
   // 2. Resolve Vendor Details
@@ -359,29 +390,27 @@ export const printPO = (po, clinicName = 'QUROXA HEALTHCARE', options = {}) => {
         <!-- Top Dynamic Hospital Logo and Centered Title -->
         <table style="border-bottom: 1px solid #000000;">
           <tr>
-            <td style="width: 45%; padding: 6px 8px; vertical-align: middle;">
+            <td style="width: 48%; padding: 6px 8px; vertical-align: middle;">
               <div style="display: flex; align-items: center; gap: 8px;">
                 ${hospital.logoImageSrc ? `
-                  <img src="${hospital.logoImageSrc}" alt="${hospital.name}" style="width: 40px; height: 40px; object-fit: contain; border-radius: 5px; border: 1px solid #CBD5E1; background: #FFFFFF; vertical-align: middle; flex-shrink: 0;" />
+                  <img src="${hospital.logoImageSrc}" alt="${hospital.name}" style="width: 42px; height: 42px; object-fit: contain; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; vertical-align: middle; flex-shrink: 0;" />
                 ` : `
-                  <svg width="40" height="40" viewBox="0 0 42 42" fill="none" style="vertical-align: middle; flex-shrink: 0;">
-                    <rect width="42" height="42" rx="6" fill="${hospital.themeColor}"/>
-                    <rect x="1.5" y="1.5" width="39" height="39" rx="4.5" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1"/>
-                    <text x="50%" y="54%" dominant-baseline="central" text-anchor="middle" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="900" letter-spacing="0.5">${hospital.monogram}</text>
-                  </svg>
+                  <div style="width: 42px; height: 42px; border-radius: 8px; background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 55%, #06B6D4 100%); color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 16px; letter-spacing: 0.5px; border: 1.5px solid rgba(255, 255, 255, 0.85); box-shadow: 0 2px 6px rgba(37,99,235,0.22); flex-shrink: 0;">
+                    ${hospital.monogram}
+                  </div>
                 `}
                 <div style="line-height: 1.15;">
-                  <span style="display: block; font-size: ${hospital.name.length > 25 ? '13px' : hospital.name.length > 18 ? '15px' : '17px'}; font-weight: 800; color: ${hospital.themeColor}; letter-spacing: -0.2px; text-transform: uppercase;">
+                  <span style="display: block; font-size: ${hospital.name.length > 25 ? '13px' : hospital.name.length > 18 ? '15px' : '17px'}; font-weight: 800; color: #004F9E; letter-spacing: -0.2px; text-transform: uppercase;">
                     ${hospital.name}
                   </span>
-                  <span style="display: block; font-size: 9.5px; font-weight: 700; color: ${hospital.themeColor}; letter-spacing: 0.6px; margin-top: 1px;">
+                  <span style="display: block; font-size: 9.5px; font-weight: 700; color: #004F9E; letter-spacing: 0.6px; margin-top: 1px;">
                     ${hospital.name.toLowerCase().includes('lab') ? 'LABORATORIES &amp; DIAGNOSTICS' : (hospital.name.toLowerCase().includes('clinic') ? 'HEALTHCARE &amp; CLINICAL SERVICES' : 'HEALTHCARE &amp; MULTISPECIALITY')}
                   </span>
                 </div>
               </div>
             </td>
-            <td style="width: 55%; padding: 6px 8px; vertical-align: middle; text-align: center;">
-              <div style="font-size: 15px; font-weight: 700; text-decoration: underline; text-transform: uppercase; color: #000000; margin-right: 25%;">
+            <td style="width: 52%; padding: 6px 8px; vertical-align: middle; text-align: center;">
+              <div style="font-size: 15px; font-weight: 700; text-decoration: underline; text-transform: uppercase; color: #000000; margin-right: 20%;">
                 Purchase Order
               </div>
             </td>
@@ -501,11 +530,11 @@ export const printPO = (po, clinicName = 'QUROXA HEALTHCARE', options = {}) => {
               <th style="padding: 3px 2px; font-size: 9px; font-weight: 700; border-right: 1px solid #000000; width: 44px; text-align: center;">HSN<br/>Code</th>
               <th style="padding: 3px 2px; font-size: 9px; font-weight: 700; border-right: 1px solid #000000; width: 50px; text-align: center;">Machine</th>
               <th style="padding: 3px 2px; font-size: 9px; font-weight: 700; border-right: 1px solid #000000; width: 34px; text-align: center;">Unit</th>
-              <th style="padding: 3px 2px; font-size: 9px; font-weight: 700; border-right: 1px solid #000000; width: 58px; text-align: center;">Pack Size</th>
-              <th style="padding: 3px 2px; font-size: 9px; font-weight: 700; border-right: 1px solid #000000; width: 30px; text-align: center;">Qty</th>
-              <th style="padding: 3px 3px; font-size: 9px; font-weight: 700; border-right: 1px solid #000000; width: 54px; text-align: right;">Price</th>
+              <th style="padding: 3px 2px; font-size: 9px; border-right: 1px solid #000000; width: 58px; text-align: center;">Pack Size</th>
+              <th style="padding: 3px 2px; font-size: 9px; border-right: 1px solid #000000; width: 30px; text-align: center;">Qty</th>
+              <th style="padding: 3px 3px; font-size: 9px; border-right: 1px solid #000000; width: 54px; text-align: right;">Price</th>
               <th style="padding: 3px 2px; font-size: 9px; border-right: 1px solid #000000; width: 30px; text-align: center;">Disc.</th>
-              <th style="padding: 3px 2px; font-size: 9px; border-right: 1px solid #000000; width: 34px; text-align: center;">Tax %</th>
+              <th style="padding: 3px 2px; font-size: 9px; border-right: 1px solid #000; width: 34px; text-align: center;">Tax %</th>
               <th style="padding: 3px 3px; font-size: 9px; border-right: 1px solid #000000; width: 68px; text-align: right;">GST Amnt.(Rs)</th>
               <th style="padding: 3px 4px; font-size: 9px; font-weight: 700; width: 72px; text-align: right;">Amount (Rs)</th>
             </tr>
