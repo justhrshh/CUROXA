@@ -1550,6 +1550,7 @@ router.get('/doctor-queue/:doctorId', async (req, res) => {
     res.json({
       tenantId,
       doctorId,
+      publicQueueId: doctorObj.publicQueueId || '',
       doctorName: doctorObj.name,
       specialty: doctorObj.specialty || '',
       date: dateStr,

@@ -14,6 +14,7 @@ import ProcurementDashboard from './pages/ProcurementDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import DpoDashboard from './pages/DpoDashboard';
 import HospitalPortal from './pages/HospitalPortal';
+import DoctorQueuePage from './pages/DoctorQueuePage';
 import { PortalBrandingProvider } from './context/PortalBrandingContext';
 import WakeUpOverlay from './components/WakeUpOverlay';
 import GlobalSupportWidget from './components/GlobalSupportWidget';
@@ -300,6 +301,7 @@ function App() {
       <Routes>
         <Route path="/patient/login" element={<PatientPortalLogin />} />
         <Route path="/patient-register" element={<PatientRegistration />} />
+        <Route path="/doctor/queue/:publicQueueId" element={<DoctorQueuePage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/admin" element={
           <ProtectedRoute targetRole="admin">

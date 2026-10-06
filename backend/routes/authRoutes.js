@@ -719,7 +719,7 @@ router.get("/doctors", tenantMiddleware, async (req, res) => {
   try {
     const doctors = await User.find(
       { role: "doctor", tenantId: req.tenantId },
-      "name specialty available consultationFee email phone avatar max_slots doctorSlots weeklyOff staff_id",
+      "name specialty available consultationFee email phone avatar max_slots doctorSlots weeklyOff staff_id publicQueueId",
     ).lean();
 
     const LeaveRequest = require("../models/LeaveRequest");
@@ -800,7 +800,7 @@ router.get("/doctors/universal", verifyToken, async (req, res) => {
   try {
     const doctors = await User.find(
       { role: "doctor" },
-      "name specialty available consultationFee tenantId email doctorSlots weeklyOff"
+      "name specialty available consultationFee tenantId email doctorSlots weeklyOff publicQueueId"
     );
     res.json(doctors);
   } catch (error) {

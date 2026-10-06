@@ -5,6 +5,7 @@ import { socket, joinTenantRoom } from '../utils/socket';
 import { useRealTimeSync } from '../hooks/useRealTimeSync';
 import HRPayroll from './HRPayroll';
 import WaitingQueuePanel from '../components/WaitingQueuePanel';
+import DoctorQRModal from '../components/DoctorQRModal';
 import quroxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import { HospitalBrandLogo, getActivePortalBranding, restoreActivePortalDocumentMetadata } from '../context/PortalBrandingContext';
 import { generateReceiptSlipPdf, fetchLetterheadConfig } from '../utils/exportEngine';
@@ -634,6 +635,8 @@ const ReceptionistDashboard = () => {
   const [patientsList, setPatientsList] = useState([]);
   const [staffList, setStaffList] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [selectedDoctorForQR, setSelectedDoctorForQR] = useState(null);
+  const [showDoctorQRModal, setShowDoctorQRModal] = useState(false);
   const [bills, setBills] = useState([]);
   
   const [patientPhoto, setPatientPhoto] = useState(null);
@@ -6814,17 +6817,45 @@ const ReceptionistDashboard = () => {
                                 </div>
                               </div>
 
-                              <span style={{
-                                fontSize: '10px',
-                                fontWeight: 800,
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                background: isAvailable ? '#D1FAE5' : isOff ? '#FEF3C7' : '#FEE2E2',
-                                color: isAvailable ? '#065F46' : isOff ? '#92400E' : '#991B1B',
-                                border: `1px solid ${isAvailable ? '#A7F3D0' : isOff ? '#FDE68A' : '#FECACA'}`
-                              }}>
-                                {isAvailable ? 'Available' : isOff ? 'Weekoff' : 'On Leave'}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedDoctorForQR(doc);
+                                    setShowDoctorQRModal(true);
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontSize: '10px',
+                                    fontWeight: 800,
+                                    padding: '3px 8px',
+                                    borderRadius: '8px',
+                                    background: '#EFF6FF',
+                                    color: '#2563EB',
+                                    border: '1px solid #BFDBFE',
+                                    cursor: 'pointer'
+                                  }}
+                                  title="View & Print Live Queue QR"
+                                >
+                                  <i data-lucide="qr-code" style={{ width: '12px', height: '12px' }}></i>
+                                  <span>QR</span>
+                                </button>
+
+                                <span style={{
+                                  fontSize: '10px',
+                                  fontWeight: 800,
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  background: isAvailable ? '#D1FAE5' : isOff ? '#FEF3C7' : '#FEE2E2',
+                                  color: isAvailable ? '#065F46' : isOff ? '#92400E' : '#991B1B',
+                                  border: `1px solid ${isAvailable ? '#A7F3D0' : isOff ? '#FDE68A' : '#FECACA'}`
+                                }}>
+                                  {isAvailable ? 'Available' : isOff ? 'Weekoff' : 'On Leave'}
+                                </span>
+                              </div>
                             </div>
 
                             {/* Live Utilization Line */}
@@ -20699,6 +20730,17 @@ const ReceptionistDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Doctor QR Modal for Reception / Staff */}
+      <DoctorQRModal
+        isOpen={showDoctorQRModal}
+        onClose={() => {
+          setShowDoctorQRModal(false);
+          setSelectedDoctorForQR(null);
+        }}
+        doctor={selectedDoctorForQR}
+        hospitalName={localStorage.getItem('tenantId') || 'QUROXA HEALTHCARE'}
+      />
     </>
   );
 };

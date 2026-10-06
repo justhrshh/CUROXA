@@ -226,7 +226,13 @@ const userSchema = new mongoose.Schema({
     fileType: { type: String, required: true },
     uploadedAt: { type: Date, default: Date.now },
     uploadedBy: { type: String, required: true }
-  }]
+  }],
+  publicQueueId: {
+    type: String,
+    sparse: true,
+    unique: true,
+    trim: true
+  }
 }, { timestamps: true });
 
 // Unique index for uniqueness per tenant

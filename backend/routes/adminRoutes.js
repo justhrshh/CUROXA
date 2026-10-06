@@ -151,7 +151,8 @@ router.post("/users", isHrOrAdmin, requireActiveSubscription, async (req, res) =
       leaveBalance: req.body.leaveBalance,
       doctorSlots: role === 'doctor' ? (req.body.doctorSlots || []) : [],
       weeklyOff: req.body.weeklyOff || 'Sunday',
-      avatar: req.body.avatar || ''
+      avatar: req.body.avatar || '',
+      publicQueueId: role === 'doctor' ? ('q_' + require('crypto').randomBytes(10).toString('hex')) : undefined
     });
 
     writeAudit(req, "staff_created", newUser._id, { staff_id, role, name });

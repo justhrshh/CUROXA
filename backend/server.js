@@ -248,6 +248,9 @@ app.use("/api/dpo", dpoRoutes);
 const portalRoutes = require("./routes/portalRoutes");
 app.use("/api/public/portal", portalRoutes);
 
+const publicQueueRoutes = require("./routes/publicQueueRoutes");
+app.use("/api/public-queue", publicQueueRoutes);
+
 // Create HTTP server and initialize socket.io
 const http = require("http").createServer(app);
 const io = require("socket.io")(http, {

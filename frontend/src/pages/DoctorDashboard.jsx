@@ -5,6 +5,7 @@ import PrescriptionMakerTab from './PrescriptionMakerTab';
 import HRPayroll from './HRPayroll';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import ExportModal from '../components/export/ExportModal';
+import DoctorQRModal from '../components/DoctorQRModal';
 import curoxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import { HospitalBrandLogo, getActivePortalBranding, restoreActivePortalDocumentMetadata } from '../context/PortalBrandingContext';
 import {
@@ -792,6 +793,7 @@ const DoctorDashboard = () => {
     waitingCount: 0,
     lastIssuedToken: 0
   });
+  const [showDoctorQRModal, setShowDoctorQRModal] = useState(false);
 
   const fetchDoctorQueue = useCallback(async () => {
     const docId = user?.id || user?._id;
@@ -806,7 +808,8 @@ const DoctorDashboard = () => {
           currentPatient: res.data.currentPatient ?? null,
           nextToken: res.data.nextToken ?? null,
           waitingCount: res.data.waitingCount ?? 0,
-          lastIssuedToken: res.data.lastIssuedToken ?? 0
+          lastIssuedToken: res.data.lastIssuedToken ?? 0,
+          publicQueueId: res.data.publicQueueId || ''
         });
       }
     } catch (err) {
@@ -7521,6 +7524,31 @@ I have scanned the medical reference databases, but couldn't find a direct match
                       {doctorQueue.waitingCount} {doctorQueue.waitingCount === 1 ? 'patient' : 'patients'}
                     </span>
                   </div>
+
+                  {/* DOCTOR LIVE QUEUE QR BUTTON */}
+                  <button
+                    onClick={() => setShowDoctorQRModal(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      background: 'linear-gradient(135deg, #1E40AF 0%, #2563EB 100%)',
+                      color: '#FFFFFF',
+                      padding: '8px 16px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-1px)'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                  >
+                    <i data-lucide="qr-code" style={{ width: '15px', height: '15px' }}></i>
+                    <span>PATIENT QUEUE QR</span>
+                  </button>
                 </div>
               </div>
 
@@ -15467,6 +15495,18 @@ I have scanned the medical reference databases, but couldn't find a direct match
           onClose={() => setShowPatientExportModal(false)}
         />
       )}
+
+      {/* Doctor QR Modal */}
+      <DoctorQRModal
+        isOpen={showDoctorQRModal}
+        onClose={() => setShowDoctorQRModal(false)}
+        doctor={{
+          name: user.name || 'Doctor',
+          specialty: user.specialty || user.department || 'General Medicine',
+          publicQueueId: user.publicQueueId || doctorQueue.publicQueueId
+        }}
+        hospitalName={user.tenantName || 'QUROXA HEALTHCARE'}
+      />
       </>
     </ErrorBoundary>
   );
