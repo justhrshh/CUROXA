@@ -9898,7 +9898,17 @@ const PharmacyDashboard = () => {
                                 })()}
                                 <button 
                                   style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer', background: '#10B981', border: 'none', color: 'white', borderRadius: '4px', fontWeight: 700 }}
-                                  onClick={() => printGRN(grn, currentUser?.tenantName || 'QUROXA HEALTHCARE')}
+                                  onClick={() => {
+                                    const activeHospName = currentUser?.tenantName || localStorage.getItem('tenantName') || "Ishita's Clinic";
+                                    printGRN(grn, activeHospName, {
+                                      hospitalName: activeHospName,
+                                      hospitalLogo: currentUser?.hospitalLogo || localStorage.getItem('hospitalLogo'),
+                                      hospitalAddress: currentUser?.hospitalAddress || localStorage.getItem('hospitalAddress'),
+                                      hospitalGstin: currentUser?.hospitalGstin || localStorage.getItem('hospitalGstin'),
+                                      hospitalPhone: currentUser?.hospitalPhone || localStorage.getItem('hospitalPhone'),
+                                      currentUser
+                                    });
+                                  }}
                                 >
                                   📄 PDF
                                 </button>
@@ -14477,7 +14487,17 @@ const PharmacyDashboard = () => {
                 <button 
                   type="button" 
                   style={{ padding: '8px 20px', borderRadius: '8px', background: '#10B981', color: 'white', fontWeight: 800, cursor: 'pointer', border: 'none' }} 
-                  onClick={() => printGRN(selectedGrnDetails, currentUser?.tenantName || 'QUROXA HEALTHCARE')}
+                  onClick={() => {
+                    const activeHospName = currentUser?.tenantName || localStorage.getItem('tenantName') || "Ishita's Clinic";
+                    printGRN(selectedGrnDetails, activeHospName, {
+                      hospitalName: activeHospName,
+                      hospitalLogo: currentUser?.hospitalLogo || localStorage.getItem('hospitalLogo'),
+                      hospitalAddress: currentUser?.hospitalAddress || localStorage.getItem('hospitalAddress'),
+                      hospitalGstin: currentUser?.hospitalGstin || localStorage.getItem('hospitalGstin'),
+                      hospitalPhone: currentUser?.hospitalPhone || localStorage.getItem('hospitalPhone'),
+                      currentUser
+                    });
+                  }}
                 >
                   Download PDF
                 </button>

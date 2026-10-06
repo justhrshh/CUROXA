@@ -16027,12 +16027,22 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                               >
                                 View
                               </button>
-                              <button 
-                                style={{ padding: '6px 12px', fontSize: '12px', background: '#10B981', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer' }}
-                                onClick={() => printGRN(grn, currentUser?.tenantName || subscription?.name || 'Sunrise Multispeciality')}
-                              >
-                                📄 PDF
-                              </button>
+                                <button 
+                                  style={{ padding: '6px 12px', fontSize: '12px', background: '#10B981', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer' }}
+                                  onClick={() => {
+                                    const activeHospName = currentUser?.tenantName || localStorage.getItem('tenantName') || subscription?.name || "Ishita's Clinic";
+                                    printGRN(grn, activeHospName, {
+                                      hospitalName: activeHospName,
+                                      hospitalLogo: currentUser?.hospitalLogo || localStorage.getItem('hospitalLogo'),
+                                      hospitalAddress: currentUser?.hospitalAddress || localStorage.getItem('hospitalAddress'),
+                                      hospitalGstin: currentUser?.hospitalGstin || localStorage.getItem('hospitalGstin'),
+                                      hospitalPhone: currentUser?.hospitalPhone || localStorage.getItem('hospitalPhone'),
+                                      currentUser
+                                    });
+                                  }}
+                                >
+                                  📄 PDF
+                                </button>
                             </div>
                           </td>
                         </tr>
@@ -26908,7 +26918,17 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button 
                 style={{ height: '36px', padding: '0 16px', background: '#10B981', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}
-                onClick={() => printGRN(adminSelectedGrn, currentUser?.tenantName || subscription?.name || 'Sunrise Multispeciality')}
+                onClick={() => {
+                  const activeHospName = currentUser?.tenantName || localStorage.getItem('tenantName') || subscription?.name || "Ishita's Clinic";
+                  printGRN(adminSelectedGrn, activeHospName, {
+                    hospitalName: activeHospName,
+                    hospitalLogo: currentUser?.hospitalLogo || localStorage.getItem('hospitalLogo'),
+                    hospitalAddress: currentUser?.hospitalAddress || localStorage.getItem('hospitalAddress'),
+                    hospitalGstin: currentUser?.hospitalGstin || localStorage.getItem('hospitalGstin'),
+                    hospitalPhone: currentUser?.hospitalPhone || localStorage.getItem('hospitalPhone'),
+                    currentUser
+                  });
+                }}
               >
                 Download PDF
               </button>

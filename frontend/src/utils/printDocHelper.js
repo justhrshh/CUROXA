@@ -91,7 +91,7 @@ function formatPoDate(dateVal) {
  * Resolves hospital identity, logo, address, state and theme color dynamically.
  * Strictly prioritizes current active tenant context (e.g. Ishita's Clinic).
  */
-function resolveDynamicHospital(clinicName, options = {}) {
+export function resolveDynamicHospital(clinicName, options = {}) {
   // 1. Establish the authoritative hospital name from current user session
   let userObj = {};
   try {
@@ -274,9 +274,20 @@ export const printPO = (po, clinicName = null, options = {}) => {
   const currentUser = options.currentUser || (() => {
     try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch (e) { return {}; }
   })();
-  const preparedBy = po.requestedBy || currentUser.name || 'JITESH KUMAR';
-  const checkedBy = po.checkedBy || 'ISHAN SHUKLA';
-  const approvedBy = po.approvedBy || 'ISHAN SHUKLA';
+
+  const placedBySnapshot = po.placedBy || {};
+  const approvedBySnapshot = po.approvedBy && typeof po.approvedBy === 'object' ? po.approvedBy : {};
+
+  const preparedByName = placedBySnapshot.name || po.requestedBy || currentUser.name || 'JITESH KUMAR';
+  const preparedByRole = placedBySnapshot.designation || placedBySnapshot.role || 'Pharmacist / In-Charge';
+  const preparedBySigUrl = placedBySnapshot.signatureUrl || '';
+
+  const checkedByName = po.checkedBy || 'ISHAN SHUKLA';
+
+  const isApproved = String(po.status || '').toLowerCase() === 'approved';
+  const approvedByName = approvedBySnapshot.name || (typeof po.approvedBy === 'string' ? po.approvedBy : (isApproved ? 'SUPERINTENDENT / ADMIN' : 'Pending Approval'));
+  const approvedByRole = approvedBySnapshot.designation || approvedBySnapshot.role || (isApproved ? 'Medical Superintendent / Administrator' : '');
+  const approvedBySigUrl = isApproved && approvedBySnapshot.signatureUrl ? approvedBySnapshot.signatureUrl : '';
 
   // 5. Line Items Calculations & Rows
   let runningSubtotal = 0;
@@ -584,17 +595,31 @@ export const printPO = (po, clinicName = null, options = {}) => {
         <!-- Signatures (Prepared By, Checked By, Approved By) -->
         <table style="margin-top: 10px; margin-bottom: 20px;">
           <tr>
-            <td style="width: 33.33%; text-align: left; padding-left: 12px;">
-              <div style="font-weight: 700; font-size: 9.5px;">Prepared By</div>
-              <div style="font-weight: 700; font-size: 9px; margin-top: 24px; text-transform: uppercase;">${preparedBy}</div>
+            <td style="width: 33.33%; text-align: left; padding-left: 12px; vertical-align: bottom;">
+              <div style="font-weight: 700; font-size: 9.5px; margin-bottom: 4px;">Prepared / Placed By</div>
+              ${preparedBySigUrl ? `
+                <div style="margin-bottom: 4px;">
+                  <img src="${preparedBySigUrl}" alt="Prepared By Signature" style="max-height: 44px; max-width: 140px; object-fit: contain; display: block;" />
+                </div>
+              ` : '<div style="height: 24px;"></div>'}
+              <div style="font-weight: 700; font-size: 9px; text-transform: uppercase;">${preparedByName}</div>
+              <div style="font-size: 8px; color: #475569;">${preparedByRole}</div>
             </td>
-            <td style="width: 33.33%; text-align: left; padding-left: 12px;">
-              <div style="font-weight: 700; font-size: 9.5px;">Checked By</div>
-              <div style="font-weight: 700; font-size: 9px; margin-top: 24px; text-transform: uppercase;">${checkedBy}</div>
+            <td style="width: 33.33%; text-align: left; padding-left: 12px; vertical-align: bottom;">
+              <div style="font-weight: 700; font-size: 9.5px; margin-bottom: 4px;">Checked By</div>
+              <div style="height: 24px;"></div>
+              <div style="font-weight: 700; font-size: 9px; text-transform: uppercase;">${checkedByName}</div>
+              <div style="font-size: 8px; color: #475569;">Internal Audit / Stores</div>
             </td>
-            <td style="width: 33.33%; text-align: left; padding-left: 12px;">
-              <div style="font-weight: 700; font-size: 9.5px;">Approved By</div>
-              <div style="font-weight: 700; font-size: 9px; margin-top: 24px; text-transform: uppercase;">${approvedBy}</div>
+            <td style="width: 33.33%; text-align: left; padding-left: 12px; vertical-align: bottom;">
+              <div style="font-weight: 700; font-size: 9.5px; margin-bottom: 4px;">Approved By</div>
+              ${approvedBySigUrl ? `
+                <div style="margin-bottom: 4px;">
+                  <img src="${approvedBySigUrl}" alt="Approved By Signature" style="max-height: 44px; max-width: 140px; object-fit: contain; display: block;" />
+                </div>
+              ` : '<div style="height: 24px;"></div>'}
+              <div style="font-weight: 700; font-size: 9px; text-transform: uppercase; ${!isApproved ? 'color: #D97706;' : ''}">${approvedByName}</div>
+              <div style="font-size: 8px; color: #475569;">${approvedByRole}</div>
             </td>
           </tr>
         </table>
@@ -638,7 +663,16 @@ export const printPO = (po, clinicName = null, options = {}) => {
   printWindow.document.close();
 };
 
-export const printGRN = (grn, clinicName = 'QUROXA HEALTHCARE') => {
+function formatGrnDisplayDate(dateVal) {
+  if (!dateVal) return '--';
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return String(dateVal);
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+export const printGRN = (grn, clinicName = null, options = {}) => {
+  if (!grn) return;
+
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.left = '-9999px';
@@ -648,147 +682,478 @@ export const printGRN = (grn, clinicName = 'QUROXA HEALTHCARE') => {
 
   const printWindow = iframe.contentWindow;
 
-  let subtotalSum = 0;
-  let gstSum = 0;
+  // 1. Resolve Dynamic Hospital Info strictly for current portal session (e.g. Ishita's Clinic)
+  const hospital = resolveDynamicHospital(clinicName, options);
 
-  const itemsHTML = (grn.items || []).map((item, idx) => {
-    const qty = item.qtyReceived || 0;
-    const price = item.price || 0;
-    const gstRate = item.gst !== undefined ? item.gst : 12;
-    const itemSub = qty * price;
-    const gstAmt = itemSub * (gstRate / 100);
-    const total = itemSub + gstAmt;
+  // 2. Line Items Breakdown
+  const items = Array.isArray(grn.items) && grn.items.length > 0 ? grn.items : [];
 
-    subtotalSum += itemSub;
-    gstSum += gstAmt;
+  let totalCalculatedDiscount = 0;
+  let totalCalculatedGst = 0;
+  let totalCalculatedGrand = 0;
+
+  // Table 1: Receiving & Batch Details
+  const batchRowsHtml = items.length > 0 ? items.map((item, idx) => {
+    const itemName = item.name || item.itemName || '--';
+    const sku = item.sku || item.itemCode || '--';
+    const unit = item.purchasedUnit || item.unit || 'Strip';
+    const barcode = item.barcode || '--';
+    const batchNo = item.batchNumber || item.batchNo || '--';
+    const mfgDate = item.mfgDate ? formatGrnDisplayDate(item.mfgDate) : '--';
+    const expiryDate = item.expiryDate ? formatGrnDisplayDate(item.expiryDate) : '--';
 
     return `
-      <tr>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #E2E8F0;">${idx + 1}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #E2E8F0; font-weight: 600;">${item.name}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #E2E8F0; font-family: monospace;">${item.sku || '—'}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #E2E8F0; text-align: center;">${item.qtyOrdered || '—'}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #E2E8F0; text-align: center; font-weight: 700; color: #059669;">${qty}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #E2E8F0; text-align: right;">₹${price.toFixed(2)}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #E2E8F0; text-align: right;">${gstRate}%</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #E2E8F0; text-align: right;">₹${gstAmt.toFixed(2)}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-weight: 700;">₹${total.toFixed(2)}</td>
+      <tr style="background: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-size: 10px;">${idx + 1}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; font-weight: 700; font-size: 10px; color: #0F172A;">${itemName}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; font-family: monospace; font-size: 10px; color: #475569;">${sku}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-size: 10px;">${unit}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-family: monospace; font-size: 10px; color: #64748B;">${barcode}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-weight: 700; font-size: 10px; color: #1E293B;">${batchNo}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-size: 10px; color: #64748B;">${mfgDate}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-weight: 700; font-size: 10px; color: #B91C1C;">${expiryDate}</td>
       </tr>
     `;
-  }).join('');
+  }).join('') : `
+    <tr><td colspan="8" style="padding: 10px; text-align: center; color: #94A3B8; font-size: 10px;">No batch items recorded.</td></tr>
+  `;
 
-  const grandTotal = subtotalSum + gstSum;
+  // Table 2: Quantity Reconciliation
+  const qtyRowsHtml = items.length > 0 ? items.map((item, idx) => {
+    const itemName = item.name || item.itemName || '--';
+    const poQty = item.qtyOrdered ?? item.orderedQty ?? '--';
+    const prevRec = item.previouslyReceivedQty ?? 0;
+    const remainingQty = item.remainingQty ?? '--';
+    const receivedQty = item.qtyReceived ?? item.receivedQty ?? 0;
+    const rejectedQty = item.rejectedQty ?? 0;
+    const rejReason = item.rejectionReason || '--';
+
+    return `
+      <tr style="background: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-size: 10px;">${idx + 1}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; font-weight: 700; font-size: 10px; color: #0F172A;">${itemName}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-size: 10px;">${poQty}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-size: 10px; color: #64748B;">${prevRec}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-size: 10px;">${remainingQty}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-weight: 800; font-size: 10px; color: #059669;">${receivedQty}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-weight: ${rejectedQty > 0 ? '800' : '500'}; font-size: 10px; color: ${rejectedQty > 0 ? '#DC2626' : '#64748B'};">${rejectedQty}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; font-size: 10px; color: #64748B;">${rejReason}</td>
+      </tr>
+    `;
+  }).join('') : `
+    <tr><td colspan="8" style="padding: 10px; text-align: center; color: #94A3B8; font-size: 10px;">No quantity data recorded.</td></tr>
+  `;
+
+  // Table 3: Financial Details
+  const finRowsHtml = items.length > 0 ? items.map((item, idx) => {
+    const itemName = item.name || item.itemName || '--';
+    const rate = Number(item.purchaseRate ?? item.price ?? 0);
+    const discPct = Number(item.discountPercent ?? item.discount ?? 0);
+    const discAmt = Number(item.discountAmount ?? ((rate * (discPct / 100))) ?? 0);
+    const gstRate = Number(item.gst !== undefined && item.gst !== null ? item.gst : 12);
+    const taxable = Math.max(0, rate - discAmt);
+    const gstAmt = Number(item.gstAmount ?? ((taxable * (gstRate / 100))) ?? 0);
+    const buyPrice = Number(item.buyPrice ?? (taxable + gstAmt) ?? (rate + gstAmt));
+    const recQty = Number(item.qtyReceived ?? item.receivedQty ?? 1);
+    const netAmt = Number(item.netAmount ?? (recQty * buyPrice) ?? 0);
+
+    totalCalculatedDiscount += (discAmt * recQty);
+    totalCalculatedGst += (gstAmt * recQty);
+    totalCalculatedGrand += netAmt;
+
+    return `
+      <tr style="background: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-size: 10px;">${idx + 1}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; font-weight: 700; font-size: 10px; color: #0F172A;">${itemName}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: right; font-size: 10px;">${rate.toFixed(2)}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-size: 10px;">${discPct}%</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: right; font-size: 10px;">${discAmt.toFixed(2)}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: center; font-size: 10px;">${gstRate}%</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: right; font-size: 10px;">${gstAmt.toFixed(2)}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: right; font-weight: 600; font-size: 10px;">${buyPrice.toFixed(2)}</td>
+        <td style="padding: 5px 6px; border: 1px solid #CBD5E1; text-align: right; font-weight: 800; font-size: 10px; color: #0F172A;">${netAmt.toFixed(2)}</td>
+      </tr>
+    `;
+  }).join('') : `
+    <tr><td colspan="9" style="padding: 10px; text-align: center; color: #94A3B8; font-size: 10px;">No financial line items recorded.</td></tr>
+  `;
+
+  const finalTotalDiscount = grn.totalDiscount !== undefined && grn.totalDiscount !== null && grn.totalDiscount !== '' ? Number(grn.totalDiscount) : totalCalculatedDiscount;
+  const finalTotalGst = grn.totalGst !== undefined && grn.totalGst !== null && grn.totalGst !== '' ? Number(grn.totalGst) : totalCalculatedGst;
+  const finalGrandTotal = grn.grandTotal !== undefined && grn.grandTotal !== null && grn.grandTotal !== '' ? Number(grn.grandTotal) : totalCalculatedGrand;
+  const invoiceAmount = Number(grn.invoiceAmount ?? 0);
+
+  // Logo rendering
+  const logoHtml = hospital.logoImageSrc ? `
+    <img src="${hospital.logoImageSrc}" alt="${hospital.name}" style="height: 48px; max-width: 140px; object-fit: contain; margin-right: 14px;" />
+  ` : `
+    <div style="width: 44px; height: 44px; background: ${hospital.themeColor || '#004F9E'}; border-radius: 6px; color: #FFFFFF; font-weight: 900; font-size: 18px; display: inline-flex; align-items: center; justify-content: center; margin-right: 14px; letter-spacing: 0.5px; box-shadow: 0 2px 4px rgba(0,0,0,0.12); flex-shrink: 0;">
+      ${hospital.monogram || 'IC'}
+    </div>
+  `;
+
+  const formattedDate = formatGrnDisplayDate(grn.receivedDate || grn.grnDate || grn.createdAt);
+
+  const receivedBySnapshot = grn.receivedByStaff || {};
+  const inspectorName = receivedBySnapshot.name || grn.receivedBy || 'Pharmacist';
+  const inspectorRole = receivedBySnapshot.designation || receivedBySnapshot.role || 'Pharmacist / In-Charge';
+  const inspectorSigUrl = receivedBySnapshot.signatureUrl || '';
 
   const htmlContent = `
     <!DOCTYPE html>
     <html>
     <head>
+      <meta charset="utf-8" />
       <title>Goods Receipt Note - ${grn.grnId}</title>
       <style>
-        @page { size: A4; margin: 15mm; }
-        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1E293B; margin: 0; padding: 0; font-size: 12px; line-height: 1.5; }
-        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #059669; padding-bottom: 15px; margin-bottom: 25px; }
-        .title { font-size: 24px; font-weight: 800; color: #059669; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
-        .clinic-name { font-size: 16px; font-weight: 700; color: #0F172A; margin: 5px 0 0 0; }
-        .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
-        .meta-table td { padding: 6px 0; vertical-align: top; }
-        .meta-label { font-size: 11px; color: #64748B; font-weight: 700; text-transform: uppercase; display: block; margin-bottom: 2px; }
-        .meta-val { font-size: 13px; font-weight: 700; color: #1E293B; }
-        .items-table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
-        .items-table th { background: #F8FAFC; padding: 10px; text-align: left; font-weight: 800; color: #475569; border-bottom: 2px solid #E2E8F0; font-size: 11px; text-transform: uppercase; }
-        .summary-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; width: 280px; margin-left: auto; }
-        .summary-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
-        .footer { margin-top: 50px; text-align: center; border-top: 1px solid #E2E8F0; padding-top: 15px; font-size: 11px; color: #94A3B8; }
+        @page { size: A4 portrait; margin: 10mm 12mm; }
+        * { box-sizing: border-box; }
+        body { 
+          font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+          color: #1E293B; 
+          margin: 0; 
+          padding: 0; 
+          font-size: 11px; 
+          line-height: 1.4;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .header-wrap { 
+          display: flex; 
+          justify-content: space-between; 
+          align-items: center; 
+          padding-bottom: 12px; 
+          border-bottom: 2px solid #E2E8F0;
+        }
+        .brand-block { 
+          display: flex; 
+          align-items: center; 
+        }
+        .clinic-title { 
+          font-size: 18px; 
+          font-weight: 800; 
+          color: #0F172A; 
+          letter-spacing: -0.2px; 
+          text-transform: uppercase; 
+        }
+        .clinic-sub { 
+          font-size: 10.5px; 
+          color: #64748B; 
+          margin-top: 2px; 
+        }
+        .doc-meta-right { 
+          text-align: right; 
+        }
+        .doc-title { 
+          font-size: 15px; 
+          font-weight: 800; 
+          color: #0F172A; 
+          letter-spacing: 0.5px; 
+          text-transform: uppercase; 
+        }
+        .doc-grn-id { 
+          font-size: 13px; 
+          font-weight: 800; 
+          color: #2563EB; 
+          font-family: monospace; 
+          margin-top: 2px; 
+        }
+        .status-pill { 
+          display: inline-block; 
+          padding: 2px 8px; 
+          font-size: 9.5px; 
+          font-weight: 800; 
+          border-radius: 4px; 
+          background: #DCFCE7; 
+          color: #166534; 
+          text-transform: uppercase; 
+          margin-top: 3px; 
+        }
+        .accent-bar { 
+          display: flex; 
+          justify-content: space-between; 
+          align-items: center; 
+          background: #F1F5F9; 
+          border-radius: 4px; 
+          padding: 6px 10px; 
+          margin: 10px 0 14px 0; 
+          font-size: 10.5px; 
+          color: #475569; 
+        }
+        .meta-card { 
+          display: flex; 
+          background: #F8FAFC; 
+          border: 1px solid #E2E8F0; 
+          border-radius: 6px; 
+          padding: 10px 14px; 
+          margin-bottom: 14px; 
+        }
+        .meta-col { 
+          flex: 1; 
+        }
+        .meta-col-title { 
+          font-size: 10.5px; 
+          font-weight: 800; 
+          color: #1E293B; 
+          margin-bottom: 6px; 
+          text-transform: uppercase; 
+          letter-spacing: 0.5px; 
+        }
+        .meta-grid { 
+          display: grid; 
+          grid-template-columns: 1fr 1fr; 
+          gap: 4px 12px; 
+          font-size: 10.5px; 
+        }
+        .meta-item { 
+          color: #475569; 
+        }
+        .meta-item strong { 
+          color: #0F172A; 
+        }
+        .meta-divider { 
+          width: 1px; 
+          background: #CBD5E1; 
+          margin: 0 14px; 
+        }
+        .section-header { 
+          display: flex; 
+          justify-content: space-between; 
+          align-items: center; 
+          margin: 12px 0 6px 0; 
+        }
+        .section-title { 
+          font-size: 11px; 
+          font-weight: 800; 
+          color: #0F172A; 
+          text-transform: uppercase; 
+          letter-spacing: 0.3px; 
+        }
+        .section-count { 
+          font-size: 10px; 
+          color: #64748B; 
+        }
+        .data-table { 
+          width: 100%; 
+          border-collapse: collapse; 
+          margin-bottom: 8px; 
+        }
+        .data-table th { 
+          padding: 5px 6px; 
+          font-size: 10px; 
+          font-weight: 800; 
+          text-transform: uppercase; 
+          border: 1px solid #CBD5E1; 
+          letter-spacing: 0.2px; 
+        }
+        .data-table td { 
+          border: 1px solid #CBD5E1; 
+        }
+        .summary-box { 
+          display: flex; 
+          justify-content: space-between; 
+          align-items: center; 
+          background: #F1F5F9; 
+          border: 1px solid #CBD5E1; 
+          border-radius: 6px; 
+          padding: 8px 12px; 
+          margin: 10px 0 20px 0; 
+          font-size: 10.5px; 
+          color: #475569; 
+        }
+        .grand-total-val { 
+          font-size: 13px; 
+          font-weight: 900; 
+          color: #1E40AF; 
+        }
+        .sig-block { 
+          display: flex; 
+          justify-content: space-between; 
+          margin-top: 36px; 
+          page-break-inside: avoid; 
+        }
+        .sig-col { 
+          text-align: center; 
+          width: 180px; 
+          border-top: 1px dashed #94A3B8; 
+          padding-top: 6px; 
+          font-size: 10px; 
+          color: #475569; 
+        }
+        .sig-col strong { 
+          display: block; 
+          color: #0F172A; 
+          margin-bottom: 2px; 
+        }
+        .footer-note { 
+          margin-top: 24px; 
+          text-align: center; 
+          border-top: 1px solid #E2E8F0; 
+          padding-top: 8px; 
+          font-size: 9.5px; 
+          color: #94A3B8; 
+        }
       </style>
     </head>
     <body>
-      <div class="header">
-        <div>
-          <div class="title">Goods Receipt Note (GRN)</div>
-          <div class="clinic-name">${clinicName}</div>
+      <!-- Dynamic Hospital & Document Header -->
+      <div class="header-wrap">
+        <div class="brand-block">
+          ${logoHtml}
+          <div>
+            <div class="clinic-title">${hospital.name}</div>
+            <div class="clinic-sub">
+              ${[hospital.address, hospital.phone ? `Phone: ${hospital.phone}` : null, hospital.gstin ? `GSTIN: ${hospital.gstin}` : null].filter(Boolean).join(' &nbsp;|&nbsp; ')}
+            </div>
+          </div>
         </div>
-        <div style="text-align: right;">
-          <div style="font-size: 16px; font-weight: 800; color: #059669; font-family: monospace;">${grn.grnId}</div>
-          <div style="color: #64748B; font-size: 12px; margin-top: 4px;">Ref PO: <strong style="font-family: monospace;">${grn.poNumber || 'Direct Purchase'}</strong></div>
+        <div class="doc-meta-right">
+          <div class="doc-title">GOODS RECEIPT NOTE (GRN)</div>
+          <div class="doc-grn-id">${grn.grnId}</div>
+          <div><span class="status-pill">${grn.status || 'Verified/Completed'}</span></div>
         </div>
       </div>
 
-      <table class="meta-table">
-        <tr>
-          <td style="width: 50%;">
-            <span class="meta-label">Supplier / Vendor</span>
-            <span class="meta-val" style="font-size: 15px; color: #059669;">${grn.vendorName}</span>
-          </td>
-          <td style="width: 50%; text-align: right;">
-            <span class="meta-label">Date Received</span>
-            <span class="meta-val">${new Date(grn.receivedDate || grn.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-          </td>
-        </tr>
-        <tr>
-          <td>
-            <span class="meta-label">Received & Inspected By</span>
-            <span class="meta-val">${grn.receivedBy || 'Pharmacy Staff'}</span>
-          </td>
-          <td style="text-align: right;">
-            <span class="meta-label">Status</span>
-            <span class="meta-val" style="color: #059669;">VERIFIED & COMPLETED</span>
-          </td>
-        </tr>
-      </table>
+      <!-- Accent Subtitle Bar -->
+      <div class="accent-bar">
+        <span>Stock Intake Report &nbsp;|&nbsp; Date: <strong>${formattedDate}</strong></span>
+        <span>Clinic: <strong style="color: #0F172A;">${hospital.name}</strong></span>
+      </div>
 
-      ${grn.notes ? `
-        <div style="margin-bottom: 25px; padding: 12px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px;">
-          <span class="meta-label" style="margin-bottom: 4px;">Verification Notes</span>
-          <div style="font-size: 12px; color: #334155;">${grn.notes}</div>
+      <!-- Structured Metadata Card -->
+      <div class="meta-card">
+        <!-- Left: GRN & PO Information -->
+        <div class="meta-col">
+          <div class="meta-col-title">GRN & PO INFORMATION</div>
+          <div class="meta-grid">
+            <div class="meta-item">GRN Date: <strong>${formattedDate}</strong></div>
+            <div class="meta-item">PO Number: <strong>${grn.poNumber || 'Direct Purchase'}</strong></div>
+            <div class="meta-item">Location: <strong>${grn.grnLocation || 'Main Pharmacy Store'}</strong></div>
+            <div class="meta-item">PO Date: <strong>${grn.poDate ? formatGrnDisplayDate(grn.poDate) : '--'}</strong></div>
+            <div class="meta-item">Status: <strong style="color: #059669;">${grn.status || 'Verified/Completed'}</strong></div>
+            <div class="meta-item">Received By: <strong>${grn.receivedBy || 'Pharmacist'}</strong></div>
+          </div>
         </div>
-      ` : ''}
 
-      <h3 style="font-size: 13px; font-weight: 800; color: #0F172A; text-transform: uppercase; margin-bottom: 10px;">Received Inventory Breakdown</h3>
-      <table class="items-table">
+        <div class="meta-divider"></div>
+
+        <!-- Right: Supplier & Invoice Details -->
+        <div class="meta-col">
+          <div class="meta-col-title">SUPPLIER & INVOICE DETAILS</div>
+          <div class="meta-grid">
+            <div class="meta-item">Vendor: <strong>${grn.vendorName || '--'}</strong></div>
+            <div class="meta-item">Invoice No: <strong>${grn.invoiceNumber || '--'}</strong></div>
+            <div class="meta-item">Vendor Code: <strong>${grn.vendorCode || (grn.vendorId && typeof grn.vendorId === 'object' ? grn.vendorId.code : '') || '--'}</strong></div>
+            <div class="meta-item">Invoice Date: <strong>${grn.invoiceDate ? formatGrnDisplayDate(grn.invoiceDate) : '--'}</strong></div>
+            <div class="meta-item"></div>
+            <div class="meta-item">Invoice Amount: <strong>Rs. ${invoiceAmount.toFixed(2)}</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 1: Receiving & Batch Details -->
+      <div class="section-header">
+        <div class="section-title">1. RECEIVING & BATCH DETAILS</div>
+        <div class="section-count">${items.length} item(s)</div>
+      </div>
+      <table class="data-table">
         <thead>
-          <tr>
-            <th style="width: 30px;">S.No</th>
-            <th>Medication Details</th>
-            <th>SKU</th>
-            <th style="width: 60px; text-align: center;">Ord.Qty</th>
-            <th style="width: 60px; text-align: center;">Rec.Qty</th>
-            <th style="width: 80px; text-align: right;">Unit Price</th>
-            <th style="width: 50px; text-align: right;">GST</th>
-            <th style="width: 80px; text-align: right;">GST Amt</th>
-            <th style="width: 100px; text-align: right;">Net Total</th>
+          <tr style="background: #1E293B; color: #FFFFFF;">
+            <th style="width: 28px; text-align: center;">#</th>
+            <th style="text-align: left;">Item Name</th>
+            <th style="text-align: left; width: 95px;">Item SKU / Code</th>
+            <th style="width: 50px; text-align: center;">Unit</th>
+            <th style="width: 70px; text-align: center;">Barcode</th>
+            <th style="width: 75px; text-align: center;">Batch No.</th>
+            <th style="width: 75px; text-align: center;">Mfg Date</th>
+            <th style="width: 75px; text-align: center;">Expiry Date</th>
           </tr>
         </thead>
         <tbody>
-          ${itemsHTML}
+          ${batchRowsHtml}
         </tbody>
       </table>
 
+      <!-- Section 2: Quantity Reconciliation -->
+      <div class="section-header">
+        <div class="section-title">2. QUANTITY RECONCILIATION</div>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr style="background: #334155; color: #FFFFFF;">
+            <th style="width: 28px; text-align: center;">#</th>
+            <th style="text-align: left;">Item Name</th>
+            <th style="width: 60px; text-align: center;">PO Qty</th>
+            <th style="width: 80px; text-align: center;">Prev Received</th>
+            <th style="width: 85px; text-align: center;">Remaining Qty</th>
+            <th style="width: 75px; text-align: center;">Received Qty</th>
+            <th style="width: 75px; text-align: center;">Rejected Qty</th>
+            <th style="width: 100px; text-align: left;">Rejection Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${qtyRowsHtml}
+        </tbody>
+      </table>
+
+      <!-- Section 3: Financial Details -->
+      <div class="section-header">
+        <div class="section-title">3. FINANCIAL DETAILS</div>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr style="background: #0F172A; color: #FFFFFF;">
+            <th style="width: 28px; text-align: center;">#</th>
+            <th style="text-align: left;">Item Name</th>
+            <th style="width: 70px; text-align: right;">Rate (Rs)</th>
+            <th style="width: 50px; text-align: center;">Disc %</th>
+            <th style="width: 75px; text-align: right;">Disc Amt (Rs)</th>
+            <th style="width: 50px; text-align: center;">GST %</th>
+            <th style="width: 75px; text-align: right;">GST Amt (Rs)</th>
+            <th style="width: 80px; text-align: right;">Buy Price (Rs)</th>
+            <th style="width: 85px; text-align: right;">Net Amt (Rs)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${finRowsHtml}
+        </tbody>
+      </table>
+
+      <!-- Totals & Invoice Reconciliation Summary Box -->
       <div class="summary-box">
-        <div class="summary-row" style="font-size: 12px; color: #475569; font-weight: 600;">
-          <span>Subtotal (Excl. GST)</span>
-          <span>₹${subtotalSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        <span>Total Discount: <strong>Rs. ${finalTotalDiscount.toFixed(2)}</strong></span>
+        <span>Total GST: <strong>Rs. ${finalTotalGst.toFixed(2)}</strong></span>
+        <span>Invoice Ref: <strong>${grn.invoiceNumber || '--'} (Rs. ${invoiceAmount.toFixed(2)})</strong></span>
+        <span class="grand-total-val">GRN Grand Total: Rs. ${finalGrandTotal.toFixed(2)}</span>
+      </div>
+
+      <!-- Verification Signatures -->
+      <div class="sig-block">
+        <div class="sig-col" style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center;">
+          ${inspectorSigUrl ? `
+            <div style="margin-bottom: 4px;">
+              <img src="${inspectorSigUrl}" alt="Staff Signature" style="max-height: 42px; max-width: 140px; object-fit: contain; display: block;" />
+            </div>
+          ` : '<div style="height: 24px;"></div>'}
+          <strong style="text-transform: uppercase;">${inspectorName}</strong>
+          <span style="font-size: 8.5px; color: #64748B;">${inspectorRole}</span>
+          <span style="margin-top: 2px;">Inspected &amp; Received By</span>
         </div>
-        <div class="summary-row" style="font-size: 12px; color: #EA580C; font-weight: 700;">
-          <span>GST Tax Burden</span>
-          <span>₹${gstSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        <div class="sig-col" style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center;">
+          <div style="height: 24px;"></div>
+          <strong>Store In-Charge</strong>
+          <span>Superintendent / Store Head</span>
         </div>
-        <div class="summary-row" style="font-size: 14px; font-weight: 800; color: #0F172A; border-top: 1px solid #E2E8F0; padding-top: 6px; margin-top: 6px;">
-          <span>Grand Total (Incl. GST)</span>
-          <span>₹${grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        <div class="sig-col" style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center;">
+          <div style="height: 24px;"></div>
+          <strong>${grn.vendorName || 'Vendor Representative'}</strong>
+          <span>Authorized Signatory / Vendor Stamp</span>
         </div>
       </div>
 
-      <div style="margin-top: 60px; display: flex; justify-content: space-between;">
-        <div style="text-align: center; width: 200px; border-top: 1px dashed #94A3B8; padding-top: 8px; font-size: 11px; color: #64748B;">
-          Inspected & Logged By
-        </div>
-        <div style="text-align: center; width: 200px; border-top: 1px dashed #94A3B8; padding-top: 8px; font-size: 11px; color: #64748B;">
-          Superintendent / Store Head
-        </div>
-      </div>
-
-      <div class="footer">
-        This is a certified Goods Receipt Note detailing accepted stock delivery under active procurement.
+      <!-- Footer Note -->
+      <div class="footer-note">
+        ${hospital.name} — Confidential Authorized Hospital Document &nbsp;|&nbsp; Page 1 of 1 &nbsp;|&nbsp; Generated on ${new Date().toLocaleString('en-IN')}
       </div>
 
       <script>

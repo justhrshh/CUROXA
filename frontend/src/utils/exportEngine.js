@@ -4,6 +4,7 @@ const jsPDF = jsPDFModule.jsPDF || jsPDFModule.default || jsPDFModule;
 import autoTable from 'jspdf-autotable';
 import api from './api.js';
 import { convertPdfToImage } from './pdfHelper.js';
+import { resolveDynamicHospital } from './printDocHelper.js';
 
 /**
  * Letterhead cache to eliminate duplicate network overhead during multi-export sessions.
@@ -335,19 +336,7 @@ function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName, letterhead
   const safeBottom = margins.bottom;
   const safeWidth = pageWidth - safeLeft - safeRight;
 
-  const drawLetterheadBg = () => {
-    if (hasLetterhead && letterheadConfig.letterheadImg) {
-      try {
-        doc.addImage(letterheadConfig.letterheadImg, 'JPEG', 0, 0, pageWidth, pageHeight);
-      } catch {
-        try {
-          doc.addImage(letterheadConfig.letterheadImg, 'PNG', 0, 0, pageWidth, pageHeight);
-        } catch (imgErr) {
-          console.warn('[EXPORT ENGINE] Failed to stamp GRN letterhead background:', imgErr.message);
-        }
-      }
-    }
-  };
+  const hospital = resolveDynamicHospital(clinicName, { hospital: letterheadConfig?.hospital });
 
   // Group items by unique GRN ID
   const grnGroups = {};
@@ -367,51 +356,72 @@ function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName, letterhead
       doc.addPage();
     }
 
-    if (hasLetterhead) {
-      drawLetterheadBg();
-    }
-
     const items = grnGroups[grnId];
     const first = items[0] || {};
 
     let currentY = safeTop;
 
-    if (hasLetterhead) {
-      // Clean header within safe area
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.setTextColor(15, 23, 42); // Slate 900
-      doc.text(`GOODS RECEIPT NOTE (GRN) — ${grnId}`, safeLeft, currentY + 4);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(71, 85, 105);
-      doc.text(`Stock Intake Report  |  Date Range: ${dateRangeText}`, safeLeft, currentY + 9);
-      doc.text(`Clinic: ${clinicName || 'QUROXA HEALTHCARE'}`, pageWidth - safeRight, currentY + 9, { align: 'right' });
-
-      currentY += 13;
-    } else {
-      // Fallback Hospital Header Banner
-      doc.setFillColor(37, 99, 235); // Royal Blue
-      doc.rect(0, 0, pageWidth, 20, 'F');
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
-      doc.setTextColor(255, 255, 255);
-      doc.text(clinicName || 'QUROXA HEALTHCARE', 14, 9);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(219, 234, 254);
-      doc.text('Goods Receipt Note (GRN) — Verified Stock Intake Report', 14, 15);
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.setTextColor(255, 255, 255);
-      doc.text(`GRN Number: ${grnId}`, pageWidth - 14, 12, { align: 'right' });
-
-      currentY = 23;
+    // Dynamic Hospital Logo or Crisp Monogram Badge
+    let logoDrawn = false;
+    if (hospital.logoImageSrc) {
+      try {
+        doc.addImage(hospital.logoImageSrc, 'PNG', safeLeft, currentY, 13, 13);
+        logoDrawn = true;
+      } catch (e1) {
+        try {
+          doc.addImage(hospital.logoImageSrc, 'JPEG', safeLeft, currentY, 13, 13);
+          logoDrawn = true;
+        } catch (e2) {}
+      }
     }
+    if (!logoDrawn) {
+      doc.setFillColor(0, 79, 158); // Hospital Primary
+      doc.roundedRect(safeLeft, currentY, 13, 13, 2, 2, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(255, 255, 255);
+      doc.text(hospital.monogram || 'IC', safeLeft + 6.5, currentY + 8.8, { align: 'center' });
+    }
+
+    // Hospital Name & Sub-details
+    const titleLeft = safeLeft + 16;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42); // Slate 900
+    doc.text(hospital.name, titleLeft, currentY + 5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(71, 85, 105); // Slate 600
+    const subLine = [hospital.address, hospital.phone ? `Phone: ${hospital.phone}` : null, hospital.gstin ? `GSTIN: ${hospital.gstin}` : null].filter(Boolean).join('  |  ');
+    doc.text(subLine, titleLeft, currentY + 9.5);
+
+    // Right-aligned Document Title & ID
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text('GOODS RECEIPT NOTE (GRN)', pageWidth - safeRight, currentY + 5, { align: 'right' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(37, 99, 235); // Blue 600
+    doc.text(grnId, pageWidth - safeRight, currentY + 9.5, { align: 'right' });
+
+    // Subheader Accent Bar
+    const barY = currentY + 14;
+    doc.setFillColor(241, 245, 249); // Slate 100
+    doc.rect(safeLeft, barY, safeWidth, 5.2, 'F');
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Stock Intake Report  |  Date Range: ${dateRangeText}`, safeLeft + 3, barY + 3.6);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text(`Clinic: ${hospital.name}`, pageWidth - safeRight - 3, barY + 3.6, { align: 'right' });
+
+    currentY = barY + 8;
 
     // Structured Metadata Card (GRN, PO, Supplier, Invoice)
     doc.setFillColor(248, 250, 252); // #F8FAFC
@@ -640,7 +650,7 @@ function renderGrnStructuredPdf(doc, rows, dateRangeText, clinicName, letterhead
     doc.setTextColor(148, 163, 184); // #94A3B8
     const footerY = pageHeight - Math.max(safeBottom - 8, 5);
     doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, footerY, { align: 'center' });
-    doc.text('QUROXA HEALTHCARE — Confidential Authorized Hospital Document', safeLeft, footerY);
+    doc.text(`${hospital.name} — Confidential Authorized Hospital Document`, safeLeft, footerY);
     doc.text(`Date Range: ${dateRangeText}`, pageWidth - safeRight, footerY, { align: 'right' });
   }
 }

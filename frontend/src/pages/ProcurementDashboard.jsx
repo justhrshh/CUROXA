@@ -6733,7 +6733,18 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                                   <button 
                                     className="proc-btn proc-btn-primary" 
                                     style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#059669' }}
-                                    onClick={() => printGRN(grn, localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE')}
+                                    onClick={() => {
+                                      const activeHospName = currentUser?.tenantName || localStorage.getItem('tenantName') || hospitalBranding?.name || "Ishita's Clinic";
+                                      printGRN(grn, activeHospName, {
+                                        hospital: hospitalBranding,
+                                        hospitalName: activeHospName,
+                                        hospitalLogo: hospitalBranding?.logo || localStorage.getItem('hospitalLogo'),
+                                        hospitalAddress: hospitalBranding?.address || localStorage.getItem('hospitalAddress'),
+                                        hospitalPhone: hospitalBranding?.phone || localStorage.getItem('hospitalPhone'),
+                                        hospitalGstin: hospitalBranding?.gst || localStorage.getItem('hospitalGstin'),
+                                        currentUser
+                                      });
+                                    }}
                                     title="Print / Save GRN Document"
                                   >
                                     📄 PDF
@@ -10635,7 +10646,18 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                   type="button" 
                   className="proc-btn" 
                   style={{ background: '#10B981', color: 'white', fontWeight: 800, border: 'none', borderRadius: '6px', cursor: 'pointer', padding: '8px 16px' }}
-                  onClick={() => printGRN(selectedGrnDetails, localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE')}
+                  onClick={() => {
+                    const activeHospName = currentUser?.tenantName || localStorage.getItem('tenantName') || hospitalBranding?.name || "Ishita's Clinic";
+                    printGRN(selectedGrnDetails, activeHospName, {
+                      hospital: hospitalBranding,
+                      hospitalName: activeHospName,
+                      hospitalLogo: hospitalBranding?.logo || localStorage.getItem('hospitalLogo'),
+                      hospitalAddress: hospitalBranding?.address || localStorage.getItem('hospitalAddress'),
+                      hospitalPhone: hospitalBranding?.phone || localStorage.getItem('hospitalPhone'),
+                      hospitalGstin: hospitalBranding?.gst || localStorage.getItem('hospitalGstin'),
+                      currentUser
+                    });
+                  }}
                 >
                   Download PDF
                 </button>
@@ -10683,7 +10705,7 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
             currentFilters={{
               search: searchQuery || ''
             }}
-            clinicName={localStorage.getItem('tenantName') || 'QUROXA HEALTHCARE'}
+            clinicName={currentUser?.tenantName || localStorage.getItem('tenantName') || hospitalBranding?.name || "Ishita's Clinic"}
             onClose={() => setShowGrnExportModal(false)}
             onSuccess={(result) => {
               showToast(`Exported ${result.recordCount} GRN line item(s) to ${result.fileName}!`, 'success');
