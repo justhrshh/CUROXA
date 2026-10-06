@@ -989,6 +989,20 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   const [selectedPO, setSelectedPO] = useState(null);
   const [poEditItems, setPoEditItems] = useState([]);
   const [showEditPOModal, setShowEditPOModal] = useState(false);
+
+  // Operational Expenses & Management states
+  const [expenses, setExpenses] = useState([]);
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [expenseForm, setExpenseForm] = useState({
+    title: '',
+    category: 'Utilities & Electricity',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    paymentMode: 'UPI',
+    payee: '',
+    notes: ''
+  });
+  const [expenseSubmitting, setExpenseSubmitting] = useState(false);
   
   // Audit Logs States
   const [auditSearchQuery, setAuditSearchQuery] = useState('');
@@ -1241,6 +1255,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     fetchPurchaseOrders();
     fetchGoodsReceipts();
     fetchVendors();
+    fetchExpenses();
     fetchApprovals();
     fetchWarningAlerts();
     fetchDiscountSetting();
@@ -1461,6 +1476,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         fetchPurchaseOrders(),
         fetchGoodsReceipts(),
         fetchVendors(),
+        fetchExpenses(),
         fetchApprovals(),
         fetchWarningAlerts(),
         fetchDiscountSetting(),
@@ -1737,6 +1753,56 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       setVendors(response.data);
     } catch (err) {
       console.error('Failed to fetch vendors in Admin', err);
+    }
+  };
+
+  const fetchExpenses = async () => {
+    try {
+      const response = await api.get('/expenses');
+      setExpenses(response.data || []);
+    } catch (err) {
+      console.warn('Failed to fetch expenses in Admin', err);
+    }
+  };
+
+  const handleCreateExpense = async (e) => {
+    e.preventDefault();
+    if (!expenseForm.title || !expenseForm.amount) {
+      showToast('Please enter an expense title and amount', 'error');
+      return;
+    }
+    try {
+      setExpenseSubmitting(true);
+      await api.post('/expenses', expenseForm);
+      showToast('Expense recorded successfully!', 'success');
+      setExpenseForm({
+        title: '',
+        category: 'Utilities & Electricity',
+        amount: '',
+        date: new Date().toISOString().split('T')[0],
+        paymentMode: 'UPI',
+        payee: '',
+        notes: ''
+      });
+      fetchExpenses();
+      fetchPurchaseOrders();
+    } catch (err) {
+      console.error('Failed to record expense:', err);
+      showToast(err.response?.data?.error || 'Failed to record expense', 'error');
+    } finally {
+      setExpenseSubmitting(false);
+    }
+  };
+
+  const handleDeleteExpense = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this expense?')) return;
+    try {
+      await api.delete(`/expenses/${id}`);
+      showToast('Expense removed', 'info');
+      fetchExpenses();
+    } catch (err) {
+      console.error('Failed to delete expense:', err);
+      showToast(err.response?.data?.error || 'Failed to delete expense', 'error');
     }
   };
 
@@ -2562,22 +2628,32 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   };
 
   const handleAdminRestock = async (alertItem) => {
+    if (!alertItem || typeof alertItem !== 'object') {
+      console.warn("handleAdminRestock received invalid alertItem:", alertItem);
+      return;
+    }
     setLoading(true);
     setError('');
     setSuccess('');
     try {
-      if (alertItem.department === 'Pharmacy' || alertItem.department === 'pharmacy') {
+      const isPharmacy = alertItem.department === 'Pharmacy' || 
+                         alertItem.department === 'pharmacy' || 
+                         (alertItem.category && alertItem.category !== 'Laboratory') ||
+                         (alertItem.rawItem && (alertItem.rawItem.department === 'Pharmacy' || alertItem.rawItem.batchNumber));
+      const targetId = alertItem._id || alertItem.id || (alertItem.rawItem && alertItem.rawItem._id);
+      
+      if (isPharmacy) {
         const currentQty = alertItem.stock || 0;
         await api.post('/pharmacy-tickets', {
-          alertId: `alert-${alertItem._id}-${Date.now()}`,
-          medicineId: alertItem._id,
+          alertId: `alert-${targetId || Date.now()}-${Date.now()}`,
+          medicineId: targetId,
           medicineName: alertItem.name,
           currentStock: currentQty,
           adminComment: `Stock critically low (${currentQty}). Placed replenishment ticket request.`
         });
         setSuccess(`Replenishment ticket raised for Pharmacy department!`);
-      } else {
-        await api.put(`/lab-inventory/${alertItem._id}`, { isRestock: true, addQty: 100 });
+      } else if (targetId) {
+        await api.put(`/lab-inventory/${targetId}`, { isRestock: true, addQty: 100 });
         setSuccess(`Replenished stock for ${alertItem.name} successfully!`);
       }
       fetchInventoryAlerts();
@@ -3409,8 +3485,14 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     setTimeout(() => { setSuccess(''); setError(''); }, 3000);
   };
 
-  const resolveCriticalAlert = async (id, title, rawItem) => {
+  const resolveCriticalAlert = async (id, title, actionNameOrRawItem, maybeRawItem) => {
     setResolvingAlertIds(prev => ({ ...prev, [id]: true }));
+    const rawItem = (maybeRawItem && typeof maybeRawItem === 'object')
+      ? maybeRawItem
+      : (actionNameOrRawItem && typeof actionNameOrRawItem === 'object')
+        ? actionNameOrRawItem
+        : null;
+
     try {
       if (rawItem) {
         await handleAdminRestock(rawItem);
@@ -4078,10 +4160,21 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
     });
 
-    // Filter approved purchase orders for selected month
+    // Filter active purchase orders for selected month
+    const inactivePoStatuses = ['Draft', 'Cancelled', 'Rejected'];
     const monthPOs = purchaseOrders.filter(po => {
-      if (!['Approved', 'Sent', 'Confirmed', 'Completed'].includes(po.status)) return false;
-      const d = new Date(po.createdAt || po.updatedAt || Date.now());
+      if (inactivePoStatuses.includes(po.status)) return false;
+      const hasChildren = purchaseOrders.some(c => (c.parentPOId === po.poId || c.parentPOId === po._id) && (c.poId !== po.poId && c._id !== po._id));
+      if (po.isParent && hasChildren) return false;
+
+      const d = new Date(po.createdAt || po.orderDate || po.date || po.updatedAt || Date.now());
+      if (isNaN(d.getTime())) return false;
+      return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+    });
+
+    // Filter operational expenses for selected month
+    const monthOpExpenses = (expenses || []).filter(e => {
+      const d = new Date(e.date || e.createdAt);
       if (isNaN(d.getTime())) return false;
       return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
     });
@@ -4091,6 +4184,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
     let totalRevenue = 0;
     let totalExpenses = 0;
+    let totalPoExpenses = 0;
+    let totalOpExpenses = 0;
     const dailyData = [];
 
     for (let day = 1; day <= endDay; day++) {
@@ -4104,19 +4199,29 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
       const dayRev = dayBillsRev + dayPharmacyRev;
 
-      const dayExp = monthPOs
-        .filter(po => new Date(po.createdAt || po.updatedAt || Date.now()).getDate() === day)
+      const dayPoExp = monthPOs
+        .filter(po => new Date(po.createdAt || po.orderDate || po.date || po.updatedAt || Date.now()).getDate() === day)
         .reduce((sum, p) => sum + (p.totalAmount || 0), 0);
+
+      const dayOpExp = monthOpExpenses
+        .filter(e => new Date(e.date || e.createdAt).getDate() === day)
+        .reduce((sum, e) => sum + (e.amount || 0), 0);
+
+      const dayExp = dayPoExp + dayOpExp;
 
       totalRevenue += dayRev;
       totalExpenses += dayExp;
+      totalPoExpenses += dayPoExp;
+      totalOpExpenses += dayOpExp;
 
       dailyData.push({
         day,
         dateLabel: `${day} ${monthShort}`,
         fullDate: `${day} ${monthShort} ${targetYear}`,
         revenue: dayRev,
-        expenses: dayExp
+        expenses: dayExp,
+        poExpenses: dayPoExp,
+        opExpenses: dayOpExp
       });
     }
 
@@ -4172,13 +4277,17 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       endDay,
       totalRevenue,
       totalExpenses,
+      totalPoExpenses,
+      totalOpExpenses,
+      poCount: monthPOs.length,
+      opCount: monthOpExpenses.length,
       netIncome,
       margin,
       dailyData,
       xTicks,
       yMax,
       yTicks,
-      hasTransactions: monthBills.length > 0 || monthPOs.length > 0 || totalRevenue > 0 || totalExpenses > 0
+      hasTransactions: monthBills.length > 0 || monthPharmacy.length > 0 || monthPOs.length > 0 || monthOpExpenses.length > 0 || totalRevenue > 0 || totalExpenses > 0
     };
   };
 
@@ -12628,7 +12737,29 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       </span>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowExpenseModal(true)}
+                      style={{
+                        padding: '5px 11px',
+                        borderRadius: '8px',
+                        background: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        color: '#1D4ED8',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="Manage and record hospital operational expenses"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      <span>Record Expense</span>
+                    </button>
                     <select
                       value={finSelectedMonth}
                       onChange={(e) => setFinSelectedMonth(e.target.value)}
@@ -12661,9 +12792,18 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
                   });
 
+                  const inactivePoStatuses = ['Draft', 'Cancelled', 'Rejected'];
                   const yearPOs = purchaseOrders.filter(po => {
-                    if (!['Approved', 'Sent', 'Confirmed', 'Completed'].includes(po.status)) return false;
-                    const d = new Date(po.createdAt || po.updatedAt || Date.now());
+                    if (inactivePoStatuses.includes(po.status)) return false;
+                    const hasChildren = purchaseOrders.some(c => (c.parentPOId === po.poId || c.parentPOId === po._id) && (c.poId !== po.poId && c._id !== po._id));
+                    if (po.isParent && hasChildren) return false;
+
+                    const d = new Date(po.createdAt || po.orderDate || po.date || po.updatedAt || Date.now());
+                    return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
+                  });
+
+                  const yearOpExpenses = (expenses || []).filter(e => {
+                    const d = new Date(e.date || e.createdAt);
                     return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
                   });
 
@@ -12680,19 +12820,25 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     const totalMonthIncome = monthBillsSum + monthPharmacySum;
 
                     const monthPOsSum = yearPOs
-                      .filter(po => new Date(po.createdAt || po.updatedAt || Date.now()).getMonth() === mIdx)
+                      .filter(po => new Date(po.createdAt || po.orderDate || po.date || po.updatedAt || Date.now()).getMonth() === mIdx)
                       .reduce((sum, p) => sum + (p.totalAmount || 0), 0);
 
+                    const monthOpExpensesSum = yearOpExpenses
+                      .filter(e => new Date(e.date || e.createdAt).getMonth() === mIdx)
+                      .reduce((sum, e) => sum + (e.amount || 0), 0);
+
+                    const totalMonthExpense = monthPOsSum + monthOpExpensesSum;
+
                     if (totalMonthIncome > rawMax) rawMax = totalMonthIncome;
-                    if (monthPOsSum > rawMax) rawMax = monthPOsSum;
+                    if (totalMonthExpense > rawMax) rawMax = totalMonthExpense;
 
                     return {
                       month: mName,
                       index: mIdx,
                       label: `${mName} ${targetYear}`,
                       income: totalMonthIncome,
-                      expense: monthPOsSum,
-                      net: totalMonthIncome - monthPOsSum
+                      expense: totalMonthExpense,
+                      net: totalMonthIncome - totalMonthExpense
                     };
                   });
 
@@ -12753,13 +12899,27 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         </div>
 
                         {/* Expenses */}
-                        <div className="fin-summary-box exp">
-                          <span className="fin-summary-lbl">Expenses</span>
+                        <div 
+                          className="fin-summary-box exp"
+                          onClick={() => setShowExpenseModal(true)}
+                          style={{ cursor: 'pointer' }}
+                          title="Click to view & record operational expenses"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span className="fin-summary-lbl">Expenses</span>
+                            <span style={{ fontSize: '9.5px', color: '#DC2626', fontWeight: 800, background: '#FEE2E2', padding: '1px 5px', borderRadius: '4px' }}>
+                              + Record
+                            </span>
+                          </div>
                           <span className="fin-summary-val" style={{ color: '#0F172A' }}>
                             ₹{finData.totalExpenses >= 100000 ? (finData.totalExpenses / 100000).toFixed(2) + 'L' : finData.totalExpenses.toLocaleString('en-IN')}
                           </span>
                           <span className="fin-summary-sub red">
-                            {finData.totalExpenses > 0 ? 'Approved PO spending' : '₹0 expenses'}
+                            {finData.totalExpenses > 0 
+                              ? (finData.totalPoExpenses > 0 && finData.totalOpExpenses > 0
+                                  ? `₹${finData.totalPoExpenses.toLocaleString('en-IN')} POs • ₹${finData.totalOpExpenses.toLocaleString('en-IN')} Ops`
+                                  : (finData.totalPoExpenses > 0 ? `${finData.poCount} PO purchase${finData.poCount > 1 ? 's' : ''}` : `${finData.opCount} operational item${finData.opCount > 1 ? 's' : ''}`))
+                              : '₹0 expenses'}
                           </span>
                         </div>
 
@@ -28327,6 +28487,269 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: RECORD & MANAGE HOSPITAL EXPENSES */}
+      {showExpenseModal && (
+        <div 
+          className="admin-modal-overlay" 
+          onClick={() => setShowExpenseModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.45)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px'
+          }}
+        >
+          <div 
+            className="admin-modal-card" 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#FFFFFF',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '740px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              border: '1px solid #E2E8F0',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#FEE2E2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="1" x2="12" y2="23"/>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>Hospital Expenses & Outflows</h3>
+                  <div style={{ fontSize: '12px', color: '#64748B' }}>
+                    Track operational expenses and automated procurement PO commitments
+                  </div>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowExpenseModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '18px', color: '#64748B', cursor: 'pointer', padding: '4px 8px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Form: Record New Expense */}
+              <form onSubmit={handleCreateExpense} style={{ background: '#F8FAFC', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                  <span>Record Operational Expense</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>Expense Title *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Electricity Bill, Clinic Rent, Generator Fuel"
+                      value={expenseForm.title}
+                      onChange={(e) => setExpenseForm({ ...expenseForm, title: e.target.value })}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>Category *</label>
+                    <select
+                      value={expenseForm.category}
+                      onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', outline: 'none', boxSizing: 'border-box', background: '#FFFFFF' }}
+                    >
+                      <option value="Utilities & Electricity">Utilities & Electricity</option>
+                      <option value="Rent & Facilities">Rent & Facilities</option>
+                      <option value="Staff & Salaries">Staff & Salaries</option>
+                      <option value="Maintenance & Repairs">Maintenance & Repairs</option>
+                      <option value="Lab & Diagnostics">Lab & Diagnostics</option>
+                      <option value="Procurement & Medical Supplies">Procurement & Medical Supplies</option>
+                      <option value="Marketing & Administrative">Marketing & Administrative</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>Amount (₹) *</label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      step="any"
+                      placeholder="0.00"
+                      value={expenseForm.amount}
+                      onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={expenseForm.date}
+                      onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>Payment Mode</label>
+                    <select
+                      value={expenseForm.paymentMode}
+                      onChange={(e) => setExpenseForm({ ...expenseForm, paymentMode: e.target.value })}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', outline: 'none', boxSizing: 'border-box', background: '#FFFFFF' }}
+                    >
+                      <option value="UPI">UPI / QR</option>
+                      <option value="Bank Transfer">Bank Transfer / NEFT</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Cheque">Cheque</option>
+                      <option value="Card">Card</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>Payee / Vendor Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Torrent Power, Landlord"
+                      value={expenseForm.payee}
+                      onChange={(e) => setExpenseForm({ ...expenseForm, payee: e.target.value })}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    placeholder="Notes or invoice/receipt reference number (optional)"
+                    value={expenseForm.notes}
+                    onChange={(e) => setExpenseForm({ ...expenseForm, notes: e.target.value })}
+                    style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={expenseSubmitting}
+                    style={{
+                      padding: '8px 20px',
+                      borderRadius: '8px',
+                      background: '#DC2626',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      fontSize: '12.5px',
+                      fontWeight: 700,
+                      cursor: expenseSubmitting ? 'not-allowed' : 'pointer',
+                      whiteSpace: 'nowrap',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <span>{expenseSubmitting ? 'Recording...' : 'Add Expense'}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Recorded Operational Expenses List */}
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', marginBottom: '10px' }}>
+                  Recorded Operational Expenses ({expenses.length})
+                </div>
+
+                {expenses.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '28px', background: '#F8FAFC', borderRadius: '10px', border: '1px dashed #CBD5E1', color: '#64748B', fontSize: '13px' }}>
+                    No manual operational expenses recorded yet. Active Purchase Orders from Procurement are automatically synced as expenses.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto' }}>
+                    {expenses.map((exp) => (
+                      <div 
+                        key={exp._id} 
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          background: '#FFFFFF',
+                          border: '1px solid #E2E8F0',
+                          borderRadius: '8px',
+                          gap: '12px'
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>{exp.title}</span>
+                            <span style={{ fontSize: '10.5px', background: '#F1F5F9', color: '#475569', padding: '1px 7px', borderRadius: '4px', fontWeight: 700 }}>
+                              {exp.category}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                            {new Date(exp.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} • {exp.paymentMode} {exp.payee ? `• Payee: ${exp.payee}` : ''}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span style={{ fontSize: '14.5px', fontWeight: 900, color: '#DC2626' }}>
+                            ₹{Number(exp.amount).toLocaleString('en-IN')}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteExpense(exp._id)}
+                            style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px', borderRadius: '4px' }}
+                            title="Delete Expense"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', background: '#F8FAFC', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
+              <button
+                type="button"
+                onClick={() => setShowExpenseModal(false)}
+                style={{
+                  background: '#FFFFFF',
+                  color: '#475569',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '8px',
+                  padding: '7px 18px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

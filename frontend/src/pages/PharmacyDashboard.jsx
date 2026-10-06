@@ -4518,11 +4518,26 @@ const PharmacyDashboard = () => {
                     <div 
                       className="sidebar-link"
                       onClick={(e) => { e.preventDefault(); window.open('/procurement', '_blank'); setMobileSidebarOpen(false); }}
+                      style={{ position: 'relative' }}
                     >
                       <div className="sidebar-link-icon" style={{ background: '#CCFBF1', color: '#0D9488' }}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
                       </div>
                       <span className="sidebar-link-text">Procurement</span>
+                      {pharmacyTickets.filter(t => t.status === 'Open').length > 0 && (
+                        <span style={{
+                          marginLeft: 'auto',
+                          background: '#EF4444',
+                          color: '#FFFFFF',
+                          fontSize: '10.5px',
+                          fontWeight: 800,
+                          padding: '2px 7px',
+                          borderRadius: '10px',
+                          boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)'
+                        }}>
+                          {pharmacyTickets.filter(t => t.status === 'Open').length}
+                        </span>
+                      )}
                     </div>
                   )}
                 </>
@@ -5021,6 +5036,139 @@ const PharmacyDashboard = () => {
         {activeTab === 'dash' && (
           <div style={{ animation: 'slideUp 0.3s ease-out' }}>
             
+            {/* Critical Admin Replenishment Ticket Alert Banner */}
+            {pharmacyTickets.filter(t => t.status === 'Open').length > 0 && (
+              <div style={{
+                marginBottom: '20px',
+                background: 'linear-gradient(135deg, #FEF2F2 0%, #FFF1F2 50%, #FFE4E6 100%)',
+                border: '1.5px solid #FCA5A5',
+                borderRadius: '16px',
+                padding: '16px 20px',
+                boxShadow: '0 8px 20px rgba(239, 68, 68, 0.12)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #DC2626 0%, #EF4444 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#FFFFFF',
+                      boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)'
+                    }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '15px', fontWeight: 800, color: '#991B1B' }}>
+                        {pharmacyTickets.filter(t => t.status === 'Open').length === 1
+                          ? 'Admin Attention: 1 Urgent Medicine Replenishment Request'
+                          : `Admin Attention: ${pharmacyTickets.filter(t => t.status === 'Open').length} Urgent Medicine Replenishment Requests`}
+                      </div>
+                      <div style={{ fontSize: '12.5px', color: '#7F1D1D', fontWeight: 500, marginTop: '2px' }}>
+                        Hospital Admin resolved critical stock alerts and dispatched replenishment orders to the Pharmacy queue.
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '9px',
+                        background: '#DC2626',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        fontSize: '12.5px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 3px 8px rgba(220, 38, 38, 0.25)'
+                      }}
+                      onClick={() => {
+                        window.open('/procurement', '_blank');
+                      }}
+                    >
+                      <span>Open Procurement Suite</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                    <button
+                      type="button"
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '9px',
+                        background: '#FFFFFF',
+                        color: '#991B1B',
+                        border: '1.5px solid #FCA5A5',
+                        fontSize: '12.5px',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => {
+                        setProcurementSubTab('tickets');
+                        setActiveTab('procurement');
+                      }}
+                    >
+                      View All Tickets
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px', marginTop: '4px' }}>
+                  {pharmacyTickets.filter(t => t.status === 'Open').map(t => (
+                    <div key={t._id} style={{
+                      background: '#FFFFFF',
+                      borderRadius: '12px',
+                      padding: '12px 14px',
+                      border: '1px solid #FECACA',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '10px'
+                    }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.medicineName}</div>
+                        <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                          Current Stock: <strong style={{ color: '#DC2626' }}>{t.currentStock}</strong> | {t.adminComment || 'Stock critical'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '7px',
+                          background: '#F1F5F9',
+                          border: '1px solid #CBD5E1',
+                          color: '#0F172A',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          flexShrink: 0
+                        }}
+                        onClick={() => {
+                          setSelectedTicket(t);
+                          setTicketResolutionReason('');
+                          setShowResolveTicketModal(true);
+                        }}
+                      >
+                        Settle Ticket
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 5 KPI Cards Grid with distinct surfaces and micro-charts matching Admin Portal */}
             <div className="kpi-grid">
               

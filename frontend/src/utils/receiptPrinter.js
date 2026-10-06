@@ -182,7 +182,7 @@ export function generateReceiptHtml(receiptData = {}, clinicName = null, options
   <title>${documentTitle} - ${receiptNo}</title>
   <style>
     @page {
-      size: 210mm 148.5mm; /* Half of A4 size sheet */
+      size: A4 portrait;
       margin: 4mm 6mm;
     }
     *, *::before, *::after {
@@ -204,10 +204,11 @@ export function generateReceiptHtml(receiptData = {}, clinicName = null, options
       width: 100%;
       max-width: 198mm;
       margin: 0 auto;
-      padding: 2mm 3mm;
+      padding: 2.5mm 3.5mm;
       box-sizing: border-box;
       overflow: hidden;
       page-break-after: avoid;
+      border: 1.5px solid #000000;
     }
     table {
       width: 100%;
@@ -223,9 +224,14 @@ export function generateReceiptHtml(receiptData = {}, clinicName = null, options
       white-space: nowrap;
     }
     @media print {
-      body {
-        width: 210mm;
-        height: 148.5mm;
+      html, body {
+        width: 210mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .receipt-container {
+        margin: 0 auto !important;
+        page-break-after: avoid !important;
       }
       .no-print {
         display: none !important;
@@ -407,13 +413,6 @@ export function generateReceiptHtml(receiptData = {}, clinicName = null, options
 
     </div>
 
-    <!-- 6. ONLINE ACCESS / REPORT CREDENTIALS -->
-    <div style="margin-top: 6px; font-size: 10px; color: #000; line-height: 1.25;">
-      <strong>For Online Report:</strong>${portalUrl} &nbsp;&nbsp;&nbsp; 
-      <strong>UserName ::</strong>${regNo} &nbsp;&nbsp;&nbsp; 
-      <strong>Password ::</strong>${mobileNo !== '—' ? mobileNo : receiptNo}
-    </div>
-
     <!-- 7. DIVIDER & DISCLAIMER -->
     <div style="margin-top: 4px; border-bottom: 1px dashed #000; position: relative;">
       <span style="position: absolute; right: 0; bottom: -6px; background: #FFF; padding-left: 6px; font-size: 9.5px; font-weight: 700;">E. & O.E.</span>
@@ -452,7 +451,7 @@ export const printReceipt = (receiptData = {}, clinicName = null, options = {}) 
     iframe.style.left = '-9999px';
     iframe.style.top = '-9999px';
     iframe.style.width = '210mm';
-    iframe.style.height = '148.5mm';
+    iframe.style.height = '297mm';
     iframe.style.border = '0';
     document.body.appendChild(iframe);
 

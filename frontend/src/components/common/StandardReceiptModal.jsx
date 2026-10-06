@@ -109,12 +109,11 @@ export default function StandardReceiptModal({
       <style>{`
         @media print {
           @page {
-            size: 210mm 148.5mm; /* Half of A4 size sheet */
+            size: A4 portrait;
             margin: 4mm 6mm;
           }
           html, body {
             width: 210mm !important;
-            height: 148.5mm !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #FFFFFF !important;
@@ -132,12 +131,14 @@ export default function StandardReceiptModal({
           #curoxa-standard-receipt-half-a4 {
             position: absolute !important;
             left: 0 !important;
+            right: 0 !important;
             top: 0 !important;
-            width: 200mm !important;
-            max-height: 142mm !important;
-            margin: 0 !important;
-            padding: 2mm 3mm !important;
-            border: none !important;
+            width: 198mm !important;
+            max-width: 198mm !important;
+            max-height: 140mm !important;
+            margin: 0 auto !important;
+            padding: 2.5mm 3.5mm !important;
+            border: 1.5px solid #000000 !important;
             box-shadow: none !important;
             page-break-after: avoid !important;
             overflow: hidden !important;
@@ -148,15 +149,41 @@ export default function StandardReceiptModal({
         }
       `}</style>
 
-      <div style={{ maxWidth: '820px', width: '100%', background: 'transparent', position: 'relative' }}>
+      {/* SOLID MODAL CARD (NO FLOATING BUTTONS) */}
+      <div 
+        style={{ 
+          maxWidth: '840px', 
+          width: '100%', 
+          background: '#FFFFFF', 
+          borderRadius: '12px',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.35)',
+          border: '1px solid #CBD5E1',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+        onClick={e => e.stopPropagation()}
+      >
         
-        {/* Floating Print / Close Bar */}
-        <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        {/* INTEGRATED MODAL TOOLBAR (DOCKED AT TOP) */}
+        <div 
+          className="no-print" 
+          style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            padding: '12px 20px', 
+            background: '#F8FAFC', 
+            borderBottom: '1px solid #E2E8F0' 
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 800, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', padding: '3px 10px', borderRadius: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Half-A4 Format (210mm × 148.5mm)
+            <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
+              Receipt Preview
             </span>
-            <span style={{ fontSize: '12px', color: '#CBD5E1', fontWeight: 600 }}>Official Receipt Preview</span>
+            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+              #{receiptNo}
+            </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -175,7 +202,7 @@ export default function StandardReceiptModal({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                boxShadow: '0 4px 12px rgba(5,150,105,0.3)',
+                boxShadow: '0 2px 6px rgba(5,150,105,0.25)',
                 transition: 'all 0.15s ease'
               }}
               onMouseEnter={e => e.currentTarget.style.background = '#047857'}
@@ -186,7 +213,7 @@ export default function StandardReceiptModal({
                 <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
                 <rect x="6" y="14" width="12" height="8"/>
               </svg>
-              Print Receipt (Half A4)
+              Print Receipt
             </button>
 
             {mobileNo && mobileNo !== '—' && (
@@ -212,7 +239,7 @@ export default function StandardReceiptModal({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  boxShadow: '0 4px 12px rgba(37,99,235,0.25)',
+                  boxShadow: '0 2px 6px rgba(37,99,235,0.25)',
                   transition: 'all 0.15s ease'
                 }}
                 onMouseEnter={e => e.currentTarget.style.background = '#1D4ED8'}
@@ -234,20 +261,21 @@ export default function StandardReceiptModal({
                 style={{
                   width: '32px',
                   height: '32px',
-                  borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.15)',
-                  border: 'none',
-                  color: '#FFFFFF',
+                  borderRadius: '8px',
+                  background: '#F1F5F9',
+                  border: '1px solid #CBD5E1',
+                  color: '#475569',
                   fontSize: '16px',
                   fontWeight: 800,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  transition: 'background 0.15s'
+                  transition: 'all 0.15s'
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.3)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
+                onMouseEnter={e => { e.currentTarget.style.background = '#E2E8F0'; e.currentTarget.style.color = '#0F172A'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#475569'; }}
+                title="Close"
               >
                 ✕
               </button>
@@ -255,22 +283,23 @@ export default function StandardReceiptModal({
           </div>
         </div>
 
-        {/* RECEIPT PAPER CONTAINER (STRICT HALF-A4 SHEET) */}
-        <div 
-          id="curoxa-standard-receipt-half-a4"
-          style={{
-            background: '#FFFFFF',
-            borderRadius: '4px',
-            padding: '16px 20px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
-            color: '#000000',
-            fontFamily: 'Arial, Helvetica, sans-serif',
-            fontSize: '11px',
-            lineHeight: 1.25,
-            width: '100%',
-            boxSizing: 'border-box'
-          }}
-        >
+        {/* MODAL BODY WITH BOUNDED RECEIPT PAPER */}
+        <div style={{ padding: '16px 20px', background: '#F1F5F9', overflowY: 'auto', display: 'flex', justifyContent: 'center' }}>
+          <div 
+            id="curoxa-standard-receipt-half-a4"
+            style={{
+              background: '#FFFFFF',
+              border: '1.5px solid #000000',
+              padding: '12px 14px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+              color: '#000000',
+              fontFamily: 'Arial, Helvetica, sans-serif',
+              fontSize: '11px',
+              lineHeight: 1.25,
+              width: '100%',
+              boxSizing: 'border-box'
+            }}
+          >
           
           {/* 1. TOP HEADER */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2px' }}>
@@ -467,13 +496,6 @@ export default function StandardReceiptModal({
 
           </div>
 
-          {/* 6. ONLINE ACCESS / REPORT CREDENTIALS */}
-          <div style={{ marginTop: '6px', fontSize: '10px', color: '#000', lineHeight: 1.25 }}>
-            <strong>For Online Report:</strong> {portalUrl} &nbsp;&nbsp;&nbsp;
-            <strong>UserName ::</strong> {regNo} &nbsp;&nbsp;&nbsp;
-            <strong>Password ::</strong> {mobileNo !== '—' ? mobileNo : receiptNo}
-          </div>
-
           {/* 7. DIVIDER & DISCLAIMER */}
           <div style={{ marginTop: '4px', borderBottom: '1px dashed #000', position: 'relative' }}>
             <span style={{ position: 'absolute', right: 0, bottom: '-6px', background: '#FFF', paddingLeft: '6px', fontSize: '9.5px', fontWeight: 700 }}>E. & O.E.</span>
@@ -501,5 +523,6 @@ export default function StandardReceiptModal({
 
       </div>
     </div>
+  </div>
   );
 }

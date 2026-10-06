@@ -192,6 +192,8 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
 
   const [selectedInvoiceDetails, setSelectedInvoiceDetails] = useState(null);
   const [previewPoDetails, setPreviewPoDetails] = useState(null);
+  const [pharmacyTickets, setPharmacyTickets] = useState([]);
+  const [showTicketsModal, setShowTicketsModal] = useState(false);
 
   const [notifications, setNotifications] = useState([]);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
@@ -386,15 +388,18 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [vendorRes, poRes, grnRes, medRes, approvalsRes, itemMasterRes, quotationRes] = await Promise.all([
+      const [vendorRes, poRes, grnRes, medRes, approvalsRes, itemMasterRes, quotationRes, ticketsRes] = await Promise.all([
         api.get('/vendors'),
         api.get('/purchase-orders'),
         api.get('/goods-receipts'),
         api.get('/medicines'),
         api.get('/approvals').catch(() => ({ data: [] })),
         api.get('/item-master', { params: { limit: 2000, status: 'Active' } }).catch(() => ({ data: { data: [] } })),
-        api.get('/vendor-quotations', { params: { limit: 2000, status: 'Active', expired: 'false' } }).catch(() => ({ data: { data: [] } }))
+        api.get('/vendor-quotations', { params: { limit: 2000, status: 'Active', expired: 'false' } }).catch(() => ({ data: { data: [] } })),
+        api.get('/pharmacy-tickets').catch(() => ({ data: [] }))
       ]);
+
+      setPharmacyTickets(ticketsRes?.data || []);
 
       const fetchedItemMasters = itemMasterRes.data?.data || [];
       setItemMasters(fetchedItemMasters);
@@ -852,28 +857,33 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
   const calculateMtdPurchases = () => {
     const currentMonth = new Date().getMonth();
     const currentYear = new Date().getFullYear();
-    const activeStatuses = ['Approved', 'Sent', 'Confirmed', 'Partially Delivered', 'Completed'];
+    const inactiveStatuses = ['Draft', 'Cancelled', 'Rejected'];
     const sum = purchaseOrders
       .filter(p => {
-        const d = new Date(p.createdAt);
-        return d.getMonth() === currentMonth && d.getFullYear() === currentYear && activeStatuses.includes(p.status);
+        const hasChildren = purchaseOrders.some(c => c.parentPOId === p.poId);
+        if (p.isParent && hasChildren) return false;
+
+        const d = new Date(p.createdAt || p.date || p.orderDate || Date.now());
+        const isCurrentMonth = d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        return isCurrentMonth && !inactiveStatuses.includes(p.status);
       })
-      .reduce((acc, p) => acc + p.totalAmount, 0);
+      .reduce((acc, p) => acc + (Number(p.totalAmount) || 0), 0);
     return sum;
   };
 
   const calculateOutstandingPayable = () => {
     let sum = 0;
-    const activeStatuses = ['Approved', 'Sent', 'Confirmed', 'Partially Delivered', 'Completed'];
+    const inactiveStatuses = ['Draft', 'Cancelled', 'Rejected'];
     purchaseOrders.forEach(po => {
-      const total = po.totalAmount;
-      const isCompleted = po.status === 'Completed';
-      const isInactive = !activeStatuses.includes(po.status);
-      const amountPaid = isCompleted ? total : (isInactive ? 0 : total * 0.4);
-      const balance = total - amountPaid;
-      if (!isInactive) {
-        sum += balance;
-      }
+      const hasChildren = purchaseOrders.some(c => c.parentPOId === po.poId);
+      if (po.isParent && hasChildren) return;
+      if (inactiveStatuses.includes(po.status)) return;
+
+      const total = Number(po.totalAmount) || 0;
+      const isCompleted = po.status === 'Completed' || po.paymentStatus === 'Paid';
+      const amountPaid = isCompleted ? total : (Number(po.paidAmount) || 0);
+      const balance = Math.max(0, total - amountPaid);
+      sum += balance;
     });
     return sum;
   };
@@ -1426,6 +1436,56 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
     setActiveTab('pos');
   };
 
+  const handleCreatePOFromTicket = (ticket) => {
+    const matchedMaster = itemMasters.find(m => 
+      m.name?.toLowerCase() === ticket.medicineName?.toLowerCase() ||
+      m.genericName?.toLowerCase() === ticket.medicineName?.toLowerCase() ||
+      m._id === ticket.medicineId
+    );
+    const matchedMed = medicines.find(m => 
+      m.name?.toLowerCase() === ticket.medicineName?.toLowerCase() ||
+      m._id === ticket.medicineId
+    );
+
+    const initialItem = {
+      sku: matchedMaster?.sku || matchedMed?.sku || '',
+      itemMasterId: matchedMaster?._id || '',
+      name: ticket.medicineName,
+      genericName: matchedMaster?.genericName || ticket.medicineName,
+      brandName: matchedMaster?.brandName || '',
+      manufacturer: matchedMaster?.manufacturer || '',
+      purchasedUnit: matchedMaster?.purchasedUnit || 'Unit',
+      packSize: matchedMaster?.packSize || '',
+      converterFactor: matchedMaster?.converterFactor || 1,
+      consumptionUnit: matchedMaster?.consumptionUnit || 'Unit',
+      qty: 100,
+      vendorId: '',
+      vendorName: '',
+      price: matchedMaster?.mrp || matchedMed?.mrp || 0,
+      discount: 0,
+      tax: matchedMaster?.gst || 12
+    };
+
+    setEditingDraftPO(null);
+    setPoScreenItems([initialItem]);
+    setPoScreenNotes(`Replenishment order for ${ticket.medicineName} (Admin Alert ID: ${ticket.alertId || ticket._id})`);
+    setIsCreatingPO(true);
+    setActiveTab('pos');
+    setShowTicketsModal(false);
+    showToast(`Drafting Purchase Order for ${ticket.medicineName}`, 'info');
+  };
+
+  const handleResolvePharmacyTicket = async (ticketId, reason) => {
+    try {
+      await api.put(`/pharmacy-tickets/${ticketId}/resolve`, { reason: reason || 'Replenished via Purchase Order / Stock verified in Procurement Suite' });
+      showToast('Replenishment ticket marked as resolved!', 'success');
+      fetchData();
+    } catch (err) {
+      console.error('Failed to resolve ticket:', err);
+      showToast(err.response?.data?.error || 'Failed to resolve ticket', 'error');
+    }
+  };
+
   return (
     <>
       <style>{`
@@ -1625,8 +1685,10 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
           align-items: center;
           background: linear-gradient(135deg, #FFFFFF 0%, #F5F9FF 60%, #EBF3FE 100%);
           border: 1px solid rgba(224, 236, 255, 0.9);
-          border-radius: 14px;
-          padding: 7px 20px 7px 12px;
+          border-radius: 12px;
+          height: 42px;
+          box-sizing: border-box;
+          padding: 0 14px 0 12px;
           min-width: 140px;
           cursor: pointer;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1647,8 +1709,11 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
           align-items: center;
           background: linear-gradient(135deg, #FFFFFF 0%, #FFF8F8 60%, #FFEFEF 100%);
           border: 1px solid rgba(254, 226, 226, 0.9);
-          border-radius: 14px;
-          padding: 7px 14px 7px 12px;\r\n          min-width: 120px;
+          border-radius: 12px;
+          height: 42px;
+          box-sizing: border-box;
+          padding: 0 14px 0 12px;
+          min-width: 120px;
           cursor: pointer;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           box-shadow: 0 4px 16px -2px rgba(252, 165, 165, 0.28), 0 1px 3px rgba(0, 0, 0, 0.02);
@@ -1699,6 +1764,10 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
         .proc-search-container {
           position: relative;
           width: 360px;
+          height: 42px;
+          display: flex;
+          align-items: center;
+          box-sizing: border-box;
         }
 
         .proc-search-container i, .proc-search-container svg {
@@ -1713,7 +1782,9 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
 
         .proc-search-input {
           width: 100%;
-          padding: 10px 14px 10px 40px;
+          height: 42px;
+          box-sizing: border-box;
+          padding: 0 14px 0 40px;
           border-radius: 12px;
           border: 1.5px solid #E2E8F0;
           background: #F8FAFC;
@@ -3368,7 +3439,7 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                 onClick={() => setActiveTab('dashboard')}
                 title="Procurement Suite Active Workspace"
               >
-                <div style={{ position: 'absolute', top: '7px', right: '10px', width: '6.5px', height: '6.5px', borderRadius: '50%', background: '#22C55E', border: '1.5px solid #FFFFFF', boxShadow: '0 0 6px rgba(34, 197, 94, 0.6)', zIndex: 3 }} />
+                <div style={{ position: 'absolute', top: '7px', right: '9px', width: '6.5px', height: '6.5px', borderRadius: '50%', background: '#22C55E', border: '1.5px solid #FFFFFF', boxShadow: '0 0 6px rgba(34, 197, 94, 0.6)', zIndex: 3 }} />
                 <svg 
                   viewBox="0 0 70 50" 
                   fill="none" 
@@ -3393,12 +3464,12 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                   <polyline points="9 12 11 14 15 10"/>
                 </svg>
-                <div style={{ width: '1px', height: '22px', background: 'rgba(226, 232, 240, 0.95)', margin: '0 10px 0 8px', flexShrink: 0, position: 'relative', zIndex: 2 }} />
-                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, paddingRight: '12px', position: 'relative', zIndex: 2 }}>
-                  <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', lineHeight: 1.15, letterSpacing: '-0.01em', fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}>
+                <div style={{ width: '1px', height: '20px', background: 'rgba(226, 232, 240, 0.95)', margin: '0 10px 0 8px', flexShrink: 0, position: 'relative', zIndex: 2 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0, paddingRight: '10px', position: 'relative', zIndex: 2 }}>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', lineHeight: 1.15, letterSpacing: '-0.01em', fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}>
                     Procurement Suite
                   </span>
-                  <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#2563EB', lineHeight: 1.15, marginTop: '2px' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: '#2563EB', lineHeight: 1.15, marginTop: '1.5px' }}>
                     Hospital Store • Live
                   </span>
                 </div>
@@ -3415,16 +3486,44 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                   <line x1="12" y1="9" x2="12" y2="13"/>
                   <line x1="12" y1="17" x2="12.01" y2="17"/>
                 </svg>
-                <div style={{ width: '1px', height: '22px', background: 'rgba(254, 205, 211, 0.95)', margin: '0 10px 0 8px', flexShrink: 0, position: 'relative', zIndex: 2 }} />
-                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, paddingRight: '12px', position: 'relative', zIndex: 2 }}>
-                  <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', lineHeight: 1.15, letterSpacing: '-0.01em', fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}>
+                <div style={{ width: '1px', height: '20px', background: 'rgba(254, 205, 211, 0.95)', margin: '0 10px 0 8px', flexShrink: 0, position: 'relative', zIndex: 2 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0, paddingRight: '10px', position: 'relative', zIndex: 2 }}>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', lineHeight: 1.15, letterSpacing: '-0.01em', fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}>
                     {getDisplayPOs().filter(p => !p.isParent && p.vendorName !== 'Consolidated Multiple Suppliers' && !(p.vendorOrders && p.vendorOrders.length > 0) && ['Approved', 'Sent', 'Confirmed', 'Partially Delivered'].includes(p.status)).length} Pending
                   </span>
-                  <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#EF4444', lineHeight: 1.15, marginTop: '2px' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: '#EF4444', lineHeight: 1.15, marginTop: '1.5px' }}>
                     Deliveries Queue
                   </span>
                 </div>
               </div>
+
+              {/* 3. Operational Restock Alerts Widget from Admin */}
+              {pharmacyTickets.filter(t => t.status === 'Open').length > 0 && (
+                <div 
+                  className="header-alerts-widget" 
+                  onClick={() => setShowTicketsModal(true)}
+                  title="Admin Replenishment Tickets Pending"
+                  style={{
+                    background: 'linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%)',
+                    borderColor: '#F87171',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, position: 'relative', zIndex: 2 }}>
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
+                  <div style={{ width: '1px', height: '20px', background: 'rgba(248, 113, 113, 0.95)', margin: '0 10px 0 8px', flexShrink: 0, position: 'relative', zIndex: 2 }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0, paddingRight: '10px', position: 'relative', zIndex: 2 }}>
+                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#991B1B', lineHeight: 1.15, letterSpacing: '-0.01em', fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}>
+                      {pharmacyTickets.filter(t => t.status === 'Open').length} Restock Alert{pharmacyTickets.filter(t => t.status === 'Open').length > 1 ? 's' : ''}
+                    </span>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#DC2626', lineHeight: 1.15, marginTop: '1.5px' }}>
+                      Admin Request →
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Search Container with Instant Dropdown */}
               <div className="proc-search-container" style={{ width: '280px', position: 'relative' }}>
@@ -3686,37 +3785,6 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                   );
                 })()}
               </div>
-
-              {/* Digital Signature Quick Button */}
-              <button 
-                type="button" 
-                onClick={() => setShowSignatureModal(true)} 
-                style={{ 
-                  height: '42px', 
-                  padding: '0 13px', 
-                  borderRadius: '12px', 
-                  border: userSignatureUrl ? '1px solid #BBF7D0' : '1px solid #BFDBFE', 
-                  background: userSignatureUrl ? '#F0FDF4' : '#EFF6FF', 
-                  color: userSignatureUrl ? '#15803D' : '#1D4ED8', 
-                  fontWeight: 750, 
-                  fontSize: '12px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '6px', 
-                  cursor: 'pointer', 
-                  boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)', 
-                  transition: 'all 0.15s ease' 
-                }}
-                title="Manage your digital signature for Purchase Orders & GRNs"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
-                <span>Digital Signature</span>
-                {userSignatureUrl ? (
-                  <span style={{ width: '6.5px', height: '6.5px', borderRadius: '50%', background: '#22C55E', boxShadow: '0 0 5px #22C55E' }}></span>
-                ) : (
-                  <span style={{ fontSize: '10px', background: '#DBEAFE', color: '#1E40AF', padding: '1px 5px', borderRadius: '4px' }}>Upload</span>
-                )}
-              </button>
 
               {/* Flagship Bell Widget */}
               <div 
@@ -4399,6 +4467,37 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                         </div>
 
                         <div className="proc-action-list">
+                          {/* Item 0: Admin Replenishment Ticket Requests */}
+                          {pharmacyTickets.filter(t => t.status === 'Open').length > 0 && (
+                            <div 
+                              className="proc-action-item" 
+                              style={{ 
+                                background: 'linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%)', 
+                                border: '1.5px solid #F87171',
+                                cursor: 'pointer',
+                                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.12)'
+                              }}
+                              onClick={() => setShowTicketsModal(true)}
+                            >
+                              <div className="proc-action-icon red" style={{ background: '#DC2626', color: '#FFFFFF' }}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                                </svg>
+                              </div>
+                              <div style={{ flexGrow: 1 }}>
+                                <div className="proc-action-title" style={{ color: '#991B1B', fontWeight: 800 }}>
+                                  {pharmacyTickets.filter(t => t.status === 'Open').length === 1
+                                    ? `1 Admin Restock Request: ${pharmacyTickets.filter(t => t.status === 'Open')[0].medicineName}`
+                                    : `${pharmacyTickets.filter(t => t.status === 'Open').length} Admin Restock Requests Pending`}
+                                </div>
+                                <div className="proc-action-desc" style={{ color: '#DC2626', fontWeight: 600 }}>
+                                  Stock critically low. Click to view & raise PO immediately →
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           {/* Item 1 */}
                           <div 
                             className="proc-action-item" 
@@ -11080,6 +11179,127 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
                 className="proc-btn proc-btn-secondary"
                 style={{ width: '100%', padding: '8px' }}
                 onClick={() => setShowSignatureModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADMIN REPLENISHMENT TICKETS */}
+      {showTicketsModal && (
+        <div className="proc-modal-overlay" onClick={() => setShowTicketsModal(false)}>
+          <div className="proc-modal" style={{ maxWidth: '680px', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="proc-modal-header" style={{ borderBottom: '1px solid #E2E8F0', paddingBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#FEE2E2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#0F172A' }}>Admin Replenishment Tickets</h3>
+                  <div style={{ fontSize: '12px', color: '#64748B' }}>
+                    Critical stock alerts resolved by Admin that require Pharmacy Purchase Orders
+                  </div>
+                </div>
+              </div>
+              <button type="button" className="proc-close-btn" onClick={() => setShowTicketsModal(false)}>✕</button>
+            </div>
+
+            <div className="proc-modal-body" style={{ padding: '16px 0', maxHeight: '60vh', overflowY: 'auto' }}>
+              {pharmacyTickets.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 16px', color: '#64748B' }}>
+                  No replenishment tickets found.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {pharmacyTickets.map((t) => (
+                    <div 
+                      key={t._id} 
+                      style={{
+                        padding: '14px 16px',
+                        borderRadius: '12px',
+                        border: t.status === 'Open' ? '1.5px solid #FCA5A5' : '1px solid #E2E8F0',
+                        background: t.status === 'Open' ? '#FEF2F2' : '#F8FAFC',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>{t.medicineName}</span>
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              background: t.status === 'Open' ? '#EF4444' : '#10B981',
+                              color: '#FFFFFF'
+                            }}>
+                              {t.status}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px' }}>
+                            Raised: {new Date(t.createdAt).toLocaleString()} • Stock at Alert: <strong style={{ color: '#DC2626' }}>{t.currentStock}</strong>
+                          </div>
+                        </div>
+
+                        {t.status === 'Open' && (
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              type="button"
+                              className="proc-btn proc-btn-primary"
+                              style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}
+                              onClick={() => handleCreatePOFromTicket(t)}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                              <span>Raise PO</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="proc-btn proc-btn-secondary"
+                              style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 700 }}
+                              onClick={() => {
+                                const reason = window.prompt('Resolution comment / reason for closing ticket:', 'Stock replenished / order confirmed');
+                                if (reason && reason.trim()) {
+                                  handleResolvePharmacyTicket(t._id, reason.trim());
+                                }
+                              }}
+                            >
+                              Settle Ticket
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {t.adminComment && (
+                        <div style={{ fontSize: '12px', color: '#7F1D1D', background: 'rgba(254, 226, 226, 0.6)', padding: '6px 10px', borderRadius: '6px' }}>
+                          <strong>Admin Note:</strong> {t.adminComment}
+                        </div>
+                      )}
+
+                      {t.pharmacyReason && (
+                        <div style={{ fontSize: '12px', color: '#166534', background: '#DCFCE7', padding: '6px 10px', borderRadius: '6px' }}>
+                          <strong>Pharmacy Resolution:</strong> {t.pharmacyReason} (by {t.resolvedBy || 'Pharmacist'})
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="proc-modal-footer" style={{ borderTop: '1px solid #E2E8F0', paddingTop: '12px', marginTop: 0 }}>
+              <button
+                type="button"
+                className="proc-btn proc-btn-secondary"
+                style={{ width: '100%', padding: '8px' }}
+                onClick={() => setShowTicketsModal(false)}
               >
                 Close
               </button>
