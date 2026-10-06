@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api, { clearPortalAuthContext, performLogout } from '../utils/api';
 import HRPayroll from './HRPayroll';
 import { HospitalBrandLogo, getActivePortalBranding, restoreActivePortalDocumentMetadata } from '../context/PortalBrandingContext';
+import { printReceipt } from '../utils/receiptPrinter';
 
 const permissionNames = {
   'dr-consult': 'Patient consultation notes',
@@ -258,6 +259,31 @@ const LabDashboard = () => {
       }
 
       showToast(`Payment of ₹${(selectedCoveragePharmacyRx.amountVal || 550).toFixed(2)} settled via ${coveragePharmacyPaymentMode}. Prescription dispensed successfully!`);
+      try {
+        printReceipt({
+          receiptNo: 'PH-' + selectedCoveragePharmacyRx.id,
+          orderId: selectedCoveragePharmacyRx.id,
+          uhid: selectedCoveragePharmacyRx.patientId || '',
+          patientName: selectedCoveragePharmacyRx.patient || 'Patient',
+          doctorName: selectedCoveragePharmacyRx.doctor || 'Attending Doctor',
+          department: 'Pharmacy Dispensary',
+          invoiceDate: new Date(),
+          paymentMode: coveragePharmacyPaymentMode,
+          items: (selectedCoveragePharmacyRx.items || []).map(it => ({
+            particulars: it.medicine,
+            sampleType: it.dosage || 'Prescribed',
+            qty: it.quantity || 1,
+            amount: (it.price || 50) * (it.quantity || 1)
+          })),
+          totalAmount: selectedCoveragePharmacyRx.amountVal || 550,
+          paidAmount: coveragePharmacyPaymentMode === 'Cash' ? (Number(coveragePharmacyCashReceived) || (selectedCoveragePharmacyRx.amountVal || 550)) : (selectedCoveragePharmacyRx.amountVal || 550),
+          balanceDue: 0,
+          paymentStatus: 'PAID',
+          notes: 'Pharmacy Dispensing Receipt'
+        }, currentUser?.tenantName);
+      } catch (e) {
+        console.error('Receipt print error', e);
+      }
       setShowCoveragePharmacyPaymentModal(false);
       setSelectedCoveragePharmacyRx(null);
       fetchCoverageData();
@@ -600,7 +626,8 @@ const LabDashboard = () => {
           name: b.patientId?.name || 'Unknown',
           service: b.items?.[0]?.description || 'Medical Service',
           amount: b.totalAmount || 0,
-          paid: b.status === 'Paid'
+          paid: b.status === 'Paid',
+          raw: b
         })));
       }
 
@@ -3606,7 +3633,35 @@ const LabDashboard = () => {
                                   type="button"
                                   className="btn-cover-action receptionist-primary"
                                   style={{ background: 'transparent', border: '1px solid #E2E8F0', color: '#64748B' }}
-                                  onClick={() => showToast("Re-printing duplicate receipt...")}
+                                  onClick={() => {
+                                    const billData = bill.raw || {};
+                                    const patient = billData.patientId || {};
+                                    const items = (billData.items && billData.items.length > 0)
+                                      ? billData.items.map(it => ({
+                                          particulars: it.description || bill.service,
+                                          sampleType: it.type || 'Diagnostics / Lab',
+                                          amount: it.amount || bill.amount
+                                        }))
+                                      : [{ particulars: bill.service, sampleType: 'Diagnostics / Lab', amount: bill.amount }];
+
+                                    printReceipt({
+                                      receiptNo: bill.id || ('RCP-' + Date.now()),
+                                      orderId: bill.id,
+                                      uhid: patient.uhid || patient._id || '',
+                                      patientName: patient.name || bill.name,
+                                      ageGender: ((patient.age ? patient.age + ' Y' : '') + (patient.gender ? ' / ' + patient.gender : '')).trim(),
+                                      mobile: patient.phone || '',
+                                      doctorName: billData.doctorName || 'Pathology / Lab Dept',
+                                      department: 'Clinical Laboratory',
+                                      invoiceDate: billData.createdAt || new Date(),
+                                      paymentMode: billData.paymentMethod || 'Cash',
+                                      items: items,
+                                      totalAmount: bill.amount,
+                                      paidAmount: bill.amount,
+                                      balanceDue: 0,
+                                      paymentStatus: 'PAID'
+                                    }, currentUser?.tenantName);
+                                  }}
                                 >
                                   Print Receipt
                                 </button>

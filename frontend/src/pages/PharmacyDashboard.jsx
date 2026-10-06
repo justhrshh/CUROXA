@@ -6,6 +6,7 @@ import SearchableDropdown from '../components/SearchableDropdown';
 import ExpiryManagementPanel from '../components/ExpiryManagementPanel';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import { printPO, printGRN } from '../utils/printDocHelper';
+import { printReceipt } from '../utils/receiptPrinter';
 import curoxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import { HospitalBrandLogo, getActivePortalBranding, restoreActivePortalDocumentMetadata } from '../context/PortalBrandingContext';
 import { cleanHtmlText } from '../utils/textHelper';
@@ -2014,67 +2015,37 @@ const PharmacyDashboard = () => {
 
   const handlePrintSaleReceipt = (sale) => {
     if (!sale) return;
-    const printWindow = window.open('', '_blank');
-    const itemsHtml = (sale.items || []).map(it => {
-      const skuDiv = it.sku ? '<div style="font-size: 11px; color: #64748B;">SKU: ' + it.sku + '</div>' : '';
-      return '<tr>' +
-        '<td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; font-size: 13px; color: #0F172A; font-weight: 600;">' +
-          it.medicineName + skuDiv +
-        '</td>' +
-        '<td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; text-align: center; font-size: 13px; color: #475569;">' + it.quantity + ' ' + (it.unit || '') + '</td>' +
-        '<td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-size: 13px; color: #475569;">₹' + (it.mrp || 0).toFixed(2) + '</td>' +
-        '<td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-size: 13px; color: #475569;">' + (it.discountPercent || 0) + '%</td>' +
-        '<td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-size: 13px; color: #475569;">' + (it.gstPercent || 0) + '%</td>' +
-        '<td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-size: 13px; color: #0F172A; font-weight: 700;">₹' + (it.netAmount || 0).toFixed(2) + '</td>' +
-      '</tr>';
-    }).join('');
+    const items = (sale.items || []).map(it => ({
+      name: it.medicineName || it.name,
+      particulars: it.medicineName || it.name,
+      sampleType: it.sku ? ('SKU: ' + it.sku) : (it.unit || 'Unit'),
+      unit: it.unit || 'Unit',
+      qty: it.quantity || 1,
+      price: it.mrp || (it.netAmount ? (it.netAmount / (it.quantity || 1)) : 0),
+      discount: it.discountPercent ? (it.discountPercent + '%') : '',
+      amount: it.netAmount != null ? it.netAmount : ((it.mrp || 0) * (it.quantity || 1))
+    }));
 
-    const formattedDate = sale.saleDate ? new Date(sale.saleDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
-    const formattedTime = sale.saleTime || (sale.createdAt ? new Date(sale.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+    const receiptData = {
+      receiptNo: sale.saleId || ('PH-' + Date.now()),
+      orderId: sale.saleId,
+      uhid: sale.patientIdentifier || sale.uhid || '',
+      patientName: sale.customerName || 'Walk-in Customer',
+      ageGender: (sale.customerAge || sale.gender) ? ((sale.customerAge || '') + ' ' + (sale.gender || '')).trim() : '',
+      mobile: sale.customerMobile || sale.phone || '',
+      doctorName: sale.doctorName || 'Direct / OTC',
+      department: 'Pharmacy Dispensary',
+      invoiceDate: sale.saleDate || sale.createdAt || new Date(),
+      paymentMode: sale.paymentMethod || 'Cash',
+      items: items,
+      totalAmount: sale.grandTotal != null ? sale.grandTotal : (sale.netAmount || sale.subtotal || 0),
+      paidAmount: sale.amountReceived != null ? sale.amountReceived : (sale.grandTotal || 0),
+      balanceDue: 0,
+      paymentStatus: sale.paymentStatus || 'PAID',
+      notes: 'Sale Type: ' + (sale.saleType || 'DIRECT') + (sale.changeReturned ? (' | Change: ₹' + Number(sale.changeReturned).toFixed(2)) : '')
+    };
 
-    const receiptHtml = '<!DOCTYPE html><html><head><title>Pharmacy Receipt - ' + sale.saleId + '</title>' +
-      '<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">' +
-      '<style>@page { margin: 15mm; } body { font-family: "Plus Jakarta Sans", sans-serif; color: #0F172A; margin: 0; padding: 20px; font-size: 13px; } table { width: 100%; border-collapse: collapse; margin-top: 15px; } th { background: #F8FAFC; padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; color: #475569; border-bottom: 2px solid #CBD5E1; }</style>' +
-      '</head><body>' +
-      '<div style="text-align: center; border-bottom: 2px solid #E2E8F0; padding-bottom: 16px; margin-bottom: 20px;">' +
-        '<h2 style="margin: 0; font-size: 22px; font-weight: 800; color: #2563EB;">QUROXA PHARMACY</h2>' +
-        '<div style="font-size: 12px; color: #64748B; margin-top: 4px;">Main Pharmacy Dispensary • Tax Invoice / Cash Receipt</div>' +
-      '</div>' +
-      '<div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 12.5px;">' +
-        '<div>' +
-          '<div><strong>Sale ID:</strong> <span style="font-family: monospace; font-size: 14px; font-weight: 700;">' + sale.saleId + '</span></div>' +
-          '<div style="margin-top: 4px;"><strong>Date & Time:</strong> ' + formattedDate + ' ' + formattedTime + '</div>' +
-          '<div style="margin-top: 4px;"><strong>Sale Type:</strong> <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; background: ' + (sale.saleType === 'DIRECT' ? '#EEF2FF' : '#ECFDF5') + '; color: ' + (sale.saleType === 'DIRECT' ? '#4F46E5' : '#059669') + '; font-weight: 700;">' + sale.saleType + '</span></div>' +
-          '<div style="margin-top: 4px;"><strong>Doctor / Source:</strong> ' + (sale.doctorName || 'Self / No Doctor') + '</div>' +
-        '</div>' +
-        '<div style="text-align: right;">' +
-          '<div><strong>Customer / Patient:</strong> ' + (sale.customerName || 'Walk-in') + '</div>' +
-          (sale.customerMobile ? '<div style="margin-top: 4px;"><strong>Mobile:</strong> ' + sale.customerMobile + '</div>' : '') +
-          (sale.patientIdentifier ? '<div style="margin-top: 4px;"><strong>Patient ID:</strong> ' + sale.patientIdentifier + '</div>' : '') +
-          '<div style="margin-top: 4px;"><strong>Pharmacist:</strong> ' + (sale.pharmacistName || 'Pharmacist') + '</div>' +
-        '</div>' +
-      '</div>' +
-      '<table><thead><tr><th>Medicine / Item</th><th style="text-align: center;">Qty</th><th style="text-align: right;">MRP</th><th style="text-align: right;">Disc</th><th style="text-align: right;">GST</th><th style="text-align: right;">Net Amount</th></tr></thead>' +
-      '<tbody>' + itemsHtml + '</tbody></table>' +
-      '<div style="display: flex; justify-content: flex-end; margin-top: 20px;">' +
-        '<div style="width: 260px; background: #F8FAFC; padding: 16px; border-radius: 8px; border: 1px solid #E2E8F0;">' +
-          '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;"><span>Subtotal:</span><span>₹' + (sale.subtotal || 0).toFixed(2) + '</span></div>' +
-          '<div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #16A34A;"><span>Total Discount:</span><span>-₹' + (sale.totalDiscount || 0).toFixed(2) + '</span></div>' +
-          '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;"><span>GST:</span><span>₹' + (sale.totalGst || 0).toFixed(2) + '</span></div>' +
-          '<div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 2px solid #CBD5E1; font-weight: 800; font-size: 15px; color: #0F172A;"><span>Grand Total:</span><span>₹' + (sale.grandTotal || 0).toFixed(2) + '</span></div>' +
-          '<div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; color: #475569;"><span>Payment:</span><span style="font-weight: 700;">' + (sale.paymentMethod || 'Cash') + ' (' + (sale.paymentStatus || 'PAID') + ')</span></div>' +
-          (sale.paymentMethod === 'Cash' ? '<div style="display: flex; justify-content: space-between; font-size: 12px; color: #475569;"><span>Received:</span><span>₹' + (sale.amountReceived || sale.grandTotal).toFixed(2) + '</span></div><div style="display: flex; justify-content: space-between; font-size: 12px; color: #475569;"><span>Change:</span><span>₹' + (sale.changeReturned || 0).toFixed(2) + '</span></div>' : '') +
-        '</div>' +
-      '</div>' +
-      '<div style="margin-top: 40px; text-align: center; color: #94A3B8; font-size: 11px; border-top: 1px solid #E2E8F0; padding-top: 12px;">Thank you for choosing Quroxa Healthcare. Get well soon!</div>' +
-      '</body></html>';
-
-    printWindow.document.write(receiptHtml);
-    printWindow.document.close();
-    setTimeout(() => {
-      printWindow.focus();
-      printWindow.print();
-    }, 500);
+    printReceipt(receiptData, currentUser?.tenantName || 'Quroxa Medical Center');
   };
 
   const handleOpenSalesExport = async () => {
@@ -2564,135 +2535,39 @@ const PharmacyDashboard = () => {
   };
 
   const handlePrintInvoice = (group) => {
-    const printWindow = window.open('', '_blank');
+    if (!group) return;
     const enrichedItems = group.itemsList || [];
-    const computedTotal = enrichedItems.reduce((acc, item) => acc + (item.lineTotal || 0), 0);
-    const itemsHtml = enrichedItems.map(item => `
-      <tr>
-        <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; font-size: 14px; color: #0F172A; font-weight: 600;">
-          ${item.medicine}
-          <div style="font-size: 11px; color: #64748B; margin-top: 2px;">${item.dosage} • ${item.instructions || ''}</div>
-        </td>
-        <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: center; font-size: 14px; color: #475569;">${item.duration}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: center; font-size: 14px; color: #475569;">${item.quantity || 1}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-size: 14px; color: #475569;">₹${(item.unitPrice || 0).toFixed(2)}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-size: 14px; color: #0F172A; font-weight: 700;">₹${(item.lineTotal || 0).toFixed(2)}</td>
-      </tr>
-    `).join('');
+    const items = enrichedItems.map(item => ({
+      name: item.medicine || item.name,
+      particulars: item.medicine || item.name,
+      sampleType: item.dosage ? (item.dosage + (item.instructions ? (' • ' + item.instructions) : '')) : (item.duration || 'Prescribed'),
+      qty: item.quantity || 1,
+      price: item.unitPrice || 0,
+      amount: item.lineTotal != null ? item.lineTotal : ((item.unitPrice || 0) * (item.quantity || 1))
+    }));
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Invoice - ${group.id}</title>
-          <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
-          <style>
-            @page {
-              size: A4;
-              margin: 0;
-            }
-            body { font-family: 'Outfit', sans-serif; color: #1E293B; margin: 0; padding: 0; background: white; }
-            .invoice-container {
-              width: 100%;
-              min-height: 100%;
-              box-sizing: border-box;
-              padding: 40mm 20mm 30mm 20mm; /* Space for letterhead */
-              position: relative;
-            }
-            .print-letterhead-bg {
-              position: fixed;
-              top: 0;
-              left: 0;
-              right: 0;
-              bottom: 0;
-              width: 100%;
-              height: 100%;
-              z-index: -1;
-              object-fit: contain;
-              object-position: center top;
-            }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #E2E8F0; padding-bottom: 20px; margin-bottom: 20px; }
-            .title { font-size: 24px; font-weight: 800; color: #2563EB; }
-            .meta { text-align: right; }
-            .details { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-            .card { padding: 16px; border: 1px solid #E2E8F0; border-radius: 12px; background: #F8FAFC; }
-            .card-title { font-size: 12px; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 6px; }
-            .card-val { font-size: 14px; font-weight: 700; color: #0F172A; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th { background: #F8FAFC; padding: 12px; text-align: left; border-bottom: 2px solid #E2E8F0; font-size: 12px; font-weight: 700; color: #64748B; text-transform: uppercase; }
-            .total { margin-top: 30px; text-align: right; font-size: 20px; font-weight: 800; color: #0F172A; border-top: 2px solid #E2E8F0; padding-top: 15px; }
-            .print-only { display: block; }
-            @media print {
-              body * { visibility: hidden; }
-              .invoice-container, .invoice-container *, .print-letterhead-bg { visibility: visible; }
-              .invoice-container { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
-            }
-          </style>
-        </head>
-        <body>
-          ${customPharmacyLetterhead ? (
-            customPharmacyLetterhead.startsWith('data:application/pdf') || customPharmacyLetterhead.endsWith('.pdf') || customPharmacyLetterhead.includes('application/pdf') ? `
-              <embed src="${customPharmacyLetterhead}" type="application/pdf" class="print-letterhead-bg" style="border: none;" />
-            ` : `
-              <img src="${customPharmacyLetterhead}" class="print-letterhead-bg" alt="Letterhead" />
-            `
-          ) : `
-          <div class="print-only" style="position: fixed; top: 0; left: 0; width: 210mm; height: 25mm; background: #0F172A; color: white; padding: 5mm 15mm; box-sizing: border-box; z-index: -1;">
-            <h1 style="margin: 0; font-size: 20px; font-weight: 900;">QUROXA PHARMACY</h1>
-            <p style="margin: 0; font-size: 10px; opacity: 0.8;">Premium Healthcare EMR System</p>
-          </div>
-          `}
-          <div class="invoice-container" style="position: relative; z-index: 10;">
-            ${!customPharmacyLetterhead ? `
-            <div class="header">
-              <div>
-                <div class="title">Quroxa Pharmacy</div>
-                <p style="margin: 4px 0 0 0; font-size: 14px; color: #64748B;">Premium Healthcare EMR System</p>
-              </div>
-              <div class="meta">
-                <h3 style="margin: 0; font-size: 20px; font-weight: 800; color: #0F172A;">INVOICE ${group.id}</h3>
-                <p style="margin: 4px 0 0 0; font-size: 14px; color: #64748B;">Date: ${group.dateStr || new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-              </div>
-            </div>
-            ` : `
-            <div class="meta" style="margin-bottom: 20px; text-align: right;">
-                <h3 style="margin: 0; font-size: 20px; font-weight: 800; color: #0F172A;">INVOICE ${group.id}</h3>
-                <p style="margin: 4px 0 0 0; font-size: 14px; color: #64748B;">Date: ${group.dateStr || new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-            </div>
-            `}
-          <div class="details">
-            <div class="card">
-              <div class="card-title">Patient Details</div>
-              <div class="card-val">${group.name}</div>
-              <div style="font-size: 13px; color: #64748B; margin-top: 2px;">${group.age} Y / ${group.gender}</div>
-              <div style="font-size: 13px; color: #64748B; margin-top: 2px;">${group.phone || ''}</div>
-            </div>
-            <div class="card">
-              <div class="card-title">Doctor Details</div>
-              <div class="card-val">${group.docName}</div>
-              <div style="font-size: 13px; color: #64748B; margin-top: 2px;">${group.specialty}</div>
-            </div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Medicine</th>
-                <th style="text-align: center;">Duration</th>
-                <th style="text-align: center;">Qty</th>
-                <th style="text-align: right;">Unit Price</th>
-                <th style="text-align: right;">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsHtml}
-            </tbody>
-          </table>
-          <div class="total">Total: ₹${computedTotal.toFixed(2)}</div>
-          <script>window.print();</script>
-          </div> <!-- end invoice container -->
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    const computedTotal = enrichedItems.reduce((acc, item) => acc + (item.lineTotal || 0), 0);
+
+    const receiptData = {
+      receiptNo: group.id ? ('RX-' + group.id) : ('INV-' + Date.now()),
+      orderId: group.id,
+      uhid: group.uhid || group.patientId || '',
+      patientName: group.name || 'Patient',
+      ageGender: ((group.age ? group.age + ' Y' : '') + (group.gender ? ' / ' + group.gender : '')).trim(),
+      mobile: group.phone || '',
+      doctorName: group.docName || 'Consultant Doctor',
+      department: group.specialty || 'Pharmacy Dispensary',
+      invoiceDate: group.dateStr || group.date || new Date(),
+      paymentMode: 'Cash / Pharmacy Settlement',
+      items: items,
+      totalAmount: computedTotal,
+      paidAmount: computedTotal,
+      balanceDue: 0,
+      paymentStatus: 'PAID',
+      notes: 'Prescription Dispensing Receipt'
+    };
+
+    printReceipt(receiptData, currentUser?.tenantName || 'Quroxa Medical Center');
   };
 
   const handleOpenAdd = () => {

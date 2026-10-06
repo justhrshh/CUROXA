@@ -15,6 +15,7 @@ import {
   prescriptionExportColumns
 } from '../utils/exportEngine';
 import { cleanHtmlText } from '../utils/textHelper';
+import { printReceipt } from '../utils/receiptPrinter';
 
 const permissionNames = {
   'dr-consult': 'Patient consultation notes',
@@ -884,7 +885,8 @@ const DoctorDashboard = () => {
           name: b.patientId?.name || 'Unknown',
           service: b.items?.[0]?.description || 'Medical Service',
           amount: b.totalAmount || 0,
-          paid: b.status === 'Paid'
+          paid: b.status === 'Paid',
+          raw: b
         })));
       }
 
@@ -7021,7 +7023,35 @@ I have scanned the medical reference databases, but couldn't find a direct match
                               type="button"
                               className="btn-cover-action receptionist-primary"
                               style={{ background: 'transparent', border: '1px solid #E2E8F0', color: '#64748B' }}
-                              onClick={() => showToastNotification("Re-printing duplicate receipt...")}
+                              onClick={() => {
+                                const billData = bill.raw || {};
+                                const patient = billData.patientId || {};
+                                const items = (billData.items && billData.items.length > 0)
+                                  ? billData.items.map(it => ({
+                                      particulars: it.description || bill.service,
+                                      sampleType: it.type || 'Clinical / OPD Consultation',
+                                      amount: it.amount || bill.amount
+                                    }))
+                                  : [{ particulars: bill.service, sampleType: 'Clinical / OPD Consultation', amount: bill.amount }];
+
+                                printReceipt({
+                                  receiptNo: bill.id || ('RCP-' + Date.now()),
+                                  orderId: bill.id,
+                                  uhid: patient.uhid || patient._id || '',
+                                  patientName: patient.name || bill.name,
+                                  ageGender: ((patient.age ? patient.age + ' Y' : '') + (patient.gender ? ' / ' + patient.gender : '')).trim(),
+                                  mobile: patient.phone || '',
+                                  doctorName: billData.doctorName || 'Doctor In-charge',
+                                  department: 'OPD Services',
+                                  invoiceDate: billData.createdAt || new Date(),
+                                  paymentMode: billData.paymentMethod || 'Cash',
+                                  items: items,
+                                  totalAmount: bill.amount,
+                                  paidAmount: bill.amount,
+                                  balanceDue: 0,
+                                  paymentStatus: 'PAID'
+                                });
+                              }}
                             >
                               Print Receipt
                             </button>
