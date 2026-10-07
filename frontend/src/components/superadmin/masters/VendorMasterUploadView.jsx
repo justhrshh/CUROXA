@@ -1,3 +1,4 @@
+import { getAccessToken } from '../../../utils/authTokenStore';
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Upload, 
@@ -47,7 +48,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
     const fetchHospitals = async () => {
       try {
         setLoadingHospitals(true);
-        const token = localStorage.getItem('token');
+        const token = (getAccessToken() || localStorage.getItem('token'));
         const res = await fetch(getApiUrl('/superadmin/masters/hospitals-list'), {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
@@ -70,7 +71,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
     try {
       setDownloadingVendor(true);
       setError('');
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const url = downloadHospital
         ? `/superadmin/masters/upload/vendor/download?tenantId=${encodeURIComponent(downloadHospital)}`
         : '/superadmin/masters/upload/vendor/download';
@@ -123,7 +124,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
       formData.append('file', file);
       formData.append('tenantId', selectedHospital);
 
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const res = await fetch(getApiUrl('/superadmin/masters/upload/vendor/parse-preview'), {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -151,7 +152,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
     try {
       setIsImporting(true);
       setError('');
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const res = await fetch(getApiUrl('/superadmin/masters/upload/vendor/confirm'), {
         method: 'POST',
         headers: {

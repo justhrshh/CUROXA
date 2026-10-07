@@ -574,13 +574,9 @@ const DoctorDashboard = () => {
   useEffect(() => {
     const fetchTenantMode = async () => {
       try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-        const res = await fetch('/api/auth/tenant-mode', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
+        const res = await api.get('/auth/tenant-mode');
+        const data = res.data;
+        if (data) {
           const mode = data.doctorClinicalMode || 'ONLINE';
           setDoctorClinicalMode(mode);
           localStorage.setItem('doctorClinicalMode', mode);

@@ -1,3 +1,4 @@
+import { getAccessToken } from './authTokenStore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -39,7 +40,7 @@ export async function downloadMasterExcel(category, department, exportType = 'HO
     throw new Error('Please select a category first to export.');
   }
 
-  const token = localStorage.getItem('token');
+  const token = getAccessToken() || localStorage.getItem('token');
   let url = `/api/superadmin/masters/export/excel?category=${encodeURIComponent(category)}&exportType=${encodeURIComponent(exportType)}`;
   const isSpecificDept = department && department !== 'all' && department.trim() !== '';
   if (isSpecificDept) {
@@ -81,7 +82,7 @@ export async function downloadMasterPdf(category, department) {
     throw new Error('Please select a category first to export.');
   }
 
-  const token = localStorage.getItem('token');
+  const token = getAccessToken() || localStorage.getItem('token');
   let url = `/api/superadmin/masters/export/data?category=${encodeURIComponent(category)}`;
   const isSpecificDept = department && department !== 'all' && department.trim() !== '';
   if (isSpecificDept) {

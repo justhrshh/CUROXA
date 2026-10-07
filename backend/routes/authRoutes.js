@@ -25,6 +25,216 @@ const router = express.Router();
 // that can never be typed as a password.
 const randomOAuthPassword = () => crypto.randomBytes(32).toString("hex");
 
+// ═══════════════════════════════════════════════════════════════════
+// REFRESH TOKEN & SESSION ROTATION (PHASE 2A)
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/auth/refresh
+ * Validates the refresh token from HttpOnly cookie (or body fallback),
+ * enforces rotation and reuse detection, and issues a new access token.
+ */
+router.post("/refresh", async (req, res) => {
+  try {
+    const RefreshToken = require("../models/RefreshToken");
+    const {
+      getRefreshCookieName,
+      getRefreshCookieOptions,
+      getClearRefreshCookieOptions
+    } = require("../utils/authSessionHelper");
+
+    const cookieName = getRefreshCookieName();
+    // Strictly obtain the refresh token ONLY from the configured HttpOnly cookie.
+    // Do NOT accept req.body.refreshToken, query parameters, or Authorization headers.
+    const rawToken = req.cookies?.[cookieName];
+
+    if (!rawToken || typeof rawToken !== "string" || !rawToken.trim()) {
+      return res.status(401).json({ error: "No refresh token cookie provided" });
+    }
+
+    const tokenHash = crypto.createHash("sha256").update(rawToken.trim()).digest("hex");
+    const session = await RefreshToken.findOne({ tokenHash });
+
+    if (!session) {
+      console.warn("[AUTH_REFRESH] Refresh attempt with unknown token hash");
+      return res.status(401).json({ error: "Invalid refresh token" });
+    }
+
+    // ── REUSE DETECTION ──
+    if (session.isRevoked) {
+      console.error(
+        `[AUTH_SECURITY_ALERT] Refresh token reuse detected! Family: ${session.familyId}, User: ${session.userId}. Revoking entire family.`
+      );
+      // Immediately revoke all sessions in this family
+      await RefreshToken.updateMany(
+        { familyId: session.familyId },
+        { $set: { isRevoked: true, revokedAt: new Date() } }
+      );
+      res.clearCookie(cookieName, getClearRefreshCookieOptions());
+      return res.status(401).json({
+        error: "Invalid or reused refresh token. Please sign in again."
+      });
+    }
+
+    // ── EXPIRATION CHECK ──
+    if (new Date() > session.expiresAt) {
+      session.isRevoked = true;
+      session.revokedAt = new Date();
+      await session.save();
+      res.clearCookie(cookieName, getClearRefreshCookieOptions());
+      return res.status(401).json({
+        error: "Refresh session expired. Please sign in again."
+      });
+    }
+
+    // ── USER STATE & TENANT VALIDATION ──
+    const user = await User.findById(session.userId);
+    if (!user) {
+      session.isRevoked = true;
+      session.revokedAt = new Date();
+      await session.save();
+      res.clearCookie(cookieName, getClearRefreshCookieOptions());
+      return res.status(401).json({ error: "User account no longer exists." });
+    }
+
+    // Tenant binding check: Never trust client tenant; compare server records
+    if (user.tenantId && session.tenantId && user.tenantId.toLowerCase() !== session.tenantId.toLowerCase()) {
+      session.isRevoked = true;
+      session.revokedAt = new Date();
+      await session.save();
+      res.clearCookie(cookieName, getClearRefreshCookieOptions());
+      return res.status(401).json({ error: "Tenant authorization mismatch." });
+    }
+
+    // Password version check
+    if (
+      user.password_version !== undefined &&
+      session.password_version !== undefined &&
+      user.password_version > session.password_version
+    ) {
+      session.isRevoked = true;
+      session.revokedAt = new Date();
+      await session.save();
+      res.clearCookie(cookieName, getClearRefreshCookieOptions());
+      return res.status(401).json({ error: "Password changed. Please sign in again." });
+    }
+
+    // ── ATOMIC ROTATION ──
+    const newRawToken = crypto.randomBytes(40).toString("hex");
+    const newTokenHash = crypto.createHash("sha256").update(newRawToken).digest("hex");
+    const refreshDays = parseInt(process.env.AUTH_REFRESH_TOKEN_DAYS || "7", 10);
+    const newExpiresAt = new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000);
+
+    // Concurrency protection: atomically mark current token revoked with replacement pointer
+    const rotated = await RefreshToken.findOneAndUpdate(
+      { _id: session._id, isRevoked: false },
+      {
+        $set: {
+          isRevoked: true,
+          replacedByTokenHash: newTokenHash,
+          revokedAt: new Date()
+        }
+      },
+      { returnDocument: 'after' }
+    );
+
+    if (!rotated) {
+      return res.status(401).json({
+        error: "Concurrent refresh collision. Please retry."
+      });
+    }
+
+    // Create new rotated session within the same familyId
+    await RefreshToken.create({
+      userId: user._id,
+      tenantId: session.tenantId,
+      tokenHash: newTokenHash,
+      familyId: session.familyId,
+      userAgent: req.headers["user-agent"] || "",
+      ipAddress: req.ip || req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "",
+      password_version: user.password_version || 0,
+      expiresAt: newExpiresAt,
+      isRevoked: false
+    });
+
+    // ── ISSUE COMPATIBLE 24H ACCESS TOKEN (WITHOUT passwordHash) ──
+    const tokenPayload = {
+      id: user._id,
+      staff_id: user.staff_id,
+      role: user.role,
+      name: user.name,
+      tenantId: session.tenantId,
+      specialty: user.specialty || "",
+      platformRole: user.platformRole || "",
+      password_version: user.password_version || 0
+    };
+
+    const newAccessToken = jwt.sign(tokenPayload, getJwtSecret(), {
+      expiresIn: "15m"
+    });
+
+    // Attach rotated cookie
+    res.cookie(cookieName, newRawToken, getRefreshCookieOptions());
+
+    console.log(`[AUTH_REFRESH] Token rotated successfully for user ${user.staff_id} (${session.tenantId})`);
+
+    return res.json({
+      success: true,
+      token: newAccessToken,
+      user: {
+        id: user._id,
+        _id: user._id,
+        staff_id: user.staff_id,
+        role: user.role,
+        name: user.name,
+        tenantId: session.tenantId,
+        email: user.email,
+        avatar: user.avatar || "",
+        isSetupComplete: user.isSetupComplete
+      }
+    });
+  } catch (err) {
+    console.error("[AUTH_REFRESH] Unexpected error:", err);
+    return res.status(500).json({ error: "Internal server error during session refresh" });
+  }
+});
+
+/**
+ * POST /api/auth/logout
+ * Server-side logout: revokes the presenting refresh session and clears cookie.
+ */
+router.post("/logout", async (req, res) => {
+  try {
+    const RefreshToken = require("../models/RefreshToken");
+    const {
+      getRefreshCookieName,
+      getClearRefreshCookieOptions
+    } = require("../utils/authSessionHelper");
+
+    const cookieName = getRefreshCookieName();
+    // Strictly obtain the refresh token ONLY from the configured HttpOnly cookie.
+    // Do NOT accept req.body.refreshToken or other client-supplied bodies.
+    const rawToken = req.cookies?.[cookieName];
+
+    if (rawToken && typeof rawToken === "string" && rawToken.trim()) {
+      const tokenHash = crypto.createHash("sha256").update(rawToken.trim()).digest("hex");
+      await RefreshToken.findOneAndUpdate(
+        { tokenHash, isRevoked: false },
+        { $set: { isRevoked: true, revokedAt: new Date() } }
+      );
+      console.log("[AUTH_LOGOUT] Refresh session revoked on server.");
+    }
+
+    res.clearCookie(cookieName, getClearRefreshCookieOptions());
+    return res.json({ success: true, message: "Logged out successfully" });
+  } catch (err) {
+    console.error("[AUTH_LOGOUT] Unexpected error:", err);
+    const { getRefreshCookieName, getClearRefreshCookieOptions } = require("../utils/authSessionHelper");
+    res.clearCookie(getRefreshCookieName(), getClearRefreshCookieOptions());
+    return res.json({ success: true, message: "Logged out successfully" });
+  }
+});
+
 // Lightweight ping endpoint to wake up Render backend from cold starts
 router.get("/ping", (req, res) => {
   res.json({ status: "ok", message: "Curoxa Backend is awake" });
@@ -261,7 +471,6 @@ router.post("/login", tenantMiddleware, async (req, res) => {
       tenantId: user.tenantId,
       specialty: platformRole || user.specialty || '',
       platformRole: platformRole || user.platformRole || '',
-      passwordHash: user.password_hash,
       password_version: user.password_version || 0,
     };
     let isPatientComplete = false;
@@ -297,8 +506,22 @@ router.post("/login", tenantMiddleware, async (req, res) => {
     const token = jwt.sign(
       tokenPayload,
       getJwtSecret(),
-      { expiresIn: "24h" },
+      { expiresIn: user.role === 'patient' ? "24h" : "15m" },
     );
+
+    // Issue server-side refresh session and set HttpOnly cookie (for staff/admin sessions)
+    if (user.role !== 'patient') {
+      try {
+        const { issueRefreshSession } = require('../utils/authSessionHelper');
+        await issueRefreshSession(res, {
+          user,
+          tenantId: user.tenantId,
+          req
+        });
+      } catch (sessErr) {
+        console.warn('[AUTH_SESSION] Refresh session generation warning:', sessErr.message);
+      }
+    }
 
     // Fire-and-forget audit log (don't block login response)
     AuditLog.create({
@@ -544,15 +767,26 @@ router.post("/google-login", tenantMiddleware, async (req, res) => {
         role: user.role,
         name: user.name,
         tenantId: targetTenant,
-        passwordHash: user.password_hash,
         password_version: user.password_version || 0,
       };
 
       const token = jwt.sign(
         tokenPayload,
         getJwtSecret(),
-        { expiresIn: "24h" },
+        { expiresIn: "15m" },
       );
+
+      // Issue server-side refresh session and set HttpOnly cookie
+      try {
+        const { issueRefreshSession } = require('../utils/authSessionHelper');
+        await issueRefreshSession(res, {
+          user,
+          tenantId: targetTenant,
+          req
+        });
+      } catch (sessErr) {
+        console.warn('[AUTH_SESSION] Google login refresh session warning:', sessErr.message);
+      }
 
       const { getHospitalEffectiveModules } = require('../utils/subscriptionHelper');
       const effectiveModules = await getHospitalEffectiveModules(hospital);
@@ -1258,6 +1492,14 @@ router.post("/verify-otp", tenantMiddleware, async (req, res) => {
     user.otp_purpose = null;
     await user.save();
 
+    // Invalidate all active refresh sessions across all devices for this user
+    try {
+      const { revokeAllUserSessions } = require('../utils/authSessionHelper');
+      await revokeAllUserSessions(user._id);
+    } catch (revErr) {
+      console.warn('[AUTH] Error revoking sessions on password reset:', revErr.message);
+    }
+
     // Broadcast session revocation event via socket
     const io = req.app.get("io");
     if (io) {
@@ -1704,7 +1946,6 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
       tenantId: user.tenantId,
       specialty: platformRole || user.specialty || '',
       platformRole: platformRole || user.platformRole || '',
-      passwordHash: user.password_hash,
       password_version: user.password_version || 0,
     };
     let isPatientComplete = false;
@@ -1740,8 +1981,22 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
     const token = jwt.sign(
       tokenPayload,
       getJwtSecret(),
-      { expiresIn: "24h" },
+      { expiresIn: user.role === 'patient' ? "24h" : "15m" },
     );
+
+    // Issue server-side refresh session and set HttpOnly cookie (for staff/admin sessions)
+    if (user.role !== 'patient') {
+      try {
+        const { issueRefreshSession } = require('../utils/authSessionHelper');
+        await issueRefreshSession(res, {
+          user,
+          tenantId: user.tenantId,
+          req
+        });
+      } catch (sessErr) {
+        console.warn('[AUTH_SESSION] OTP login refresh session warning:', sessErr.message);
+      }
+    }
 
     // Fire-and-forget audit log
     AuditLog.create({

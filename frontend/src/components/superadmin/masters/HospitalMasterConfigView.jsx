@@ -1,3 +1,4 @@
+import { getAccessToken } from '../../../utils/authTokenStore';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import * as Icons from 'lucide-react';
 import { getAllCategories, getCategoryConfig } from '../../../config/masterSchemaRegistry';
@@ -75,7 +76,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
     const fetchHospitals = async () => {
       try {
         setLoadingHospitals(true);
-        const token = localStorage.getItem('token');
+        const token = (getAccessToken() || localStorage.getItem('token'));
         const res = await fetch(getApiUrl('/superadmin/masters/hospitals-list'), {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
@@ -106,7 +107,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
     try {
       setLoadingConfigs(true);
       setErrorMessage('');
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const params = new URLSearchParams();
       params.append('tenantId', selectedTenantId);
       if (categoryFilter !== 'all') params.append('category', categoryFilter);
@@ -147,7 +148,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
     if (!selectedTenantId || !isAssignModalOpen) return;
     try {
       setLoadingUnassigned(true);
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const params = new URLSearchParams();
       params.append('tenantId', selectedTenantId);
       if (categoryFilter !== 'all') params.append('category', categoryFilter);
@@ -194,7 +195,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
     }
     try {
       setSavingAssign(true);
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const payload = {
         tenantId: selectedTenantId,
         masterItemId: selectedMasterItem._id,
@@ -250,7 +251,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
     if (!editingConfig) return;
     try {
       setSavingEdit(true);
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const payload = {
         mrp: Number(editForm.mrp) || 0,
         netRate: Number(editForm.netRate) || 0,
@@ -293,7 +294,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const res = await fetch(getApiUrl(`/superadmin/masters/hospital-configs/${config._id}`), {
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : {}

@@ -1,3 +1,4 @@
+import api, { getAccessToken } from '../utils/api';
 import React, { useState, useEffect, useRef } from 'react';
 import { socket } from '../utils/socket';
 
@@ -12,14 +13,14 @@ export default function GlobalSupportWidget() {
   const [loading, setLoading] = useState(false);
   const [supportTab, setSupportTab] = useState('raised'); // 'raised' or 'general'
   
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(getAccessToken());
   const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{}'));
   
   const chatEndRef = useRef(null);
 
   useEffect(() => {
     const handleLogin = () => {
-      setToken(localStorage.getItem('token'));
+      setToken(getAccessToken());
       setCurrentUser(JSON.parse(localStorage.getItem('user') || '{}'));
     };
     const handleLogout = () => {
@@ -139,13 +140,9 @@ export default function GlobalSupportWidget() {
 
   const fetchTickets = async () => {
     try {
-      const res = await fetch('/api/auth/support/tickets', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const res = await api.get('/auth/support/tickets');
+      const data = res.data;
+      if (data) {
         setTickets(data);
         // Refresh active ticket details if open
         if (activeTicket) {

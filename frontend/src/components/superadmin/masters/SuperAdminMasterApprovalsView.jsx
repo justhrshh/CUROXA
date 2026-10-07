@@ -1,3 +1,4 @@
+import { getAccessToken } from '../../../utils/authTokenStore';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as Icons from 'lucide-react';
 import axios from 'axios';
@@ -74,7 +75,7 @@ export default function SuperAdminMasterApprovalsView() {
   useEffect(() => {
     const fetchHospitals = async () => {
       try {
-        const token = localStorage.getItem('token');
+        const token = (getAccessToken() || localStorage.getItem('token'));
         const res = await axios.get(getApiUrl('/superadmin/masters/hospitals-list'), {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -93,7 +94,7 @@ export default function SuperAdminMasterApprovalsView() {
     setLoading(true);
     setErrorMsg('');
     try {
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const headers = { Authorization: `Bearer ${token}` };
 
       // 1. Fetch Item Requests
@@ -219,7 +220,7 @@ export default function SuperAdminMasterApprovalsView() {
 
     if (['SUBMITTED', 'PENDING'].includes(req.status)) {
       try {
-        const token = localStorage.getItem('token');
+        const token = (getAccessToken() || localStorage.getItem('token'));
         await axios.put(getApiUrl(`/item-requests/admin/${req._id}/review`), { note: 'Review opened by Super Admin' }, {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -233,7 +234,7 @@ export default function SuperAdminMasterApprovalsView() {
     setReviewSubmitting(true);
     setErrorMsg('');
     try {
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const payload = {
         approvedMrp: approvedPrice.mrp !== '' ? Number(approvedPrice.mrp) : null,
         approvedNetRate: approvedPrice.netRate !== '' ? Number(approvedPrice.netRate) : null,
@@ -270,7 +271,7 @@ export default function SuperAdminMasterApprovalsView() {
     }
     setItemRejecting(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const res = await axios.put(getApiUrl(`/item-requests/admin/${activeItemRequest._id}/reject`), {
         rejectionReason: itemRejectionReason.trim(),
         note: reviewNote
@@ -299,7 +300,7 @@ export default function SuperAdminMasterApprovalsView() {
     const fetchCandidates = async () => {
       setLoadingCandidates(true);
       try {
-        const token = localStorage.getItem('token');
+        const token = (getAccessToken() || localStorage.getItem('token'));
         const res = await axios.get(getApiUrl('/superadmin/masters/unassigned-global-items'), {
           headers: { Authorization: `Bearer ${token}` },
           params: {
@@ -328,7 +329,7 @@ export default function SuperAdminMasterApprovalsView() {
     }
     setConverting(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const res = await axios.put(getApiUrl(`/item-requests/admin/${activeItemRequest._id}/convert-to-assign`), {
         canonicalMasterItemId: selectedCanonicalItem._id,
         note: `Matched proposal with canonical item ${selectedCanonicalItem.itemCode} (${selectedCanonicalItem.itemName || selectedCanonicalItem.genericName})`
@@ -363,7 +364,7 @@ export default function SuperAdminMasterApprovalsView() {
     if (!activeVendorRequest) return;
     try {
       setVendorActionLoading(true);
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const res = await axios.post(getApiUrl(`/superadmin/vendor-requests/${activeVendorRequest._id}/approve`), {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -392,7 +393,7 @@ export default function SuperAdminMasterApprovalsView() {
 
     try {
       setVendorActionLoading(true);
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const res = await axios.post(getApiUrl(`/superadmin/vendor-requests/${activeVendorRequest._id}/reject`), {
         rejectionReason: vendorRejectionReason.trim()
       }, {

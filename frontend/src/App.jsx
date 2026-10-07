@@ -19,10 +19,11 @@ import { PortalBrandingProvider } from './context/PortalBrandingContext';
 import WakeUpOverlay from './components/WakeUpOverlay';
 import GlobalSupportWidget from './components/GlobalSupportWidget';
 import ModuleUnavailableView from './components/ModuleUnavailableView';
-import api, { clearPortalAuthContext, performLogout } from './utils/api';
+import api, { clearPortalAuthContext, performLogout, getAccessToken, refreshAccessToken } from './utils/api';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 
-import { socket, joinTenantRoom } from './utils/socket';
+import { socket, joinTenantRoom, connectSocket, disconnectSocket, getActiveSocketToken } from './utils/socket';
 
 // Proactively clean up any corrupted or "undefined" values in localStorage on boot to prevent JSON.parse crashes
 for (const key of ['user', 'tenantModules', 'curoxa_pmState', 'read_notif_ids', 'curoxa_superadmin_session']) {
@@ -67,7 +68,8 @@ const checkHasCoverage = (username, targetRole) => {
 
 // Protected Route Component
 const ProtectedRoute = ({ children, targetRole }) => {
-  const token = localStorage.getItem('token');
+  const { authInitializing } = useAuth();
+  const token = getAccessToken();
   let user = {};
   try {
     const storedUser = localStorage.getItem('user');
@@ -76,7 +78,23 @@ const ProtectedRoute = ({ children, targetRole }) => {
     console.error('Failed to parse user from localStorage:', e);
   }
 
-  if (!token) {
+  // Render neutral loading indicator while session restoration is in progress
+  if (authInitializing) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-9 h-9 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Restoring Session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const isImpersonating = !!localStorage.getItem('curoxa_superadmin_session');
+  const isPatientSession = targetRole === 'patient' || user.role === 'patient';
+  const effectiveToken = token || (isImpersonating || isPatientSession ? localStorage.getItem('token') : null);
+
+  if (!effectiveToken) {
     return <Navigate to="/login" replace />;
   }
 
@@ -172,34 +190,38 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getActiveSocketToken();
     const tenantId = localStorage.getItem('tenantId');
     if (token && tenantId) {
-      console.log('[SOCKET] Token & Tenant ID found in storage on mount, connecting socket...');
-      if (!socket.connected) {
-        socket.connect();
-      }
-      joinTenantRoom(tenantId);
+      console.log('[SOCKET] Token & Tenant ID found on mount, connecting authenticated socket...');
+      connectSocket(tenantId);
     }
 
     const handleLoginSuccess = () => {
       const tId = localStorage.getItem('tenantId');
       console.log('[SOCKET] Login success event caught, connecting socket with tenant:', tId);
       if (tId) {
-        if (!socket.connected) {
-          socket.connect();
-        }
-        joinTenantRoom(tId);
+        connectSocket(tId);
       }
     };
 
     const handleLogoutEvent = () => {
       console.log('[SOCKET] Logout event caught, disconnecting socket...');
-      socket.disconnect();
+      disconnectSocket();
+    };
+
+    const handleSocketSessionExpired = async () => {
+      console.warn('[SOCKET] Socket session expired. Triggering session refresh...');
+      try {
+        await refreshAccessToken();
+      } catch (err) {
+        console.warn('[SOCKET] Socket session refresh failed:', err.message);
+      }
     };
 
     window.addEventListener('curoxa_login_success', handleLoginSuccess);
     window.addEventListener('curoxa_logout', handleLogoutEvent);
+    window.addEventListener('curoxa_socket_session_expired', handleSocketSessionExpired);
 
     const onDataChanged = (event) => {
       console.log('[SOCKET] Data changed event received:', event);
@@ -296,9 +318,10 @@ function App() {
 
   return (
     <Router>
-      <WakeUpOverlay visible={waking} message="Waking up server" />
-      <GlobalSupportWidget />
-      <Routes>
+      <AuthProvider>
+        <WakeUpOverlay visible={waking} message="Waking up server" />
+        <GlobalSupportWidget />
+        <Routes>
         <Route path="/patient/login" element={<PatientPortalLogin />} />
         <Route path="/patient-register" element={<PatientRegistration />} />
         <Route path="/doctor/queue/:publicQueueId" element={<DoctorQueuePage />} />
@@ -471,6 +494,7 @@ function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      </AuthProvider>
     </Router>
   );
 }

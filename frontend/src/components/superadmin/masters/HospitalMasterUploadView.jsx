@@ -1,3 +1,4 @@
+import { getAccessToken } from '../../../utils/authTokenStore';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Upload, 
@@ -334,7 +335,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
     const fetchHospitals = async () => {
       try {
         setLoadingHospitals(true);
-        const token = localStorage.getItem('token');
+        const token = (getAccessToken() || localStorage.getItem('token'));
         const res = await fetch(getApiUrl('/superadmin/masters/hospitals-list'), {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
@@ -356,7 +357,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
   const fetchHistory = useCallback(async () => {
     try {
       setLoadingHistory(true);
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const url = uploadHospital 
         ? `/superadmin/masters/upload/history?tenantId=${encodeURIComponent(uploadHospital)}&limit=10`
         : '/superadmin/masters/upload/history?limit=10';
@@ -394,7 +395,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
     try {
       setDownloadingMaster(true);
       setError('');
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       let url = `/superadmin/masters/upload/download?category=${encodeURIComponent(downloadCategory)}`;
       if (downloadHospital) {
         url += `&tenantId=${encodeURIComponent(downloadHospital)}`;
@@ -470,7 +471,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
         formData.append('department', '');
       }
 
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const res = await fetch(getApiUrl('/superadmin/masters/upload/parse-preview'), {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -499,7 +500,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
       setIsImporting(true);
       setError('');
 
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const res = await fetch(getApiUrl('/superadmin/masters/upload/confirm-import'), {
         method: 'POST',
         headers: {

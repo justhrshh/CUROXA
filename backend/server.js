@@ -68,6 +68,9 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
+const cookieParser = require("cookie-parser");
+app.use(cookieParser());
+
 // Connect to MongoDB
 connectDB();
 
@@ -264,50 +267,22 @@ const io = require("socket.io")(http, {
 // Set io instance on app so it can be retrieved in routes
 app.set("io", io);
 
+// ── PHASE 2C: REAL-TIME AUTHENTICATION & TENANT ISOLATION ──
+const {
+  socketAuthMiddleware,
+  configureSocketTenantIsolation
+} = require("./middleware/socketAuthMiddleware");
+
+io.use(socketAuthMiddleware);
+
 io.on("connection", (socket) => {
-  console.log(`[SOCKET] Client connected: ${socket.id}`);
-
-  socket.on("join_tenant", (tenantId) => {
-    if (tenantId) {
-      const room = String(tenantId).trim().toLowerCase();
-      socket.join(room);
-      const rawRoom = String(tenantId).trim();
-      if (rawRoom !== room) {
-        socket.join(rawRoom);
-      }
-      console.log(`[SOCKET] Client ${socket.id} joined tenant room(s): ${room} / ${rawRoom}`);
-    }
-  });
-
-  socket.on("change_global_theme", (data) => {
-    console.log("[SOCKET] Global theme change broadcast:", data);
-    io.emit("global_theme_changed", data);
-  });
-
-  socket.on("disconnect", () => {
-    console.log(`[SOCKET] Client disconnected: ${socket.id}`);
-  });
+  console.log(`[SOCKET] Client connected: ${socket.id} (authenticated: ${!!socket.authenticated})`);
+  configureSocketTenantIsolation(io, socket);
 });
 
 // Basic route for testing
 app.get("/", (req, res) => {
   res.send("Curoxa API is running...");
-});
-
-app.get("/api/debug-db", async (req, res) => {
-  try {
-    const User = require("./models/User");
-    const Patient = require("./models/Patient");
-    const Appointment = require("./models/Appointment");
-    const Billing = require("./models/Billing");
-    const users = await User.find({});
-    const patients = await Patient.find({});
-    const appointments = await Appointment.find({});
-    const bills = await Billing.find({});
-    res.json({ users, patients, appointments, bills });
-  } catch (err) {
-    res.status(500).json({ error: err.message, stack: err.stack });
-  }
 });
 
 http.listen(PORT, () => {

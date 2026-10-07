@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { performLogout } from '../utils/api';
+import api, { performLogout } from '../utils/api';
 import quroxaLogo from '../assets/quroxa_new_logo.png';
 import { 
   Stethoscope, 
@@ -121,14 +121,9 @@ const ModuleUnavailableView = ({ moduleName, moduleKey }) => {
     setChecking(true);
     setFeedback(null);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/auth/tenant-mode', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const res = await api.get('/auth/tenant-mode');
+      const data = res.data;
+      if (data) {
         if (data && data.modules) {
           localStorage.setItem('tenantModules', JSON.stringify(data.modules));
           const effective = data.modules[normalizedKey];

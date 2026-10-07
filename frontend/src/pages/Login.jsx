@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import api from '../utils/api';
+import api, { setAccessToken, getAccessToken } from '../utils/api';
 import { 
   Eye, EyeOff, AlertCircle, CheckCircle, User, Lock, ArrowRight, 
   Calendar, FlaskConical, BarChart3, Pill, ShieldCheck, Mail, KeyRound, Heart
@@ -97,7 +97,7 @@ const Login = () => {
 
   // Check if user is already logged in
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getAccessToken();
     let user = {};
     try {
       const storedUser = localStorage.getItem('user');
@@ -125,6 +125,8 @@ const Login = () => {
 
   useEffect(() => {
     if (window.location.pathname.startsWith('/portal/')) return;
+    const token = getAccessToken();
+    if (!token) return; // Do not call protected endpoints when unauthenticated
     const prewarm = async () => {
       try {
         const [meds, docs] = await Promise.allSettled([
@@ -161,7 +163,7 @@ const Login = () => {
       });
       const { token, user, tenantModules, doctorClinicalMode, plan, subscriptionRestricted, subscriptionStatus, subscriptionDaysRemaining } = response.data;
       
-      localStorage.setItem('token', token);
+      setAccessToken(token);
       localStorage.setItem('user', JSON.stringify(user));
       localStorage.setItem('tenantId', user.tenantId || 'city_hospital');
       localStorage.setItem('tenantName', user.tenantName || user.hospitalName || 'Beta Beacon Specialty Care');
@@ -242,7 +244,7 @@ const Login = () => {
       });
       const { token, user, tenantModules, doctorClinicalMode, plan, subscriptionRestricted, subscriptionStatus, subscriptionDaysRemaining } = response.data;
       
-      localStorage.setItem('token', token);
+      setAccessToken(token);
       localStorage.setItem('user', JSON.stringify(user));
       localStorage.setItem('tenantId', user.tenantId || 'city_hospital');
       localStorage.setItem('tenantModules', JSON.stringify(tenantModules || {}));

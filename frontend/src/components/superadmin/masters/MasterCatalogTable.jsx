@@ -1,3 +1,4 @@
+import { getAccessToken } from '../../../utils/authTokenStore';
 import React, { useState, useEffect, useCallback } from 'react';
 import * as Icons from 'lucide-react';
 import { getCategoryConfig } from '../../../config/masterSchemaRegistry';
@@ -46,7 +47,7 @@ export default function MasterCatalogTable({
     try {
       setLoading(true);
       setError('');
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const params = new URLSearchParams();
 
       if (category && category !== 'all') {

@@ -1,3 +1,4 @@
+import { getAccessToken } from '../../../utils/authTokenStore';
 import React, { useState, useEffect, useCallback } from 'react';
 import * as Icons from 'lucide-react';
 import {
@@ -60,7 +61,7 @@ export default function VendorMasterView() {
   };
 
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
+    const token = (getAccessToken() || localStorage.getItem('token'));
     return {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {})

@@ -108,17 +108,14 @@ const WaitingQueuePanel = ({
   const [isFinishingId, setIsFinishingId] = useState(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      fetch('/api/auth/tenant-mode', { credentials: 'omit', headers: { 'Authorization': `Bearer ${token}` } })
-        .then(r => r.ok ? r.json() : null)
-        .then(d => {
+    api.get('/auth/tenant-mode')
+        .then(res => {
+          const d = res.data;
           if (d?.doctorClinicalMode) {
             setInternalClinicalMode(d.doctorClinicalMode);
             localStorage.setItem('doctorClinicalMode', d.doctorClinicalMode);
           }
         }).catch(() => {});
-    }
   }, []);
 
   const onFinishConsultation = async (item) => {

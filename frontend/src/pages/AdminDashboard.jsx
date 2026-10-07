@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import api, { clearPortalAuthContext, performLogout } from '../utils/api';
+import api, { clearPortalAuthContext, performLogout, setAccessToken } from '../utils/api';
 import { socket, joinTenantRoom } from '../utils/socket';
 import HRPayroll from './HRPayroll';
 import EmployeeProfileView from '../components/hr/EmployeeProfileView';
@@ -3439,7 +3439,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     const sessionStr = localStorage.getItem('curoxa_superadmin_session');
     if (sessionStr) {
       const session = JSON.parse(sessionStr);
-      localStorage.setItem('token', session.token);
+      setAccessToken(session.token);
+      localStorage.removeItem('token');
       localStorage.setItem('user', session.user);
       localStorage.setItem('tenantModules', session.tenantModules);
       localStorage.removeItem('curoxa_superadmin_session');

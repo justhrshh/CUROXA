@@ -2654,6 +2654,9 @@ router.put('/change-password', async (req, res) => {
 
     await writeAudit(req, 'update_superadmin_password', `Superadmin password updated successfully for ${user.email || user.staff_id}`);
 
+    const { revokeAllUserSessions } = require('../utils/authSessionHelper');
+    await revokeAllUserSessions(user._id);
+
     const jwt = require('jsonwebtoken');
     const { getJwtSecret } = require('../config/env');
     const newToken = jwt.sign({
@@ -2662,9 +2665,8 @@ router.put('/change-password', async (req, res) => {
       role: user.role,
       name: user.name,
       tenantId: user.tenantId || 'city_hospital',
-      passwordHash: user.password_hash,
       password_version: user.password_version || 0
-    }, getJwtSecret(), { expiresIn: '24h' });
+    }, getJwtSecret(), { expiresIn: '15m' });
 
     res.json({
       message: 'SuperAdmin password updated successfully!',

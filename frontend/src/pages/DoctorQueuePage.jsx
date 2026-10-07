@@ -139,6 +139,15 @@ const DoctorQueuePage = () => {
     };
 
     if (socket) {
+      if (!socket.connected) {
+        const token = localStorage.getItem('token');
+        if (token) {
+          socket.auth = { token };
+        } else if (publicQueueId) {
+          socket.auth = { publicQueueId };
+        }
+        socket.connect();
+      }
       socket.on('data_changed', handleDataChanged);
     }
 

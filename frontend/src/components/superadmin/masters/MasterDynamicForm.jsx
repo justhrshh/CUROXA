@@ -1,3 +1,4 @@
+import { getAccessToken } from '../../../utils/authTokenStore';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as Icons from 'lucide-react';
 import { getDepartmentFields, getCategoryConfig } from '../../../config/masterSchemaRegistry';
@@ -206,7 +207,7 @@ export default function MasterDynamicForm({
       const fetchNextCode = async () => {
         try {
           setLoadingCode(true);
-          const token = localStorage.getItem('token');
+          const token = (getAccessToken() || localStorage.getItem('token'));
           const targetUrl = getApiUrl(`/superadmin/masters/next-code?category=${encodeURIComponent(category)}`);
           const res = await fetch(targetUrl, {
             headers: token ? { Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}` } : {}
@@ -361,7 +362,7 @@ export default function MasterDynamicForm({
 
     try {
       setSaving(true);
-      const token = localStorage.getItem('token');
+      const token = (getAccessToken() || localStorage.getItem('token'));
       const url = getApiUrl(isEdit ? `/superadmin/masters/items/${initialData._id}` : '/superadmin/masters/items');
       const method = isEdit ? 'PUT' : 'POST';
 

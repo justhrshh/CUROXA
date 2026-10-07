@@ -1,3 +1,4 @@
+import { getAccessToken } from '../../../utils/authTokenStore';
 import React, { useState, useEffect } from 'react';
 import { 
   Boxes, 
@@ -24,7 +25,7 @@ export default function StockMasterUploadView({ onSwitchTab }) {
     let isMounted = true;
     const fetchHospitals = async () => {
       try {
-        const token = localStorage.getItem('token');
+        const token = (getAccessToken() || localStorage.getItem('token'));
         const res = await fetch(getApiUrl('/superadmin/masters/hospitals-list'), {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });

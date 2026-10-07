@@ -70,9 +70,9 @@ async function runThreePortalManualHttpVerification() {
 
     // Connect real Socket.IO clients for all three portals
     console.log('[2/7] Connecting real Socket.IO client sessions for Patient, Reception, and Doctor...');
-    const patientSocket = io(BASE_URL);
-    const recSocket = io(BASE_URL);
-    const doctorSocket = io(BASE_URL);
+    const patientSocket = io(BASE_URL, { auth: { token: patientToken } });
+    const recSocket = io(BASE_URL, { auth: { token: recToken } });
+    const doctorSocket = io(BASE_URL, { auth: { token: doctorToken } });
 
     let patientSyncEvents = 0;
     let recSyncEvents = 0;

@@ -1495,13 +1495,9 @@ const ReceptionistDashboard = () => {
   useEffect(() => {
     const fetchTenantMode = async () => {
       try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-        const res = await fetch('/api/auth/tenant-mode', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
+        const res = await api.get('/auth/tenant-mode');
+        const data = res.data;
+        if (data) {
           const mode = data.doctorClinicalMode || 'ONLINE';
           setDoctorClinicalMode(mode);
           localStorage.setItem('doctorClinicalMode', mode);
@@ -2537,17 +2533,14 @@ const ReceptionistDashboard = () => {
       } else if (type === 'indents' || type === 'indent') {
         fetchIndents();
       } else if (type === 'subscription' || type === 'hospital_updated') {
-        const token = localStorage.getItem('token');
-        if (token) {
-          fetch('/api/auth/tenant-mode', { headers: { 'Authorization': `Bearer ${token}` } })
-            .then(r => r.ok ? r.json() : null)
-            .then(d => {
+        api.get('/auth/tenant-mode')
+            .then(res => {
+              const d = res.data;
               if (d?.doctorClinicalMode) {
                 setDoctorClinicalMode(d.doctorClinicalMode);
                 localStorage.setItem('doctorClinicalMode', d.doctorClinicalMode);
               }
             }).catch(() => {});
-        }
       } else if (type === 'appointments' || type === 'billing' || type === 'all' || !type) {
         fetchData();
       }

@@ -1,3 +1,5 @@
+import { getAccessToken, setAccessToken } from '../utils/authTokenStore';
+const getSuperAdminToken = () => getAccessToken() || (typeof localStorage !== 'undefined' ? getSuperAdminToken() : null);
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
@@ -920,7 +922,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const saveHospitalModules = async (hospitalId, modulesToSave) => {
     setModuleSaveStatus(prev => ({ ...prev, [hospitalId]: 'saving' }));
-    const token = localStorage.getItem('token');
+    const token = getSuperAdminToken();
     try {
       const res = await fetch(`/api/superadmin/hospitals/${hospitalId}`, {
         method: 'PUT',
@@ -970,7 +972,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const refreshNotifications = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const headers = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
@@ -987,7 +989,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const markAsRead = async (id) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/notifications/${id}/read`, {
         method: 'PUT',
         headers: {
@@ -1006,7 +1008,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const markAllAsRead = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch('/api/superadmin/notifications/mark-all-read', {
         method: 'POST',
         headers: {
@@ -1025,7 +1027,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const clearAllNotifications = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch('/api/superadmin/notifications/clear', {
         method: 'DELETE',
         headers: {
@@ -1049,7 +1051,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch('/api/superadmin/meetings', {
         method: 'POST',
         headers: {
@@ -1076,7 +1078,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const handleDeleteMeeting = async (id) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/meetings/${id}`, {
         method: 'DELETE',
         headers: {
@@ -1188,7 +1190,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const fetchGlobalItems = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const query = new URLSearchParams({
         page: globalItemsPagination.page,
         limit: globalItemsPagination.limit,
@@ -1212,7 +1214,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const fetchItemRequests = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const query = new URLSearchParams({
         page: itemRequestsPagination.page,
         limit: itemRequestsPagination.limit,
@@ -1235,7 +1237,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const fetchPendingRequestsCount = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch('/api/superadmin/item-requests?status=SUBMITTED&limit=1', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -1521,7 +1523,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
     setLogoEditSaving(true);
     setLogoEditError('');
     try {
-      const token = localStorage.getItem('token') || localStorage.getItem('superadminToken');
+      const token = getSuperAdminToken() || localStorage.getItem('superadminToken');
       const body = { logo: logoEditDraft };
       if (logoEditNameDraft.trim()) {
         body.name = logoEditNameDraft.trim();
@@ -1568,7 +1570,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const fetchImpersonatedStats = async (hospCode) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/hospitals/${hospCode}/dashboard-stats`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -1583,7 +1585,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const fetchImpersonatedPatients = async (hospCode) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/hospitals/${hospCode}/patients`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -1598,7 +1600,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const fetchImpersonatedDoctors = async (hospCode) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/hospitals/${hospCode}/doctors`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -1613,7 +1615,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const handleAddImpersonatedPatient = async (patientData) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/hospitals/${impersonatingHospital.code}/patients`, {
         method: 'POST',
         headers: {
@@ -1639,7 +1641,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const handleAddImpersonatedAppointment = async (apptData) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/hospitals/${impersonatingHospital.code}/appointments`, {
         method: 'POST',
         headers: {
@@ -1664,7 +1666,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const handleAddImpersonatedInvoice = async (invoiceData) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/hospitals/${impersonatingHospital.code}/billing`, {
         method: 'POST',
         headers: {
@@ -1689,7 +1691,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const handleAddImpersonatedLab = async (labData) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/hospitals/${impersonatingHospital.code}/labs`, {
         method: 'POST',
         headers: {
@@ -1714,7 +1716,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const handleImpersonateLogin = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/hospitals/${impersonatingHospital.code}/impersonate-login`, {
         method: 'POST',
         headers: {
@@ -1724,13 +1726,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
       if (res.ok) {
         const data = await res.json();
         const currentSession = {
-          token: localStorage.getItem('token'),
+          token: getSuperAdminToken(),
           user: localStorage.getItem('user'),
           tenantModules: localStorage.getItem('tenantModules')
         };
         localStorage.setItem('curoxa_superadmin_session', JSON.stringify(currentSession));
         
-        localStorage.setItem('token', data.token);
+        setAccessToken(data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
         localStorage.setItem('tenantModules', JSON.stringify(data.tenantModules));
         
@@ -1750,7 +1752,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const fetchImpersonatedStaff = async (hospCode) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/hospitals/${hospCode}/staff`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -1795,7 +1797,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [gstinVerificationError, setGstinVerificationError] = useState('');
 
   const handleVerifyStep = async (hospital, stepName, newStatus) => {
-    const token = localStorage.getItem('token');
+    const token = getSuperAdminToken();
     let updateData = {};
     if (stepName === 'panGst') {
       updateData.panGstStatus = newStatus;
@@ -1849,7 +1851,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const handleAutoCreateOnboarding = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch('/api/superadmin/onboarding', {
         method: 'POST',
         headers: {
@@ -1894,7 +1896,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
   };
 
   const executeHospitalActivation = async (hospitalToActivate, formOverrides = {}) => {
-    const token = localStorage.getItem('token');
+    const token = getSuperAdminToken();
     
     const hospitalName = (formOverrides.name || hospitalToActivate?.name || '').trim();
     const adminName = (formOverrides.adminName || hospitalToActivate?.adminName || '').trim();
@@ -2078,7 +2080,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const handleAddImpersonatedStaff = async (staffData) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/hospitals/${impersonatingHospital.code}/staff`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -2100,7 +2102,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const handleUpdateImpersonatedStaff = async (staffId, staffData) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch(`/api/superadmin/hospitals/${impersonatingHospital.code}/staff/${staffId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -2131,7 +2133,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
       onConfirm: async () => {
         setConfirmModalConfig(prev => ({ ...prev, isLoading: true, confirmText: 'Deleting Staff...' }));
         try {
-          const token = localStorage.getItem('token');
+          const token = getSuperAdminToken();
           const res = await fetch(`/api/superadmin/hospitals/${impersonatingHospital.code}/staff/${staffId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
@@ -2988,7 +2990,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   // Load all Super Admin collections from the backend on mount
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getSuperAdminToken();
     if (!token) {
       navigate('/login');
       return;
@@ -3222,7 +3224,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   useEffect(() => {
     if (activeTab === 'platform-audits') {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       if (!token) return;
       fetch('/api/superadmin/audits', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -3235,7 +3237,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const fetchBroadcasts = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       if (!token) return;
       const res = await fetch('/api/superadmin/broadcasts', {
         headers: {
@@ -3254,7 +3256,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
   // Trigger manual backup via backend API
   const handleTriggerBackup = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch('/api/superadmin/backups/trigger', {
         method: 'POST',
         headers: {
@@ -3290,7 +3292,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
     setIsVerifyingLicense(true);
     setVerificationError('');
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch('/api/superadmin/verify-license', {
         method: 'POST',
         headers: {
@@ -3327,7 +3329,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
     }
     setIsVerifyingLicense(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch('/api/superadmin/verify-license', {
         method: 'POST',
         headers: {
@@ -3373,7 +3375,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
     setIsVerifyingGstin(true);
     setGstinVerificationError('');
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch('/api/superadmin/verify-gstin', {
         method: 'POST',
         headers: {
@@ -3410,7 +3412,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
     }
     setIsVerifyingGstin(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const res = await fetch('/api/superadmin/verify-gstin', {
         method: 'POST',
         headers: {
@@ -3498,7 +3500,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
     };
 
     const saveWizardDraft = async (exitAfterSaving = false, customStep = null) => {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       const stepToUse = customStep !== null ? customStep : wizardStep;
       
       if (exitAfterSaving) {
@@ -3588,7 +3590,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
     };
 
     const finalizeOnboarding = async (finalStatus) => {
-      const token = localStorage.getItem('token');
+      const token = getSuperAdminToken();
       try {
         if (finalStatus === 'Live') {
           await executeHospitalActivation(wizardHospital);
@@ -3664,7 +3666,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
         try {
           await fetch(`/api/superadmin/hospitals/${wizardHospital.code.toLowerCase()}/staff`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getSuperAdminToken()}` },
             body: JSON.stringify({
               staff_id: newStaff.staff_id,
               name: newStaff.name,
@@ -3692,7 +3694,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           delete updateData.__v;
           const res = await fetch(`/api/superadmin/onboarding/${wizardHospital._id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getSuperAdminToken()}` },
             body: JSON.stringify(updateData)
           });
           if (res.ok) {
@@ -3734,7 +3736,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           delete updateData.__v;
           const res = await fetch(`/api/superadmin/onboarding/${wizardHospital._id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getSuperAdminToken()}` },
             body: JSON.stringify(updateData)
           });
           if (res.ok) {
@@ -4931,7 +4933,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               formData.append('document', file);
                               
                               try {
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 const res = await fetch('/api/superadmin/upload-compliance', {
                                   method: 'POST',
                                   headers: { 'Authorization': `Bearer ${token}` },
@@ -7046,7 +7048,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 onConfirm: async () => {
                                   setConfirmModalConfig(prev => ({ ...prev, isLoading: true, confirmText: 'Purging Database...' }));
                                   try {
-                                    const token = localStorage.getItem('token');
+                                    const token = getSuperAdminToken();
                                     const res = await fetch('/api/superadmin/purge', {
                                       method: 'POST',
                                       headers: { 'Authorization': `Bearer ${token}` }
@@ -10260,7 +10262,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 if ((hosp.doctorClinicalMode || 'ONLINE') === newMode) return;
                                 const originalMode = hosp.doctorClinicalMode || 'ONLINE';
                                 setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, doctorClinicalMode: newMode } : h));
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 try {
                                   const res = await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
                                     method: 'PUT',
@@ -10305,7 +10307,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 if ((hosp.doctorClinicalMode || 'ONLINE') === newMode) return;
                                 const originalMode = hosp.doctorClinicalMode || 'ONLINE';
                                 setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, doctorClinicalMode: newMode } : h));
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 try {
                                   const res = await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
                                     method: 'PUT',
@@ -10368,7 +10370,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             max={100}
                             value={hosp.limits?.staffLimit || 20}
                             onChange={async (val) => {
-                              const token = localStorage.getItem('token');
+                              const token = getSuperAdminToken();
                               const updatedLimits = { ...hosp.limits, staffLimit: val };
                               // Optimistically update frontend state
                               setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, limits: updatedLimits } : h));
@@ -10399,7 +10401,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             max={500}
                             value={hosp.limits?.storageLimit || 50}
                             onChange={async (val) => {
-                              const token = localStorage.getItem('token');
+                              const token = getSuperAdminToken();
                               const updatedLimits = { ...hosp.limits, storageLimit: val };
                               // Optimistically update frontend state
                               setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, limits: updatedLimits } : h));
@@ -10507,7 +10509,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   storageLimit: storageLimit
                                 };
 
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 try {
                                   const res = await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
                                     method: 'PUT',
@@ -10611,7 +10613,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               value={hosp.csm || ''}
                               onChange={async (e) => {
                                 const val = e.target.value;
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 try {
                                   await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
                                     method: 'PUT',
@@ -10633,7 +10635,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 value={hosp.gst || ''}
                                 onChange={async (e) => {
                                   const val = e.target.value;
-                                  const token = localStorage.getItem('token');
+                                  const token = getSuperAdminToken();
                                   try {
                                     await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
                                       method: 'PUT',
@@ -10685,7 +10687,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 value={hosp.license || ''}
                                 onChange={async (e) => {
                                   const val = e.target.value;
-                                  const token = localStorage.getItem('token');
+                                  const token = getSuperAdminToken();
                                   try {
                                     await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
                                       method: 'PUT',
@@ -10735,7 +10737,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               value={hosp.address || ''}
                               onChange={async (e) => {
                                 const val = e.target.value;
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 try {
                                   await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
                                     method: 'PUT',
@@ -10765,7 +10767,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               onChange={async (e) => {
                                 const val = e.target.value.toUpperCase();
                                 setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, panNumber: val } : h));
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 try {
                                   await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
                                     method: 'PUT',
@@ -10787,7 +10789,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               onChange={async (e) => {
                                 const val = e.target.value.toUpperCase();
                                 setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, corpId: val } : h));
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 try {
                                   await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
                                     method: 'PUT',
@@ -10809,7 +10811,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               onChange={async (e) => {
                                 const val = e.target.value;
                                 setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, signatoryName: val } : h));
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 try {
                                   await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
                                     method: 'PUT',
@@ -10831,7 +10833,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               onChange={async (e) => {
                                 const val = e.target.value;
                                 setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, fireSafetyCertificate: val } : h));
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 try {
                                   await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
                                     method: 'PUT',
@@ -10853,7 +10855,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               onChange={async (e) => {
                                 const val = e.target.value;
                                 setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, pollutionCertificate: val } : h));
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 try {
                                   await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
                                     method: 'PUT',
@@ -10925,7 +10927,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             type="button"
                             style={{ ...styles.btnPrimary, background: '#2563EB', width: '100%', padding: '10px', fontSize: '12px', marginTop: '4px' }}
                             onClick={async () => {
-                              const token = localStorage.getItem('token');
+                              const token = getSuperAdminToken();
                               const newPassword = tempPasswords[hosp._id];
                               if (!hosp.adminUsername && !newPassword) {
                                 setCredentialsMsg({ text: "Please fill in the admin username or a new password.", type: "error" });
@@ -11011,7 +11013,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             style={{ ...styles.btnPrimary, background: hosp.status === 'Active' ? '#EF4444' : '#10B981', width: '100%', padding: '10px' }}
                             onClick={async () => {
                               const nextStatus = hosp.status === 'Active' ? 'Suspended' : 'Active';
-                              const token = localStorage.getItem('token');
+                              const token = getSuperAdminToken();
                               const targetId = hosp._id || hosp.code || hosp.id;
                               try {
                                 const res = await fetch(`/api/superadmin/hospitals/${targetId}`, {
@@ -11054,7 +11056,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 danger: true,
                                 onConfirm: async () => {
                                   setConfirmModalConfig(prev => ({ ...prev, isLoading: true, confirmText: 'Deleting Hospital...' }));
-                                  const token = localStorage.getItem('token');
+                                  const token = getSuperAdminToken();
                                   const deleteTargetId = hosp._id || hosp.code || hosp.id;
                                   try {
                                     const res = await fetch(`/api/superadmin/hospitals/${deleteTargetId}`, {
@@ -11884,7 +11886,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation();
-                                    const token = localStorage.getItem('token');
+                                    const token = getSuperAdminToken();
                                     try {
                                       const res = await fetch(`/api/superadmin/tickets/${t._id}`, {
                                         method: 'PUT',
@@ -11939,7 +11941,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             {ticket.status !== 'Resolved' && (
                               <button
                                 onClick={async () => {
-                                  const token = localStorage.getItem('token');
+                                  const token = getSuperAdminToken();
                                   try {
                                     const res = await fetch(`/api/superadmin/tickets/${ticket._id}`, {
                                       method: 'PUT',
@@ -12024,7 +12026,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             onKeyDown={async (e) => {
                               if (e.key === 'Enter') {
                                 if (!chatMessageText.trim()) return;
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 try {
                                   const res = await fetch(`/api/superadmin/tickets/${ticket._id}/message`, {
                                     method: 'POST',
@@ -12044,7 +12046,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             style={styles.btnPrimary}
                             onClick={async () => {
                               if (!chatMessageText.trim()) return;
-                              const token = localStorage.getItem('token');
+                              const token = getSuperAdminToken();
                               try {
                                 const res = await fetch(`/api/superadmin/tickets/${ticket._id}/message`, {
                                   method: 'POST',
@@ -12129,7 +12131,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             return;
                           }
                           try {
-                            const token = localStorage.getItem('token');
+                            const token = getSuperAdminToken();
                             const res = await fetch('/api/superadmin/broadcast', {
                               method: 'POST',
                               headers: {
@@ -12465,7 +12467,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               };
 
               const handleMarkAsPaid = async (inv) => {
-                const token = localStorage.getItem('token');
+                const token = getSuperAdminToken();
                 try {
                   const res = await fetch(`/api/superadmin/invoices/${inv._id}`, {
                     method: 'PUT',
@@ -13649,7 +13651,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   showToast('Name and Email are required.', 'error');
                   return;
                 }
-                const token = localStorage.getItem('token');
+                const token = getSuperAdminToken();
                 const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
                 try {
                   if (editingEmployee) {
@@ -13690,7 +13692,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   danger: true,
                   onConfirm: async () => {
                     setConfirmModalConfig(prev => ({ ...prev, isLoading: true, confirmText: 'Removing...' }));
-                    const token = localStorage.getItem('token');
+                    const token = getSuperAdminToken();
                     try {
                       const res = await fetch(`/api/superadmin/employees/${emp._id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
                       if (res.ok) {
@@ -14180,7 +14182,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   return;
                 }
                 try {
-                  const token = localStorage.getItem('token');
+                  const token = getSuperAdminToken();
                   const res = await fetch('/api/superadmin/reports', {
                     method: 'POST',
                     headers: {
@@ -14219,7 +14221,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   onConfirm: async () => {
                     setConfirmModalConfig(prev => ({ ...prev, isLoading: true, confirmText: 'Deleting...' }));
                     try {
-                      const token = localStorage.getItem('token');
+                      const token = getSuperAdminToken();
                       const res = await fetch(`/api/superadmin/reports/${id}`, {
                         method: 'DELETE',
                         headers: { 'Authorization': `Bearer ${token}` }
@@ -14251,7 +14253,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   onConfirm: async () => {
                     setConfirmModalConfig(prev => ({ ...prev, isLoading: true, confirmText: 'Deleting...' }));
                     try {
-                      const token = localStorage.getItem('token');
+                      const token = getSuperAdminToken();
                       const res = await fetch(`/api/superadmin/schedules/${id}`, {
                         method: 'DELETE',
                         headers: { 'Authorization': `Bearer ${token}` }
@@ -14280,7 +14282,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   return;
                 }
                 try {
-                  const token = localStorage.getItem('token');
+                  const token = getSuperAdminToken();
                   const res = await fetch('/api/superadmin/schedules', {
                     method: 'POST',
                     headers: {
@@ -14893,7 +14895,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   </button>
                                   <button
                                     onClick={async () => {
-                                      const token = localStorage.getItem('token');
+                                      const token = getSuperAdminToken();
                                       await fetch(`/api/superadmin/global-items/${item._id}/toggle-status`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
                                       fetchGlobalItems();
                                     }}
@@ -15011,7 +15013,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             <button onClick={() => setIsItemModalOpen(false)} style={styles.btnSecondary}>Cancel</button>
                             <button
                               onClick={async () => {
-                                const token = localStorage.getItem('token');
+                                const token = getSuperAdminToken();
                                 const method = editingItem ? 'PUT' : 'POST';
                                 const url = editingItem ? `/api/superadmin/global-items/${editingItem._id}` : '/api/superadmin/global-items';
                                 try {
@@ -15404,7 +15406,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             {selectedRequest.status === 'SUBMITTED' && (
                               <button
                                 onClick={async () => {
-                                  const token = localStorage.getItem('token');
+                                  const token = getSuperAdminToken();
                                   await fetch(`/api/item-requests/admin/${selectedRequest._id}/review`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
                                   fetchItemRequests();
                                   fetchPendingRequestsCount();
@@ -15422,7 +15424,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 <button
                                   onClick={async () => {
                                     setIsCheckingDuplicates(true);
-                                    const token = localStorage.getItem('token');
+                                    const token = getSuperAdminToken();
                                     const q = new URLSearchParams({
                                       genericName: p.genericName || '',
                                       manufacturer: p.manufacturer || '',
@@ -15462,7 +15464,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                         </div>
                                         <button
                                           onClick={async () => {
-                                            const token = localStorage.getItem('token');
+                                            const token = getSuperAdminToken();
                                             await fetch(`/api/item-requests/admin/${selectedRequest._id}/approve`, {
                                               method: 'PUT',
                                               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -15490,7 +15492,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 <div style={{ display: 'flex', gap: '10px' }}>
                                   <button
                                     onClick={async () => {
-                                      const token = localStorage.getItem('token');
+                                      const token = getSuperAdminToken();
                                       await fetch(`/api/item-requests/admin/${selectedRequest._id}/approve`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
                                       fetchItemRequests();
                                       fetchPendingRequestsCount();
@@ -15522,7 +15524,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 />
                                 <button
                                   onClick={async () => {
-                                    const token = localStorage.getItem('token');
+                                    const token = getSuperAdminToken();
                                     await fetch(`/api/item-requests/admin/${selectedRequest._id}/reject`, {
                                       method: 'PUT',
                                       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -15959,7 +15961,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 disabled={isDeleting}
                 onClick={async () => {
                   setIsDeleting(true);
-                  const token = localStorage.getItem('token');
+                  const token = getSuperAdminToken();
                   try {
                     const res = await fetch(`/api/superadmin/onboarding/${selectedOnboardingHospital._id}`, {
                       method: 'DELETE',
@@ -16226,7 +16228,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             </div>
             <form onSubmit={async (e) => {
               e.preventDefault();
-              const token = localStorage.getItem('token');
+              const token = getSuperAdminToken();
               try {
                 const res = await fetch(`/api/superadmin/plans/${editingPlan._id}`, {
                   method: 'PUT',
@@ -17071,7 +17073,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
               setIsUpdatingProfile(true);
               try {
-                const token = localStorage.getItem('token');
+                const token = getSuperAdminToken();
                 const res = await fetch('/api/superadmin/change-password', {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
