@@ -12593,7 +12593,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 <span style={{ fontSize: '26px' }}>⚠️</span>
                 <div>
                   <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#991B1B' }}>
-                    {subscription?.isTrial || subscription?.trialUsed
+                    {subscription?.isTrial
                       ? "Your trial has ended. Choose a paid plan to continue using QUROXA."
                       : "Clinic Subscription Expired — Restricted Mode Active"}
                   </h4>
@@ -12629,7 +12629,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#B91C1C'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#DC2626'}
               >
-                {subscription?.isTrial || subscription?.trialUsed ? 'CHOOSE PAID PLAN' : (renewingSubscription ? 'Renewing...' : 'Renew Subscription')}
+                {subscription?.isTrial ? 'CHOOSE PAID PLAN' : (renewingSubscription ? 'Renewing...' : 'Renew Subscription')}
               </button>
             </div>
           </div>
@@ -20981,15 +20981,15 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
 
                   {/* Alert Banner for Subscription Due */}
-                  {(daysLeft <= 30 || subscription?.isTrial || subscription?.trialUsed) && (
+                  {(daysLeft <= 7 || subscription?.isExpired || isSubscriptionRestricted || subscription?.isTrial) && (
                     <div className="subscription-alert-banner" style={{ marginBottom: '24px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                         <div style={{
                           width: '40px',
                           height: '40px',
                           borderRadius: '12px',
-                          background: (subscription?.isTrial || subscription?.trialUsed) ? '#FEF2F2' : '#DBEAFE',
-                          color: (subscription?.isTrial || subscription?.trialUsed) ? '#DC2626' : '#2563EB',
+                          background: (subscription?.isExpired || isSubscriptionRestricted || subscription?.isTrial) ? '#FEF2F2' : '#DBEAFE',
+                          color: (subscription?.isExpired || isSubscriptionRestricted || subscription?.isTrial) ? '#DC2626' : '#2563EB',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -20998,17 +20998,21 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
                         </div>
                         <div>
-                          <h4 style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: 800, color: (subscription?.isTrial || subscription?.trialUsed) ? '#991B1B' : '#1E3A8A' }}>
-                            {(subscription?.isTrial || subscription?.trialUsed)
+                          <h4 style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: 800, color: (subscription?.isExpired || isSubscriptionRestricted || subscription?.isTrial) ? '#991B1B' : '#1E3A8A' }}>
+                            {subscription?.isTrial
                               ? (subscription?.isExpired || daysLeft === 0
                                   ? "Your trial has ended. Choose a paid plan to continue using QUROXA."
                                   : `Trial expires in ${daysLeft} days. Choose a paid plan to continue using QUROXA.`)
-                              : `Subscription renewal due in ${daysLeft} days`}
+                              : (subscription?.isExpired || isSubscriptionRestricted
+                                  ? "Subscription Expired — Choose a plan to restore full clinic access"
+                                  : `Subscription renewal due in ${daysLeft} days`)}
                           </h4>
-                          <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: (subscription?.isTrial || subscription?.trialUsed) ? '#B91C1C' : '#1E40AF' }}>
-                            {(subscription?.isTrial || subscription?.trialUsed)
+                          <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: (subscription?.isExpired || isSubscriptionRestricted || subscription?.isTrial) ? '#B91C1C' : '#1E40AF' }}>
+                            {subscription?.isTrial
                               ? "Trial plans are one-time only. Select a monthly or annual plan below to activate full clinic access."
-                              : `Renew before ${renewalDateString} to avoid service disruption. Contact your MediFlow admin.`}
+                              : (subscription?.isExpired || isSubscriptionRestricted
+                                  ? "Your clinical and operational modules are currently locked. Renew below to resume immediately."
+                                  : `Renew before ${renewalDateString} to avoid service disruption.`)}
                           </p>
                         </div>
                       </div>
@@ -21049,8 +21053,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                           <span style={{ fontSize: '16px', fontWeight: 700, color: '#64748B' }}>{planPrice}</span>
                         </div>
                         <span style={{
-                          background: subscription.status === 'Active' ? '#DCFCE7' : '#FEE2E2',
-                          color: subscription.status === 'Active' ? '#15803D' : '#B91C1C',
+                          background: (subscription.status?.toLowerCase() === 'active' && !isSubscriptionRestricted) ? '#DCFCE7' : '#FEE2E2',
+                          color: (subscription.status?.toLowerCase() === 'active' && !isSubscriptionRestricted) ? '#15803D' : '#B91C1C',
                           fontSize: '11px',
                           fontWeight: 900,
                           padding: '4px 10px',
@@ -21081,7 +21085,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                                 borderRadius: '4px', 
                                 letterSpacing: '0.3px' 
                               }}>
-                                {subscription.status === 'Active' ? 'ENABLED' : 'DISABLED'}
+                                {(subscription.status?.toLowerCase() === 'active' && !isSubscriptionRestricted) ? 'ENABLED' : 'DISABLED'}
                               </span>
                             )
                           }
