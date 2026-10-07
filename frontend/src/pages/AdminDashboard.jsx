@@ -1024,6 +1024,16 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   const [superAdminPlans, setSuperAdminPlans] = useState([]);
   const [billingCycle, setBillingCycle] = useState('monthly');
   const [renewingSubscription, setRenewingSubscription] = useState(false);
+  const [checkoutPlanModal, setCheckoutPlanModal] = useState(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('upi');
+
+  const handleOpenCheckoutModal = (planName, cycle, price) => {
+    setCheckoutPlanModal({
+      planName: planName || subscription?.plan || 'Enterprise Elite',
+      billingCycle: cycle || (billingCycle === 'annual' ? 'Annual' : 'Monthly'),
+      price: price || (cycle === 'Annual' ? '₹25,000 / month' : '₹2,500 / month')
+    });
+  };
 
   const isSubscriptionRestricted = localStorage.getItem('subscriptionRestricted') === 'true' ||
     subscription?.subscriptionRestricted === true ||
@@ -21004,17 +21014,12 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       </div>
                       <button 
                         onClick={() => {
-                          if (subscription?.isTrial || subscription?.trialUsed) {
-                            const el = document.getElementById('pricing-plans-section');
-                            if (el) el.scrollIntoView({ behavior: 'smooth' });
-                          } else {
-                            handleRenewOrUpgrade(subscription?.plan, 'Annual');
-                          }
+                          const el = document.getElementById('pricing-plans-section');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
                         }}
-                        disabled={renewingSubscription}
                         style={{
                           border: 'none',
-                          background: (subscription?.isTrial || subscription?.trialUsed) ? '#DC2626' : '#2563EB',
+                          background: '#DC2626',
                           color: '#FFFFFF',
                           padding: '10px 20px',
                           borderRadius: '8px',
@@ -21025,12 +21030,10 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                           transition: 'all 0.2s',
                           flexShrink: 0
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = (subscription?.isTrial || subscription?.trialUsed) ? '#B91C1C' : '#1D4ED8'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = (subscription?.isTrial || subscription?.trialUsed) ? '#DC2626' : '#2563EB'; }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = '#B91C1C'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = '#DC2626'; }}
                       >
-                        {(subscription?.isTrial || subscription?.trialUsed)
-                          ? 'CHOOSE A PAID PLAN'
-                          : (renewingSubscription ? 'RENEWING...' : 'RENEW NOW')}
+                        SELECT PLAN & RENEW
                       </button>
                     </div>
                   )}
@@ -21217,11 +21220,18 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
                                 <button
                                   className="plan-cta-btn"
-                                  style={{ background: isCurrentPlan ? '#E2E8F0' : plan.accentColor, color: isCurrentPlan ? '#64748B' : 'white', cursor: isCurrentPlan ? 'default' : 'pointer', boxShadow: isCurrentPlan ? 'none' : `0 4px 12px ${plan.accentColor}33` }}
-                                  disabled={isCurrentPlan}
-                                  onClick={() => handleUpgradeRequest(plan.name, 'Monthly')}
+                                  style={{
+                                    background: (isCurrentPlan && !isSubscriptionRestricted) ? '#E2E8F0' : plan.accentColor,
+                                    color: (isCurrentPlan && !isSubscriptionRestricted) ? '#64748B' : 'white',
+                                    cursor: (isCurrentPlan && !isSubscriptionRestricted) ? 'default' : 'pointer',
+                                    boxShadow: (isCurrentPlan && !isSubscriptionRestricted) ? 'none' : `0 4px 12px ${plan.accentColor}33`
+                                  }}
+                                  disabled={isCurrentPlan && !isSubscriptionRestricted}
+                                  onClick={() => handleOpenCheckoutModal(plan.name, 'Monthly', displayPriceMonthly)}
                                 >
-                                  {isCurrentPlan ? 'CURRENT PLAN' : `UPGRADE TO ${plan.name.toUpperCase()}`}
+                                  {isCurrentPlan
+                                    ? (isSubscriptionRestricted ? `RENEW ${plan.name.toUpperCase()} (MONTHLY)` : 'CURRENT ACTIVE PLAN')
+                                    : `SELECT ${plan.name.toUpperCase()} (MONTHLY)`}
                                 </button>
                               </div>
 
@@ -21264,10 +21274,18 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
                                 <button
                                   className="plan-cta-btn"
-                                  style={{ background: '#10B981', boxShadow: '0 4px 12px rgba(16,185,129,0.2)' }}
-                                  onClick={() => handleUpgradeRequest(plan.name, 'Annual')}
+                                  style={{
+                                    background: (isCurrentPlan && !isSubscriptionRestricted && billingCycle === 'annual') ? '#E2E8F0' : '#10B981',
+                                    color: (isCurrentPlan && !isSubscriptionRestricted && billingCycle === 'annual') ? '#64748B' : 'white',
+                                    cursor: (isCurrentPlan && !isSubscriptionRestricted && billingCycle === 'annual') ? 'default' : 'pointer',
+                                    boxShadow: (isCurrentPlan && !isSubscriptionRestricted && billingCycle === 'annual') ? 'none' : '0 4px 12px rgba(16,185,129,0.2)'
+                                  }}
+                                  disabled={isCurrentPlan && !isSubscriptionRestricted && billingCycle === 'annual'}
+                                  onClick={() => handleOpenCheckoutModal(plan.name, 'Annual', displayPriceAnnual)}
                                 >
-                                  UPGRADE TO ANNUAL
+                                  {isCurrentPlan && isSubscriptionRestricted
+                                    ? `RENEW ${plan.name.toUpperCase()} (ANNUAL)`
+                                    : `SELECT ${plan.name.toUpperCase()} (ANNUAL)`}
                                 </button>
                               </div>
 
@@ -28917,6 +28935,200 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           </div>
         </div>
       )}
+
+        {/* Subscription Checkout & Payment Gateway Modal */}
+        {checkoutPlanModal && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(6px)',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}>
+            <div style={{
+              background: '#FFFFFF',
+              borderRadius: '20px',
+              maxWidth: '520px',
+              width: '100%',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              border: '1px solid #E2E8F0',
+              overflow: 'hidden'
+            }}>
+              {/* Modal Header */}
+              <div style={{
+                padding: '20px 24px',
+                background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800 }}>Confirm Plan & Payment</h3>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#94A3B8' }}>
+                    CUROXA Hospital Subscription & License Activation
+                  </p>
+                </div>
+                <button
+                  onClick={() => setCheckoutPlanModal(null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#94A3B8',
+                    cursor: 'pointer',
+                    fontSize: '22px',
+                    lineHeight: 1
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div style={{ padding: '24px' }}>
+                {/* Plan Summary Card */}
+                <div style={{
+                  background: '#F8FAFC',
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  padding: '16px 20px',
+                  marginBottom: '20px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Selected Plan</span>
+                    <span style={{
+                      background: '#EFF6FF',
+                      color: '#2563EB',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: '6px'
+                    }}>
+                      {checkoutPlanModal.billingCycle.toUpperCase()}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A' }}>
+                      {checkoutPlanModal.planName}
+                    </span>
+                    <span style={{ fontSize: '18px', fontWeight: 800, color: '#2563EB' }}>
+                      {checkoutPlanModal.price}
+                    </span>
+                  </div>
+                  <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                    • Includes: Full Clinical Access (Doctors, Reception, Pharmacy, Laboratory, Workforce)
+                  </p>
+                </div>
+
+                {/* Payment Method Selector */}
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '10px' }}>
+                    Select Payment Method:
+                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {[
+                      { id: 'upi', title: 'UPI / Google Pay / PhonePe', desc: 'Instant activation via QR or VPA' },
+                      { id: 'card', title: 'Credit / Debit Card / Net Banking', desc: 'Secure payment gateway' },
+                      { id: 'bank', title: 'Hospital Corporate Account / NEFT', desc: 'Direct corporate invoice clearance' }
+                    ].map(pm => (
+                      <div
+                        key={pm.id}
+                        onClick={() => setSelectedPaymentMethod(pm.id)}
+                        style={{
+                          padding: '12px 16px',
+                          borderRadius: '10px',
+                          border: selectedPaymentMethod === pm.id ? '2px solid #2563EB' : '1px solid #E2E8F0',
+                          background: selectedPaymentMethod === pm.id ? '#EFF6FF' : '#FFFFFF',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          checked={selectedPaymentMethod === pm.id}
+                          onChange={() => setSelectedPaymentMethod(pm.id)}
+                          style={{ accentColor: '#2563EB' }}
+                        />
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 750, color: '#0F172A' }}>{pm.title}</div>
+                          <div style={{ fontSize: '11px', color: '#64748B' }}>{pm.desc}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Notice */}
+                <div style={{
+                  background: '#F0FDF4',
+                  border: '1px solid #BBF7D0',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  marginBottom: '20px'
+                }}>
+                  <span style={{ fontSize: '18px' }}>⚡</span>
+                  <span style={{ fontSize: '12px', color: '#166534', fontWeight: 600 }}>
+                    Instant Activation: Once confirmed, your clinic will be immediately active and all modules will unlock.
+                  </span>
+                </div>
+
+                {/* Modal Actions */}
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => setCheckoutPlanModal(null)}
+                    disabled={renewingSubscription}
+                    style={{
+                      padding: '10px 18px',
+                      background: '#F1F5F9',
+                      color: '#475569',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const chosenPlan = checkoutPlanModal.planName;
+                      const chosenCycle = checkoutPlanModal.billingCycle;
+                      setCheckoutPlanModal(null);
+                      await handleRenewOrUpgrade(chosenPlan, chosenCycle);
+                    }}
+                    disabled={renewingSubscription}
+                    style={{
+                      padding: '10px 24px',
+                      background: '#2563EB',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontWeight: 800,
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
+                    }}
+                  >
+                    {renewingSubscription ? 'Processing...' : 'Pay & Activate Clinic'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </>
   );
