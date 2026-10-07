@@ -5,12 +5,16 @@ const getRefreshCookieName = () => {
   return process.env.AUTH_REFRESH_COOKIE_NAME || 'refreshToken';
 };
 
+const isProductionEnvironment = () => {
+  return process.env.NODE_ENV === 'production' || !!process.env.RENDER || !!process.env.VERCEL;
+};
+
 /**
  * Returns cookie options for setting the refresh token.
  * Uses HttpOnly, Secure in production, and SameSite configuration.
  */
 const getRefreshCookieOptions = () => {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = isProductionEnvironment();
   const refreshDays = parseInt(process.env.AUTH_REFRESH_TOKEN_DAYS || '7', 10);
   return {
     httpOnly: true,
@@ -25,7 +29,7 @@ const getRefreshCookieOptions = () => {
  * Returns cookie options for clearing the refresh token.
  */
 const getClearRefreshCookieOptions = () => {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = isProductionEnvironment();
   return {
     httpOnly: true,
     secure: isProd,
