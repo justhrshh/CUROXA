@@ -119,6 +119,42 @@ router.post("/refresh", async (req, res) => {
       return res.status(401).json({ error: "Password changed. Please sign in again." });
     }
 
+    // ── SUBSCRIPTION ENFORCEMENT CHECK DURING SESSION REFRESH ──
+    let subStatus = null;
+    let isSubRestricted = false;
+    const SuperAdminHospital = require("../models/SuperAdminHospital");
+    const { getHospitalSubscriptionStatus } = require("../utils/subscriptionHelper");
+    const tenantKey = session.tenantId || user.tenantId;
+
+    if (user.role !== 'superadmin' && user.role !== 'super_admin' && tenantKey) {
+      const hospital = await SuperAdminHospital.findOne({
+        $or: [
+          { code: String(tenantKey).toLowerCase().trim() },
+          { hospitalId: String(tenantKey).toUpperCase().trim() }
+        ]
+      });
+
+      if (hospital) {
+        subStatus = getHospitalSubscriptionStatus(hospital);
+        if (subStatus.isExpired) {
+          if (user.role !== 'admin') {
+            console.log(`[AUTH_REFRESH] Blocked: Hospital "${hospital.name}" subscription expired for staff "${user.staff_id}"`);
+            session.isRevoked = true;
+            session.revokedAt = new Date();
+            await session.save();
+            res.clearCookie(cookieName, getClearRefreshCookieOptions());
+            return res.status(403).json({
+              error: "Your subscription has expired. Please contact your hospital administrator to renew your plan.",
+              subscriptionRestricted: true,
+              subscriptionStatus: 'EXPIRED',
+              isExpired: true
+            });
+          }
+          isSubRestricted = true;
+        }
+      }
+    }
+
     // ── ATOMIC ROTATION ──
     const newRawToken = crypto.randomBytes(40).toString("hex");
     const newTokenHash = crypto.createHash("sha256").update(newRawToken).digest("hex");
@@ -181,6 +217,8 @@ router.post("/refresh", async (req, res) => {
     return res.json({
       success: true,
       token: newAccessToken,
+      subscriptionRestricted: isSubRestricted,
+      subscriptionStatus: isSubRestricted ? 'EXPIRED' : (subStatus ? subStatus.status : 'ACTIVE'),
       user: {
         id: user._id,
         _id: user._id,
@@ -421,7 +459,12 @@ router.post("/login", tenantMiddleware, async (req, res) => {
     // Subscription enforcement check for hospital users
     let subStatus = null;
     const SuperAdminHospital = require("../models/SuperAdminHospital");
-    const hospital = user.tenantId ? await SuperAdminHospital.findOne({ code: String(user.tenantId).toLowerCase().trim() }) : null;
+    const hospital = user.tenantId ? await SuperAdminHospital.findOne({
+      $or: [
+        { code: String(user.tenantId).toLowerCase().trim() },
+        { hospitalId: String(user.tenantId).toUpperCase().trim() }
+      ]
+    }) : null;
     if (user.role !== 'superadmin' && user.role !== 'super_admin' && hospital) {
       subStatus = getHospitalSubscriptionStatus(hospital);
       if (subStatus.isExpired) {
@@ -725,7 +768,12 @@ router.post("/google-login", tenantMiddleware, async (req, res) => {
       targetTenant = user.tenantId;
 
       const SuperAdminHospital = require("../models/SuperAdminHospital");
-      let hospital = await SuperAdminHospital.findOne({ code: targetTenant.toLowerCase().trim() });
+      let hospital = await SuperAdminHospital.findOne({
+        $or: [
+          { code: targetTenant.toLowerCase().trim() },
+          { hospitalId: targetTenant.toUpperCase().trim() }
+        ]
+      });
       if (!hospital && targetTenant) {
         let name = targetTenant.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
         if (!name.toLowerCase().includes('hospital') && !name.toLowerCase().includes('clinic') && !name.toLowerCase().includes('center')) {
@@ -1774,7 +1822,12 @@ router.post("/send-login-otp", tenantMiddleware, async (req, res) => {
 
     // 3. Check suspension and subscription status of hospital using user.tenantId
     const SuperAdminHospital = require("../models/SuperAdminHospital");
-    const hospital = user.tenantId ? await SuperAdminHospital.findOne({ code: String(user.tenantId).toLowerCase().trim() }) : null;
+    const hospital = user.tenantId ? await SuperAdminHospital.findOne({
+      $or: [
+        { code: String(user.tenantId).toLowerCase().trim() },
+        { hospitalId: String(user.tenantId).toUpperCase().trim() }
+      ]
+    }) : null;
     if (hospital && (user.role !== 'superadmin' && user.role !== 'super_admin')) {
       const subStatus = getHospitalSubscriptionStatus(hospital);
       if (subStatus.isExpired) {
@@ -1903,7 +1956,12 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
     // Subscription status check for hospital tenants
     let subStatus = null;
     const SuperAdminHospital = require("../models/SuperAdminHospital");
-    const hospital = user.tenantId ? await SuperAdminHospital.findOne({ code: String(user.tenantId).toLowerCase().trim() }) : null;
+    const hospital = user.tenantId ? await SuperAdminHospital.findOne({
+      $or: [
+        { code: String(user.tenantId).toLowerCase().trim() },
+        { hospitalId: String(user.tenantId).toUpperCase().trim() }
+      ]
+    }) : null;
     if (user.role !== 'superadmin' && user.role !== 'super_admin' && hospital) {
       subStatus = getHospitalSubscriptionStatus(hospital);
       if (subStatus.isExpired) {

@@ -333,7 +333,12 @@ router.get("/subscription", isHrOrAdmin, async (req, res) => {
     const LabRequest = require('../models/LabRequest');
 
     // Find the hospital in the superadmin table by tenant code
-    const hospital = await SuperAdminHospital.findOne({ code: req.tenantId.toLowerCase().trim() });
+    const hospital = await SuperAdminHospital.findOne({
+      $or: [
+        { code: String(req.tenantId).toLowerCase().trim() },
+        { hospitalId: String(req.tenantId).toUpperCase().trim() }
+      ]
+    });
     if (!hospital) {
       return res.status(404).json({ error: "Hospital subscription records not found." });
     }
@@ -412,7 +417,12 @@ router.post("/renew-subscription", isHrOrAdmin, async (req, res) => {
   try {
     const SuperAdminHospital = require('../models/SuperAdminHospital');
     const SuperAdminInvoice = require('../models/SuperAdminInvoice');
-    const hospital = await SuperAdminHospital.findOne({ code: String(req.tenantId).toLowerCase().trim() });
+    const hospital = await SuperAdminHospital.findOne({
+      $or: [
+        { code: String(req.tenantId).toLowerCase().trim() },
+        { hospitalId: String(req.tenantId).toUpperCase().trim() }
+      ]
+    });
     if (!hospital) {
       return res.status(404).json({ error: "Hospital subscription records not found." });
     }

@@ -90,8 +90,10 @@ async function run() {
   await connectDB();
 
   // Create isolated express app for testing
+  const cookieParser = require('cookie-parser');
   const app = express();
   app.use(express.json());
+  app.use(cookieParser());
   app.use('/api/auth', authRoutes);
   app.use('/api/admin', tenantMiddleware, adminRoutes);
   app.use('/api/patients', tenantMiddleware, checkModule('reception'), patientRoutes);
@@ -138,6 +140,23 @@ async function run() {
     });
     assert(paidDates.isTrial === false, 'Paid plan flag isTrial = false');
     assert(paidDates.expiryDate.getFullYear() === startTrial.getFullYear() + 1, 'Paid plan defaults to 1 year duration');
+
+    // Monthly plan policy (e.g. Enterprise Elite (₹2,500/mo))
+    const monthlyDates = getHospitalSubscriptionDates({
+      plan: 'Enterprise Elite (₹2,500/mo)',
+      subscriptionStartDate: startTrial
+    });
+    const expectedMonthlyExpiry = new Date(startTrial.getTime() + 30 * 24 * 60 * 60 * 1000);
+    assert(monthlyDates.expiryDate.toISOString() === expectedMonthlyExpiry.toISOString(), 'Monthly plan (/mo) defaults to 30 days duration');
+
+    // Status = EXPIRED or subscriptionStatus = EXPIRED policy
+    const explicitExpiredDates = getHospitalSubscriptionDates({
+      plan: 'Professional Plan',
+      subscriptionStatus: 'EXPIRED',
+      subscriptionStartDate: new Date()
+    });
+    assert(explicitExpiredDates.isExpired === true, 'Explicit subscriptionStatus EXPIRED marks isExpired = true');
+    assert(explicitExpiredDates.daysRemaining === 0, 'Explicit subscriptionStatus EXPIRED sets daysRemaining = 0');
 
     // One-Time Trial Rule Helpers
     assert(hasHospitalUsedTrial({ trialUsed: true }) === true, 'Recognizes trialUsed: true');
@@ -287,6 +306,45 @@ async function run() {
     assert(loginAdminA.body.subscriptionStatus === 'EXPIRED', "Admin login response flags subscriptionStatus = 'EXPIRED'");
 
     const adminTokenA = loginAdminA.body.token;
+
+    // 3b. Admin A refresh on Expired Hospital A -> 200 OK with subscriptionRestricted: true
+    const adminSetCookie = loginAdminA.headers['set-cookie'];
+    const adminCookie = Array.isArray(adminSetCookie) ? adminSetCookie[0].split(';')[0] : (typeof adminSetCookie === 'string' ? adminSetCookie.split(';')[0] : '');
+    if (adminCookie) {
+      const adminRefreshRes = await request(serverUrl, '/api/auth/refresh', {
+        method: 'POST',
+        headers: { Cookie: adminCookie }
+      });
+      assert(adminRefreshRes.status === 200, 'Expired admin CAN refresh session (200 OK)');
+      assert(adminRefreshRes.body.subscriptionRestricted === true, 'Admin refresh flags subscriptionRestricted = true');
+      assert(adminRefreshRes.body.subscriptionStatus === 'EXPIRED', "Admin refresh flags subscriptionStatus = 'EXPIRED'");
+    }
+
+    // 3c. Doctor A attempts session refresh on Expired Hospital A -> 403 Forbidden!
+    const RefreshToken = require('../models/RefreshToken');
+    const { getRefreshCookieName } = require('../utils/authSessionHelper');
+    const crypto = require('crypto');
+    const docRawRefresh = crypto.randomBytes(40).toString('hex');
+    const docHashRefresh = crypto.createHash('sha256').update(docRawRefresh).digest('hex');
+    await RefreshToken.create({
+      userId: doctorA._id,
+      tenantId: codeA,
+      tokenHash: docHashRefresh,
+      familyId: crypto.randomUUID(),
+      userAgent: 'test-agent',
+      ipAddress: '127.0.0.1',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    });
+
+    const docRefreshRes = await request(serverUrl, '/api/auth/refresh', {
+      method: 'POST',
+      headers: { Cookie: `${getRefreshCookieName()}=${docRawRefresh}` }
+    });
+    assert(docRefreshRes.status === 403, 'Normal staff (doctor) BLOCKED from session refresh when hospital plan expired (403)');
+    assert(
+      docRefreshRes.body.error === 'Your subscription has expired. Please contact your hospital administrator to renew your plan.',
+      'Staff refresh endpoint returns exact subscription expired message'
+    );
 
     // 4. Admin A accesses /api/admin/subscription -> 200 OK
     const adminSubRes = await request(serverUrl, '/api/admin/subscription', {

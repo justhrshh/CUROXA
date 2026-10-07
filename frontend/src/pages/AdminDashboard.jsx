@@ -1081,6 +1081,15 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     setTimeout(() => setNotification(null), 3000);
   };
 
+  const handleNavTabClick = (targetTab, callback) => {
+    if (isSubscriptionRestricted && targetTab !== 'subscription') {
+      showToast('Subscription expired. All operational modules are locked until plan renewal.', 'error');
+      return;
+    }
+    if (callback) callback();
+    setActiveTab(targetTab);
+  };
+
   useEffect(() => {
     if (!newStaff.staff_id) {
       setIsUsernameAvailable(null);
@@ -1619,8 +1628,12 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     try {
       const response = await api.get('/admin/subscription');
       setSubscription(response.data);
-      if (response.data && response.data.modules) {
-        localStorage.setItem('tenantModules', JSON.stringify(response.data.modules));
+      if (response.data) {
+        localStorage.setItem('subscriptionRestricted', response.data.subscriptionRestricted ? 'true' : 'false');
+        localStorage.setItem('subscriptionStatus', response.data.status || 'ACTIVE');
+        if (response.data.modules) {
+          localStorage.setItem('tenantModules', JSON.stringify(response.data.modules));
+        }
       }
       
       const plansRes = await api.get('/admin/plans');
@@ -11471,9 +11484,10 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 {/* Active Dashboard item matching exact reference */}
                 <div 
                   className={`sidebar-link ${activeTab === 'dashboard' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('dashboard')}
+                  onClick={() => handleNavTabClick('dashboard')}
+                  style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                 >
-                  {activeTab === 'dashboard' && (
+                  {!isSubscriptionRestricted && activeTab === 'dashboard' && (
                     <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
                   )}
                   <div className="sidebar-link-icon" style={{
@@ -11486,13 +11500,20 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'dashboard' ? 700 : 600, color: activeTab === 'dashboard' ? '#2563EB' : '#0F172A', letterSpacing: '-0.01em' }}>
                     Dashboard
                   </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                 </div>
 
                 <div 
                   className={`sidebar-link ${activeTab === 'supply' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('supply')}
+                  onClick={() => handleNavTabClick('supply')}
+                  style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                 >
-                  {activeTab === 'supply' && (
+                  {!isSubscriptionRestricted && activeTab === 'supply' && (
                     <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
                   )}
                   <div className="sidebar-link-icon" style={{
@@ -11505,13 +11526,20 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'supply' ? 700 : 600, color: activeTab === 'supply' ? '#2563EB' : '#0F172A', letterSpacing: '-0.01em' }}>
                     Alerts & tasks
                   </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                 </div>
 
                 <div 
                   className={`sidebar-link ${activeTab === 'approvals' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('approvals')}
+                  onClick={() => handleNavTabClick('approvals')}
+                  style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                 >
-                  {activeTab === 'approvals' && (
+                  {!isSubscriptionRestricted && activeTab === 'approvals' && (
                     <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
                   )}
                   <div className="sidebar-link-icon" style={{
@@ -11524,14 +11552,21 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'approvals' ? 700 : 600, color: activeTab === 'approvals' ? '#2563EB' : '#0F172A', letterSpacing: '-0.01em' }}>
                     Approvals
                   </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                 </div>
 
                 {tenantModules.inventory?.enabled !== false && (
                   <div 
                     className={`sidebar-link ${activeTab === 'po-approvals' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('po-approvals')}
+                    onClick={() => handleNavTabClick('po-approvals')}
+                    style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                   >
-                    {activeTab === 'po-approvals' && (
+                    {!isSubscriptionRestricted && activeTab === 'po-approvals' && (
                       <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#2563EB' }} />
                     )}
                     <div className="sidebar-link-icon" style={{
@@ -11544,6 +11579,12 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'po-approvals' ? 700 : 600, color: activeTab === 'po-approvals' ? '#2563EB' : '#0F172A', letterSpacing: '-0.01em' }}>
                       PO Approvals
                     </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                   </div>
                 )}
               </div>
@@ -11566,9 +11607,10 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     {tenantModules.reception?.enabled !== false && (
                       <div 
                         className={`sidebar-link ${activeTab === 'appointments' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('appointments')}
+                        onClick={() => handleNavTabClick('appointments')}
+                        style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                       >
-                        {activeTab === 'appointments' && (
+                        {!isSubscriptionRestricted && activeTab === 'appointments' && (
                           <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
                         )}
                         <div className="sidebar-link-icon" style={{
@@ -11581,12 +11623,19 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'appointments' ? 700 : 600, color: activeTab === 'appointments' ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
                           Appointments
                         </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                       </div>
                     )}
                     {tenantModules.reception?.enabled !== false && (
                       <div 
                         className={`sidebar-link ${['patients', 'patient-details'].includes(activeTab) ? 'active' : ''}`}
-                        onClick={() => { setActiveTab('patients'); setViewingPatient(null); }}
+                        onClick={() => handleNavTabClick('patients', () => setViewingPatient(null))}
+                        style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                       >
                         {['patients', 'patient-details'].includes(activeTab) && (
                           <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
@@ -11601,13 +11650,20 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: ['patients', 'patient-details'].includes(activeTab) ? 700 : 600, color: ['patients', 'patient-details'].includes(activeTab) ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
                           Patients
                         </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                       </div>
                     )}
                     <div 
                       className={`sidebar-link ${activeTab === 'workforce' ? 'active' : ''}`}
-                      onClick={() => { setActiveTab('workforce'); setSelectedStaffProfile(null); setStaffSubView('list'); }}
+                      onClick={() => handleNavTabClick('workforce', () => { setSelectedStaffProfile(null); setStaffSubView('list'); })}
+                      style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                     >
-                      {activeTab === 'workforce' && (
+                      {!isSubscriptionRestricted && activeTab === 'workforce' && (
                         <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
                       )}
                       <div className="sidebar-link-icon" style={{
@@ -11620,10 +11676,17 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'workforce' ? 700 : 600, color: activeTab === 'workforce' ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
                         Employees
                       </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                     </div>
                     <div 
                       className={`sidebar-link ${activeTab === 'permissions' ? 'active' : ''}`}
-                      onClick={() => setActiveTab('permissions')}
+                      onClick={() => handleNavTabClick('permissions')}
+                      style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                     >
                       {activeTab === 'permissions' && (
                         <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
@@ -11638,6 +11701,12 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'permissions' ? 700 : 600, color: activeTab === 'permissions' ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
                         Role Coverage
                       </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                     </div>
                   </>
                 )}
@@ -11660,7 +11729,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   <>
                     <div 
                       className={`sidebar-link ${activeTab === 'financials' ? 'active' : ''}`}
-                      onClick={() => setActiveTab('financials')}
+                      onClick={() => handleNavTabClick('financials')}
+                      style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                     >
                       {activeTab === 'financials' && (
                         <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#EA580C' }} />
@@ -11675,10 +11745,17 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'financials' ? 700 : 600, color: activeTab === 'financials' ? '#EA580C' : '#0F172A', letterSpacing: '-0.01em' }}>
                         Revenue
                       </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                     </div>
                     <div 
                       className={`sidebar-link ${activeTab === 'audit' ? 'active' : ''}`}
-                      onClick={() => setActiveTab('audit')}
+                      onClick={() => handleNavTabClick('audit')}
+                      style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                     >
                       {activeTab === 'audit' && (
                         <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#EA580C' }} />
@@ -11693,11 +11770,18 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'audit' ? 700 : 600, color: activeTab === 'audit' ? '#EA580C' : '#0F172A', letterSpacing: '-0.01em' }}>
                         Audit Logs
                       </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                     </div>
                     {tenantModules.dpdp?.enabled !== false && (
                       <div 
                         className={`sidebar-link ${activeTab === 'dpdp' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('dpdp')}
+                        onClick={() => handleNavTabClick('dpdp')}
+                        style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                       >
                         {activeTab === 'dpdp' && (
                           <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#EA580C' }} />
@@ -11712,6 +11796,12 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'dpdp' ? 700 : 600, color: activeTab === 'dpdp' ? '#EA580C' : '#0F172A', letterSpacing: '-0.01em' }}>
                           DPO & Compliance
                         </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                       </div>
                     )}
                   </>
@@ -11735,7 +11825,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   <>
                     <div 
                       className={`sidebar-link ${activeTab === 'services-catalog' ? 'active' : ''}`}
-                      onClick={() => setActiveTab('services-catalog')}
+                      onClick={() => handleNavTabClick('services-catalog')}
+                      style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                     >
                       {activeTab === 'services-catalog' && (
                         <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
@@ -11744,16 +11835,23 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         background: activeTab === 'services-catalog' ? '#0F172A' : '#F1F5F9',
                         color: activeTab === 'services-catalog' ? '#FFFFFF' : '#64748B'
                       }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M17 9.5a3.5 3.5 0 0 0-7 0c0 2 2.5 3.5 3.5 4.5s3.5 2.5 3.5 4.5a3.5 3.5 0 0 1-7 0"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M17 9.5a3.5 3.5 0 0 0-7 0c0 2.5 3.5 3.5 4.5s3.5 2.5 3.5 4.5a3.5 3.5 0 0 1-7 0"/></svg>
                       </div>
                       <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'services-catalog' ? 700 : 600, color: activeTab === 'services-catalog' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
                         Pricing & Procedures
                       </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                     </div>
                     {tenantModules.laboratory?.enabled !== false && (
                       <div 
                         className={`sidebar-link ${activeTab === 'lab-catalog' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('lab-catalog')}
+                        onClick={() => handleNavTabClick('lab-catalog')}
+                        style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                       >
                         {activeTab === 'lab-catalog' && (
                           <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
@@ -11767,6 +11865,12 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'lab-catalog' ? 700 : 600, color: activeTab === 'lab-catalog' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
                           Lab Tests Catalog
                         </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                       </div>
                     )}
 
@@ -11774,7 +11878,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       className={`sidebar-link ${activeTab === 'subscription' ? 'active' : ''}`}
                       onClick={() => setActiveTab('subscription')}
                     >
-                      {activeTab === 'subscription' && (
+                      {(activeTab === 'subscription' || isSubscriptionRestricted) && (
                         <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
                       )}
                       <div className="sidebar-link-icon" style={{
@@ -11789,9 +11893,10 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     </div>
                     <div 
                       className={`sidebar-link ${activeTab === 'maintenance' ? 'active' : ''}`}
-                      onClick={() => setActiveTab('maintenance')}
+                      onClick={() => handleNavTabClick('maintenance')}
+                      style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                     >
-                      {activeTab === 'maintenance' && (
+                      {!isSubscriptionRestricted && activeTab === 'maintenance' && (
                         <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
                       )}
                       <div className="sidebar-link-icon" style={{
@@ -11803,12 +11908,19 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'maintenance' ? 700 : 600, color: activeTab === 'maintenance' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
                         Maintenance
                       </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                     </div>
                     <div 
                       className={`sidebar-link ${activeTab === 'letterhead' ? 'active' : ''}`}
-                      onClick={() => setActiveTab('letterhead')}
+                      onClick={() => handleNavTabClick('letterhead')}
+                      style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                     >
-                      {activeTab === 'letterhead' && (
+                      {!isSubscriptionRestricted && activeTab === 'letterhead' && (
                         <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
                       )}
                       <div className="sidebar-link-icon" style={{
@@ -11820,10 +11932,17 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'letterhead' ? 700 : 600, color: activeTab === 'letterhead' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
                         Letterhead Settings
                       </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                     </div>
                     <div 
                       className={`sidebar-link ${activeTab === 'updates' ? 'active' : ''}`}
-                      onClick={() => setActiveTab('updates')}
+                      onClick={() => handleNavTabClick('updates')}
+                      style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                     >
                       {activeTab === 'updates' && (
                         <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
@@ -11837,6 +11956,12 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'updates' ? 700 : 600, color: activeTab === 'updates' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
                         Updates
                       </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
                     </div>
                   </>
                 )}
@@ -12113,63 +12238,98 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             </div>
 
             <div className="header-actions">
-              {/* 1. Plan Widget (Lighter Pastel Shade & Soft Gradient) */}
+              {/* 1. Plan Widget (Active vs Expired styling) */}
               <div 
                 className="header-plan-widget"
                 onClick={() => setActiveTab('subscription')}
-                title="View Subscription"
+                title={isSubscriptionRestricted ? "Subscription Expired — Click to Renew Plan" : "View Subscription"}
+                style={isSubscriptionRestricted ? {
+                  background: 'linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%)',
+                  border: '1.5px solid #F87171',
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.15)',
+                  cursor: 'pointer'
+                } : { cursor: 'pointer' }}
               >
-                {/* Top Right Active Green Dot */}
-                <div style={{ position: 'absolute', top: '7px', right: '10px', width: '6.5px', height: '6.5px', borderRadius: '50%', background: '#22C55E', border: '1.5px solid #FFFFFF', boxShadow: '0 0 6px rgba(34, 197, 94, 0.6)', zIndex: 3 }} />
+                {/* Top Right Status Dot */}
+                <div style={{
+                  position: 'absolute',
+                  top: '7px',
+                  right: '10px',
+                  width: '6.5px',
+                  height: '6.5px',
+                  borderRadius: '50%',
+                  background: isSubscriptionRestricted ? '#EF4444' : '#22C55E',
+                  border: '1.5px solid #FFFFFF',
+                  boxShadow: isSubscriptionRestricted ? '0 0 6px rgba(239, 68, 68, 0.7)' : '0 0 6px rgba(34, 197, 94, 0.6)',
+                  zIndex: 3
+                }} />
 
-                {/* Bottom Right Organic Light Pastel Blue Wave */}
-                <svg 
-                  viewBox="0 0 70 50" 
-                  fill="none" 
-                  xmlns="http://www.w3.org/2000/svg"
-                  style={{
-                    position: 'absolute',
-                    right: 0,
-                    bottom: 0,
-                    width: '46px',
-                    height: '34px',
-                    pointerEvents: 'none',
-                    zIndex: 1
-                  }}
-                >
-                  <path d="M10 50 C24 45 36 28 46 14 C52 4 60 0 70 0 L70 50 Z" fill="url(#planBlueWaveLight)" opacity="0.65" />
-                  <path d="M22 50 C36 46 44 32 54 18 C58 8 64 3 70 2 L70 50 Z" fill="url(#planBlueWaveAccent)" opacity="0.4" />
-                  <path d="M10 50 C24 45 36 28 46 14 C52 4 60 0 70 0" stroke="rgba(255, 255, 255, 0.65)" strokeWidth="0.8" />
-                  <path d="M22 50 C36 46 44 32 54 18 C58 8 64 3 70 2" stroke="rgba(255, 255, 255, 0.45)" strokeWidth="0.8" />
-                  <defs>
-                    <linearGradient id="planBlueWaveLight" x1="10" y1="0" x2="70" y2="50" gradientUnits="userSpaceOnUse">
-                      <stop stopColor="#93C5FD" stopOpacity="0.8" />
-                      <stop offset="0.6" stopColor="#60A5FA" stopOpacity="0.9" />
-                      <stop offset="1" stopColor="#3B82F6" />
-                    </linearGradient>
-                    <linearGradient id="planBlueWaveAccent" x1="22" y1="0" x2="70" y2="50" gradientUnits="userSpaceOnUse">
-                      <stop stopColor="#BFDBFE" stopOpacity="0.6" />
-                      <stop offset="1" stopColor="#60A5FA" stopOpacity="0.8" />
-                    </linearGradient>
-                  </defs>
-                </svg>
+                {/* Bottom Right Organic Light Pastel Blue Wave (Only when active) */}
+                {!isSubscriptionRestricted && (
+                  <svg 
+                    viewBox="0 0 70 50" 
+                    fill="none" 
+                    xmlns="http://www.w3.org/2000/svg"
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      bottom: 0,
+                      width: '46px',
+                      height: '34px',
+                      pointerEvents: 'none',
+                      zIndex: 1
+                    }}
+                  >
+                    <path d="M10 50 C24 45 36 28 46 14 C52 4 60 0 70 0 L70 50 Z" fill="url(#planBlueWaveLight)" opacity="0.65" />
+                    <path d="M22 50 C36 46 44 32 54 18 C58 8 64 3 70 2 L70 50 Z" fill="url(#planBlueWaveAccent)" opacity="0.4" />
+                    <path d="M10 50 C24 45 36 28 46 14 C52 4 60 0 70 0" stroke="rgba(255, 255, 255, 0.65)" strokeWidth="0.8" />
+                    <path d="M22 50 C36 46 44 32 54 18 C58 8 64 3 70 2" stroke="rgba(255, 255, 255, 0.45)" strokeWidth="0.8" />
+                    <defs>
+                      <linearGradient id="planBlueWaveLight" x1="10" y1="0" x2="70" y2="50" gradientUnits="userSpaceOnUse">
+                        <stop stopColor="#93C5FD" stopOpacity="0.8" />
+                        <stop offset="0.6" stopColor="#60A5FA" stopOpacity="0.9" />
+                        <stop offset="1" stopColor="#3B82F6" />
+                      </linearGradient>
+                      <linearGradient id="planBlueWaveAccent" x1="22" y1="0" x2="70" y2="50" gradientUnits="userSpaceOnUse">
+                        <stop stopColor="#BFDBFE" stopOpacity="0.6" />
+                        <stop offset="1" stopColor="#60A5FA" stopOpacity="0.8" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                )}
 
-                {/* Left Shield with Checkmark Icon */}
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, position: 'relative', zIndex: 2 }}>
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                  <polyline points="9 12 11 14 15 10"/>
-                </svg>
+                {/* Left Shield Icon: Red alert on expired, Blue checkmark on active */}
+                {isSubscriptionRestricted ? (
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, position: 'relative', zIndex: 2 }}>
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                ) : (
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, position: 'relative', zIndex: 2 }}>
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    <polyline points="9 12 11 14 15 10"/>
+                  </svg>
+                )}
 
                 {/* Vertical Divider */}
-                <div style={{ width: '1px', height: '22px', background: 'rgba(226, 232, 240, 0.95)', margin: '0 10px 0 8px', flexShrink: 0, position: 'relative', zIndex: 2 }} />
+                <div style={{
+                  width: '1px',
+                  height: '22px',
+                  background: isSubscriptionRestricted ? 'rgba(252, 165, 165, 0.95)' : 'rgba(226, 232, 240, 0.95)',
+                  margin: '0 10px 0 8px',
+                  flexShrink: 0,
+                  position: 'relative',
+                  zIndex: 2
+                }} />
 
                 {/* Text Block */}
                 <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, paddingRight: '14px', position: 'relative', zIndex: 2 }}>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', lineHeight: 1.15, letterSpacing: '-0.01em', fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: isSubscriptionRestricted ? '#991B1B' : '#0F172A', lineHeight: 1.15, letterSpacing: '-0.01em', fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}>
                     {subscription?.plan ? subscription.plan.split(' (')[0] : 'Trial Plan'}
                   </span>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563EB', lineHeight: 1.15, textTransform: 'capitalize', marginTop: '1px' }}>
-                    {subscription?.status ? subscription.status.toLowerCase() : 'Active'}
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: isSubscriptionRestricted ? '#DC2626' : '#2563EB', lineHeight: 1.15, textTransform: 'capitalize', marginTop: '1px' }}>
+                    {isSubscriptionRestricted ? 'Expired' : (subscription?.status ? subscription.status.toLowerCase() : 'Active')}
                   </span>
                 </div>
               </div>
@@ -12177,8 +12337,9 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
               {/* 2. Alerts Widget (Lighter Pastel Shade & Soft Gradient) */}
               <div 
                 className="header-alerts-widget" 
-                onClick={() => setActiveTab('supply')}
+                onClick={() => handleNavTabClick('supply')}
                 title="View Alerts & Tasks"
+                style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
               >
                 {/* Left Warning Triangle Icon */}
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, position: 'relative', zIndex: 2 }}>
@@ -12319,9 +12480,10 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
               {/* 4. Manual Full-Dashboard Sync Button */}
               <button 
                 className="header-sync-btn"
-                onClick={handleManualSyncAll}
-                disabled={isGlobalSyncing}
-                title="Re-sync all dashboard data"
+                onClick={isSubscriptionRestricted ? () => showToast('Subscription expired. All operational modules are locked until plan renewal.', 'error') : handleManualSyncAll}
+                disabled={isGlobalSyncing || isSubscriptionRestricted}
+                title={isSubscriptionRestricted ? "Subscription Expired" : "Re-sync all dashboard data"}
+                style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
               >
                 <svg 
                   width="16" 
@@ -12346,11 +12508,11 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
               {/* 5. Action Button - Futuristic Chevron matching reference */}
               <button 
                 className="header-add-staff-btn" 
-                onClick={() => { 
-                  setActiveTab('workforce');
+                onClick={() => handleNavTabClick('workforce', () => { 
                   setStaffSubView('new');
                   navigate('/admin/staff/new');
-                }}
+                })}
+                style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 <span>Manage / Add Employee</span>
@@ -12481,7 +12643,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           </div>
         )}
 
-        {activeTab === 'hr-payroll' && (
+        {!isSubscriptionRestricted && activeTab === 'hr-payroll' && (
           <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', padding: 0 }}>
             <HRPayroll 
               initialTab={hrInitialTab} 
@@ -16227,7 +16389,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         )}
 
         {/* 8. Premium Hospital Finance & Revenue Analytics Center */}
-        {activeTab === 'financials' && (() => {
+        {!isSubscriptionRestricted && activeTab === 'financials' && (() => {
           // --- 1. DATE FORMATTING & RANGE HELPERS ---
           const now = new Date();
           const monthShortNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -19562,7 +19724,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         )}
 
         {/* 8. Redesigned Enterprise Patients Registry */}
-        {activeTab === 'patients' && (
+        {!isSubscriptionRestricted && activeTab === 'patients' && (
           <div className="admin-dashboard-content">
             {(() => {
               // --- HELPER LOGIC FOR REAL PATIENT ATTRIBUTES ---
@@ -21197,7 +21359,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         )}
 
         {/* Dedicated Updates Page Tab */}
-        {activeTab === 'updates' && (() => {
+        {!isSubscriptionRestricted && activeTab === 'updates' && (() => {
           const daysLeft = subscription ? Math.max(0, Math.ceil((new Date(subscription.renewalDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : 8;
           const showRenewalCard = daysLeft <= 30;
           const pendingUpdatesCount = systemBroadcasts.length + (showRenewalCard ? 1 : 0);
@@ -22271,7 +22433,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         )}
 
         {/* 11. Role Coverage / Permissions Management */}
-        {activeTab === 'permissions' && (() => {
+        {!isSubscriptionRestricted && activeTab === 'permissions' && (() => {
           const selectedStaff = staff.find(s => s.id === pmSelectedStaffId || s.name === pmSelectedStaffId);
           
           // Compute system active overrides list
@@ -22760,7 +22922,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         })()}
 
         {/* 10. Audit Logs Content matching mockup exactly */}
-        {activeTab === 'audit' && (() => {
+        {!isSubscriptionRestricted && activeTab === 'audit' && (() => {
           // Dynamic filtering logic based on user input and category filter tabs
           const filteredLogs = auditLogs.filter(log => {
             const matchesSearch = 
@@ -23238,7 +23400,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           );
         })()}
 
-        {activeTab === 'dpdp' && (() => {
+        {!isSubscriptionRestricted && activeTab === 'dpdp' && (() => {
           // Filter requests based on status and search query
           const filteredRequests = dpdpRequests.filter(req => {
             const patientName = req.patientName || req.patientId?.name || '';
@@ -23662,7 +23824,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         })()}
 
         {/* Hospital Owner Pricing & Procedures Catalog Tab */}
-        {activeTab === 'services-catalog' && (() => {
+        {!isSubscriptionRestricted && activeTab === 'services-catalog' && (() => {
           const filteredCatalog = pricingCatalog.filter(proc => {
             const matchesCategory = procCategoryFilter === 'All' || proc.category === procCategoryFilter;
             const matchesQuery = proc.name.toLowerCase().includes(procSearchQuery.toLowerCase()) || 
@@ -24133,7 +24295,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         })()}
 
         {/* TAB: LAB TEST CATALOG & DYNAMIC PRICES (Added for Hospital Admin Global Management) */}
-        {activeTab === 'lab-catalog' && (() => {
+        {!isSubscriptionRestricted && activeTab === 'lab-catalog' && (() => {
           const filteredCatalog = labTestCatalog.filter(item => {
             const matchesCategory = catalogCategoryFilter === 'All' || (item.category || '').trim() === catalogCategoryFilter;
             const matchesQuery = (item.testName || '').toLowerCase().includes(catalogSearchQuery.toLowerCase()) || 

@@ -72,12 +72,20 @@ function getHospitalSubscriptionDates(hospital) {
     const d = new Date(hospital.subscriptionExpiryDate);
     if (!isNaN(d.getTime())) expiryDate = d;
   }
+  if (!expiryDate && hospital.planExpiryDate) {
+    const d = new Date(hospital.planExpiryDate);
+    if (!isNaN(d.getTime())) expiryDate = d;
+  }
 
   if (!expiryDate) {
+    const planLower = String(hospital.plan || '').toLowerCase();
     if (isTrial) {
       // 7-day trial policy
       const trialDays = Number(hospital.trialDays) || 7;
       expiryDate = new Date(startDate.getTime() + trialDays * 24 * 60 * 60 * 1000);
+    } else if (planLower.includes('/mo') || hospital.billingCycle === 'monthly') {
+      // Monthly paid plan (e.g. 'Enterprise Elite (₹2,500/mo)')
+      expiryDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000);
     } else {
       // Paid plan: derived from contract duration or renewal cycle (default 1 year)
       const durationYears = Number(hospital.contractDurationYears) || 1;
@@ -93,7 +101,12 @@ function getHospitalSubscriptionDates(hospital) {
   let daysRemaining = 0;
   let isExpired = false;
 
-  if (now >= expiryTime || hospital.status === 'Suspended') {
+  const explicitExpiredStatus = (
+    String(hospital.subscriptionStatus || '').toLowerCase() === 'expired' ||
+    String(hospital.status || '').toLowerCase() === 'expired'
+  );
+
+  if (now >= expiryTime || hospital.status === 'Suspended' || explicitExpiredStatus) {
     daysRemaining = 0;
     isExpired = true;
   } else {
@@ -141,6 +154,7 @@ function getHospitalSubscriptionStatus(hospital) {
 
   if (hospital.status === 'Suspended') {
     const dates = getHospitalSubscriptionDates(hospital);
+    const trialUsed = hasHospitalUsedTrial(hospital);
     return {
       isTrial: dates.isTrial,
       planType: dates.isTrial ? 'TRIAL' : 'PAID',
@@ -149,7 +163,9 @@ function getHospitalSubscriptionStatus(hospital) {
       daysRemaining: 0,
       isExpired: true,
       status: 'SUSPENDED',
-      subscriptionRestricted: true
+      subscriptionRestricted: true,
+      trialUsed,
+      canUseTrial: !trialUsed
     };
   }
 
