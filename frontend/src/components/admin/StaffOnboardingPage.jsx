@@ -452,8 +452,8 @@ export default function StaffOnboardingPage({
   };
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: '#F1F5F9', padding: '10px 14px 24px', minHeight: '100vh', boxSizing: 'border-box' }}>
-      <div style={{ maxWidth: '1360px', margin: '0 auto', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+    <div style={{ width: '100%', minHeight: '100%', boxSizing: 'border-box' }}>
+      <div style={{ width: '100%', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden', boxSizing: 'border-box' }}>
 
         {/* ─── WORKSTATION TOP BANNER ─── */}
         <div style={{
