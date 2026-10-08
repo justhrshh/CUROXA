@@ -387,4 +387,116 @@ router.post('/vendor/confirm', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// STOCK MASTER UPLOAD, VALIDATION & TEMPLATE ENDPOINTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const {
+  generateStockMasterTemplateWorkbook,
+  generateStockMasterExportWorkbook,
+  parseStockMasterWorkbook,
+  validateStockMasterRows,
+  commitStockMasterImport
+} = require('../services/stockMasterService');
+
+/**
+ * GET /api/superadmin/masters/upload/stock/template
+ * Download empty Stock Master Excel template with exact approved columns.
+ * Contains NO fake/demo inventory rows.
+ */
+router.get('/stock/template', async (req, res) => {
+  try {
+    const { tenantId } = req.query;
+    const { buffer, filename } = generateStockMasterTemplateWorkbook(tenantId ? tenantId.trim() : '');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/superadmin/masters/upload/stock/download
+ * Export current hospital stock balances into Stock Master Excel format.
+ */
+router.get('/stock/download', async (req, res) => {
+  try {
+    const { tenantId } = req.query;
+    if (!tenantId || !tenantId.trim()) {
+      return res.status(400).json({ error: 'tenantId is required for Stock Master export.' });
+    }
+    const { buffer, filename, count } = await generateStockMasterExportWorkbook(tenantId.trim());
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-Item-Count', count);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/superadmin/masters/upload/stock/parse-preview
+ * Parse uploaded Stock Master Excel workbook, validate every row against the hospital's
+ * selected Item Master catalog, verify Buying Price <= MRP, check expiration, and return
+ * a structured preview with validation errors/warnings.
+ */
+router.post('/stock/parse-preview', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No Excel file uploaded.' });
+    }
+    const { tenantId } = req.body;
+    if (!tenantId || !tenantId.trim()) {
+      return res.status(400).json({ error: 'tenantId is required.' });
+    }
+
+    const parsed = parseStockMasterWorkbook(req.file.buffer);
+    const result = await validateStockMasterRows(parsed.rows, tenantId.trim());
+
+    res.json({
+      success: true,
+      fileHash: parsed.fileHash,
+      fileName: req.file.originalname,
+      summary: result.summary,
+      rows: result.rows
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/superadmin/masters/upload/stock/confirm
+ * Commit validated Stock Master rows into the inventory ledger (MedicineBatch & Medicine).
+ */
+router.post('/stock/confirm', async (req, res) => {
+  try {
+    const { tenantId, rows } = req.body;
+    if (!tenantId || !tenantId.trim()) {
+      return res.status(400).json({ error: 'tenantId is required.' });
+    }
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'No stock rows provided for confirmation.' });
+    }
+
+    const result = await commitStockMasterImport({
+      tenantId: tenantId.trim(),
+      rows,
+      user: req.user
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(tenantId.trim()).emit('data_changed', { type: 'medicines' });
+      io.to(tenantId.trim()).emit('data_changed', { type: 'medicine_batches' });
+    }
+
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 module.exports = router;

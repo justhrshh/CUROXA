@@ -5,6 +5,7 @@ const MedicineBatch = require('../models/MedicineBatch');
 const Prescription = require('../models/Prescription');
 const Patient = require('../models/Patient');
 const AuditLog = require('../models/AuditLog');
+const DiscountSetting = require('../models/DiscountSetting');
 const { validateAndPlanFEFO, commitFEFOConsumption } = require('../utils/inventoryEngine');
 const { verifyToken } = require('../middleware/authMiddleware');
 
@@ -37,7 +38,15 @@ function calculateItemFinancials(item, medicineDoc, stockImpact = 'DEDUCTED') {
 
   const gross = qty * mrp;
   const discountAmount = Math.round((gross * (discountPercent / 100)) * 100) / 100;
-  const taxable = Math.max(0, Math.round((gross - discountAmount) * 100) / 100);
+  
+  // SELLING PRICE RULE ENFORCEMENT:
+  // Selling Price = MRP - Discount (calculated per unit & total)
+  // Server-authoritative: client-submitted selling prices are ignored/overridden
+  const unitDiscount = qty > 0 ? (discountAmount / qty) : 0;
+  const unitSellingPrice = Math.max(0, Math.round((mrp - unitDiscount) * 100) / 100);
+  const totalSellingPrice = Math.max(0, Math.round((gross - discountAmount) * 100) / 100);
+
+  const taxable = totalSellingPrice;
   const gstAmount = Math.round((taxable * (gstPercent / 100)) * 100) / 100;
   const netAmount = Math.round((taxable + gstAmount) * 100) / 100;
 
@@ -52,6 +61,7 @@ function calculateItemFinancials(item, medicineDoc, stockImpact = 'DEDUCTED') {
     mrp,
     discountPercent,
     discountAmount,
+    sellingPrice: unitSellingPrice, // Server-derived: MRP - Discount
     gstPercent,
     gstAmount,
     netAmount,
@@ -202,6 +212,22 @@ router.post('/', async (req, res) => {
     // 2. Validate payment method
     const validPaymentMethods = ['Cash', 'UPI', 'Card'];
     const resolvedPaymentMethod = validPaymentMethods.includes(paymentMethod) ? paymentMethod : 'Cash';
+
+    // 2b. Validate discounts against hospital policy
+    const discountSetting = await DiscountSetting.findOne({ tenantId: req.tenantId }).lean();
+    const maxAllowedDiscount = discountSetting?.allowedDiscountPercent !== undefined ? discountSetting.allowedDiscountPercent : 100;
+
+    for (const it of items) {
+      const disc = Number(it.discountPercent) || 0;
+      if (disc < 0) {
+        return res.status(400).json({ error: `Discount cannot be negative for item "${it.medicineName || it.medicine || 'Medicine'}".` });
+      }
+      if (disc > maxAllowedDiscount) {
+        return res.status(400).json({
+          error: `Discount of ${disc}% exceeds the hospital authorized limit of ${maxAllowedDiscount}% for item "${it.medicineName || it.medicine || 'Medicine'}".`
+        });
+      }
+    }
 
     let resolvedDoctorName = 'Self / No Doctor';
     let resolvedCustomerName = customerName ? String(customerName).trim() : '';

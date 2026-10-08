@@ -295,6 +295,15 @@ router.post('/', async (req, res) => {
           }
         }
       }
+
+      // Step 5: Pricing Rule Enforcement: Buying Price (purchaseRate) <= MRP
+      const itemPurchaseRate = Number(item.purchaseRate !== undefined && item.purchaseRate !== null ? item.purchaseRate : (item.price || 0));
+      const itemMrp = Number(item.mrp || 0);
+      if (itemMrp > 0 && itemPurchaseRate > itemMrp) {
+        return res.status(400).json({
+          error: `Pricing Rule Violation for '${item.name}': Buying Price (₹${itemPurchaseRate}) cannot exceed MRP (₹${itemMrp}). Buying Price must be <= MRP.`
+        });
+      }
     }
 
     // 2. Validate PO-linked quantities cumulatively against PO order
@@ -679,6 +688,15 @@ router.put('/:id', async (req, res) => {
           item.converterFactor = im.converterFactor;
           item.purchasedUnit = im.purchasedUnit;
           item.consumptionUnit = im.consumptionUnit;
+        }
+
+        // Pricing Rule Enforcement: Buying Price <= MRP
+        const itemPurchaseRate = Number(item.purchaseRate !== undefined && item.purchaseRate !== null ? item.purchaseRate : (item.price || 0));
+        const itemMrp = Number(item.mrp || 0);
+        if (itemMrp > 0 && itemPurchaseRate > itemMrp) {
+          return res.status(400).json({
+            error: `Pricing Rule Violation for '${item.name}': Buying Price (₹${itemPurchaseRate}) cannot exceed MRP (₹${itemMrp}). Buying Price must be <= MRP.`
+          });
         }
       }
     }

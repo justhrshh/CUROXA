@@ -15584,8 +15584,9 @@ const PharmacyDashboard = () => {
                           <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>Stock</th>
                           <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase', width: '100px' }}>Qty</th>
                           <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>MRP</th>
-                          <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase', width: '80px' }}>Disc %</th>
-                          <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase', width: '80px' }}>GST %</th>
+                          <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase', width: '75px' }}>Disc %</th>
+                          <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#2563EB', fontSize: '11px', textTransform: 'uppercase' }}>Selling Price</th>
+                          <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase', width: '70px' }}>GST %</th>
                           <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#475569', fontSize: '11px', textTransform: 'uppercase' }}>Total</th>
                           <th style={{ padding: '10px 8px', textAlign: 'center', width: '40px' }}></th>
                         </tr>
@@ -15655,6 +15656,18 @@ const PharmacyDashboard = () => {
                                   onChange={(e) => handleDirectSaleItemChange(idx, 'discountPercent', e.target.value)}
                                   style={{ width: '50px', padding: '4px 6px', borderRadius: '6px', border: '1px solid #CBD5E1', textAlign: 'center', fontSize: '12.5px', fontWeight: 700, outline: 'none' }}
                                 />
+                              </td>
+
+                              {/* Calculated Selling Price = MRP - Discount per unit */}
+                              <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                                <div style={{ fontWeight: 800, color: '#2563EB', fontSize: '13px' }}>
+                                  ₹{Math.max(0, (item.mrp * (1 - (item.discountPercent || 0) / 100))).toFixed(2)}
+                                </div>
+                                {(item.discountPercent || 0) > 0 && (
+                                  <div style={{ fontSize: '10px', color: '#16A34A', fontWeight: 700 }}>
+                                    -₹{(item.mrp * ((item.discountPercent || 0) / 100)).toFixed(2)}
+                                  </div>
+                                )}
                               </td>
 
                               <td style={{ padding: '10px 12px', textAlign: 'center' }}>
@@ -15740,16 +15753,16 @@ const PharmacyDashboard = () => {
                     <div style={{ background: '#F8FAFC', padding: '16px 20px', borderRadius: '16px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                          <span>Subtotal:</span>
+                          <span>MRP Gross:</span>
                           <span style={{ fontWeight: 700 }}>₹{subtotal.toFixed(2)}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16A34A' }}>
-                          <span>Total Discount:</span>
+                          <span>Discount (MRP - Disc):</span>
                           <span style={{ fontWeight: 700 }}>-₹{totalDisc.toFixed(2)}</span>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                          <span>Taxable Amount:</span>
-                          <span style={{ fontWeight: 700 }}>₹{taxable.toFixed(2)}</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#2563EB', fontWeight: 800 }}>
+                          <span>Effective Selling Price:</span>
+                          <span>₹{taxable.toFixed(2)}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
                           <span>Total GST:</span>

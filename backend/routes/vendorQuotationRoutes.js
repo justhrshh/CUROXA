@@ -639,6 +639,14 @@ router.post('/', async (req, res) => {
       const gst = Math.max(0, Math.min(100, line.gstPercent !== undefined ? Number(line.gstPercent) : (item.defaultGst ?? 12)));
       const lineMrp = Number(line.mrp) >= 0 ? Number(line.mrp) : 0;
 
+      // PRICING RULE ENFORCEMENT: Buying Price <= MRP
+      if (lineMrp > 0 && pRate > lineMrp) {
+        return res.status(400).json({
+          success: false,
+          error: `Pricing Rule Violation for item "${item.itemName || item.brandName}": Buying Price (₹${pRate}) cannot exceed MRP (₹${lineMrp}). Buying Price must be <= MRP.`
+        });
+      }
+
       // Rate derivations
       const netRatePurchased = pRate * (1 - disc / 100) * (1 + gst / 100);
       const ratePerConsUnit = pRate / cFactor;
@@ -845,6 +853,16 @@ router.put('/:id', async (req, res) => {
     // Recalculate derived rates
     const cFactor = Number(quotation.converterFactor) > 0 ? Number(quotation.converterFactor) : 1;
     const pRate = Number(quotation.ratePerPurchasedUnit) || 0;
+    const qMrp = Number(quotation.mrp) || 0;
+
+    // PRICING RULE ENFORCEMENT: Buying Price <= MRP
+    if (qMrp > 0 && pRate > qMrp) {
+      return res.status(400).json({
+        success: false,
+        error: `Pricing Rule Violation: Buying Price (₹${pRate}) cannot exceed MRP (₹${qMrp}). Buying Price must be <= MRP.`
+      });
+    }
+
     const disc = Math.max(0, Math.min(100, Number(quotation.discountPercent) || 0));
     const gst = Math.max(0, Math.min(100, Number(quotation.gstPercent) || 0));
 

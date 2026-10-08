@@ -11,6 +11,7 @@ const pharmacySaleItemSchema = new mongoose.Schema({
   mrp: { type: Number, required: true, min: 0 },
   discountPercent: { type: Number, default: 0, min: 0, max: 100 },
   discountAmount: { type: Number, default: 0, min: 0 },
+  sellingPrice: { type: Number, default: 0, min: 0 }, // Authoritative server-derived: (mrp - unitDiscount)
   gstPercent: { type: Number, default: 0, min: 0, max: 100 },
   gstAmount: { type: Number, default: 0, min: 0 },
   netAmount: { type: Number, required: true, min: 0 },
