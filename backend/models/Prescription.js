@@ -10,9 +10,15 @@ const prescriptionSchema = new mongoose.Schema({
     dosage: { type: String, required: true },
     duration: { type: String, required: true },
     instructions: { type: String },
-    quantity: { type: Number, default: 1 }
+    quantity: { type: Number, default: 1 },
+    itemCode: { type: String },
+    masterItemId: { type: mongoose.Schema.Types.ObjectId, ref: 'ItemMaster' },
+    genericName: { type: String }
   }],
-  status: { type: String, enum: ['Pending', 'Pending Pharmacy Dispatch', 'Direct Patient', 'In Progress', 'Dispensed', 'Dispensed by Pharmacy'], default: 'Pending' },
+  status: { type: String, enum: ['Pending', 'Pending Pharmacy Dispatch', 'Direct Patient', 'In Progress', 'Dispensed', 'Dispensed by Pharmacy', 'Cancelled'], default: 'Pending' },
+  notes: { type: String, default: '' },
+  diagnosis: { type: String, default: '' },
+  tests: [{ type: String }],
   doctorSignatureUrl: { type: String, default: '' },
   prescriptionType: {
     type: String,

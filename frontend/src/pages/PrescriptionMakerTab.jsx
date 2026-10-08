@@ -252,6 +252,60 @@ export default function PrescriptionMakerTab({
   const [medSearchQuery, setMedSearchQuery] = useState('');
   const [showMedSuggestions, setShowMedSuggestions] = useState(false);
 
+  // Hospital Master Catalog states (tenant-scoped formulary)
+  const [catalogMedicines, setCatalogMedicines] = useState([]);
+  const [isLoadingCatalogMeds, setIsLoadingCatalogMeds] = useState(false);
+  const [catalogTests, setCatalogTests] = useState([]);
+  const [isLoadingCatalogTests, setIsLoadingCatalogTests] = useState(false);
+
+  // Fetch hospital medicine catalog on drawer open / search change (debounced 300ms)
+  useEffect(() => {
+    if (!showMedicationDrawer) return;
+    let isCurrent = true;
+    const timer = setTimeout(async () => {
+      try {
+        setIsLoadingCatalogMeds(true);
+        const q = medSearchQuery.trim();
+        const url = q
+          ? `/prescriptions/catalog/medicines?search=${encodeURIComponent(q)}`
+          : `/prescriptions/catalog/medicines`;
+        const res = await api.get(url);
+        if (isCurrent && res.data) setCatalogMedicines(res.data);
+      } catch (err) {
+        console.error('Failed to fetch hospital medicine catalog:', err);
+      } finally {
+        if (isCurrent) setIsLoadingCatalogMeds(false);
+      }
+    }, medSearchQuery.trim() ? 300 : 0);
+    return () => { isCurrent = false; clearTimeout(timer); };
+  }, [showMedicationDrawer, medSearchQuery]);
+
+  // Fetch hospital test catalog on drawer open / search change (debounced 300ms)
+  useEffect(() => {
+    if (!showAssignLabDrawer) return;
+    // Pre-populate selected list from parent labs on first open
+    if (labs && labs.length > 0 && selectedLabsList.length === 0) {
+      setSelectedLabsList(labs);
+    }
+    let isCurrent = true;
+    const timer = setTimeout(async () => {
+      try {
+        setIsLoadingCatalogTests(true);
+        const q = searchQuery.trim();
+        const url = q
+          ? `/prescriptions/catalog/tests?search=${encodeURIComponent(q)}`
+          : `/prescriptions/catalog/tests`;
+        const res = await api.get(url);
+        if (isCurrent && res.data) setCatalogTests(res.data);
+      } catch (err) {
+        console.error('Failed to fetch hospital test catalog:', err);
+      } finally {
+        if (isCurrent) setIsLoadingCatalogTests(false);
+      }
+    }, searchQuery.trim() ? 300 : 0);
+    return () => { isCurrent = false; clearTimeout(timer); };
+  }, [showAssignLabDrawer, searchQuery]);
+
   const [followUpEnabled, setFollowUpEnabled] = useState(false);
   const [followUpDate, setFollowUpDate] = useState('');
   const [followUpTime, setFollowUpTime] = useState('10:00 AM');
@@ -1780,8 +1834,8 @@ export default function PrescriptionMakerTab({
                 <div style={{ width: '26px', height: '26px', borderRadius: '7px', background: '#F1F5F9', border: '1px solid #CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <FileText style={{ width: '14px', height: '14px', color: '#475569' }} />
                 </div>
-                <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#0F172A', letterSpacing: '0.05em' }}>NOTES & INSTRUCTIONS FOR PATIENT</span>
-                <span style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', background: '#F1F5F9', border: '1px solid #E2E8F0', padding: '2px 7px', borderRadius: '12px' }}>Optional</span>
+                <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#0F172A', letterSpacing: '0.05em' }}>PRESCRIPTION NOTES & PATIENT ADVICE</span>
+                <span style={{ fontSize: '10px', fontWeight: 700, color: '#2563EB', background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '2px 7px', borderRadius: '12px' }}>Persistent Record</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 700, color: '#64748B' }}>
                 <span>{notesCollapsed ? 'Expand' : 'Collapse'}</span>
@@ -1796,7 +1850,7 @@ export default function PrescriptionMakerTab({
                 <ClinicalRichEditor
                   value={soap.plan || ''}
                   onChange={val => setSoap(prev => ({ ...prev, plan: val }))}
-                  placeholder="Type patient instructions & advice here (use toolbar for bold, italic, highlight, and bullet points)..."
+                  placeholder="Type patient instructions, clinical advice, or prescribe/recommend medicines & tests NOT in hospital catalog (e.g. Tab. XYZ 500mg OD for 5 days)..."
                   borderColor="#E2E8F0"
                   focusBorderColor="#2563EB"
                   accentColor="#2563EB"
@@ -2067,8 +2121,8 @@ export default function PrescriptionMakerTab({
                     }}
                   />
 
-                  {/* Test Suggestions Overlay */}
-                  {showSuggestions && searchQuery.trim() && (
+                  {/* Test Suggestions Overlay — Hospital Catalog */}
+                  {showSuggestions && (
                     <div 
                       data-lenis-prevent
                       style={{
@@ -2082,24 +2136,49 @@ export default function PrescriptionMakerTab({
                         boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
                         zIndex: 10,
                         marginTop: '6px',
-                        maxHeight: '200px',
+                        maxHeight: '220px',
                         overflowY: 'auto',
                         padding: '6px'
                       }}
                     >
-                      {availableTests
-                        .filter(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
-                        .map(t => (
+                      {isLoadingCatalogTests ? (
+                        <div style={{ padding: '14px', textAlign: 'center', fontSize: '12px', color: '#64748B' }}>
+                          Loading hospital catalog...
+                        </div>
+                      ) : catalogTests.length > 0 ? (
+                        catalogTests.map(t => (
                           <div 
-                            key={t}
-                            onClick={() => handleAddLab(t)}
-                            style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 650, color: '#334155', transition: '0.2s' }}
+                            key={t._id || t.itemCode || (t.itemName || t.name)}
+                            onClick={() => handleAddLab(t.itemName || t.name)}
+                            style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 650, color: '#334155', transition: '0.2s', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                             onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                           >
-                            {t}
+                            <div>
+                              <span style={{ fontWeight: 700, color: '#1E293B' }}>{t.itemName || t.name}</span>
+                              {t.department && (
+                                <span style={{ marginLeft: '8px', fontSize: '10.5px', color: '#64748B', background: '#F1F5F9', padding: '2px 6px', borderRadius: '4px' }}>
+                                  {t.department}
+                                </span>
+                              )}
+                            </div>
+                            {t.itemCode && (
+                              <span style={{ fontSize: '10px', color: '#94A3B8', fontFamily: 'monospace' }}>
+                                {t.itemCode}
+                              </span>
+                            )}
                           </div>
-                        ))}
+                        ))
+                      ) : (
+                        <div style={{ padding: '14px', textAlign: 'center', background: '#FFFBEB', borderRadius: '8px', border: '1px solid #FDE68A' }}>
+                          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#92400E' }}>
+                            No matching test in this hospital's catalog.
+                          </p>
+                          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#B45309' }}>
+                            You can recommend unlisted tests in <strong>Prescription Notes</strong> below.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2385,8 +2464,8 @@ export default function PrescriptionMakerTab({
                     }}
                   />
 
-                  {/* Suggestions List */}
-                  {showMedSuggestions && medSearchQuery.trim() && (
+                  {/* Suggestions List — Hospital Medicine Catalog */}
+                  {showMedSuggestions && (
                     <div 
                       data-lenis-prevent
                       style={{
@@ -2400,56 +2479,69 @@ export default function PrescriptionMakerTab({
                         boxShadow: '0 6px 20px rgba(0,0,0,0.06)',
                         zIndex: 10,
                         marginTop: '4px',
-                        maxHeight: '180px',
+                        maxHeight: '240px',
                         overflowY: 'auto',
-                        padding: '4px'
+                        padding: '6px'
                       }}
                     >
-                      {(() => {
-                        const dbList = (pharmacyInventoryDb && pharmacyInventoryDb.length > 0 ? pharmacyInventoryDb : dbMedicines) || [];
-                        const defaultKeys = Object.keys(medicineDefaults || {}).map(k => ({
-                          name: k.charAt(0).toUpperCase() + k.slice(1),
-                          qty: 100,
-                          isDefault: true
-                        }));
-                        const merged = [...dbList];
-                        defaultKeys.forEach(dk => {
-                          if (!merged.some(m => m.name && m.name.toLowerCase() === dk.name.toLowerCase())) {
-                            merged.push(dk);
-                          }
-                        });
-                        return merged.filter(m => m.name && m.name.toLowerCase().includes(medSearchQuery.toLowerCase()));
-                      })().map(m => (
-                        <div 
-                          key={m._id || m.id || m.name}
-                          onClick={() => {
-                            const nameLower = m.name.toLowerCase().trim();
-                            const preset = medicineDefaults[nameLower] || {};
-                            const newItem = {
-                              id: Date.now() + Math.random(),
-                              medicine: m.name,
-                              dosage: preset.dose || '1 Tab',
-                              frequency: preset.freq || 'Once a Day',
-                              duration: preset.duration || '5 Days',
-                              timing: preset.timing || 'After Food'
-                            };
-                            setLocalMedicines([...localMedicines, newItem]);
-                            setMedSearchQuery('');
-                            setShowMedSuggestions(false);
-                          }}
-                          style={{ padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 650, color: '#334155', transition: '0.15s' }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                        >
-                          💊 {m.name} {m.isDefault ? (
-                            <span style={{ color: '#2563EB', fontSize: '10px' }}>(Preset)</span>
-                          ) : m.qty <= 0 ? (
-                            <span style={{ color: '#EF4444', fontSize: '10px' }}>(Out of Stock)</span>
-                          ) : (
-                            <span style={{ color: '#16A34A', fontSize: '10px' }}>({m.qty} In Stock)</span>
-                          )}
+                      {isLoadingCatalogMeds ? (
+                        <div style={{ padding: '14px', textAlign: 'center', fontSize: '12px', color: '#64748B' }}>
+                          Loading hospital formulary...
                         </div>
-                      ))}
+                      ) : catalogMedicines.length > 0 ? (
+                        catalogMedicines.map(m => (
+                          <div 
+                            key={m._id || m.itemCode || (m.itemName || m.name)}
+                            onClick={() => {
+                              const nameLower = (m.itemName || m.name || '').toLowerCase().trim();
+                              const preset = medicineDefaults[nameLower] || {};
+                              const newItem = {
+                                id: Date.now() + Math.random(),
+                                medicine: m.itemName || m.name,
+                                dosage: m.dosage || preset.dose || '500 mg',
+                                frequency: preset.freq || 'Once a Day',
+                                duration: preset.duration || '5 Days',
+                                timing: preset.timing || 'After Food',
+                                itemCode: m.itemCode || '',
+                                masterItemId: m._id || null,
+                                genericName: m.genericName || ''
+                              };
+                              setLocalMedicines([...localMedicines, newItem]);
+                              setMedSearchQuery('');
+                              setShowMedSuggestions(false);
+                            }}
+                            style={{ padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: '#334155', transition: '0.15s', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>💊</span>
+                                <span style={{ fontWeight: 700, color: '#0F172A' }}>{m.itemName || m.name}</span>
+                                {m.genericName && m.genericName !== (m.itemName || m.name) && (
+                                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>({m.genericName})</span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '10px', color: '#94A3B8', paddingLeft: '20px' }}>
+                                {m.itemCode && <span>Code: {m.itemCode}</span>}
+                                {m.dosage && <span> · {m.dosage}</span>}
+                              </div>
+                            </div>
+                            <span style={{ fontSize: '10px', fontWeight: 800, color: '#2563EB', background: '#EFF6FF', padding: '2px 6px', borderRadius: '4px', border: '1px solid #BFDBFE', flexShrink: 0 }}>
+                              Formulary
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ padding: '14px', textAlign: 'center', background: '#FFFBEB', borderRadius: '8px', border: '1px solid #FDE68A' }}>
+                          <p style={{ margin: 0, fontSize: '12.5px', fontWeight: 700, color: '#92400E' }}>
+                            No matching medicine in this hospital's catalog.
+                          </p>
+                          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#B45309', lineHeight: '1.4' }}>
+                            Prescribe unlisted medications in <strong>Prescription Notes</strong> below.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2593,7 +2685,10 @@ export default function PrescriptionMakerTab({
                       dose: med.dosage,
                       freq: med.frequency,
                       duration: med.duration,
-                      timing: med.timing
+                      timing: med.timing,
+                      itemCode: med.itemCode || '',
+                      masterItemId: med.masterItemId || null,
+                      genericName: med.genericName || ''
                     });
                   });
                   setLocalMedicines([]);

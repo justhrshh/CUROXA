@@ -2683,7 +2683,10 @@ const DoctorDashboard = () => {
           freq: freq,
           duration: item.duration || '5 Days',
           timing: timing,
-          notes: item.notes || ''
+          notes: item.notes || '',
+          itemCode: item.itemCode || '',
+          masterItemId: item.masterItemId || null,
+          genericName: item.genericName || ''
         };
       });
       setMedicines(loadedMeds);
@@ -2691,8 +2694,8 @@ const DoctorDashboard = () => {
       setMedicines([]);
     }
 
-    // Map labs from argument or rx.labs
-    const sourceLabs = relatedLabs || rx.labs || [];
+    // Map labs from rx.tests or argument or rx.labs
+    const sourceLabs = (rx.tests && rx.tests.length > 0) ? rx.tests : (relatedLabs || rx.labs || []);
     if (sourceLabs && sourceLabs.length > 0) {
       setLabs(sourceLabs.map(l => (typeof l === 'string' ? l : (l.testName || l.name || ''))).filter(Boolean));
     } else {
@@ -2709,7 +2712,7 @@ const DoctorDashboard = () => {
       subjective: '',
       objective: '',
       assessment: resolvedNotes,
-      plan: ''
+      plan: resolvedNotes
     });
 
     if (rx.status) {
@@ -4161,7 +4164,10 @@ const DoctorDashboard = () => {
           dosage: m.dose && m.dose.trim() !== '' ? m.dose.trim() : '500 mg',
           duration: m.duration && m.duration.trim() !== '' ? m.duration.trim() : '5 Days',
           instructions: `${m.freq || 'Once a day'} (${m.timing || 'After Food'})`,
-          quantity: qty
+          quantity: qty,
+          itemCode: m.itemCode || undefined,
+          masterItemId: m.masterItemId || undefined,
+          genericName: m.genericName || undefined
         };
       });
     const validLabs = labs.filter(test => test && test.trim() !== '');
@@ -4254,6 +4260,7 @@ const DoctorDashboard = () => {
           status: rxStatus,
           items: validMedicines,
           labs: validLabs,
+          tests: validLabs,
           diagnosis: cleanDiagnosisText,
           notes: soap.plan || soap.assessment || ''
         });
@@ -4297,7 +4304,10 @@ const DoctorDashboard = () => {
           patientId: patientId,
           doctorId: user.id,
           status: rxStatus,
-          items: validMedicines
+          items: validMedicines,
+          notes: soap.plan || soap.assessment || '',
+          diagnosis: cleanDiagnosisText,
+          tests: validLabs
         });
         rxRecord = rxRes.data;
         if (rxRes && rxRes.data) {
@@ -14084,6 +14094,14 @@ I have scanned the medical reference databases, but couldn't find a direct match
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#EF4444' }}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                               <span><b>Recorded Vitals:</b> {item.vitals}</span>
                             </div>
+
+                            {/* Prescription Notes */}
+                            {item.notes && (
+                              <div style={{ background: '#F8FAFC', border: '1px dashed #CBD5E1', padding: '10px 14px', borderRadius: '10px', fontSize: '11px', color: '#475569', marginBottom: '16px' }}>
+                                <span style={{ fontWeight: 800, color: '#1E293B', display: 'block', marginBottom: '2px' }}>Prescription Notes / Patient Advice:</span>
+                                <span style={{ whiteSpace: 'pre-wrap' }}>{item.notes.replace(/<[^>]*>?/gm, '')}</span>
+                              </div>
+                            )}
 
                             {/* Test Orders */}
                             {item.tests && item.tests.length > 0 && (

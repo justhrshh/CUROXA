@@ -1,6 +1,8 @@
 const express = require("express");
 const Prescription = require("../models/Prescription");
 const Medicine = require("../models/Medicine");
+const ItemMaster = require("../models/ItemMaster");
+const HospitalMasterConfig = require("../models/HospitalMasterConfig");
 const User = require("../models/User");
 const AuditLog = require("../models/AuditLog");
 const Appointment = require("../models/Appointment");
@@ -17,6 +19,168 @@ const router = express.Router();
 router.use(verifyToken);
 router.use(checkDoctorClinicalMode);
 
+/**
+ * Validates that any items with masterItemId belong to the authenticated hospital's catalog
+ */
+async function validatePrescriptionItemsCatalog(tenantId, items) {
+  if (!Array.isArray(items) || items.length === 0) return;
+  const masterIdsToCheck = items
+    .map(i => i.masterItemId)
+    .filter(id => id && String(id).trim() !== '');
+
+  if (masterIdsToCheck.length === 0) return;
+
+  const validAssignments = await HospitalMasterConfig.find({
+    tenantId: tenantId,
+    masterItemId: { $in: masterIdsToCheck },
+    status: 'Active',
+    approvalStatus: 'Approved'
+  }).select('masterItemId').lean();
+
+  const validSet = new Set(validAssignments.map(v => v.masterItemId.toString()));
+
+  for (const item of items) {
+    if (item.masterItemId && !validSet.has(item.masterItemId.toString())) {
+      const err = new Error(`Master catalog item "${item.medicine || item.masterItemId}" is not available in this hospital catalog.`);
+      err.statusCode = 400;
+      throw err;
+    }
+  }
+}
+
+// GET /api/prescriptions/catalog/medicines - Hospital-scoped active master medicines
+router.get("/catalog/medicines", async (req, res) => {
+  try {
+    const configs = await HospitalMasterConfig.find({
+      tenantId: req.tenantId,
+      status: 'Active',
+      approvalStatus: 'Approved',
+      category: /^pharmacy$/i
+    }).select('masterItemId mrp netRate category department').lean();
+
+    const masterItemIds = configs.map(c => c.masterItemId).filter(Boolean);
+    if (masterItemIds.length === 0) {
+      return res.json([]);
+    }
+
+    const priceMap = new Map();
+    configs.forEach(c => {
+      if (c.masterItemId) {
+        priceMap.set(c.masterItemId.toString(), { mrp: c.mrp, netRate: c.netRate, category: c.category, department: c.department });
+      }
+    });
+
+    const query = {
+      _id: { $in: masterItemIds }
+    };
+
+    if (req.query.search && req.query.search.trim()) {
+      const s = req.query.search.trim();
+      const escaped = s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+      const rgx = new RegExp(escaped, 'i');
+      query.$or = [
+        { itemName: rgx },
+        { genericName: rgx },
+        { brandName: rgx },
+        { itemCode: rgx }
+      ];
+    }
+
+    const items = await ItemMaster.find(query)
+      .select('itemName genericName brandName itemCode category department dosage strength unit')
+      .limit(100)
+      .lean();
+
+    const results = items.map(it => {
+      const p = priceMap.get(it._id.toString()) || {};
+      return {
+        _id: it._id,
+        itemCode: it.itemCode,
+        name: it.itemName || it.genericName || it.brandName,
+        itemName: it.itemName,
+        genericName: it.genericName,
+        brandName: it.brandName,
+        category: it.category || p.category || 'Pharmacy',
+        department: it.department || p.department || '',
+        dosage: it.dosage || it.strength || '',
+        unit: it.unit || '',
+        mrp: p.mrp || 0,
+        netRate: p.netRate || 0
+      };
+    });
+
+    res.json(results);
+  } catch (error) {
+    console.error("Prescription medicine catalog search error:", error);
+    res.status(500).json({ error: "Failed to fetch medicine catalog" });
+  }
+});
+
+// GET /api/prescriptions/catalog/tests - Hospital-scoped active master diagnostic tests
+router.get("/catalog/tests", async (req, res) => {
+  try {
+    const configs = await HospitalMasterConfig.find({
+      tenantId: req.tenantId,
+      status: 'Active',
+      approvalStatus: 'Approved',
+      category: { $in: [/^pathology$/i, /^lab operation$/i, /^radiology$/i, /^diagnostics$/i, /^service$/i] }
+    }).select('masterItemId mrp netRate category department').lean();
+
+    const masterItemIds = configs.map(c => c.masterItemId).filter(Boolean);
+    if (masterItemIds.length === 0) {
+      return res.json([]);
+    }
+
+    const configMap = new Map();
+    configs.forEach(c => {
+      if (c.masterItemId) {
+        configMap.set(c.masterItemId.toString(), c);
+      }
+    });
+
+    const query = {
+      _id: { $in: masterItemIds }
+    };
+
+    if (req.query.search && req.query.search.trim()) {
+      const s = req.query.search.trim();
+      const escaped = s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+      const rgx = new RegExp(escaped, 'i');
+      query.$or = [
+        { itemName: rgx },
+        { genericName: rgx },
+        { itemCode: rgx },
+        { department: rgx }
+      ];
+    }
+
+    const items = await ItemMaster.find(query)
+      .select('itemName genericName itemCode category department')
+      .limit(100)
+      .lean();
+
+    const results = items.map(it => {
+      const cfg = configMap.get(it._id.toString()) || {};
+      return {
+        _id: it._id,
+        itemCode: it.itemCode,
+        name: it.itemName || it.genericName,
+        itemName: it.itemName,
+        genericName: it.genericName,
+        category: it.category || cfg.category || 'Pathology',
+        department: it.department || cfg.department || '',
+        mrp: cfg.mrp || 0,
+        netRate: cfg.netRate || 0
+      };
+    });
+
+    res.json(results);
+  } catch (error) {
+    console.error("Prescription test catalog search error:", error);
+    res.status(500).json({ error: "Failed to fetch test catalog" });
+  }
+});
+
 // Get all prescriptions (filter by status or patientId, scoped to tenant)
 router.get("/", async (req, res) => {
   try {
@@ -24,10 +188,10 @@ router.get("/", async (req, res) => {
     if (req.query.status) query.status = req.query.status;
     if (req.query.patientId) query.patientId = req.query.patientId;
 
-    // Projection: only fields the pharmacy queue / doctor history actually need
+    // Projection: includes notes, diagnosis, tests and all essential clinical fields
     const prescriptions = await Prescription.find(query)
       .select(
-        "patientId doctorId items status createdAt updatedAt appointmentId doctorSignatureUrl prescriptionType images offlineMetadata editableUntil isLocked correctionHistory",
+        "patientId doctorId items status createdAt updatedAt appointmentId doctorSignatureUrl prescriptionType images offlineMetadata editableUntil isLocked correctionHistory notes diagnosis tests",
       )
       .populate("patientId", "name age gender contact email address uhId patientId bloodGroup")
       .populate("doctorId", "name specialty department designation staff_id signatureUrl")
@@ -42,10 +206,31 @@ router.get("/", async (req, res) => {
   }
 });
 
+// Get single prescription by ID (scoped to tenant)
+router.get("/:id", async (req, res) => {
+  try {
+    const rx = await Prescription.findOne({ _id: req.params.id, tenantId: req.tenantId })
+      .populate("patientId", "name age gender contact email address uhId patientId bloodGroup")
+      .populate("doctorId", "name specialty department designation staff_id signatureUrl")
+      .populate("appointmentId", "diagnosis notes vitals date time status reason")
+      .lean();
+    if (!rx) {
+      return res.status(404).json({ error: "Prescription not found" });
+    }
+    res.json(rx);
+  } catch (error) {
+    console.error("Get prescription by ID error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Create a prescription (scoped to tenant) — NO premature stock deduction
 router.post("/", async (req, res) => {
-  const { patientId, doctorId, items, status, appointmentId } = req.body;
+  const { patientId, doctorId, items, status, appointmentId, notes, diagnosis, tests } = req.body;
   try {
+    // Validate catalog items against current tenant's active hospital master catalog
+    await validatePrescriptionItemsCatalog(req.tenantId, items);
+
     // Snapshot prescribing doctor's digital signature at the time of creation
     let signatureSnapshot = '';
     const prescribingDocId = doctorId || req.user.id;
@@ -63,6 +248,9 @@ router.post("/", async (req, res) => {
       items,
       status: status || 'Pending',
       appointmentId,
+      notes: typeof notes === 'string' ? notes : '',
+      diagnosis: typeof diagnosis === 'string' ? diagnosis : '',
+      tests: Array.isArray(tests) ? tests : (Array.isArray(req.body.labs) ? req.body.labs : []),
       doctorSignatureUrl: signatureSnapshot
     });
 
@@ -92,7 +280,7 @@ router.post("/", async (req, res) => {
 
 // Update status or edit prescription details (scoped to tenant)
 router.put("/:id", async (req, res) => {
-  const { items, status, appointmentId, labs, diagnosis, notes } = req.body;
+  const { items, status, appointmentId, labs, diagnosis, notes, tests } = req.body;
   try {
     const rxId = req.params.id;
     const previous = await Prescription.findOne({
@@ -103,6 +291,11 @@ router.put("/:id", async (req, res) => {
       .lean();
     if (!previous)
       return res.status(404).json({ error: "Prescription not found" });
+
+    // Validate that catalog items belong to this tenant's hospital catalog if items provided
+    if (items !== undefined) {
+      await validatePrescriptionItemsCatalog(req.tenantId, items);
+    }
 
     const isDispenseTransition = (status === 'Dispensed' || status === 'Dispensed by Pharmacy');
     const wasAlreadyDispensed = (previous.status === 'Dispensed' || previous.status === 'Dispensed by Pharmacy');
@@ -152,6 +345,10 @@ router.put("/:id", async (req, res) => {
     if (items !== undefined) updateObj.items = items;
     if (status !== undefined) updateObj.status = status;
     if (appointmentId !== undefined) updateObj.appointmentId = appointmentId;
+    if (notes !== undefined) updateObj.notes = notes;
+    if (diagnosis !== undefined) updateObj.diagnosis = diagnosis;
+    if (tests !== undefined) updateObj.tests = tests;
+    else if (labs !== undefined) updateObj.tests = labs;
 
     const prescription = await Prescription.findOneAndUpdate(
       { _id: rxId, tenantId: req.tenantId },
