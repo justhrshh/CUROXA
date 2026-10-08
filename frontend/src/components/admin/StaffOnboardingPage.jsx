@@ -457,7 +457,7 @@ export default function StaffOnboardingPage({
 
         {/* ─── WORKSTATION TOP BANNER ─── */}
         <div style={{
-          background: 'linear-gradient(90deg, #0284C7 0%, #0369A1 100%)',
+          background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
           color: '#FFFFFF',
           padding: '7px 16px',
           display: 'flex',
@@ -1046,7 +1046,7 @@ export default function StaffOnboardingPage({
                     <button
                       type="button"
                       onClick={handleSelectAllSlots}
-                      style={{ background: 'none', border: 'none', color: '#0284C7', fontSize: '11px', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                      style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11px', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
                     >
                       Select All
                     </button>
@@ -1067,7 +1067,7 @@ export default function StaffOnboardingPage({
                         padding: '0 8px',
                         borderRadius: '3px',
                         border: 'none',
-                        background: '#0284C7',
+                        background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
                         color: '#FFFFFF',
                         fontSize: '10.5px',
                         fontWeight: 700,
@@ -1092,7 +1092,7 @@ export default function StaffOnboardingPage({
                   <div style={{ padding: '8px 12px', marginBottom: '8px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                       <span style={{ fontSize: '11px', fontWeight: 750, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Clock style={{ width: 12, height: 12, color: '#0284C7' }} />
+                        <Clock style={{ width: 12, height: 12, color: '#2563EB' }} />
                         <span>Select Time Range for Custom OPD Slot</span>
                       </span>
                       <button
@@ -1176,7 +1176,7 @@ export default function StaffOnboardingPage({
                         <button
                           type="button"
                           onClick={handleAddSlotFromPicker}
-                          style={{ height: '24px', padding: '0 10px', borderRadius: '3px', border: 'none', background: '#0284C7', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                          style={{ height: '24px', padding: '0 10px', borderRadius: '3px', border: 'none', background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
                         >
                           Add Slot
                         </button>
@@ -1211,8 +1211,8 @@ export default function StaffOnboardingPage({
                           height: '23px',
                           padding: '0 7px',
                           borderRadius: '3px',
-                          border: isSelected ? '1px solid #0284C7' : '1px solid #CBD5E1',
-                          background: isSelected ? '#0284C7' : '#FFFFFF',
+                          border: isSelected ? '1px solid #1D4ED8' : '1px solid #CBD5E1',
+                          background: isSelected ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#FFFFFF',
                           color: isSelected ? '#FFFFFF' : '#334155',
                           fontSize: '10.5px',
                           fontWeight: isSelected ? 750 : 500,
@@ -1220,7 +1220,8 @@ export default function StaffOnboardingPage({
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '4px',
-                          transition: 'all 0.1s ease'
+                          transition: 'all 0.1s ease',
+                          boxShadow: isSelected ? '0 1px 4px rgba(37, 99, 235, 0.25)' : 'none'
                         }}
                         title={isSelected ? 'Click to deselect slot' : 'Click to select slot'}
                       >
@@ -1255,7 +1256,7 @@ export default function StaffOnboardingPage({
                   (Demographics, Aadhaar, PAN, Address & Emergency Contact - Optional)
                 </span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: '#0284C7', fontWeight: 700 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: '#2563EB', fontWeight: 700 }}>
                 <span>{showOptionalDetails ? 'Hide Section ▲' : 'Show Section ▼'}</span>
               </div>
             </div>
@@ -1541,7 +1542,7 @@ export default function StaffOnboardingPage({
                   padding: '0 18px',
                   borderRadius: '3px',
                   border: 'none',
-                  background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
+                  background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
                   color: '#FFFFFF',
                   fontSize: '11.5px',
                   fontWeight: 800,
@@ -1550,7 +1551,7 @@ export default function StaffOnboardingPage({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  boxShadow: '0 1px 3px rgba(2, 132, 199, 0.3)'
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)'
                 }}
               >
                 {isSubmitting ? (

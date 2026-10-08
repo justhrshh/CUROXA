@@ -11047,7 +11047,7 @@ const ReceptionistDashboard = () => {
 
   {/* Enterprise HIS Single-Sheet Registration Workstation (Exact layout matching media_1791438583216.png) */}
   <div style={{ flex: 1, overflowY: "auto", background: "#F1F5F9", padding: "10px 14px 20px" }}>
-    <div style={{ maxWidth: "1440px", margin: "0 auto", background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "4px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", padding: "10px 16px 14px" }}>
+    <div style={{ width: "100%", margin: "0 auto", background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "4px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", padding: "10px 16px 14px", boxSizing: "border-box" }}>
 
       {/* ─── TOP TITLE: Centered "New Registration" (Excluding ABHA portal, matching reference) ─── */}
       <div style={{ position: "relative", textAlign: "center", paddingBottom: "8px", borderBottom: "1px solid #CBD5E1", marginBottom: "10px" }}>
@@ -11068,9 +11068,9 @@ const ReceptionistDashboard = () => {
             style={{
               padding: "3px 8px",
               borderRadius: "3px",
-              border: bookingType === "doctor" ? "1px solid #0284C7" : "1px solid #CBD5E1",
-              background: bookingType === "doctor" ? "#E0F2FE" : "#FFFFFF",
-              color: bookingType === "doctor" ? "#0369A1" : "#475569",
+              border: bookingType === "doctor" ? "1px solid #2563EB" : "1px solid #CBD5E1",
+              background: bookingType === "doctor" ? "#EFF6FF" : "#FFFFFF",
+              color: bookingType === "doctor" ? "#1D4ED8" : "#475569",
               fontSize: "11px",
               fontWeight: bookingType === "doctor" ? 800 : 600,
               cursor: "pointer"
@@ -11084,9 +11084,9 @@ const ReceptionistDashboard = () => {
             style={{
               padding: "3px 8px",
               borderRadius: "3px",
-              border: bookingType === "lab" ? "1px solid #0284C7" : "1px solid #CBD5E1",
-              background: bookingType === "lab" ? "#E0F2FE" : "#FFFFFF",
-              color: bookingType === "lab" ? "#0369A1" : "#475569",
+              border: bookingType === "lab" ? "1px solid #2563EB" : "1px solid #CBD5E1",
+              background: bookingType === "lab" ? "#EFF6FF" : "#FFFFFF",
+              color: bookingType === "lab" ? "#1D4ED8" : "#475569",
               fontSize: "11px",
               fontWeight: bookingType === "lab" ? 800 : 600,
               cursor: "pointer"
@@ -11100,9 +11100,9 @@ const ReceptionistDashboard = () => {
             style={{
               padding: "3px 8px",
               borderRadius: "3px",
-              border: bookingType === "service" ? "1px solid #0284C7" : "1px solid #CBD5E1",
-              background: bookingType === "service" ? "#E0F2FE" : "#FFFFFF",
-              color: bookingType === "service" ? "#0369A1" : "#475569",
+              border: bookingType === "service" ? "1px solid #2563EB" : "1px solid #CBD5E1",
+              background: bookingType === "service" ? "#EFF6FF" : "#FFFFFF",
+              color: bookingType === "service" ? "#1D4ED8" : "#475569",
               fontSize: "11px",
               fontWeight: bookingType === "service" ? 800 : 600,
               cursor: "pointer"
@@ -11276,7 +11276,7 @@ const ReceptionistDashboard = () => {
                     height: "23px",
                     borderRadius: "2px",
                     border: "none",
-                    background: "#0284C7",
+                    background: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
                     color: "#FFFFFF",
                     fontSize: "10.5px",
                     fontWeight: 700,
@@ -11317,7 +11317,7 @@ const ReceptionistDashboard = () => {
                     <input
                       type="range" min="1" max="3" step="0.05" value={photoZoom}
                       onChange={e => setPhotoZoom(parseFloat(e.target.value))}
-                      style={{ flex: 1, height: "3px", accentColor: "#0284C7", cursor: "pointer" }}
+                      style={{ flex: 1, height: "3px", accentColor: "#2563EB", cursor: "pointer" }}
                     />
                     <button
                       type="button"
@@ -11618,7 +11618,7 @@ const ReceptionistDashboard = () => {
                         padding: "0 5px",
                         borderRadius: "2px",
                         border: "none",
-                        background: sendingOtp ? "#94A3B8" : "#0284C7",
+                        background: sendingOtp ? "#94A3B8" : "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
                         color: "#FFFFFF",
                         fontSize: "9.5px",
                         fontWeight: 750,
@@ -11780,11 +11780,12 @@ const ReceptionistDashboard = () => {
                             padding: "0 6px",
                             fontSize: "10.5px",
                             borderRadius: "2px",
-                            border: sel ? "1px solid #0284C7" : "1px solid #CBD5E1",
-                            background: sel ? "#0284C7" : (full || past ? "#F1F5F9" : "#FFFFFF"),
+                            border: sel ? "1px solid #1D4ED8" : "1px solid #CBD5E1",
+                            background: sel ? "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)" : (full || past ? "#F1F5F9" : "#FFFFFF"),
                             color: sel ? "#FFFFFF" : (full || past ? "#94A3B8" : "#334155"),
                             cursor: (full || past) ? "not-allowed" : "pointer",
-                            fontWeight: sel ? 800 : 500
+                            fontWeight: sel ? 800 : 500,
+                            boxShadow: sel ? "0 1px 4px rgba(37, 99, 235, 0.25)" : "none"
                           }}
                         >
                           {disp}
@@ -11859,7 +11860,7 @@ const ReceptionistDashboard = () => {
             </div>
 
             {/* ─── HORIZONTAL DIVIDER (Exact match with media_1791438583216.jpg) ─── */}
-            <div style={{ borderTop: "2px solid #0284C7", margin: "10px 0 8px" }}></div>
+            <div style={{ borderTop: "2px solid #2563EB", margin: "10px 0 8px" }}></div>
 
             {/* ─── BILLING & SETTLEMENT SECTION (Matching Reference Table Structure) ─── */}
             {(() => {
@@ -11900,9 +11901,9 @@ const ReceptionistDashboard = () => {
                                 flex: 1,
                                 height: "26px",
                                 borderRadius: "2px",
-                                border: isSel ? "1.5px solid #0284C7" : "1px solid #CBD5E1",
-                                background: isSel ? "#E0F2FE" : "#FFFFFF",
-                                color: isSel ? "#0369A1" : "#334155",
+                                border: isSel ? "1.5px solid #2563EB" : "1px solid #CBD5E1",
+                                background: isSel ? "#EFF6FF" : "#FFFFFF",
+                                color: isSel ? "#1D4ED8" : "#334155",
                                 fontSize: "10.5px",
                                 fontWeight: isSel ? 800 : 500,
                                 cursor: "pointer"
@@ -11999,14 +12000,15 @@ const ReceptionistDashboard = () => {
                         padding: "0 22px",
                         borderRadius: "3px",
                         border: "none",
-                        background: "#0284C7",
+                        background: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
                         color: "#FFFFFF",
                         fontSize: "12px",
                         fontWeight: 800,
                         cursor: loading ? "not-allowed" : "pointer",
                         display: "flex",
                         alignItems: "center",
-                        gap: "4px"
+                        gap: "4px",
+                        boxShadow: "0 4px 12px rgba(37, 99, 235, 0.35)"
                       }}
                     >
                       {loading
@@ -12033,9 +12035,9 @@ const ReceptionistDashboard = () => {
                         height: "28px",
                         padding: "0 18px",
                         borderRadius: "3px",
-                        border: "none",
-                        background: "#0284C7",
-                        color: "#FFFFFF",
+                        border: "1px solid #CBD5E1",
+                        background: "#FFFFFF",
+                        color: "#334155",
                         fontSize: "12px",
                         fontWeight: 700,
                         cursor: "pointer"
