@@ -1018,6 +1018,106 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   const [viewingDpdpRequest, setViewingDpdpRequest] = useState(null);
   const [dpdpResolutionNotes, setDpdpResolutionNotes] = useState('');
 
+  // Lab Request Processing Modal states (from Alerts / Live queue)
+  const [processingLabAlert, setProcessingLabAlert] = useState(null);
+  const [labResultText, setLabResultText] = useState('');
+  const [labNotesText, setLabNotesText] = useState('');
+  const [labActionLoading, setLabActionLoading] = useState(false);
+
+  const openLabProcessingModal = (alert) => {
+    setProcessingLabAlert(alert);
+    setLabResultText(alert.rawItem?.results || '');
+    setLabNotesText(alert.rawItem?.notes || '');
+  };
+
+  const handleMarkLabInProgress = async () => {
+    if (!processingLabAlert) return;
+    const labId = processingLabAlert.rawItem?._id || processingLabAlert.rawItem?.id;
+    if (!labId) {
+      showToast('Lab record ID not found', 'error');
+      return;
+    }
+    setLabActionLoading(true);
+    try {
+      await api.put(`/labs/${labId}`, { 
+        status: 'In Progress', 
+        notes: labNotesText ? labNotesText.trim() : (processingLabAlert.rawItem?.notes || 'Sample collected & received in laboratory.')
+      });
+      showToast('Lab test marked In Progress (Sample Collected)', 'success');
+      dismissEnterpriseAlert(processingLabAlert.id);
+      if (processingLabAlert.sourceAlertId) {
+        dismissEnterpriseAlert(processingLabAlert.sourceAlertId);
+      }
+      fetchWarningAlerts();
+      setProcessingLabAlert(null);
+    } catch (err) {
+      console.error('Failed to update lab status to In Progress', err);
+      showToast('Failed to update lab status: ' + (err.response?.data?.error || err.message), 'error');
+    } finally {
+      setLabActionLoading(false);
+    }
+  };
+
+  const handleCompleteLabTest = async () => {
+    if (!processingLabAlert) return;
+    const labId = processingLabAlert.rawItem?._id || processingLabAlert.rawItem?.id;
+    if (!labId) {
+      showToast('Lab record ID not found', 'error');
+      return;
+    }
+    if (!labResultText.trim()) {
+      showToast('Please enter the test findings / results before completing', 'error');
+      return;
+    }
+    setLabActionLoading(true);
+    try {
+      await api.put(`/labs/${labId}`, { 
+        status: 'Completed', 
+        results: labResultText.trim(),
+        notes: labNotesText.trim()
+      });
+      showToast('Lab report completed! Findings recorded and reagents updated.', 'success');
+      dismissEnterpriseAlert(processingLabAlert.id);
+      if (processingLabAlert.sourceAlertId) {
+        dismissEnterpriseAlert(processingLabAlert.sourceAlertId);
+      }
+      fetchWarningAlerts();
+      setProcessingLabAlert(null);
+    } catch (err) {
+      console.error('Failed to complete lab test', err);
+      showToast('Failed to complete test: ' + (err.response?.data?.error || err.message), 'error');
+    } finally {
+      setLabActionLoading(false);
+    }
+  };
+
+  const handleViewPatientFromLab = () => {
+    if (!processingLabAlert) return;
+    const patientObj = processingLabAlert.rawItem?.patientId;
+    if (patientObj) {
+      const pId = typeof patientObj === 'object' ? (patientObj._id || patientObj.id) : patientObj;
+      const found = patients.find(p => (p._id || p.id) === pId);
+      if (found) {
+        setViewingPatient(found);
+      } else if (typeof patientObj === 'object') {
+        setViewingPatient({
+          id: patientObj._id || patientObj.id,
+          raw: patientObj,
+          name: patientObj.name || 'Patient',
+          age: patientObj.age,
+          gender: patientObj.gender,
+          phone: patientObj.contact || patientObj.phone,
+          uhid: patientObj.uhid || patientObj.mrn || 'N/A'
+        });
+      }
+      setActiveTab('patient-details');
+      setProcessingLabAlert(null);
+    } else {
+      setActiveTab('patients');
+      setProcessingLabAlert(null);
+    }
+  };
+
   // Subscription live states
   const [subscription, setSubscription] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
@@ -3598,6 +3698,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         owner: ca.title.includes('Lab') ? 'Lab Head' : 'Pharmacy Head',
         timestamp: ca.rawItem?.createdAt || now,
         actionText: 'Review Stock',
+        rawItem: ca.rawItem,
+        sourceAlertId: ca.id,
       });
     });
 
@@ -3628,7 +3730,9 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         department: wa.title?.toLowerCase().includes('lab') ? 'Laboratory' : 'Admin',
         owner: 'Admin',
         timestamp: wa.rawItem?.createdAt || now,
-        actionText: wa.actionText || 'Review',
+        actionText: wa.actionText || 'Process',
+        rawItem: wa.rawItem,
+        sourceAlertId: wa.id,
       });
     });
 
@@ -13508,6 +13612,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                                     onClick={() => {
                                       if (alert.type === 'critical') {
                                         resolveCriticalAlert(alert.id, alert.title, 'Restock', alert.rawItem);
+                                      } else if (alert.rawItem?.testName || alert.title?.toLowerCase().includes('lab')) {
+                                        openLabProcessingModal(alert);
                                       } else {
                                         resolveWarningAlert(alert.id, alert.title, 'Process', alert.rawItem);
                                       }
@@ -15384,6 +15490,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                                         setActiveTab('appointments');
                                       } else if (alert.actionText === 'Resolve') {
                                         resolveCriticalAlert(alert.id, alert.title, alert.rawItem);
+                                      } else if (alert.actionText === 'Process' || alert.category === 'laboratory' || alert.title?.toLowerCase().includes('lab report')) {
+                                        openLabProcessingModal(alert);
                                       } else {
                                         showToast(`Action: ${alert.actionText || 'Review'} — ${alert.title}`, 'success');
                                       }
@@ -29132,6 +29240,379 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             </div>
           </div>
         )}
+
+
+      {/* 8. LAB REQUEST PROCESSING MODAL */}
+      {processingLabAlert && (
+        <div 
+          className="admin-modal-overlay" 
+          data-lenis-prevent 
+          onClick={() => !labActionLoading && setProcessingLabAlert(null)}
+          style={{ zIndex: 99999 }}
+        >
+          <div 
+            className="admin-modal-card" 
+            onClick={e => e.stopPropagation()} 
+            style={{ 
+              maxWidth: '620px', 
+              padding: '0', 
+              borderRadius: '16px',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+              border: '1px solid #E2E8F0'
+            }}
+          >
+            {/* Modal Header with Royal Blue Gradient */}
+            <div style={{
+              background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+              padding: '20px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              color: '#FFFFFF'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  backdropFilter: 'blur(4px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid rgba(255, 255, 255, 0.2)'
+                }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 2v7.31M14 9.31V2M8.5 2h7M14 9.3a6.5 6.5 0 1 1-4 0" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 850, letterSpacing: '-0.02em', color: '#FFFFFF' }}>
+                    Process Laboratory Order
+                  </h3>
+                  <div style={{ fontSize: '12px', color: '#BFDBFE', fontWeight: 600, marginTop: '2px' }}>
+                    Order Ref: #{((processingLabAlert.rawItem?._id || processingLabAlert.id || '').slice(-8)).toUpperCase()} • Category: Diagnostics
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={() => !labActionLoading && setProcessingLabAlert(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#FFFFFF',
+                  transition: 'background 0.2s'
+                }}
+                title="Close"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <div style={{ padding: '22px 24px', maxHeight: '78vh', overflowY: 'auto' }}>
+              {/* Order Status Stepper */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                padding: '12px 18px',
+                background: '#F8FAFC',
+                borderRadius: '12px',
+                border: '1px solid #E2E8F0',
+                marginBottom: '20px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: '#2563EB',
+                    color: '#FFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '11px',
+                    fontWeight: 800
+                  }}>1</div>
+                  <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>Ordered</span>
+                </div>
+                <div style={{ flex: 1, height: '2px', background: processingLabAlert.rawItem?.status === 'In Progress' || processingLabAlert.rawItem?.status === 'Completed' ? '#2563EB' : '#CBD5E1', margin: '0 12px' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: processingLabAlert.rawItem?.status === 'In Progress' ? '#F59E0B' : (processingLabAlert.rawItem?.status === 'Completed' ? '#10B981' : '#E2E8F0'),
+                    color: processingLabAlert.rawItem?.status === 'In Progress' || processingLabAlert.rawItem?.status === 'Completed' ? '#FFF' : '#64748B',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '11px',
+                    fontWeight: 800
+                  }}>2</div>
+                  <span style={{ fontSize: '12.5px', fontWeight: 700, color: processingLabAlert.rawItem?.status === 'In Progress' ? '#B45309' : '#475569' }}>Sample Collected</span>
+                </div>
+                <div style={{ flex: 1, height: '2px', background: processingLabAlert.rawItem?.status === 'Completed' ? '#10B981' : '#CBD5E1', margin: '0 12px' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: processingLabAlert.rawItem?.status === 'Completed' ? '#10B981' : '#E2E8F0',
+                    color: processingLabAlert.rawItem?.status === 'Completed' ? '#FFF' : '#64748B',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '11px',
+                    fontWeight: 800
+                  }}>3</div>
+                  <span style={{ fontSize: '12.5px', fontWeight: 700, color: processingLabAlert.rawItem?.status === 'Completed' ? '#047857' : '#475569' }}>Completed</span>
+                </div>
+              </div>
+
+              {/* Patient & Test Overview Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+                <div style={{
+                  background: '#F8FAFC',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  border: '1px solid #E2E8F0'
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    PATIENT DETAILS
+                  </div>
+                  <div style={{ fontSize: '15px', fontWeight: 850, color: '#0F172A', marginTop: '6px' }}>
+                    {processingLabAlert.rawItem?.patientId?.name || 'Ishita Jain'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#475569', fontWeight: 600, marginTop: '2px' }}>
+                    {processingLabAlert.rawItem?.patientId?.age ? `${processingLabAlert.rawItem.patientId.age} Yrs` : ''} 
+                    {processingLabAlert.rawItem?.patientId?.contact ? ` • ${processingLabAlert.rawItem.patientId.contact}` : ''}
+                  </div>
+                </div>
+
+                <div style={{
+                  background: '#F8FAFC',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  border: '1px solid #E2E8F0'
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    INVESTIGATION ORDERED
+                  </div>
+                  <div style={{ fontSize: '14.5px', fontWeight: 850, color: '#2563EB', marginTop: '6px' }}>
+                    {processingLabAlert.rawItem?.testName || processingLabAlert.title.replace('Lab report pending: ', '')}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#475569', fontWeight: 600, marginTop: '2px' }}>
+                    Ordered: {new Date(processingLabAlert.rawItem?.createdAt || processingLabAlert.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {processingLabAlert.rawItem?.doctorId?.name ? ` • Dr. ${processingLabAlert.rawItem.doctorId.name}` : ''}
+                  </div>
+                </div>
+              </div>
+
+              {/* Sample Collection Action Block */}
+              {processingLabAlert.rawItem?.status !== 'In Progress' && processingLabAlert.rawItem?.status !== 'Completed' && (
+                <div style={{
+                  background: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E40AF' }}>
+                      Phlebotomy / Specimen Receipt Pending
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#3B82F6', fontWeight: 600, marginTop: '2px' }}>
+                      Specimen hasn't been flagged as collected yet. Mark in-progress to notify clinicians.
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleMarkLabInProgress}
+                    disabled={labActionLoading}
+                    style={{
+                      background: '#FFFFFF',
+                      color: '#2563EB',
+                      border: '1.5px solid #2563EB',
+                      borderRadius: '8px',
+                      padding: '8px 14px',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                    }}
+                  >
+                    {labActionLoading ? 'Updating...' : '✓ Mark Sample Collected'}
+                  </button>
+                </div>
+              )}
+
+              {/* Enter Results Form */}
+              <div style={{ marginBottom: '18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>
+                    Clinical Lab Findings / Results <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Recorded in EMR chart</span>
+                </div>
+
+                {/* Preset quick pills */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  {[
+                    'Negative (<60 pg/mL)',
+                    'Positive / Reactive',
+                    'Normal / Within Limits',
+                    'Borderline (60-79 pg/mL)',
+                    'Specimen Recollection Requested'
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setLabResultText(preset)}
+                      style={{
+                        background: labResultText === preset ? '#EFF6FF' : '#F1F5F9',
+                        color: labResultText === preset ? '#2563EB' : '#475569',
+                        border: labResultText === preset ? '1px solid #2563EB' : '1px solid #E2E8F0',
+                        borderRadius: '6px',
+                        padding: '4px 8px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+
+                <textarea
+                  rows={3}
+                  value={labResultText}
+                  onChange={e => setLabResultText(e.target.value)}
+                  placeholder="Enter quantitative values, diagnostic findings, or reference ranges..."
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '13px',
+                    color: '#0F172A',
+                    fontFamily: 'inherit',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Clinical / Pathologist Notes */}
+              <div style={{ marginBottom: '22px' }}>
+                <label style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', display: 'block', marginBottom: '6px' }}>
+                  Internal Lab Notes / Remarks (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={labNotesText}
+                  onChange={e => setLabNotesText(e.target.value)}
+                  placeholder="e.g., Verified by Lead Pathologist, automated reagent deduction recorded."
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '13px',
+                    color: '#0F172A',
+                    fontFamily: 'inherit',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Action Buttons Footer */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingTop: '16px',
+                borderTop: '1px solid #E2E8F0'
+              }}>
+                <button
+                  type="button"
+                  onClick={handleViewPatientFromLab}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#2563EB',
+                    fontSize: '12.5px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 0'
+                  }}
+                >
+                  <span>Open Patient EMR Record</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </button>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => !labActionLoading && setProcessingLabAlert(null)}
+                    disabled={labActionLoading}
+                    style={{
+                      background: '#F1F5F9',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '9px 16px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      color: '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCompleteLabTest}
+                    disabled={labActionLoading}
+                    style={{
+                      background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '9px 20px',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      color: '#FFFFFF',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(37, 99, 235, 0.35)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    {labActionLoading ? 'Saving...' : 'Finalize & Complete Report →'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       </div>
     </>
