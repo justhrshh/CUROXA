@@ -395,865 +395,1167 @@ export default function StaffOnboardingPage({
     }
   };
 
+  const tableInp = {
+    height: '26px',
+    borderRadius: '3px',
+    border: '1px solid #CBD5E1',
+    background: '#FFFFFF',
+    fontSize: '11.5px',
+    fontWeight: 500,
+    color: '#0F172A',
+    width: '100%',
+    padding: '0 8px',
+    outline: 'none',
+    boxSizing: 'border-box'
+  };
+
+  const fieldRow = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    height: '26px'
+  };
+
+  const labelStyle = {
+    width: '125px',
+    textAlign: 'left',
+    fontSize: '11px',
+    fontWeight: 650,
+    color: '#334155',
+    flexShrink: 0
+  };
+
+  const colonStyle = {
+    width: '6px',
+    textAlign: 'center',
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#64748B',
+    flexShrink: 0
+  };
+
+  const sectionHeaderStyle = {
+    gridColumn: '1 / -1',
+    background: '#F1F5F9',
+    borderTop: '1px solid #CBD5E1',
+    borderBottom: '1px solid #CBD5E1',
+    padding: '4px 10px',
+    fontSize: '11px',
+    fontWeight: 800,
+    letterSpacing: '0.04em',
+    color: '#0F172A',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: '6px',
+    marginBottom: '2px'
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 py-6 px-4 sm:px-6 lg:px-8 text-slate-800">
-      <div className="max-w-6xl mx-auto pb-20">
-        
-        {/* ── TOP HEADER / BREADCRUMB ── */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-          <div>
+    <div style={{ flex: 1, overflowY: 'auto', background: '#F1F5F9', padding: '10px 14px 24px', minHeight: '100vh', boxSizing: 'border-box' }}>
+      <div style={{ maxWidth: '1360px', margin: '0 auto', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+
+        {/* ─── WORKSTATION TOP BANNER ─── */}
+        <div style={{
+          background: 'linear-gradient(90deg, #0284C7 0%, #0369A1 100%)',
+          color: '#FFFFFF',
+          padding: '7px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               type="button"
               onClick={onCancel}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-300 hover:border-slate-400 px-3 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer mb-2"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 8px',
+                borderRadius: '3px',
+                border: '1px solid rgba(255,255,255,0.3)',
+                background: 'rgba(255,255,255,0.15)',
+                color: '#FFFFFF',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
+              <ArrowLeft style={{ width: 12, height: 12 }} />
               <span>{backLabel || 'Back to Employees'}</span>
             </button>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Add New Employee
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Create login credentials, assign role and configure employee access{hospitalName ? ` for ${hospitalName}` : ''}.
-            </p>
+            <div style={{ width: '1px', height: '14px', background: 'rgba(255,255,255,0.3)' }} />
+            <span style={{ fontSize: '13.5px', fontWeight: 800, letterSpacing: '0.01em' }}>
+              Add New Employee • Staff Onboarding Workstation
+            </span>
+            {hospitalName && (
+              <span style={{ fontSize: '11px', fontWeight: 600, background: 'rgba(255,255,255,0.2)', padding: '1px 8px', borderRadius: '3px' }}>
+                {hospitalName}
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="text-xs font-semibold text-slate-600 bg-slate-200/80 px-2.5 py-1 rounded-md flex items-center gap-1">
-              <span className="text-rose-500 font-black text-base leading-none select-none">*</span> Required fields
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '10.5px', fontWeight: 700, background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '3px' }}>
+              <span style={{ color: '#FECDD3', fontWeight: 900 }}>*</span> Required Fields
             </span>
           </div>
         </div>
 
         {/* Global Error Banner */}
         {formError && (
-          <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs sm:text-sm text-rose-700 font-semibold flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
-            <span className="flex-1">{formError}</span>
+          <div style={{ margin: '10px 16px 0', padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '3px', fontSize: '12px', color: '#B91C1C', fontWeight: 650, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertCircle style={{ width: 14, height: 14, color: '#EF4444', flexShrink: 0 }} />
+            <span>{formError}</span>
           </div>
         )}
 
-        <form 
-          ref={formRef} 
-          onSubmit={handleSubmit} 
-          onKeyDown={handleKeyDown} 
+        <form
+          ref={formRef}
+          onSubmit={handleSubmit}
+          onKeyDown={handleKeyDown}
           autoComplete="off"
-          className="space-y-4"
+          style={{ padding: '10px 16px 14px' }}
         >
 
-          {/* ══════════════════════════════════════════════════════════════════
-              SECTION 1: ACCOUNT & SECURITY
-             ══════════════════════════════════════════════════════════════════ */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="px-5 py-2.5 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
-              <div>
-                <h2 className="text-xs sm:text-[13px] font-black uppercase tracking-wider text-slate-800 m-0">
-                  1. Account & Security
-                </h2>
-                <p className="text-xs text-slate-500 m-0 mt-0.5">
-                  Core login credentials and employee identity
-                </p>
+          {/* ─── CONTINUOUS 3-COLUMN TABLE GRID ─── */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr',
+            columnGap: '16px',
+            rowGap: '6px',
+            alignItems: 'center'
+          }}>
+
+            {/* ══════════════════════════════════════════════════════════════════
+                SECTION 1: ACCOUNT & SECURITY CREDENTIALS
+               ══════════════════════════════════════════════════════════════════ */}
+            <div style={sectionHeaderStyle}>
+              <span>1. ACCOUNT & SECURITY CREDENTIALS</span>
+              <span style={{ fontSize: '10px', fontWeight: 600, color: '#64748B' }}>
+                Core Login Identity & Access Credentials
+              </span>
+            </div>
+
+            {/* ROW 1: Name, Phone, Login ID */}
+            {/* Col 1: Full Legal Name */}
+            <div style={fieldRow}>
+              <span style={labelStyle}>
+                Full Legal Name <span style={{ color: '#EF4444' }}>*</span>
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="e.g. Dr. Rajesh Sharma"
+                  value={formData.name}
+                  onChange={e => {
+                    setFormData({ ...formData, name: e.target.value });
+                    if (fieldErrors.name) setFieldErrors(prev => ({ ...prev, name: '' }));
+                  }}
+                  style={{
+                    ...tableInp,
+                    ...(fieldErrors.name ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
+                  }}
+                />
               </div>
             </div>
 
-            <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-6 gap-3.5">
-              
-              {/* Full Legal Name */}
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Full Legal Name <span className="text-rose-500 font-black text-sm ml-0.5 select-none leading-none">*</span>
-                </label>
-                <div className="relative flex items-center">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
-                  <input
-                    type="text"
-                    name="name"
-                    placeholder="e.g. Dr. Rajesh Sharma"
-                    value={formData.name}
-                    onChange={e => {
-                      setFormData({ ...formData, name: e.target.value });
-                      if (fieldErrors.name) setFieldErrors(prev => ({ ...prev, name: '' }));
-                    }}
-                    className={`w-full h-9.5 pl-9 pr-3.5 bg-white border ${
-                      fieldErrors.name ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300 focus:border-blue-600'
-                    } rounded-lg text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`}
-                  />
-                </div>
-                {fieldErrors.name && (
-                  <p className="text-xs text-rose-600 font-medium mt-1">{fieldErrors.name}</p>
+            {/* Col 2: Phone Number */}
+            <div style={fieldRow}>
+              <span style={labelStyle}>
+                Phone Number <span style={{ color: '#EF4444' }}>*</span>
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+                <input
+                  type="tel"
+                  name="phone"
+                  maxLength={10}
+                  placeholder="10-digit mobile number"
+                  value={formData.phone}
+                  onChange={e => {
+                    const digits = e.target.value.replace(/\D/g, '');
+                    setFormData({
+                      ...formData,
+                      phone: digits,
+                      staff_id: digits
+                    });
+                    if (fieldErrors.phone) setFieldErrors(prev => ({ ...prev, phone: '' }));
+                  }}
+                  style={{
+                    ...tableInp,
+                    ...(fieldErrors.phone ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Col 3: System Login ID (Auto-populated from phone) */}
+            <div style={fieldRow}>
+              <span style={labelStyle}>
+                System Login ID
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  name="staff_id"
+                  readOnly
+                  value={formData.phone || 'Auto-populated from Phone'}
+                  style={{
+                    ...tableInp,
+                    background: '#F8FAFC',
+                    fontFamily: 'monospace',
+                    fontWeight: 700,
+                    color: '#475569',
+                    paddingRight: formData.phone.length === 10 ? '75px' : '8px',
+                    cursor: 'not-allowed'
+                  }}
+                />
+                {formData.phone.length === 10 && (
+                  <span style={{
+                    position: 'absolute',
+                    right: '6px',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    color: '#059669',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '2px'
+                  }}>
+                    <Check style={{ width: 11, height: 11, strokeWidth: 3 }} /> Valid ID
+                  </span>
                 )}
               </div>
+            </div>
 
-              {/* Phone Number */}
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Phone Number <span className="text-rose-500 font-black text-sm ml-0.5 select-none leading-none">*</span>
-                </label>
-                <div className="relative flex items-center">
-                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
-                  <input
-                    type="tel"
-                    name="phone"
-                    maxLength="10"
-                    placeholder="10-digit mobile number"
-                    value={formData.phone}
-                    onChange={e => {
-                      const digits = e.target.value.replace(/\D/g, '');
-                      setFormData({ 
-                        ...formData, 
-                        phone: digits,
-                        staff_id: digits 
-                      });
-                      if (fieldErrors.phone) setFieldErrors(prev => ({ ...prev, phone: '' }));
-                    }}
-                    className={`w-full h-9.5 pl-9 pr-3.5 bg-white border ${
-                      fieldErrors.phone ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300 focus:border-blue-600'
-                    } rounded-lg text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`}
-                  />
-                </div>
-                {fieldErrors.phone && (
-                  <p className="text-xs text-rose-600 font-medium mt-1">{fieldErrors.phone}</p>
-                )}
-              </div>
-
-              {/* System Login ID / Employee ID (Auto-populated from phone) */}
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  System Login ID / Employee ID
-                </label>
-                <div className="relative flex items-center">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600 absolute left-3 pointer-events-none" />
-                  <input
-                    type="text"
-                    name="staff_id"
-                    readOnly
-                    value={formData.phone || 'Auto-populated from Phone Number'}
-                    className="w-full h-9.5 pl-9 pr-24 bg-slate-100/80 border border-slate-200 rounded-lg text-xs sm:text-sm font-bold text-slate-600 cursor-not-allowed select-none font-mono"
-                  />
-                  {formData.phone.length === 10 && (
-                    <span className="absolute right-3 text-xs font-bold text-emerald-600 flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5 stroke-[3]" /> Valid ID
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Login Password */}
-              <div className="md:col-span-3">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700">
-                    Login Password <span className="text-rose-500 font-black text-sm ml-0.5 select-none leading-none">*</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={generateSecurePassword}
-                    className="text-xs font-bold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded px-2 py-0.5 flex items-center gap-1 transition-colors cursor-pointer"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>Generate</span>
-                  </button>
-                </div>
-                <div className="relative flex items-center">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+            {/* ROW 2: Password, Confirm Password, Work Location */}
+            {/* Col 1: Login Password */}
+            <div style={fieldRow}>
+              <span style={labelStyle}>
+                Login Password <span style={{ color: '#EF4444' }}>*</span>
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', minWidth: 0 }}>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     placeholder="Enter password"
                     value={formData.password}
                     style={{
-                      letterSpacing: (!showPassword && formData.password) ? '0.24em' : 'normal',
-                      fontSize: (!showPassword && formData.password) ? '18px' : '13px'
+                      ...tableInp,
+                      paddingRight: '26px',
+                      letterSpacing: (!showPassword && formData.password) ? '0.18em' : 'normal',
+                      fontSize: (!showPassword && formData.password) ? '14px' : '11.5px',
+                      ...(fieldErrors.password ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
                     }}
                     onChange={e => {
                       setFormData({ ...formData, password: e.target.value });
                       if (fieldErrors.password) setFieldErrors(prev => ({ ...prev, password: '' }));
                     }}
-                    className={`w-full h-9.5 pl-9 pr-10 bg-white border placeholder:tracking-normal placeholder:font-normal placeholder:text-xs ${
-                      fieldErrors.password ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300 focus:border-blue-600'
-                    } rounded-lg font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    style={{ position: 'absolute', right: '5px', background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', padding: 0 }}
+                    title={showPassword ? 'Hide password' : 'Show password'}
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPassword ? <EyeOff style={{ width: 13, height: 13 }} /> : <Eye style={{ width: 13, height: 13 }} />}
                   </button>
                 </div>
-                {fieldErrors.password && (
-                  <p className="text-xs text-rose-600 font-medium mt-1">{fieldErrors.password}</p>
-                )}
+                <button
+                  type="button"
+                  onClick={generateSecurePassword}
+                  style={{
+                    height: '26px',
+                    padding: '0 6px',
+                    borderRadius: '3px',
+                    border: '1px solid #BFDBFE',
+                    background: '#EFF6FF',
+                    color: '#1D4ED8',
+                    fontSize: '10.5px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    flexShrink: 0
+                  }}
+                  title="Generate strong random password"
+                >
+                  <Sparkles style={{ width: 11, height: 11 }} />
+                  <span>Generate</span>
+                </button>
               </div>
-
-              {/* Confirm Password */}
-              <div className="md:col-span-3">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700">
-                    Confirm Password <span className="text-rose-500 font-black text-sm ml-0.5 select-none leading-none">*</span>
-                  </label>
-                  {formData.confirmPassword && (
-                    <span className={`text-[11px] font-bold ${
-                      formData.password === formData.confirmPassword ? 'text-emerald-600' : 'text-rose-600'
-                    }`}>
-                      {formData.password === formData.confirmPassword ? '✓ Matched' : 'Mismatch'}
-                    </span>
-                  )}
-                </div>
-                <div className="relative flex items-center">
-                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    name="confirmPassword"
-                    placeholder="Re-enter password"
-                    value={formData.confirmPassword}
-                    style={{
-                      letterSpacing: (!showConfirmPassword && formData.confirmPassword) ? '0.24em' : 'normal',
-                      fontSize: (!showConfirmPassword && formData.confirmPassword) ? '18px' : '13px'
-                    }}
-                    onChange={e => {
-                      setFormData({ ...formData, confirmPassword: e.target.value });
-                      if (fieldErrors.confirmPassword) setFieldErrors(prev => ({ ...prev, confirmPassword: '' }));
-                    }}
-                    className={`w-full h-9.5 pl-9 pr-10 bg-white border placeholder:tracking-normal placeholder:font-normal placeholder:text-xs ${
-                      fieldErrors.confirmPassword ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300 focus:border-blue-600'
-                    } rounded-lg font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                {fieldErrors.confirmPassword && (
-                  <p className="text-xs text-rose-600 font-medium mt-1">{fieldErrors.confirmPassword}</p>
-                )}
-              </div>
-
-            </div>
-          </div>
-
-          {/* ══════════════════════════════════════════════════════════════════
-              SECTION 2: ROLE & ACCESS ASSIGNMENT
-             ══════════════════════════════════════════════════════════════════ */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="px-5 py-2.5 bg-slate-50/70 border-b border-slate-200">
-              <h2 className="text-xs sm:text-[13px] font-black uppercase tracking-wider text-slate-800 m-0">
-                2. Role & Access
-              </h2>
-              <p className="text-xs text-slate-500 m-0 mt-0.5">
-                Role assignment, work email and employment terms
-              </p>
             </div>
 
-            <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-              
-              {/* Access Role - NO overlapping left icon */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Access Role <span className="text-rose-500 font-black text-sm ml-0.5 select-none leading-none">*</span>
-                </label>
-                <div className="relative flex items-center">
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={e => handleRoleChange(e.target.value)}
-                    className="w-full h-9.5 px-3.5 pr-8 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none cursor-pointer"
-                  >
-                    {rolesList.map(r => (
-                      <option key={r.value} value={r.value}>{r.label}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Clinic / Work Email (Optional) */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Work Email <span className="text-slate-400 font-normal text-xs ml-1">(Optional)</span>
-                </label>
-                <div className="relative flex items-center">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
-                  <input
-                    type="email"
-                    name="email"
-                    placeholder="employee.name@clinic.com"
-                    value={formData.email}
-                    onChange={e => {
-                      setFormData({ ...formData, email: e.target.value });
-                      if (fieldErrors.email) setFieldErrors(prev => ({ ...prev, email: '' }));
-                    }}
-                    className={`w-full h-9.5 pl-9 pr-3.5 bg-white border ${
-                      fieldErrors.email ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300 focus:border-blue-600'
-                    } rounded-lg text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`}
-                  />
-                </div>
-                {fieldErrors.email && (
-                  <p className="text-xs text-rose-600 font-medium mt-1">{fieldErrors.email}</p>
+            {/* Col 2: Confirm Password */}
+            <div style={fieldRow}>
+              <span style={labelStyle}>
+                Confirm Password <span style={{ color: '#EF4444' }}>*</span>
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  name="confirmPassword"
+                  placeholder="Re-enter password"
+                  value={formData.confirmPassword}
+                  style={{
+                    ...tableInp,
+                    paddingRight: formData.confirmPassword ? '80px' : '26px',
+                    letterSpacing: (!showConfirmPassword && formData.confirmPassword) ? '0.18em' : 'normal',
+                    fontSize: (!showConfirmPassword && formData.confirmPassword) ? '14px' : '11.5px',
+                    ...(fieldErrors.confirmPassword ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
+                  }}
+                  onChange={e => {
+                    setFormData({ ...formData, confirmPassword: e.target.value });
+                    if (fieldErrors.confirmPassword) setFieldErrors(prev => ({ ...prev, confirmPassword: '' }));
+                  }}
+                />
+                {formData.confirmPassword && (
+                  <span style={{
+                    position: 'absolute',
+                    right: '25px',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    color: formData.password === formData.confirmPassword ? '#059669' : '#DC2626'
+                  }}>
+                    {formData.password === formData.confirmPassword ? '✓ Matched' : 'Mismatch'}
+                  </span>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{ position: 'absolute', right: '5px', background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', padding: 0 }}
+                  title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff style={{ width: 13, height: 13 }} /> : <Eye style={{ width: 13, height: 13 }} />}
+                </button>
               </div>
-
-              {/* Employment Type */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Employment Type
-                </label>
-                <div className="relative flex items-center">
-                  <select
-                    name="employmentType"
-                    value={formData.employmentType}
-                    onChange={e => setFormData({ ...formData, employmentType: e.target.value })}
-                    className="w-full h-9.5 px-3.5 pr-8 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none cursor-pointer"
-                  >
-                    <option value="Full-Time">Full-Time</option>
-                    <option value="Part-Time">Part-Time</option>
-                    <option value="Contract">Contract</option>
-                    <option value="Visiting">Visiting Consultant</option>
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Joining Date */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Joining Date
-                </label>
-                <div className="relative flex items-center">
-                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
-                  <input
-                    type="date"
-                    name="joiningDate"
-                    value={formData.joiningDate}
-                    onChange={e => setFormData({ ...formData, joiningDate: e.target.value })}
-                    className="w-full h-9.5 pl-9 pr-3 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer"
-                  />
-                </div>
-              </div>
-
             </div>
-          </div>
 
-          {/* ══════════════════════════════════════════════════════════════════
-              SECTION 3: PROFESSIONAL / ROLE CONFIGURATION (Doctor Only)
-             ══════════════════════════════════════════════════════════════════ */}
-          {formData.role === 'doctor' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-              <div className="px-5 py-2.5 bg-slate-50/70 border-b border-slate-200">
-                <h2 className="text-xs sm:text-[13px] font-black uppercase tracking-wider text-slate-800 m-0">
-                  3. Professional Configuration
-                </h2>
-                <p className="text-xs text-slate-500 m-0 mt-0.5">
-                  Clinical specialization and patient consultation fees
-                </p>
+            {/* Col 3: Work Location / Facility */}
+            <div style={fieldRow}>
+              <span style={labelStyle}>
+                Work Location
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <input
+                  type="text"
+                  name="workLocation"
+                  placeholder="Main Wing - Clinical Center"
+                  value={formData.workLocation}
+                  onChange={e => setFormData({ ...formData, workLocation: e.target.value })}
+                  style={tableInp}
+                />
               </div>
+            </div>
 
-              <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                
-                {/* Specialization - NO overlapping left icon */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Medical Specialization <span className="text-rose-500 font-black text-sm ml-0.5 select-none leading-none">*</span>
-                  </label>
-                  <div className="relative flex items-center">
+            {/* ══════════════════════════════════════════════════════════════════
+                SECTION 2: ROLE & EMPLOYMENT ACCESS
+               ══════════════════════════════════════════════════════════════════ */}
+            <div style={sectionHeaderStyle}>
+              <span>2. ROLE & EMPLOYMENT ACCESS</span>
+              <span style={{ fontSize: '10px', fontWeight: 600, color: '#64748B' }}>
+                Access Permissions, Department & Employment Terms
+              </span>
+            </div>
+
+            {/* ROW 3: Role, Work Email, Employment Type */}
+            {/* Col 1: Access Role */}
+            <div style={fieldRow}>
+              <span style={labelStyle}>
+                Access Role <span style={{ color: '#EF4444' }}>*</span>
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <select
+                  name="role"
+                  value={formData.role}
+                  onChange={e => handleRoleChange(e.target.value)}
+                  style={{ ...tableInp, cursor: 'pointer', fontWeight: 650 }}
+                >
+                  {rolesList.map(r => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Col 2: Work Email */}
+            <div style={fieldRow}>
+              <span style={labelStyle}>
+                Work Email <span style={{ color: '#94A3B8', fontWeight: 500 }}>(Opt)</span>
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="employee.name@clinic.com"
+                  value={formData.email}
+                  onChange={e => {
+                    setFormData({ ...formData, email: e.target.value });
+                    if (fieldErrors.email) setFieldErrors(prev => ({ ...prev, email: '' }));
+                  }}
+                  style={{
+                    ...tableInp,
+                    ...(fieldErrors.email ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Col 3: Employment Type */}
+            <div style={fieldRow}>
+              <span style={labelStyle}>
+                Employment Type
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <select
+                  name="employmentType"
+                  value={formData.employmentType}
+                  onChange={e => setFormData({ ...formData, employmentType: e.target.value })}
+                  style={{ ...tableInp, cursor: 'pointer' }}
+                >
+                  <option value="Full-Time">Full-Time</option>
+                  <option value="Part-Time">Part-Time</option>
+                  <option value="Contract">Contract</option>
+                  <option value="Visiting">Visiting Consultant</option>
+                </select>
+              </div>
+            </div>
+
+            {/* ROW 4: Joining Date, Department, Designation */}
+            {/* Col 1: Joining Date */}
+            <div style={fieldRow}>
+              <span style={labelStyle}>
+                Joining Date
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <input
+                  type="date"
+                  name="joiningDate"
+                  value={formData.joiningDate}
+                  onChange={e => setFormData({ ...formData, joiningDate: e.target.value })}
+                  style={{ ...tableInp, cursor: 'pointer' }}
+                />
+              </div>
+            </div>
+
+            {/* Col 2: Department */}
+            <div style={fieldRow}>
+              <span style={labelStyle}>
+                Department
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <input
+                  type="text"
+                  name="department"
+                  placeholder="e.g. Outpatient Services"
+                  value={formData.department}
+                  onChange={e => setFormData({ ...formData, department: e.target.value })}
+                  style={tableInp}
+                />
+              </div>
+            </div>
+
+            {/* Col 3: Designation */}
+            <div style={fieldRow}>
+              <span style={labelStyle}>
+                Designation
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <input
+                  type="text"
+                  name="designation"
+                  placeholder="e.g. Front Desk Executive"
+                  value={formData.designation}
+                  onChange={e => setFormData({ ...formData, designation: e.target.value })}
+                  style={tableInp}
+                />
+              </div>
+            </div>
+
+            {/* ══════════════════════════════════════════════════════════════════
+                SECTION 3: PROFESSIONAL CONFIGURATION (Doctor Only)
+               ══════════════════════════════════════════════════════════════════ */}
+            {formData.role === 'doctor' && (
+              <>
+                <div style={sectionHeaderStyle}>
+                  <span>3. PROFESSIONAL & CLINICAL CONFIGURATION</span>
+                  <span style={{ fontSize: '10px', fontWeight: 600, color: '#64748B' }}>
+                    Clinical Specialization, Consultation Fee & OPD Limits
+                  </span>
+                </div>
+
+                {/* Col 1: Specialization */}
+                <div style={fieldRow}>
+                  <span style={labelStyle}>
+                    Specialization <span style={{ color: '#EF4444' }}>*</span>
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <select
                       name="specialty"
                       value={formData.specialty}
                       onChange={e => {
-                        setFormData({ 
-                          ...formData, 
+                        setFormData({
+                          ...formData,
                           specialty: e.target.value,
-                          department: e.target.value 
+                          department: e.target.value
                         });
                         if (fieldErrors.specialty) setFieldErrors(prev => ({ ...prev, specialty: '' }));
                       }}
-                      className={`w-full h-9.5 px-3.5 pr-8 bg-white border ${
-                        fieldErrors.specialty ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300 focus:border-blue-600'
-                      } rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none cursor-pointer`}
+                      style={{
+                        ...tableInp,
+                        cursor: 'pointer',
+                        fontWeight: 650,
+                        ...(fieldErrors.specialty ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
+                      }}
                     >
                       <option value="">-- Select Specialization --</option>
                       {DOCTOR_SPECIALIZATIONS.map(spec => (
                         <option key={spec} value={spec}>{spec}</option>
                       ))}
                     </select>
-                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
                   </div>
-                  {fieldErrors.specialty && (
-                    <p className="text-xs text-rose-600 font-medium mt-1">{fieldErrors.specialty}</p>
-                  )}
                 </div>
 
-                {/* Consultation Fee */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Consultation Fee <span className="text-slate-500 font-normal">(₹ INR)</span>
-                  </label>
-                  <div className="relative flex items-center">
-                    <span className="absolute left-3 text-sm font-bold text-slate-400">₹</span>
+                {/* Col 2: Consultation Fee */}
+                <div style={fieldRow}>
+                  <span style={labelStyle}>
+                    Consult Fee (₹)
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ position: 'absolute', left: '7px', fontSize: '11px', fontWeight: 700, color: '#64748B' }}>₹</span>
                     <input
                       type="number"
                       min="0"
                       name="consultationFee"
-                      placeholder="e.g. 500"
+                      placeholder="500"
                       value={formData.consultationFee}
                       onChange={e => setFormData({ ...formData, consultationFee: e.target.value })}
-                      className="w-full h-9.5 pl-8 pr-3.5 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                      style={{ ...tableInp, paddingLeft: '20px' }}
                     />
                   </div>
                 </div>
 
+                {/* Col 3: Max Daily Slots */}
+                <div style={fieldRow}>
+                  <span style={labelStyle}>
+                    Max Slots / Day
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="number"
+                      min="1"
+                      name="max_slots"
+                      placeholder="10"
+                      value={formData.max_slots}
+                      onChange={e => setFormData({ ...formData, max_slots: e.target.value })}
+                      style={tableInp}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════════
+                SECTION 4: SCHEDULE & ATTENDANCE AVAILABILITY
+               ══════════════════════════════════════════════════════════════════ */}
+            <div style={sectionHeaderStyle}>
+              <span>{formData.role === 'doctor' ? '4. SCHEDULE & ATTENDANCE AVAILABILITY' : '3. SCHEDULE & ATTENDANCE AVAILABILITY'}</span>
+              <span style={{ fontSize: '10px', fontWeight: 600, color: '#64748B' }}>
+                Weekly Off-Duty Schedule & Operational Attendance
+              </span>
+            </div>
+
+            {/* Weekly Off Days Selection (Spans Full Width across 3 Columns) */}
+            <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '4px', minHeight: '28px' }}>
+              <span style={labelStyle}>
+                Weekly Off Days
+              </span>
+              <span style={colonStyle}>:</span>
+              <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center' }}>
+                {WEEKDAYS.map(day => {
+                  const isOff = Array.isArray(formData.weeklyOff)
+                    ? formData.weeklyOff.includes(day.key)
+                    : (formData.weeklyOff ? String(formData.weeklyOff).split(',').map(d => d.trim()).includes(day.key) : false);
+
+                  return (
+                    <button
+                      key={day.key}
+                      type="button"
+                      onClick={() => toggleWeeklyOffDay(day.key)}
+                      style={{
+                        height: '24px',
+                        padding: '0 8px',
+                        borderRadius: '3px',
+                        border: isOff ? '1px solid #0F172A' : '1px solid #CBD5E1',
+                        background: isOff ? '#0F172A' : '#FFFFFF',
+                        color: isOff ? '#FFFFFF' : '#334155',
+                        fontSize: '11px',
+                        fontWeight: isOff ? 750 : 550,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.1s ease'
+                      }}
+                      title={isOff ? `${day.key} is marked as OFF` : `${day.key} is Working`}
+                    >
+                      {isOff && <Check style={{ width: 11, height: 11, strokeWidth: 3 }} />}
+                      <span>{day.label}</span>
+                    </button>
+                  );
+                })}
+                <span style={{ fontSize: '10px', color: '#64748B', marginLeft: '6px' }}>
+                  (Dark badge indicates regular scheduled off day)
+                </span>
               </div>
             </div>
-          )}
 
-          {/* ══════════════════════════════════════════════════════════════════
-              SECTION 4: SCHEDULE & AVAILABILITY (WEEKLY OFF FOR ALL ROLES)
-             ══════════════════════════════════════════════════════════════════ */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="px-5 py-2.5 bg-slate-50/70 border-b border-slate-200">
-              <h2 className="text-xs sm:text-[13px] font-black uppercase tracking-wider text-slate-800 m-0">
-                {formData.role === 'doctor' ? '4. Schedule & Availability' : '3. Schedule & Availability'}
-              </h2>
-              <p className="text-xs text-slate-500 m-0 mt-0.5">
-                Working days and regular attendance schedule
-              </p>
-            </div>
+            {/* Doctor OPD Slots (Only when role is doctor) */}
+            {formData.role === 'doctor' && (
+              <div style={{ gridColumn: '1 / -1', marginTop: '4px', paddingTop: '6px', borderTop: '1px dashed #E2E8F0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 750, color: '#0F172A' }}>
+                      Attending OPD Time Slots <span style={{ color: '#EF4444' }}>*</span>
+                    </span>
+                    <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>
+                      ({(formData.doctorSlots || []).length} active)
+                    </span>
+                  </div>
 
-            <div className="p-4 sm:p-5 space-y-4">
-              
-              {/* Weekly Off Selection — Available for EVERY staff role */}
-              <div>
-                <div className="mb-2">
-                  <label className="block text-xs font-bold text-slate-800">
-                    Weekly Off Days
-                  </label>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Select the day(s) this employee is not scheduled to attend duty.
-                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={handleSelectAllSlots}
+                      style={{ background: 'none', border: 'none', color: '#0284C7', fontSize: '11px', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      Select All
+                    </button>
+                    <span style={{ color: '#CBD5E1' }}>|</span>
+                    <button
+                      type="button"
+                      onClick={handleClearAllSlots}
+                      style={{ background: 'none', border: 'none', color: '#64748B', fontSize: '11px', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      Clear All
+                    </button>
+                    <span style={{ color: '#CBD5E1' }}>|</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsSlotPickerOpen(!isSlotPickerOpen)}
+                      style={{
+                        height: '22px',
+                        padding: '0 8px',
+                        borderRadius: '3px',
+                        border: 'none',
+                        background: '#0284C7',
+                        color: '#FFFFFF',
+                        fontSize: '10.5px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px'
+                      }}
+                    >
+                      <Plus style={{ width: 11, height: 11 }} />
+                      <span>Add Custom Slot</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2 pt-0.5">
-                  {WEEKDAYS.map(day => {
-                    const isOff = Array.isArray(formData.weeklyOff)
-                      ? formData.weeklyOff.includes(day.key)
-                      : (formData.weeklyOff ? String(formData.weeklyOff).split(',').map(d => d.trim()).includes(day.key) : false);
+                {fieldErrors.doctorSlots && (
+                  <p style={{ margin: '0 0 6px 0', fontSize: '11px', color: '#EF4444', fontWeight: 600 }}>{fieldErrors.doctorSlots}</p>
+                )}
 
+                {/* Slot Picker Dropdown Popover */}
+                {isSlotPickerOpen && (
+                  <div style={{ padding: '8px 12px', marginBottom: '8px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 750, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock style={{ width: 12, height: 12, color: '#0284C7' }} />
+                        <span>Select Time Range for Custom OPD Slot</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => { setIsSlotPickerOpen(false); setSlotPickerError(''); }}
+                        style={{ background: 'none', border: 'none', color: '#64748B', fontWeight: 800, cursor: 'pointer', fontSize: '12px' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {slotPickerError && (
+                      <div style={{ padding: '4px 8px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '3px', fontSize: '11px', color: '#B91C1C', marginBottom: '6px' }}>
+                        {slotPickerError}
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 650, color: '#334155' }}>Start:</span>
+                        <select
+                          value={slotPickerStart}
+                          onChange={e => {
+                            const s = e.target.value;
+                            setSlotPickerStart(s);
+                            const startObj = TIME_OPTIONS.find(t => t.value === s);
+                            if (startObj) {
+                              const next30Obj = TIME_OPTIONS.find(t => t.totalMinutes === startObj.totalMinutes + 30);
+                              if (next30Obj) setSlotPickerEnd(next30Obj.value);
+                            }
+                          }}
+                          style={{ ...tableInp, width: '110px', height: '24px', cursor: 'pointer' }}
+                        >
+                          {TIME_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.value}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 650, color: '#334155' }}>End:</span>
+                        <select
+                          value={slotPickerEnd}
+                          onChange={e => setSlotPickerEnd(e.target.value)}
+                          style={{ ...tableInp, width: '110px', height: '24px', cursor: 'pointer' }}
+                        >
+                          {TIME_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.value}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginLeft: '6px' }}>
+                        <span style={{ fontSize: '10.5px', color: '#64748B' }}>Preset:</span>
+                        {[15, 30, 45, 60].map(mins => (
+                          <button
+                            key={mins}
+                            type="button"
+                            onClick={() => {
+                              const startObj = TIME_OPTIONS.find(t => t.value === slotPickerStart);
+                              if (startObj) {
+                                const targetObj = TIME_OPTIONS.find(t => t.totalMinutes === startObj.totalMinutes + mins);
+                                if (targetObj) setSlotPickerEnd(targetObj.value);
+                              }
+                            }}
+                            style={{ padding: '1px 5px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '2px', fontSize: '10px', fontWeight: 650, color: '#334155', cursor: 'pointer' }}
+                          >
+                            +{mins}m
+                          </button>
+                        ))}
+                      </div>
+
+                      <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
+                        <button
+                          type="button"
+                          onClick={() => { setIsSlotPickerOpen(false); setSlotPickerError(''); }}
+                          style={{ height: '24px', padding: '0 8px', borderRadius: '3px', border: '1px solid #CBD5E1', background: '#FFFFFF', fontSize: '11px', fontWeight: 650, cursor: 'pointer', color: '#334155' }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAddSlotFromPicker}
+                          style={{ height: '24px', padding: '0 10px', borderRadius: '3px', border: 'none', background: '#0284C7', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          Add Slot
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Compact Selectable Chips Stack */}
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '4px',
+                  padding: '5px 8px',
+                  background: '#F8FAFC',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '3px',
+                  maxHeight: '120px',
+                  overflowY: 'auto'
+                }}>
+                  {Array.from(new Set([
+                    ...DEFAULT_DOCTOR_SLOTS,
+                    ...(formData.doctorSlots || [])
+                  ])).map(slot => {
+                    const isSelected = (formData.doctorSlots || []).includes(slot);
                     return (
                       <button
-                        key={day.key}
+                        key={slot}
                         type="button"
-                        onClick={() => toggleWeeklyOffDay(day.key)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer select-none active:scale-95 ${
-                          isOff
-                            ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
-                            : 'bg-white border-slate-300 text-slate-700 hover:border-slate-400 hover:bg-slate-50'
-                        }`}
-                        title={isOff ? `${day.key} is marked as OFF` : `${day.key} is Working`}
+                        onClick={() => toggleDoctorSlot(slot)}
+                        style={{
+                          height: '23px',
+                          padding: '0 7px',
+                          borderRadius: '3px',
+                          border: isSelected ? '1px solid #0284C7' : '1px solid #CBD5E1',
+                          background: isSelected ? '#0284C7' : '#FFFFFF',
+                          color: isSelected ? '#FFFFFF' : '#334155',
+                          fontSize: '10.5px',
+                          fontWeight: isSelected ? 750 : 500,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          transition: 'all 0.1s ease'
+                        }}
+                        title={isSelected ? 'Click to deselect slot' : 'Click to select slot'}
                       >
-                        {isOff ? <Check className="w-3.5 h-3.5 text-white stroke-[3]" /> : null}
-                        <span>{day.label}</span>
+                        {isSelected ? (
+                          <Check style={{ width: 10, height: 10, strokeWidth: 3 }} />
+                        ) : (
+                          <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#94A3B8' }} />
+                        )}
+                        <span>{slot}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
+            )}
 
-              {/* Doctor OPD Slots (Only when role is doctor) */}
-              {formData.role === 'doctor' && (
-                <div className="pt-3.5 border-t border-slate-100">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2.5">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-800">
-                        Attending OPD Slots <span className="text-rose-500 font-black text-sm ml-0.5 select-none leading-none">*</span>
-                      </label>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Patient appointment slots available for booking ({(formData.doctorSlots || []).length} active)
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={handleSelectAllSlots}
-                        className="text-xs font-bold text-blue-700 hover:underline cursor-pointer"
-                      >
-                        Select All
-                      </button>
-                      <span className="text-slate-300">|</span>
-                      <button
-                        type="button"
-                        onClick={handleClearAllSlots}
-                        className="text-xs font-bold text-slate-500 hover:text-rose-600 hover:underline cursor-pointer"
-                      >
-                        Clear All
-                      </button>
-                      <span className="text-slate-300">|</span>
-                      <button
-                        type="button"
-                        onClick={() => setIsSlotPickerOpen(!isSlotPickerOpen)}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 px-2.5 py-1 rounded-md shadow-2xs transition-colors cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add Slot</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {fieldErrors.doctorSlots && (
-                    <p className="text-xs text-rose-600 font-medium mb-2.5">{fieldErrors.doctorSlots}</p>
-                  )}
-
-                  {/* ── TIME SLOT PICKER (Requirement 11-14: No manual text typing!) ── */}
-                  {isSlotPickerOpen && (
-                    <div className="p-3.5 mb-3 bg-slate-50 border border-slate-300 rounded-xl space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-blue-600" />
-                          <span>Select Time Range for New Slot</span>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => { setIsSlotPickerOpen(false); setSlotPickerError(''); }}
-                          className="text-xs text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
-                        >
-                          ✕
-                        </button>
-                      </div>
-
-                      {slotPickerError && (
-                        <div className="p-2 bg-rose-50 border border-rose-200 rounded text-xs text-rose-600 font-medium">
-                          {slotPickerError}
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-                        {/* Start Time */}
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                            Start Time
-                          </label>
-                          <select
-                            value={slotPickerStart}
-                            onChange={e => {
-                              const s = e.target.value;
-                              setSlotPickerStart(s);
-                              // Auto calculate +30 mins for end time if possible
-                              const startObj = TIME_OPTIONS.find(t => t.value === s);
-                              if (startObj) {
-                                const next30Obj = TIME_OPTIONS.find(t => t.totalMinutes === startObj.totalMinutes + 30);
-                                if (next30Obj) setSlotPickerEnd(next30Obj.value);
-                              }
-                            }}
-                            className="w-full h-9 px-3 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-                          >
-                            {TIME_OPTIONS.map(opt => (
-                              <option key={opt.value} value={opt.value}>{opt.value}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* End Time */}
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                            End Time
-                          </label>
-                          <select
-                            value={slotPickerEnd}
-                            onChange={e => setSlotPickerEnd(e.target.value)}
-                            className="w-full h-9 px-3 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-                          >
-                            {TIME_OPTIONS.map(opt => (
-                              <option key={opt.value} value={opt.value}>{opt.value}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Quick Presets & Add Button */}
-                      <div className="flex items-center justify-between pt-1">
-                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                          <span>Preset:</span>
-                          {[15, 30, 45, 60].map(mins => (
-                            <button
-                              key={mins}
-                              type="button"
-                              onClick={() => {
-                                const startObj = TIME_OPTIONS.find(t => t.value === slotPickerStart);
-                                if (startObj) {
-                                  const targetObj = TIME_OPTIONS.find(t => t.totalMinutes === startObj.totalMinutes + mins);
-                                  if (targetObj) setSlotPickerEnd(targetObj.value);
-                                }
-                              }}
-                              className="px-2 py-0.5 bg-white border border-slate-200 rounded text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
-                            >
-                              +{mins}m
-                            </button>
-                          ))}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => { setIsSlotPickerOpen(false); setSlotPickerError(''); }}
-                            className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleAddSlotFromPicker}
-                            className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-2xs cursor-pointer"
-                          >
-                            Add Slot
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Compact Selectable Chips Stack */}
-                  <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl max-h-[160px] overflow-y-auto">
-                    {Array.from(new Set([
-                      ...DEFAULT_DOCTOR_SLOTS,
-                      ...(formData.doctorSlots || [])
-                    ])).map(slot => {
-                      const isSelected = (formData.doctorSlots || []).includes(slot);
-                      return (
-                        <button
-                          key={slot}
-                          type="button"
-                          onClick={() => toggleDoctorSlot(slot)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer select-none active:scale-95 ${
-                            isSelected
-                              ? 'bg-blue-600 text-white shadow-2xs border border-blue-600'
-                              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300'
-                          }`}
-                          title={isSelected ? 'Click to deselect slot' : 'Click to select slot'}
-                        >
-                          {isSelected ? (
-                            <Check className="w-3 h-3 text-white stroke-[3]" />
-                          ) : (
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                          )}
-                          <span>{slot}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-            </div>
-          </div>
-
-          {/* ══════════════════════════════════════════════════════════════════
-              SECTION 5: PERSONAL, STATUTORY & EMERGENCY (OPTIONAL)
-             ══════════════════════════════════════════════════════════════════ */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-            <button
-              type="button"
+            {/* ══════════════════════════════════════════════════════════════════
+                SECTION 5: PERSONAL, STATUTORY & EMERGENCY DETAILS (OPTIONAL)
+               ══════════════════════════════════════════════════════════════════ */}
+            <div
               onClick={() => setShowOptionalDetails(!showOptionalDetails)}
-              className="w-full px-5 py-2.5 bg-slate-50/70 hover:bg-slate-100/70 flex items-center justify-between transition-colors border-b border-slate-200 text-left cursor-pointer"
+              style={{
+                ...sectionHeaderStyle,
+                cursor: 'pointer',
+                userSelect: 'none',
+                background: '#F8FAFC'
+              }}
             >
-              <div>
-                <h2 className="text-xs sm:text-[13px] font-black uppercase tracking-wider text-slate-800 m-0">
-                  {formData.role === 'doctor' ? '5. Personal & Statutory Details' : '4. Personal & Statutory Details'}
-                </h2>
-                <p className="text-xs text-slate-500 m-0 mt-0.5">
-                  Demographics, Aadhaar/PAN, Address & Emergency Contact
-                </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>{formData.role === 'doctor' ? '5. PERSONAL, STATUTORY & EMERGENCY DETAILS' : '4. PERSONAL, STATUTORY & EMERGENCY DETAILS'}</span>
+                <span style={{ fontSize: '10px', fontWeight: 600, color: '#64748B' }}>
+                  (Demographics, Aadhaar, PAN, Address & Emergency Contact - Optional)
+                </span>
               </div>
-
-              <div className="flex items-center gap-2">
-                {showOptionalDetails ? (
-                  <ChevronUp className="w-4 h-4 text-slate-500" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-slate-500" />
-                )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: '#0284C7', fontWeight: 700 }}>
+                <span>{showOptionalDetails ? 'Hide Section ▲' : 'Show Section ▼'}</span>
               </div>
-            </button>
+            </div>
 
             {showOptionalDetails && (
-              <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                
-                {/* Annual CTC */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Annual CTC <span className="text-slate-500 font-normal">(₹ INR)</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="e.g. 600000"
-                    value={formData.ctcAnnual}
-                    onChange={e => setFormData({ ...formData, ctcAnnual: e.target.value })}
-                    className="w-full h-9.5 px-3 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
+              <>
+                {/* ROW 7: CTC, DOB, Gender */}
+                {/* Col 1: Annual CTC */}
+                <div style={fieldRow}>
+                  <span style={labelStyle}>
+                    Annual CTC (₹)
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 600000"
+                      value={formData.ctcAnnual}
+                      onChange={e => setFormData({ ...formData, ctcAnnual: e.target.value })}
+                      style={tableInp}
+                    />
+                  </div>
                 </div>
 
-                {/* Date of Birth */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                {/* Col 2: Date of Birth */}
+                <div style={fieldRow}>
+                  <span style={labelStyle}>
                     Date of Birth
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.dob}
-                    onChange={e => setFormData({ ...formData, dob: e.target.value })}
-                    className="w-full h-9.5 px-3 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="date"
+                      value={formData.dob}
+                      onChange={e => setFormData({ ...formData, dob: e.target.value })}
+                      style={{ ...tableInp, cursor: 'pointer' }}
+                    />
+                  </div>
                 </div>
 
-                {/* Gender */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                {/* Col 3: Gender */}
+                <div style={fieldRow}>
+                  <span style={labelStyle}>
                     Gender
-                  </label>
-                  <select
-                    value={formData.gender}
-                    onChange={e => setFormData({ ...formData, gender: e.target.value })}
-                    className="w-full h-9.5 px-3 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-                  >
-                    <option value="">-- Select Gender --</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <select
+                      value={formData.gender}
+                      onChange={e => setFormData({ ...formData, gender: e.target.value })}
+                      style={{ ...tableInp, cursor: 'pointer' }}
+                    >
+                      <option value="">-- Select Gender --</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
                 </div>
 
-                {/* Blood Group */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                {/* ROW 8: Blood Group, Aadhaar, PAN */}
+                {/* Col 1: Blood Group */}
+                <div style={fieldRow}>
+                  <span style={labelStyle}>
                     Blood Group
-                  </label>
-                  <select
-                    value={formData.bloodGroup}
-                    onChange={e => setFormData({ ...formData, bloodGroup: e.target.value })}
-                    className="w-full h-9.5 px-3 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-                  >
-                    <option value="">-- Select Blood Group --</option>
-                    {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => (
-                      <option key={bg} value={bg}>{bg}</option>
-                    ))}
-                  </select>
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <select
+                      value={formData.bloodGroup}
+                      onChange={e => setFormData({ ...formData, bloodGroup: e.target.value })}
+                      style={{ ...tableInp, cursor: 'pointer' }}
+                    >
+                      <option value="">-- Select Blood Group --</option>
+                      {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => (
+                        <option key={bg} value={bg}>{bg}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                {/* Aadhaar Number */}
-                <div className="lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Aadhaar Card <span className="text-slate-500 font-normal">(12 Digits)</span>
-                  </label>
-                  <input
-                    type="text"
-                    maxLength="12"
-                    placeholder="XXXX XXXX XXXX"
-                    value={formData.aadhaar}
-                    onChange={e => setFormData({ ...formData, aadhaar: e.target.value.replace(/\D/g, '') })}
-                    className="w-full h-9.5 px-3 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
+                {/* Col 2: Aadhaar Card */}
+                <div style={fieldRow}>
+                  <span style={labelStyle}>
+                    Aadhaar Card
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="text"
+                      maxLength={12}
+                      placeholder="12-digit number"
+                      value={formData.aadhaar}
+                      onChange={e => setFormData({ ...formData, aadhaar: e.target.value.replace(/\D/g, '') })}
+                      style={{ ...tableInp, fontFamily: 'monospace' }}
+                    />
+                  </div>
                 </div>
 
-                {/* PAN Number */}
-                <div className="lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    PAN Card <span className="text-slate-500 font-normal">(10 Chars)</span>
-                  </label>
-                  <input
-                    type="text"
-                    maxLength="10"
-                    placeholder="ABCDE1234F"
-                    value={formData.pan}
-                    onChange={e => setFormData({ ...formData, pan: e.target.value.toUpperCase() })}
-                    className="w-full h-9.5 px-3 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 uppercase font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
+                {/* Col 3: PAN Card */}
+                <div style={fieldRow}>
+                  <span style={labelStyle}>
+                    PAN Card
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="text"
+                      maxLength={10}
+                      placeholder="10-char PAN"
+                      value={formData.pan}
+                      onChange={e => setFormData({ ...formData, pan: e.target.value.toUpperCase() })}
+                      style={{ ...tableInp, fontFamily: 'monospace', textTransform: 'uppercase' }}
+                    />
+                  </div>
                 </div>
 
-                {/* Residential Address */}
-                <div className="lg:col-span-4">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                {/* ROW 9: Residential Address (Spans 2 columns) & Emergency Contact Name */}
+                {/* Col 1 & 2: Residential Address */}
+                <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '4px', height: '26px' }}>
+                  <span style={labelStyle}>
                     Residential Address
-                  </label>
-                  <textarea
-                    rows="2"
-                    placeholder="Street address, city, state, postal pin code..."
-                    value={formData.address}
-                    onChange={e => setFormData({ ...formData, address: e.target.value })}
-                    className="w-full p-2.5 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="text"
+                      placeholder="Street address, city, state, postal pin code..."
+                      value={formData.address}
+                      onChange={e => setFormData({ ...formData, address: e.target.value })}
+                      style={tableInp}
+                    />
+                  </div>
                 </div>
 
-                {/* Emergency Contact Name */}
-                <div className="lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Emergency Contact Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Next of Kin / Contact Name"
-                    value={formData.emergencyContactName}
-                    onChange={e => setFormData({ ...formData, emergencyContactName: e.target.value })}
-                    className="w-full h-9.5 px-3 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
+                {/* Col 3: Emergency Contact Name */}
+                <div style={fieldRow}>
+                  <span style={labelStyle}>
+                    Emergency Contact
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="text"
+                      placeholder="Next of Kin / Contact Name"
+                      value={formData.emergencyContactName}
+                      onChange={e => setFormData({ ...formData, emergencyContactName: e.target.value })}
+                      style={tableInp}
+                    />
+                  </div>
                 </div>
 
-                {/* Emergency Contact Relation */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                {/* ROW 10: Relationship & Emergency Contact Phone */}
+                {/* Col 1: Relationship */}
+                <div style={fieldRow}>
+                  <span style={labelStyle}>
                     Relationship
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Spouse / Parent"
-                    value={formData.emergencyContactRelation}
-                    onChange={e => setFormData({ ...formData, emergencyContactRelation: e.target.value })}
-                    className="w-full h-9.5 px-3 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="text"
+                      placeholder="e.g. Spouse / Parent"
+                      value={formData.emergencyContactRelation}
+                      onChange={e => setFormData({ ...formData, emergencyContactRelation: e.target.value })}
+                      style={tableInp}
+                    />
+                  </div>
                 </div>
 
-                {/* Emergency Contact Phone */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Emergency Contact Phone
-                  </label>
-                  <input
-                    type="tel"
-                    maxLength="10"
-                    placeholder="10-digit emergency phone"
-                    value={formData.emergencyContactPhone}
-                    onChange={e => setFormData({ ...formData, emergencyContactPhone: e.target.value.replace(/\D/g, '') })}
-                    className="w-full h-9.5 px-3 bg-white border border-slate-300 focus:border-blue-600 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
+                {/* Col 2: Emergency Contact Phone */}
+                <div style={fieldRow}>
+                  <span style={labelStyle}>
+                    Emergency Phone
+                  </span>
+                  <span style={colonStyle}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      placeholder="10-digit emergency phone"
+                      value={formData.emergencyContactPhone}
+                      onChange={e => setFormData({ ...formData, emergencyContactPhone: e.target.value.replace(/\D/g, '') })}
+                      style={tableInp}
+                    />
+                  </div>
                 </div>
 
-              </div>
+                {/* Col 3: Empty spacer */}
+                <div />
+              </>
             )}
+
           </div>
 
           {/* ══════════════════════════════════════════════════════════════════
-              STICKY BOTTOM ACTION BAR (Clean buttons only - no helper row)
+              ACTION BUTTONS FOOTER
              ══════════════════════════════════════════════════════════════════ */}
-          <div className="fixed bottom-0 left-0 right-0 z-[999] bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 sm:px-8 py-3 shadow-lg">
-            <div className="max-w-6xl mx-auto flex items-center justify-end gap-3">
+          <div style={{
+            marginTop: '14px',
+            paddingTop: '10px',
+            borderTop: '1px solid #CBD5E1',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <button
+              type="button"
+              onClick={() => {
+                setFormData({
+                  name: '',
+                  phone: '',
+                  staff_id: '',
+                  email: '',
+                  joiningDate: new Date().toISOString().split('T')[0],
+                  password: '',
+                  confirmPassword: '',
+                  role: rolesList[0]?.value || 'doctor',
+                  department: 'General Medicine',
+                  designation: 'Consultant Practitioner',
+                  employmentType: 'Full-Time',
+                  workLocation: 'Main Wing - Sunrise Clinic',
+                  shiftName: 'General Shift',
+                  specialty: 'General Medicine',
+                  consultationFee: 500,
+                  max_slots: 10,
+                  weeklyOff: ['Sunday'],
+                  doctorSlots: [...DEFAULT_DOCTOR_SLOTS],
+                  ctcAnnual: '',
+                  dob: '',
+                  gender: '',
+                  bloodGroup: '',
+                  aadhaar: '',
+                  pan: '',
+                  address: '',
+                  emergencyContactName: '',
+                  emergencyContactRelation: '',
+                  emergencyContactPhone: ''
+                });
+                setFieldErrors({});
+                setFormError('');
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#64748B',
+                fontSize: '11px',
+                fontWeight: 650,
+                cursor: 'pointer',
+                padding: '4px 8px'
+              }}
+            >
+              Clear Fields
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button
                 type="button"
                 onClick={onCancel}
                 disabled={isSubmitting}
-                className="px-5 py-2 rounded-lg border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-bold transition-all cursor-pointer"
+                style={{
+                  height: '28px',
+                  padding: '0 14px',
+                  borderRadius: '3px',
+                  border: '1px solid #CBD5E1',
+                  background: '#FFFFFF',
+                  color: '#334155',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
               >
                 Cancel
               </button>
+
               <button
                 id="onboard-employee-submit-btn"
                 type="submit"
-                onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs sm:text-sm font-bold shadow-sm transition-all cursor-pointer flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{
+                  height: '28px',
+                  padding: '0 18px',
+                  borderRadius: '3px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
+                  color: '#FFFFFF',
+                  fontSize: '11.5px',
+                  fontWeight: 800,
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                  opacity: isSubmitting ? 0.7 : 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 1px 3px rgba(2, 132, 199, 0.3)'
+                }}
               >
                 {isSubmitting ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 style={{ width: 13, height: 13, animation: 'spin 1s linear infinite' }} />
                     <span>Adding Employee...</span>
                   </>
                 ) : (

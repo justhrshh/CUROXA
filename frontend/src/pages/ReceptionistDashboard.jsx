@@ -11045,66 +11045,51 @@ const ReceptionistDashboard = () => {
     </div>
   </div>
 
-  {/* Redesigned Enterprise HIS Table Registration Workstation (Matching media_1791436391758.jpg) */}
-  <div style={{ flex: 1, overflowY: "auto", background: "#F1F5F9", padding: "12px 18px 24px" }}>
-    <div style={{ maxWidth: "1440px", margin: "0 auto", background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "8px", boxShadow: "0 1px 4px rgba(15,23,42,0.06)", overflow: "hidden" }}>
+  {/* Enterprise HIS Single-Sheet Registration Workstation (Exact layout matching media_1791438583216.png) */}
+  <div style={{ flex: 1, overflowY: "auto", background: "#F1F5F9", padding: "10px 14px 20px" }}>
+    <div style={{ maxWidth: "1440px", margin: "0 auto", background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "4px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", padding: "10px 16px 14px" }}>
 
-      {/* ─── WORKSTATION TOP BANNER (Enterprise Header matching HIS/LIS Reference) ─── */}
-      <div style={{
-        background: "linear-gradient(90deg, #0284C7 0%, #0369A1 100%)",
-        color: "#FFFFFF",
-        padding: "7px 16px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        borderBottom: "1px solid #0284C7"
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span style={{ fontSize: "10.5px", fontWeight: 800, background: "rgba(255,255,255,0.2)", padding: "2px 7px", borderRadius: "4px", letterSpacing: "0.04em", border: "1px solid rgba(255,255,255,0.3)" }}>
-            HIS PORTAL
+      {/* ─── TOP TITLE: Centered "New Registration" (Excluding ABHA portal, matching reference) ─── */}
+      <div style={{ position: "relative", textAlign: "center", paddingBottom: "8px", borderBottom: "1px solid #CBD5E1", marginBottom: "10px" }}>
+        <span style={{ fontSize: "14px", fontWeight: 800, color: "#0F172A", letterSpacing: "0.02em" }}>
+          New Registration
+        </span>
+        {isExistingPatient && (
+          <span style={{ marginLeft: "10px", fontSize: "11px", fontWeight: 700, background: "#FEF3C7", color: "#92400E", padding: "1px 8px", borderRadius: "3px" }}>
+            Existing Patient: #{selectedPatient?.patientId || selectedPatient?.uhId || 'ID'}
           </span>
-          <span style={{ fontSize: "14px", fontWeight: 800, letterSpacing: "0.01em" }}>
-            New Patient Registration & Clinical Workstation
-          </span>
-          {isExistingPatient && (
-            <span style={{ fontSize: "11px", fontWeight: 700, background: "#FEF3C7", color: "#92400E", padding: "1px 8px", borderRadius: "4px" }}>
-              Existing Patient: #{selectedPatient?.patientId || selectedPatient?.uhId || 'ID'}
-            </span>
-          )}
-        </div>
+        )}
 
-        {/* Workflow Type Switcher Tabs */}
-        <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "rgba(0,0,0,0.15)", padding: "2px 4px", borderRadius: "6px" }}>
+        {/* Workflow Switcher (Doctor / Lab / Service) on the right */}
+        <div style={{ position: "absolute", right: 0, top: "-2px", display: "flex", gap: "4px" }}>
           <button
             type="button"
             onClick={() => setBookingType("doctor")}
             style={{
-              padding: "4px 10px",
-              borderRadius: "4px",
-              border: "none",
-              background: bookingType === "doctor" ? "#FFFFFF" : "transparent",
-              color: bookingType === "doctor" ? "#0369A1" : "#FFFFFF",
+              padding: "3px 8px",
+              borderRadius: "3px",
+              border: bookingType === "doctor" ? "1px solid #0284C7" : "1px solid #CBD5E1",
+              background: bookingType === "doctor" ? "#E0F2FE" : "#FFFFFF",
+              color: bookingType === "doctor" ? "#0369A1" : "#475569",
               fontSize: "11px",
               fontWeight: bookingType === "doctor" ? 800 : 600,
-              cursor: "pointer",
-              transition: "all 0.15s ease"
+              cursor: "pointer"
             }}
           >
-            🩺 Doctor Consultation
+            🩺 Doctor OPD
           </button>
           <button
             type="button"
             onClick={() => setBookingType("lab")}
             style={{
-              padding: "4px 10px",
-              borderRadius: "4px",
-              border: "none",
-              background: bookingType === "lab" ? "#FFFFFF" : "transparent",
-              color: bookingType === "lab" ? "#0369A1" : "#FFFFFF",
+              padding: "3px 8px",
+              borderRadius: "3px",
+              border: bookingType === "lab" ? "1px solid #0284C7" : "1px solid #CBD5E1",
+              background: bookingType === "lab" ? "#E0F2FE" : "#FFFFFF",
+              color: bookingType === "lab" ? "#0369A1" : "#475569",
               fontSize: "11px",
               fontWeight: bookingType === "lab" ? 800 : 600,
-              cursor: "pointer",
-              transition: "all 0.15s ease"
+              cursor: "pointer"
             }}
           >
             🧪 Lab Order
@@ -11113,189 +11098,97 @@ const ReceptionistDashboard = () => {
             type="button"
             onClick={() => setBookingType("service")}
             style={{
-              padding: "4px 10px",
-              borderRadius: "4px",
-              border: "none",
-              background: bookingType === "service" ? "#FFFFFF" : "transparent",
-              color: bookingType === "service" ? "#0369A1" : "#FFFFFF",
+              padding: "3px 8px",
+              borderRadius: "3px",
+              border: bookingType === "service" ? "1px solid #0284C7" : "1px solid #CBD5E1",
+              background: bookingType === "service" ? "#E0F2FE" : "#FFFFFF",
+              color: bookingType === "service" ? "#0369A1" : "#475569",
               fontSize: "11px",
               fontWeight: bookingType === "service" ? 800 : 600,
-              cursor: "pointer",
-              transition: "all 0.15s ease"
+              cursor: "pointer"
             }}
           >
-            🩹 Clinical Procedures
+            🩹 Procedures
           </button>
         </div>
       </div>
 
-      {/* ─── SECTION 1: DEMOGRAPHICS DATA TABLE (Left 3 Columns) + PATIENT PHOTO (Right Column) ─── */}
       {(() => {
         const isFormStarted = Boolean(formData.age || formData.title || formData.gender || formData.doctorId || formData.address || formData.addressStreet || formData.email);
         const streetValue = formData.addressStreet !== undefined ? formData.addressStreet : (formData.address || '');
 
         const tableInp = {
-          height: "30px",
-          borderRadius: "4px",
+          height: "26px",
+          borderRadius: "3px",
           border: "1px solid #CBD5E1",
           background: "#FFFFFF",
-          fontSize: "12px",
+          fontSize: "11.5px",
           fontWeight: 500,
           color: "#0F172A",
           width: "100%",
-          padding: "0 8px",
+          padding: "0 6px",
           outline: "none",
-          boxSizing: "border-box",
-          transition: "border-color 0.15s ease, box-shadow 0.15s ease"
+          boxSizing: "border-box"
         };
 
-        return (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 200px", gap: "16px", padding: "12px 16px", alignItems: "start" }}>
+        const calcBmi = (vitalWeight && vitalHeight && Number(vitalHeight) > 0)
+          ? (Number(vitalWeight) / Math.pow(Number(vitalHeight) / 100, 2)).toFixed(1)
+          : '';
 
-            {/* LEFT SIDE: 3-COLUMN TABLE GRID WITH HORIZONTAL [LABEL : INPUT] PAIRS */}
+        return (
+          <div>
+            {/* ─── CONTINUOUS DATA ENTRY GRID: 3 EQUAL DATA COLUMNS + 1 PHOTO COLUMN ─── */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              columnGap: "16px",
-              rowGap: "7px"
+              gridTemplateColumns: "1fr 1fr 1fr 165px",
+              columnGap: "14px",
+              rowGap: "5px",
+              alignItems: "start"
             }}>
 
-              {/* ROW 1: Title | Patient Name * | Gender * */}
-              {/* Col 1: Title */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Title <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <select
-                    style={{ ...tableInp, cursor: "pointer", ...((!formData.title && isFormStarted) ? { borderColor: "#EF4444" } : {}) }}
-                    value={formData.title || ""}
-                    onChange={e => {
-                      const t = e.target.value;
-                      let g = formData.gender;
-                      if (t === "Mr." || t === "Master") g = "Male";
-                      else if (t === "Mrs." || t === "Miss" || t === "Ms.") g = "Female";
-                      else if (t === "Prefer not to say") g = "Other";
-                      setFormData({ ...formData, title: t, gender: g });
-                    }}
-                    disabled={Boolean(isExistingPatient)}
-                  >
-                    <option value="">-- Title --</option>
-                    <option value="Mr.">Mr.</option>
-                    <option value="Mrs.">Mrs.</option>
-                    <option value="Ms.">Ms.</option>
-                    <option value="Miss">Miss</option>
-                    <option value="Master">Master</option>
-                    <option value="Dr.">Dr.</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Col 2: Patient Name * */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Patient Name <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+              {/* ═══ ROW 1 ═══ */}
+              {/* Col 1: Mobile No. */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  Mobile No. <span style={{ color: "#EF4444" }}>*</span>
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <input
                     type="text"
-                    placeholder="Full name"
-                    style={{ ...tableInp, ...((!formData.name && isFormStarted) ? { borderColor: "#EF4444", boxShadow: "0 0 0 2px rgba(239,68,68,0.12)" } : {}) }}
-                    value={formData.name || ""}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="10-digit mobile"
+                    maxLength={10}
+                    style={{ ...tableInp, ...((!formData.contact && isFormStarted) ? { borderColor: "#EF4444", background: "#FEF2F2" } : {}) }}
+                    value={formData.contact || ""}
+                    onChange={e => {
+                      const v = e.target.value.replace(/\D/g, "").substring(0, 10);
+                      setFormData({ ...formData, contact: v });
+                    }}
                     readOnly={isExistingPatient}
                   />
                 </div>
               </div>
 
-              {/* Col 3: Gender * */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Gender <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+              {/* Col 2: Patient Type / UHID */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  Patient Type
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <select
-                    style={{ ...tableInp, cursor: "pointer", ...((!formData.gender && isFormStarted) ? { borderColor: "#EF4444" } : {}) }}
-                    value={formData.gender || ""}
-                    onChange={e => setFormData({ ...formData, gender: e.target.value })}
-                    disabled={isExistingPatient}
-                  >
-                    <option value="">-- Gender --</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
+                  <select style={{ ...tableInp, cursor: "pointer" }} value={isExistingPatient ? "Existing Patient" : "Walk-in Client"} disabled>
+                    <option value="Walk-in Client">Walk-in Client</option>
+                    <option value="Existing Patient">Existing Patient</option>
                   </select>
-                </div>
-              </div>
-
-              {/* ROW 2: DOB | Age (Y/M/D) * | Blood Group */}
-              {/* Col 1: DOB */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  DOB {formData.dob ? <span style={{ color: "#10B981", fontSize: "10px" }}>✓</span> : (!formData.age ? <span style={{ color: "#EF4444" }}>*</span> : null)}
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="date"
-                    style={{ ...tableInp, ...((!formData.dob && !formData.age && isFormStarted) ? { borderColor: "#EF4444" } : {}) }}
-                    value={formData.dob || ""}
-                    max={getLocalDateString()}
-                    onChange={e => handleDobChange(e.target.value)}
-                    readOnly={isExistingPatient}
-                  />
-                </div>
-              </div>
-
-              {/* Col 2: Age (Y/M/D) * */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Age (Y/M/D) {!formData.dob && <span style={{ color: "#EF4444" }}>*</span>}
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0, display: "flex", gap: "3px" }}>
-                  <input
-                    type="number"
-                    min="0"
-                    max="120"
-                    placeholder="Yrs"
-                    style={{ ...tableInp, flex: 1.4, textAlign: "center", padding: "0 2px", ...((!formData.age && !formData.dob && isFormStarted) ? { borderColor: "#EF4444" } : {}) }}
-                    value={formData.age || ""}
-                    onChange={e => setFormData({ ...formData, age: e.target.value })}
-                    readOnly={isExistingPatient}
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    max="11"
-                    placeholder="M"
-                    style={{ ...tableInp, flex: 1, textAlign: "center", padding: "0 2px" }}
-                    value={formData.ageMonths || ""}
-                    onChange={e => setFormData({ ...formData, ageMonths: e.target.value })}
-                    readOnly={isExistingPatient}
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    max="31"
-                    placeholder="D"
-                    style={{ ...tableInp, flex: 1, textAlign: "center", padding: "0 2px" }}
-                    value={formData.ageDays || ""}
-                    onChange={e => setFormData({ ...formData, ageDays: e.target.value })}
-                    readOnly={isExistingPatient}
-                  />
                 </div>
               </div>
 
               {/* Col 3: Blood Group */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Blood Group
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <select
                     style={{ ...tableInp, cursor: "pointer" }}
@@ -11303,7 +11196,7 @@ const ReceptionistDashboard = () => {
                     onChange={e => setFormData({ ...formData, bloodGroup: e.target.value })}
                     disabled={isExistingPatient}
                   >
-                    <option value="">-- Group --</option>
+                    <option value="">-- Select --</option>
                     <option value="O+">O+</option>
                     <option value="O-">O-</option>
                     <option value="A+">A+</option>
@@ -11316,35 +11209,267 @@ const ReceptionistDashboard = () => {
                 </div>
               </div>
 
-              {/* ROW 3: Mobile No. * | Emergency Mobile | Email Address * (MANDATORY WITH OTP) */}
-              {/* Col 1: Mobile No. * */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Mobile No. <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Col 4 (Spans Rows 1-5): Patient Photo Box */}
+              <div style={{
+                gridRow: "span 5",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "4px",
+                borderLeft: "1px dashed #CBD5E1",
+                paddingLeft: "10px"
+              }}>
+                <div
+                  style={{
+                    width: "145px",
+                    height: "125px",
+                    border: "1.5px solid #94A3B8",
+                    borderRadius: "3px",
+                    background: patientPhoto ? "#000000" : "#FFFFFF",
+                    position: "relative",
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: patientPhoto ? (photoDragging ? "grabbing" : "grab") : "pointer"
+                  }}
+                  onMouseDown={e => { if (!patientPhoto) return; setPhotoDragging(true); setPhotoDragStartX(e.clientX - photoOffsetX); setPhotoDragStartY(e.clientY - photoOffsetY); }}
+                  onMouseMove={e => { if (!photoDragging) return; setPhotoOffsetX(e.clientX - photoDragStartX); setPhotoOffsetY(e.clientY - photoDragStartY); }}
+                  onMouseUp={() => setPhotoDragging(false)}
+                  onMouseLeave={() => setPhotoDragging(false)}
+                  onClick={() => !patientPhoto && photoFileRef.current?.click()}
+                  title={patientPhoto ? "Drag to reposition" : "Click to upload patient photo"}
+                >
+                  {patientPhoto ? (
+                    <img
+                      src={patientPhoto}
+                      alt="Patient"
+                      draggable={false}
+                      style={{
+                        position: "absolute",
+                        width: `${100 * photoZoom}%`,
+                        height: `${100 * photoZoom}%`,
+                        objectFit: "cover",
+                        top: `calc(50% + ${photoOffsetY}px)`,
+                        left: `calc(50% + ${photoOffsetX}px)`,
+                        transform: "translate(-50%, -50%)",
+                        pointerEvents: "none"
+                      }}
+                    />
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="#CBD5E1" stroke="#94A3B8" strokeWidth="1"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      <span style={{ fontSize: "10px", fontWeight: 700, color: "#475569" }}>
+                        Image Not Available
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Photo Action Buttons directly underneath */}
+                <button
+                  type="button"
+                  onClick={() => photoCamRef.current?.click()}
+                  style={{
+                    width: "145px",
+                    height: "23px",
+                    borderRadius: "2px",
+                    border: "none",
+                    background: "#0284C7",
+                    color: "#FFFFFF",
+                    fontSize: "10.5px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "4px"
+                  }}
+                >
+                  Capture
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => photoFileRef.current?.click()}
+                  style={{
+                    width: "145px",
+                    height: "23px",
+                    borderRadius: "2px",
+                    border: "1px solid #CBD5E1",
+                    background: "#F8FAFC",
+                    color: "#334155",
+                    fontSize: "10.5px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "4px"
+                  }}
+                >
+                  Manual Upload
+                </button>
+
+                {patientPhoto && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px", width: "145px" }}>
+                    <input
+                      type="range" min="1" max="3" step="0.05" value={photoZoom}
+                      onChange={e => setPhotoZoom(parseFloat(e.target.value))}
+                      style={{ flex: 1, height: "3px", accentColor: "#0284C7", cursor: "pointer" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setPatientPhoto(null); setPhotoZoom(1); setPhotoOffsetX(0); setPhotoOffsetY(0); }}
+                      style={{ padding: "1px 5px", borderRadius: "2px", border: "1px solid #FECACA", background: "#FEF2F2", color: "#EF4444", fontSize: "9.5px", fontWeight: 700, cursor: "pointer" }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+
+                <input type="file" ref={photoFileRef} style={{ display: "none" }} accept="image/png,image/jpeg,image/webp"
+                  onChange={e => { const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onloadend=()=>{setPatientPhoto(r.result);setPhotoZoom(1);setPhotoOffsetX(0);setPhotoOffsetY(0);}; r.readAsDataURL(f); }} />
+                <input type="file" ref={photoCamRef} style={{ display: "none" }} accept="image/*" capture="environment"
+                  onChange={e => { const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onloadend=()=>{setPatientPhoto(r.result);setPhotoZoom(1);setPhotoOffsetX(0);setPhotoOffsetY(0);}; r.readAsDataURL(f); }} />
+              </div>
+
+              {/* ═══ ROW 2 ═══ */}
+              {/* Col 1: Patient Name (Title + Name combined inline, matching reference!) */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  Patient Name <span style={{ color: "#EF4444" }}>*</span>
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", gap: "3px" }}>
+                  <select
+                    style={{ ...tableInp, width: "65px", flexShrink: 0, cursor: "pointer" }}
+                    value={formData.title || ""}
+                    onChange={e => {
+                      const t = e.target.value;
+                      let g = formData.gender;
+                      if (t === "Mr." || t === "Master") g = "Male";
+                      else if (t === "Mrs." || t === "Miss" || t === "Ms.") g = "Female";
+                      else if (t === "Prefer not to say") g = "Other";
+                      setFormData({ ...formData, title: t, gender: g });
+                    }}
+                    disabled={Boolean(isExistingPatient)}
+                  >
+                    <option value="">Title</option>
+                    <option value="Mr.">Mr.</option>
+                    <option value="Mrs.">Mrs.</option>
+                    <option value="Ms.">Ms.</option>
+                    <option value="Miss">Miss</option>
+                    <option value="Master">Master</option>
+                    <option value="Dr.">Dr.</option>
+                  </select>
                   <input
                     type="text"
-                    placeholder="10-digit mobile"
-                    maxLength={10}
-                    style={{ ...tableInp, ...((!formData.contact && isFormStarted) ? { borderColor: "#EF4444", boxShadow: "0 0 0 2px rgba(239,68,68,0.12)" } : {}) }}
-                    value={formData.contact || ""}
-                    onChange={e => {
-                      const v = e.target.value.replace(/\D/g, "").substring(0, 10);
-                      setFormData({ ...formData, contact: v });
-                    }}
+                    placeholder="Full name"
+                    style={{ ...tableInp, flex: 1, ...((!formData.name && isFormStarted) ? { borderColor: "#EF4444", background: "#FEF2F2" } : {}) }}
+                    value={formData.name || ""}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
                     readOnly={isExistingPatient}
                   />
                 </div>
               </div>
 
-              {/* Col 2: Emergency Mobile */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              {/* Col 2: Age (Years, Months, Days segmented) */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  Age {!formData.dob && <span style={{ color: "#EF4444" }}>*</span>}
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", gap: "3px" }}>
+                  <input
+                    type="number" min="0" max="120" placeholder="Years"
+                    style={{ ...tableInp, flex: 1.3, textAlign: "center", padding: "0 2px" }}
+                    value={formData.age || ""}
+                    onChange={e => setFormData({ ...formData, age: e.target.value })}
+                    readOnly={isExistingPatient}
+                  />
+                  <input
+                    type="number" min="0" max="11" placeholder="Months"
+                    style={{ ...tableInp, flex: 1, textAlign: "center", padding: "0 2px" }}
+                    value={formData.ageMonths || ""}
+                    onChange={e => setFormData({ ...formData, ageMonths: e.target.value })}
+                    readOnly={isExistingPatient}
+                  />
+                  <input
+                    type="number" min="0" max="31" placeholder="Days"
+                    style={{ ...tableInp, flex: 1, textAlign: "center", padding: "0 2px" }}
+                    value={formData.ageDays || ""}
+                    onChange={e => setFormData({ ...formData, ageDays: e.target.value })}
+                    readOnly={isExistingPatient}
+                  />
+                </div>
+              </div>
+
+              {/* Col 3: DOB */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  DOB {formData.dob ? "✓" : (!formData.age ? <span style={{ color: "#EF4444" }}>*</span> : "")}
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input
+                    type="date"
+                    style={tableInp}
+                    value={formData.dob || ""}
+                    max={getLocalDateString()}
+                    onChange={e => handleDobChange(e.target.value)}
+                    readOnly={isExistingPatient}
+                  />
+                </div>
+              </div>
+
+              {/* ═══ ROW 3 ═══ */}
+              {/* Col 1: Gender */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  Gender <span style={{ color: "#EF4444" }}>*</span>
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <select
+                    style={{ ...tableInp, cursor: "pointer", ...((!formData.gender && isFormStarted) ? { borderColor: "#EF4444" } : {}) }}
+                    value={formData.gender || ""}
+                    onChange={e => setFormData({ ...formData, gender: e.target.value })}
+                    disabled={isExistingPatient}
+                  >
+                    <option value="">-- Select --</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Col 2: Referred Doctor */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  Referred Doctor
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input
+                    type="text"
+                    placeholder="SELF / Doctor / Clinic"
+                    style={tableInp}
+                    value={formData.referredBy || ""}
+                    onChange={e => setFormData({ ...formData, referredBy: e.target.value })}
+                    readOnly={isExistingPatient}
+                  />
+                </div>
+              </div>
+
+              {/* Col 3: Emergency Mobile */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Emergency No.
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <input
                     type="text"
@@ -11361,21 +11486,112 @@ const ReceptionistDashboard = () => {
                 </div>
               </div>
 
-              {/* Col 3: Email Address * (STRICTLY MANDATORY WITH OTP) */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px", position: "relative" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              {/* ═══ ROW 4 ═══ */}
+              {/* Col 1: Address */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  Address
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input
+                    type="text"
+                    placeholder="House, building, street, locality"
+                    style={tableInp}
+                    value={streetValue}
+                    onChange={e => handleAddressFieldChange('addressStreet', e.target.value)}
+                    readOnly={isExistingPatient}
+                  />
+                </div>
+              </div>
+
+              {/* Col 2: City */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  City
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input
+                    type="text"
+                    placeholder="City (e.g. Gurugram)"
+                    style={tableInp}
+                    value={formData.addressCity || ""}
+                    onChange={e => handleAddressFieldChange('addressCity', e.target.value)}
+                    readOnly={isExistingPatient}
+                  />
+                </div>
+              </div>
+
+              {/* Col 3: State */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  State
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input
+                    type="text"
+                    placeholder="State (e.g. Haryana)"
+                    style={tableInp}
+                    value={formData.addressState || ""}
+                    onChange={e => handleAddressFieldChange('addressState', e.target.value)}
+                    readOnly={isExistingPatient}
+                  />
+                </div>
+              </div>
+
+              {/* ═══ ROW 5 ═══ */}
+              {/* Col 1: PIN Code */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  PIN Code
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input
+                    type="text"
+                    placeholder="6-digit PIN"
+                    maxLength={6}
+                    style={tableInp}
+                    value={formData.addressPincode || ""}
+                    onChange={e => handleAddressFieldChange('addressPincode', e.target.value.replace(/\D/g, '').substring(0, 6))}
+                    readOnly={isExistingPatient}
+                  />
+                </div>
+              </div>
+
+              {/* Col 2: Country */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  Country
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input
+                    type="text"
+                    value="INDIA"
+                    readOnly
+                    style={{ ...tableInp, background: "#F8FAFC", fontWeight: 600 }}
+                  />
+                </div>
+              </div>
+
+              {/* Col 3: Email Address (MANDATORY WITH OTP INLINE!) */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px", position: "relative" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Email <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", alignItems: "center" }}>
                   <input
                     type="email"
                     placeholder="patient@example.com"
                     style={{
                       ...tableInp,
-                      paddingRight: (!isExistingPatient && formData.email && !otpVerified) ? "55px" : "8px",
+                      paddingRight: (!isExistingPatient && formData.email && !otpVerified) ? "48px" : "6px",
                       borderColor: otpVerified ? "#10B981" : (!otpVerified && formData.email ? "#F59E0B" : ((!formData.email && isFormStarted) ? "#EF4444" : "#CBD5E1")),
-                      ...((!formData.email && isFormStarted) ? { boxShadow: "0 0 0 2px rgba(239,68,68,0.12)" } : {})
+                      ...((!formData.email && isFormStarted) ? { background: "#FEF2F2" } : {})
                     }}
                     value={formData.email || ""}
                     onChange={e => {
@@ -11385,9 +11601,9 @@ const ReceptionistDashboard = () => {
                     }}
                     readOnly={isExistingPatient}
                   />
-                  {/* Inline OTP Verification Status & Trigger */}
+                  {/* Inline OTP Verification Trigger / Badge */}
                   {otpVerified ? (
-                    <span style={{ position: "absolute", right: "6px", fontSize: "10px", fontWeight: 800, color: "#059669" }}>
+                    <span style={{ position: "absolute", right: "5px", fontSize: "9.5px", fontWeight: 800, color: "#059669" }}>
                       ✓ Verified
                     </span>
                   ) : !isExistingPatient && formData.email && (
@@ -11398,13 +11614,13 @@ const ReceptionistDashboard = () => {
                       style={{
                         position: "absolute",
                         right: "2px",
-                        height: "24px",
-                        padding: "0 6px",
-                        borderRadius: "3px",
+                        height: "20px",
+                        padding: "0 5px",
+                        borderRadius: "2px",
                         border: "none",
                         background: sendingOtp ? "#94A3B8" : "#0284C7",
                         color: "#FFFFFF",
-                        fontSize: "10.5px",
+                        fontSize: "9.5px",
                         fontWeight: 750,
                         cursor: sendingOtp ? "not-allowed" : "pointer"
                       }}
@@ -11414,27 +11630,27 @@ const ReceptionistDashboard = () => {
                   )}
                 </div>
 
-                {/* Floating Drawer for OTP Entry */}
+                {/* OTP Drawer */}
                 {!isExistingPatient && otpSent && !otpVerified && (
                   <div style={{
                     position: "absolute",
-                    top: "32px",
+                    top: "28px",
                     right: 0,
-                    zIndex: 20,
+                    zIndex: 30,
                     background: "#FFFFFF",
                     border: "1px solid #93C5FD",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-                    borderRadius: "6px",
-                    padding: "6px 8px",
+                    boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
+                    borderRadius: "4px",
+                    padding: "4px 6px",
                     display: "flex",
                     alignItems: "center",
-                    gap: "5px"
+                    gap: "4px"
                   }}>
                     <input
                       type="text"
                       placeholder="6-digit OTP"
                       maxLength={6}
-                      style={{ width: "90px", height: "24px", textAlign: "center", fontSize: "11px", border: "1px solid #CBD5E1", borderRadius: "3px", outline: "none" }}
+                      style={{ width: "80px", height: "22px", textAlign: "center", fontSize: "11px", border: "1px solid #CBD5E1", borderRadius: "2px", outline: "none" }}
                       value={verificationOtp}
                       onChange={e => setVerificationOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     />
@@ -11442,7 +11658,7 @@ const ReceptionistDashboard = () => {
                       type="button"
                       onClick={handleVerifyOtp}
                       disabled={otpVerifying || !verificationOtp}
-                      style={{ height: "24px", padding: "0 8px", background: "#10B981", color: "#FFF", border: "none", borderRadius: "3px", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}
+                      style={{ height: "22px", padding: "0 6px", background: "#10B981", color: "#FFF", border: "none", borderRadius: "2px", fontSize: "10px", fontWeight: 700, cursor: "pointer" }}
                     >
                       {otpVerifying ? "..." : "Confirm"}
                     </button>
@@ -11450,545 +11666,13 @@ const ReceptionistDashboard = () => {
                 )}
               </div>
 
-              {/* ROW 4: City | State | PIN Code */}
-              {/* Col 1: City */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  City
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="City"
-                    style={tableInp}
-                    value={formData.addressCity || ""}
-                    onChange={e => handleAddressFieldChange('addressCity', e.target.value)}
-                    readOnly={isExistingPatient}
-                  />
-                </div>
-              </div>
-
-              {/* Col 2: State */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  State
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="State"
-                    style={tableInp}
-                    value={formData.addressState || ""}
-                    onChange={e => handleAddressFieldChange('addressState', e.target.value)}
-                    readOnly={isExistingPatient}
-                  />
-                </div>
-              </div>
-
-              {/* Col 3: PIN Code */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  PIN Code
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="6-digit PIN"
-                    maxLength={6}
-                    style={{ ...tableInp, textAlign: "center" }}
-                    value={formData.addressPincode || ""}
-                    onChange={e => handleAddressFieldChange('addressPincode', e.target.value.replace(/\D/g, '').substring(0, 6))}
-                    readOnly={isExistingPatient}
-                  />
-                </div>
-              </div>
-
-              {/* ROW 5: Street Address (Spans 2 cols) | Referred By (Col 3) */}
-              {/* Street Address spanning Col 1 and 2 */}
-              <div style={{ gridColumn: "span 2", display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Address
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="Flat / House No., Building, Street, Locality"
-                    style={tableInp}
-                    value={streetValue}
-                    onChange={e => handleAddressFieldChange('addressStreet', e.target.value)}
-                    readOnly={isExistingPatient}
-                  />
-                </div>
-              </div>
-
-              {/* Col 3: Referred By */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Referred By
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="Doctor / Clinic / Self"
-                    style={tableInp}
-                    value={formData.referredBy || ""}
-                    onChange={e => setFormData({ ...formData, referredBy: e.target.value })}
-                    readOnly={isExistingPatient}
-                  />
-                </div>
-              </div>
-
-            </div>
-
-            {/* RIGHT SIDE: PATIENT PHOTO FRAME & ACTIONS (Exact match with media_1791436391758.jpg) */}
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "6px",
-              borderLeft: "1px dashed #CBD5E1",
-              paddingLeft: "14px"
-            }}>
-              {/* Photo Box */}
-              <div
-                style={{
-                  width: "148px",
-                  height: "135px",
-                  border: "1.5px solid #CBD5E1",
-                  borderRadius: "4px",
-                  background: patientPhoto ? "#000000" : "#F8FAFC",
-                  position: "relative",
-                  overflow: "hidden",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: patientPhoto ? (photoDragging ? "grabbing" : "grab") : "pointer"
-                }}
-                onMouseDown={e => { if (!patientPhoto) return; setPhotoDragging(true); setPhotoDragStartX(e.clientX - photoOffsetX); setPhotoDragStartY(e.clientY - photoOffsetY); }}
-                onMouseMove={e => { if (!photoDragging) return; setPhotoOffsetX(e.clientX - photoDragStartX); setPhotoOffsetY(e.clientY - photoDragStartY); }}
-                onMouseUp={() => setPhotoDragging(false)}
-                onMouseLeave={() => setPhotoDragging(false)}
-                onClick={() => !patientPhoto && photoFileRef.current?.click()}
-                title={patientPhoto ? "Drag to reposition" : "Click to upload patient photo"}
-              >
-                {patientPhoto ? (
-                  <img
-                    src={patientPhoto}
-                    alt="Patient"
-                    draggable={false}
-                    style={{
-                      position: "absolute",
-                      width: `${100 * photoZoom}%`,
-                      height: `${100 * photoZoom}%`,
-                      objectFit: "cover",
-                      top: `calc(50% + ${photoOffsetY}px)`,
-                      left: `calc(50% + ${photoOffsetX}px)`,
-                      transform: "translate(-50%, -50%)",
-                      pointerEvents: "none"
-                    }}
-                  />
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
-                    <svg width="44" height="44" viewBox="0 0 24 24" fill="#CBD5E1" stroke="#94A3B8" strokeWidth="1"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#64748B", marginTop: "2px" }}>
-                      Image Not Available
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Action Buttons underneath (Matching reference styling) */}
-              <button
-                type="button"
-                onClick={() => photoCamRef.current?.click()}
-                style={{
-                  width: "148px",
-                  height: "26px",
-                  borderRadius: "3px",
-                  border: "none",
-                  background: "#0284C7",
-                  color: "#FFFFFF",
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "4px"
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                Capture
-              </button>
-
-              <button
-                type="button"
-                onClick={() => photoFileRef.current?.click()}
-                style={{
-                  width: "148px",
-                  height: "26px",
-                  borderRadius: "3px",
-                  border: "1px solid #CBD5E1",
-                  background: "#FFFFFF",
-                  color: "#334155",
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "4px"
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Manual Upload
-              </button>
-
-              {patientPhoto && (
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", width: "148px" }}>
-                  <input
-                    type="range" min="1" max="3" step="0.05" value={photoZoom}
-                    onChange={e => setPhotoZoom(parseFloat(e.target.value))}
-                    style={{ flex: 1, height: "4px", accentColor: "#0284C7", cursor: "pointer" }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => { setPatientPhoto(null); setPhotoZoom(1); setPhotoOffsetX(0); setPhotoOffsetY(0); }}
-                    style={{ padding: "2px 6px", borderRadius: "3px", border: "1px solid #FECACA", background: "#FEF2F2", color: "#EF4444", fontSize: "10px", fontWeight: 700, cursor: "pointer" }}
-                  >
-                    Clear
-                  </button>
-                </div>
-              )}
-
-              <input type="file" ref={photoFileRef} style={{ display: "none" }} accept="image/png,image/jpeg,image/webp"
-                onChange={e => { const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onloadend=()=>{setPatientPhoto(r.result);setPhotoZoom(1);setPhotoOffsetX(0);setPhotoOffsetY(0);}; r.readAsDataURL(f); }} />
-              <input type="file" ref={photoCamRef} style={{ display: "none" }} accept="image/*" capture="environment"
-                onChange={e => { const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onloadend=()=>{setPatientPhoto(r.result);setPhotoZoom(1);setPhotoOffsetX(0);setPhotoOffsetY(0);}; r.readAsDataURL(f); }} />
-            </div>
-
-          </div>
-        );
-      })()}
-
-      {/* ─── SECTION 2: INITIAL VITALS (TRIAGE) TABLE ROW (Matching Reference) ─── */}
-      <div style={{
-        background: "#F8FAFC",
-        borderTop: "1px solid #CBD5E1",
-        borderBottom: "1px solid #CBD5E1",
-        padding: "6px 16px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between"
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <span style={{ fontSize: "11px", fontWeight: 800, color: "#1E293B", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            Initial Vitals (Triage)
-          </span>
-          <span style={{ fontSize: "10.5px", color: "#64748B", fontWeight: 500 }}>
-            (Optional baseline clinical observations)
-          </span>
-        </div>
-      </div>
-
-      {(() => {
-        const tableInp = {
-          height: "28px",
-          borderRadius: "4px",
-          border: "1px solid #CBD5E1",
-          background: "#FFFFFF",
-          fontSize: "12px",
-          fontWeight: 600,
-          color: "#0F172A",
-          width: "100%",
-          padding: "0 6px",
-          outline: "none",
-          boxSizing: "border-box",
-          textAlign: "center"
-        };
-
-        const calcBmi = (vitalWeight && vitalHeight && Number(vitalHeight) > 0)
-          ? (Number(vitalWeight) / Math.pow(Number(vitalHeight) / 100, 2)).toFixed(1)
-          : '';
-
-        return (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-            columnGap: "10px",
-            rowGap: "6px",
-            padding: "8px 16px",
-            alignItems: "center",
-            background: "#FFFFFF"
-          }}>
-            {/* BP */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>BP (S/D)</label>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "2px", flex: 1 }}>
-                <input type="number" placeholder="120" style={{ ...tableInp, flex: 1 }} value={vitalBpSys} onChange={e => setVitalBpSys(e.target.value)} />
-                <span style={{ color: "#94A3B8", fontSize: "11px" }}>/</span>
-                <input type="number" placeholder="80" style={{ ...tableInp, flex: 1 }} value={vitalBpDia} onChange={e => setVitalBpDia(e.target.value)} />
-              </div>
-            </div>
-
-            {/* Pulse */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>Pulse</label>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "3px", flex: 1 }}>
-                <input type="number" placeholder="72" style={tableInp} value={vitalPulse} onChange={e => setVitalPulse(e.target.value)} />
-                <span style={{ fontSize: "10px", color: "#64748B", flexShrink: 0 }}>bpm</span>
-              </div>
-            </div>
-
-            {/* Temp */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>Temp</label>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "3px", flex: 1 }}>
-                <input type="number" step="0.1" placeholder="98.6" style={tableInp} value={vitalTemp} onChange={e => setVitalTemp(e.target.value)} />
-                <span style={{ fontSize: "10px", color: "#64748B", flexShrink: 0 }}>°F</span>
-              </div>
-            </div>
-
-            {/* Weight */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>Weight</label>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "3px", flex: 1 }}>
-                <input type="number" step="0.1" placeholder="68" style={tableInp} value={vitalWeight} onChange={e => setVitalWeight(e.target.value)} />
-                <span style={{ fontSize: "10px", color: "#64748B", flexShrink: 0 }}>kg</span>
-              </div>
-            </div>
-
-            {/* Height */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>Height</label>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "3px", flex: 1 }}>
-                <input type="number" step="0.5" placeholder="174" style={tableInp} value={vitalHeight} onChange={e => setVitalHeight(e.target.value)} />
-                <span style={{ fontSize: "10px", color: "#64748B", flexShrink: 0 }}>cm</span>
-              </div>
-            </div>
-
-            {/* BMI */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>BMI</label>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
-              <div style={{ flex: 1 }}>
-                <input
-                  type="text"
-                  placeholder="23.8"
-                  readOnly
-                  style={{ ...tableInp, background: calcBmi ? "#F0FDF4" : "#F8FAFC", color: calcBmi ? "#047857" : "#64748B", fontWeight: 800 }}
-                  value={calcBmi || vitalBmi || ""}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ─── SECTION 3: CLINICAL SCHEDULING (DOCTOR CONSULTATION / LAB / SERVICE) ─── */}
-      <div style={{
-        background: "#F8FAFC",
-        borderTop: "1px solid #CBD5E1",
-        borderBottom: "1px solid #CBD5E1",
-        padding: "6px 16px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between"
-      }}>
-        <span style={{ fontSize: "11px", fontWeight: 800, color: "#1E293B", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-          {bookingType === "lab"
-            ? "Diagnostic Pathology & Laboratory Investigations"
-            : bookingType === "service"
-              ? "Clinical Procedures & Specialty Services"
-              : "Doctor Consultation & Clinical Scheduling"}
-        </span>
-        <span style={{ fontSize: "11px", fontWeight: 750, color: "#0284C7" }}>
-          {bookingType === "lab"
-            ? `${selectedLabTestsList.length} Test(s) Added`
-            : bookingType === "service"
-              ? `${selectedServicesList.length} Service(s) Added`
-              : `${1 + additionalApptsList.length} OPD Appointment${additionalApptsList.length > 0 ? "s" : ""}`}
-        </span>
-      </div>
-
-      {(() => {
-        const tableInp = {
-          height: "30px",
-          borderRadius: "4px",
-          border: "1px solid #CBD5E1",
-          background: "#FFFFFF",
-          fontSize: "12px",
-          fontWeight: 500,
-          color: "#0F172A",
-          width: "100%",
-          padding: "0 8px",
-          outline: "none",
-          boxSizing: "border-box"
-        };
-
-        // ─── CASE A: LAB ORDER ───
-        if (bookingType === "lab") {
-          const availableTests = (hospitalLabTests && hospitalLabTests.length > 0) ? hospitalLabTests : DEFAULT_HOSPITAL_LAB_TESTS;
-          const filteredTests = availableTests.filter(t => {
-            const q = labTestSearchQuery.trim().toLowerCase();
-            if (!q) return true;
-            return (t.testName || '').toLowerCase().includes(q) || (t.category || '').toLowerCase().includes(q) || (t.testCode || '').toLowerCase().includes(q);
-          });
-
-          return (
-            <div style={{ padding: "10px 16px", display: "flex", flexDirection: "column", gap: "8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Search Test <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, position: "relative" }}>
-                  <input
-                    type="text"
-                    placeholder="Search diagnostic test (e.g. CBC, Lipid, Thyroid, Urine)..."
-                    style={tableInp}
-                    value={labTestSearchQuery}
-                    onFocus={() => setShowLabTestDropdown(true)}
-                    onChange={e => { setLabTestSearchQuery(e.target.value); setShowLabTestDropdown(true); }}
-                  />
-                  {showLabTestDropdown && (
-                    <div style={{
-                      position: "absolute", top: "100%", left: 0, right: 0, marginTop: "2px",
-                      background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "6px",
-                      boxShadow: "0 8px 20px rgba(0,0,0,0.12)", zIndex: 9999, maxHeight: "200px", overflowY: "auto"
-                    }}>
-                      {filteredTests.map((test, idx) => {
-                        const isAdded = selectedLabTestsList.some(item => (item.testCode && item.testCode === test.testCode) || item.testName === test.testName);
-                        return (
-                          <div
-                            key={idx}
-                            onClick={() => {
-                              if (!isAdded) setSelectedLabTestsList([...selectedLabTestsList, test]);
-                              setShowLabTestDropdown(false);
-                              setLabTestSearchQuery("");
-                            }}
-                            style={{ padding: "6px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: isAdded ? "default" : "pointer", background: isAdded ? "#F8FAFC" : "#FFFFFF", borderBottom: "1px solid #F1F5F9" }}
-                          >
-                            <span style={{ fontSize: "12px", fontWeight: 600 }}>{test.testName} {test.category && <span style={{ color: "#059669", fontSize: "10px" }}>({test.category})</span>}</span>
-                            <span style={{ fontSize: "12px", fontWeight: 800, color: "#059669" }}>₹{Number(test.price || 0).toFixed(2)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Selected tests chips */}
-              {selectedLabTestsList.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", paddingLeft: "107px" }}>
-                  {selectedLabTestsList.map((test, idx) => (
-                    <span key={idx} style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#065F46", padding: "2px 8px", borderRadius: "4px", fontSize: "11.5px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                      {test.testName} • ₹{test.price}
-                      <button type="button" onClick={() => setSelectedLabTestsList(selectedLabTestsList.filter((_, i) => i !== idx))} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontWeight: 800 }}>✕</button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        }
-
-        // ─── CASE B: SERVICE ORDER ───
-        if (bookingType === "service") {
-          const availableServices = (hospitalClinicalServices && hospitalClinicalServices.length > 0) ? hospitalClinicalServices : [];
-          const filteredServices = availableServices.filter(s => {
-            const q = serviceSearchQuery.trim().toLowerCase();
-            if (!q) return true;
-            return (s.serviceName || '').toLowerCase().includes(q) || (s.department || '').toLowerCase().includes(q) || (s.serviceCode || '').toLowerCase().includes(q);
-          });
-
-          return (
-            <div style={{ padding: "10px 16px", display: "flex", flexDirection: "column", gap: "8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Search Procedure <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, position: "relative" }}>
-                  <input
-                    type="text"
-                    placeholder="Search clinical procedure (e.g. Root Canal, Scaling, Dressing)..."
-                    style={tableInp}
-                    value={serviceSearchQuery}
-                    onFocus={() => setShowServiceDropdown(true)}
-                    onChange={e => { setServiceSearchQuery(e.target.value); setShowServiceDropdown(true); }}
-                  />
-                  {showServiceDropdown && (
-                    <div style={{
-                      position: "absolute", top: "100%", left: 0, right: 0, marginTop: "2px",
-                      background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "6px",
-                      boxShadow: "0 8px 20px rgba(0,0,0,0.12)", zIndex: 9999, maxHeight: "200px", overflowY: "auto"
-                    }}>
-                      {filteredServices.map((service, idx) => {
-                        const isAdded = selectedServicesList.some(item => (item.serviceCode && item.serviceCode === service.serviceCode) || item.serviceName === service.serviceName);
-                        return (
-                          <div
-                            key={idx}
-                            onClick={() => {
-                              if (!isAdded) setSelectedServicesList([...selectedServicesList, service]);
-                              setShowServiceDropdown(false);
-                              setServiceSearchQuery("");
-                            }}
-                            style={{ padding: "6px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: isAdded ? "default" : "pointer", background: isAdded ? "#F8FAFC" : "#FFFFFF", borderBottom: "1px solid #F1F5F9" }}
-                          >
-                            <span style={{ fontSize: "12px", fontWeight: 600 }}>{service.serviceName} {service.department && <span style={{ color: "#7C3AED", fontSize: "10px" }}>({service.department})</span>}</span>
-                            <span style={{ fontSize: "12px", fontWeight: 800, color: "#7C3AED" }}>₹{Number(service.price || 0).toFixed(2)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Selected services chips */}
-              {selectedServicesList.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", paddingLeft: "107px" }}>
-                  {selectedServicesList.map((service, idx) => (
-                    <span key={idx} style={{ background: "#F5F3FF", border: "1px solid #DDD6FE", color: "#6D28D9", padding: "2px 8px", borderRadius: "4px", fontSize: "11.5px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                      {service.serviceName} • ₹{service.price}
-                      <button type="button" onClick={() => setSelectedServicesList(selectedServicesList.filter((_, i) => i !== idx))} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontWeight: 800 }}>✕</button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        }
-
-        // ─── CASE C: OPD DOCTOR CONSULTATION ───
-        return (
-          <div style={{ padding: "10px 16px", display: "flex", flexDirection: "column", gap: "8px" }}>
-            {/* Primary Appointment Row in Strict 3 Columns */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              columnGap: "16px",
-              rowGap: "7px"
-            }}>
-              {/* Col 1: Doctor * */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              {/* ═══ ROW 6: Clinical Details (Doctor / Date / Fee) ═══ */}
+              {/* Col 1: Doctor */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Doctor <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <select
                     style={{ ...tableInp, cursor: "pointer" }}
@@ -12006,12 +11690,12 @@ const ReceptionistDashboard = () => {
                 </div>
               </div>
 
-              {/* Col 2: Consultation Date * */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              {/* Col 2: Date */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Date <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <input
                     type="date"
@@ -12024,400 +11708,346 @@ const ReceptionistDashboard = () => {
                 </div>
               </div>
 
-              {/* Col 3: Consultation Fee (READ-ONLY LOCKED 🔒) */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              {/* Col 3: Fee (READ-ONLY LOCKED 🔒) */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Consult Fee
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
                 <div style={{
-                  flex: 1, minWidth: 0, height: "30px",
-                  background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "4px",
-                  padding: "0 8px", display: "flex", alignItems: "center", justifyContent: "space-between",
+                  flex: 1, minWidth: 0, height: "26px",
+                  background: "#F8FAFC", border: "1px solid #CBD5E1", borderRadius: "3px",
+                  padding: "0 6px", display: "flex", alignItems: "center", justifyContent: "space-between",
                   boxSizing: "border-box"
                 }}>
-                  <span style={{ fontSize: "10.5px", color: "#64748B", fontWeight: 600 }}>🔒 Locked</span>
+                  <span style={{ fontSize: "10px", color: "#64748B", fontWeight: 600 }}>🔒 Locked</span>
                   {(() => {
                     const sd = doctors.find(d => String(d._id) === String(formData.doctorId));
                     const df = sd?.consultationFee || sd?.fee || 0;
                     return (
-                      <span style={{ fontSize: "13px", fontWeight: 850, color: "#0F172A" }}>
+                      <span style={{ fontSize: "12px", fontWeight: 850, color: "#0F172A" }}>
                         ₹{Number(df).toFixed(2)}
                       </span>
                     );
                   })()}
                 </div>
               </div>
-            </div>
 
-            {/* Time Slot Chips (Spanning full width) */}
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", minHeight: "30px" }}>
-              <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                Time Slot
-              </label>
-              <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-              <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" }}>
-                {(!formData.doctorId || !bookingDate) ? (
-                  <span style={{ fontSize: "11px", color: "#94A3B8", fontStyle: "italic" }}>
-                    Select doctor and date above to load available time slots
-                  </span>
-                ) : !receptionDoctorAvailability.available ? (
-                  <span style={{ fontSize: "11px", color: "#DC2626", fontWeight: 700 }}>
-                    Doctor unavailable ({receptionDoctorAvailability.reason || "On Leave"})
-                  </span>
-                ) : (
-                  (receptionDoctorAvailability.slots || DEFAULT_RECEPTION_SLOTS).map(time => {
-                    let limit = 5; const m = time.match(/\(Limit:\s*(\d+)\)/i); if (m) limit = parseInt(m[1], 10);
-                    const cs = s => s ? s.split(/\(Limit:/i)[0].replace(/\s+/g, " ").trim().toLowerCase() : "";
-                    const tDate = new Date(bookingDate).toDateString();
-                    let bc = 0;
-                    if (formData.doctorId && bookingDate) {
-                      bc = appointments.filter(a => {
-                        if (a.status === "Cancelled") return false;
-                        const d = a.doctorId?._id || a.doctorId;
-                        if (String(d) !== String(formData.doctorId)) return false;
-                        if (new Date(a.date).toDateString() !== tDate) return false;
-                        return cs(a.time) === cs(time);
-                      }).length;
-                    }
-                    const full = bc >= limit; const past = isPastSlot(bookingDate, time); const sel = selectedSlot === time;
-                    const disp = time.split(/\(Limit:/i)[0].trim();
-                    return (
-                      <button
-                        key={time}
-                        type="button"
-                        disabled={full || past}
-                        onClick={() => { if (!full && !past) setSelectedSlot(time); }}
-                        style={{
-                          height: "24px",
-                          padding: "0 8px",
-                          fontSize: "11px",
-                          borderRadius: "3px",
-                          border: sel ? "1px solid #0284C7" : "1px solid #CBD5E1",
-                          background: sel ? "#0284C7" : (full || past ? "#F1F5F9" : "#FFFFFF"),
-                          color: sel ? "#FFFFFF" : (full || past ? "#94A3B8" : "#334155"),
-                          cursor: (full || past) ? "not-allowed" : "pointer",
-                          fontWeight: sel ? 800 : 600
-                        }}
-                      >
-                        {disp} {full && "(Full)"} {past && "(Past)"}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
+              {/* Col 4 (Row 6): Empty spacer aligned with photo column */}
+              <div></div>
 
-            {/* Additional Appointments (if any) */}
-            {additionalApptsList.map((addon, aIdx) => (
-              <div key={addon.id || aIdx} style={{
-                background: "#F8FAFC",
-                border: "1px dashed #93C5FD",
-                borderRadius: "4px",
-                padding: "6px 10px",
-                display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                columnGap: "16px",
-                rowGap: "6px"
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 700, color: "#1D4ED8", flexShrink: 0 }}>
-                    Appt #{aIdx + 2} Doctor
-                  </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                  <div style={{ flex: 1 }}>
-                    <select
-                      style={tableInp}
-                      value={addon.doctorId || ""}
-                      onChange={e => handleUpdateAdditionalDoctor(aIdx, e.target.value)}
-                    >
-                      <option value="">-- Choose Doctor --</option>
-                      {doctors.map(doc => (
-                        <option key={doc._id} value={doc._id}>
-                          {doc.name} {doc.role ? `(${doc.role})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                    Date
-                  </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                  <div style={{ flex: 1 }}>
-                    <input
-                      type="date"
-                      style={tableInp}
-                      value={addon.date || bookingDate}
-                      min={getLocalDateString()}
-                      onChange={e => handleUpdateAdditionalDate(aIdx, e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748B" }}>
-                    Fee: ₹{doctors.find(d => String(d._id) === String(addon.doctorId))?.consultationFee || 500}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveAdditionalAppt(aIdx)}
-                    style={{ background: "#FEE2E2", color: "#DC2626", border: "none", borderRadius: "3px", padding: "2px 6px", fontSize: "10.5px", fontWeight: 700, cursor: "pointer" }}
-                  >
-                    ✕ Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            {!reschedulingAppointment && (
-              <div style={{ paddingLeft: "107px" }}>
-                <button
-                  type="button"
-                  onClick={handleAddAdditionalAppt}
-                  style={{
-                    padding: "4px 10px",
-                    borderRadius: "4px",
-                    border: "1px dashed #0284C7",
-                    background: "#F0F9FF",
-                    color: "#0369A1",
-                    fontSize: "11.5px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "4px"
-                  }}
-                >
-                  + Add Another Doctor Appointment
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* ─── SECTION 4: BILLING & PAYMENT SETTLEMENT TABLE (Matching Bottom of media_1791436391758.jpg) ─── */}
-      <div style={{
-        background: "#F8FAFC",
-        borderTop: "1px solid #CBD5E1",
-        borderBottom: "1px solid #CBD5E1",
-        padding: "6px 16px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between"
-      }}>
-        <span style={{ fontSize: "11px", fontWeight: 800, color: "#1E293B", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-          Billing & Payment Settlement
-        </span>
-      </div>
-
-      {(() => {
-        const rawItems = getBillingItems();
-        const regFee = (!isExistingPatient && rawItems.length > 0) ? 50 : 0;
-        const sub = rawItems.reduce((s, i) => s + i.amount, 0) + regFee;
-        const hasDiscount = Number(bookingDiscountPercent || 0) > 0;
-        const disc = hasDiscount ? (sub * Number(bookingDiscountPercent || 0)) / 100 : 0;
-        const total = Math.max(0, sub - disc);
-        const paid = Number(formData.amountPaid || 0);
-        const bal = Math.max(0, total - paid);
-
-        const tableInp = {
-          height: "30px",
-          borderRadius: "4px",
-          border: "1px solid #CBD5E1",
-          background: "#FFFFFF",
-          fontSize: "12px",
-          fontWeight: 600,
-          color: "#0F172A",
-          width: "100%",
-          padding: "0 8px",
-          outline: "none",
-          boxSizing: "border-box"
-        };
-
-        return (
-          <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-            {/* Table Row for Settlement Metrics */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1fr",
-              columnGap: "14px",
-              rowGap: "8px",
-              alignItems: "center"
-            }}>
-              {/* Payment Mode */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Payment Mode
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, display: "flex", gap: "3px" }}>
-                  {["Cash", "UPI", "Card", "Other"].map(mode => {
-                    const isSel = bookingPaymentMethod === mode;
-                    return (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setBookingPaymentMethod(mode)}
-                        style={{
-                          flex: 1,
-                          height: "30px",
-                          borderRadius: "4px",
-                          border: isSel ? "1.5px solid #0284C7" : "1px solid #CBD5E1",
-                          background: isSel ? "#E0F2FE" : "#FFFFFF",
-                          color: isSel ? "#0369A1" : "#334155",
-                          fontSize: "11px",
-                          fontWeight: isSel ? 800 : 600,
-                          cursor: "pointer"
-                        }}
-                      >
-                        {mode}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Discount % & Reason */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <label style={{ width: "75px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Discount %
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, display: "flex", gap: "4px" }}>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    placeholder="0"
-                    style={{ ...tableInp, width: "50px", textAlign: "center" }}
-                    value={bookingDiscountPercent || ""}
-                    onChange={e => setBookingDiscountPercent(e.target.value)}
-                  />
-                  {hasDiscount && (
-                    <input
-                      type="text"
-                      placeholder="Reason"
-                      style={{ ...tableInp, flex: 1 }}
-                      value={bookingDiscountReason || ""}
-                      onChange={e => setBookingDiscountReason(e.target.value)}
-                    />
+              {/* ═══ ROW 7: Time Slot & Vitals ═══ */}
+              {/* Col 1 & 2 (Spans 2 columns): Time Slot chips */}
+              <div style={{ gridColumn: "span 2", display: "flex", alignItems: "center", gap: "4px", minHeight: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  Time Slot
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: "3px", alignItems: "center" }}>
+                  {(!formData.doctorId || !bookingDate) ? (
+                    <span style={{ fontSize: "10.5px", color: "#94A3B8" }}>
+                      Select doctor and date to load slots
+                    </span>
+                  ) : !receptionDoctorAvailability.available ? (
+                    <span style={{ fontSize: "10.5px", color: "#DC2626", fontWeight: 700 }}>
+                      Doctor unavailable ({receptionDoctorAvailability.reason || "On Leave"})
+                    </span>
+                  ) : (
+                    (receptionDoctorAvailability.slots || DEFAULT_RECEPTION_SLOTS).map(time => {
+                      let limit = 5; const m = time.match(/\(Limit:\s*(\d+)\)/i); if (m) limit = parseInt(m[1], 10);
+                      const cs = s => s ? s.split(/\(Limit:/i)[0].replace(/\s+/g, " ").trim().toLowerCase() : "";
+                      const tDate = new Date(bookingDate).toDateString();
+                      let bc = 0;
+                      if (formData.doctorId && bookingDate) {
+                        bc = appointments.filter(a => {
+                          if (a.status === "Cancelled") return false;
+                          const d = a.doctorId?._id || a.doctorId;
+                          if (String(d) !== String(formData.doctorId)) return false;
+                          if (new Date(a.date).toDateString() !== tDate) return false;
+                          return cs(a.time) === cs(time);
+                        }).length;
+                      }
+                      const full = bc >= limit; const past = isPastSlot(bookingDate, time); const sel = selectedSlot === time;
+                      const disp = time.split(/\(Limit:/i)[0].trim();
+                      return (
+                        <button
+                          key={time}
+                          type="button"
+                          disabled={full || past}
+                          onClick={() => { if (!full && !past) setSelectedSlot(time); }}
+                          style={{
+                            height: "22px",
+                            padding: "0 6px",
+                            fontSize: "10.5px",
+                            borderRadius: "2px",
+                            border: sel ? "1px solid #0284C7" : "1px solid #CBD5E1",
+                            background: sel ? "#0284C7" : (full || past ? "#F1F5F9" : "#FFFFFF"),
+                            color: sel ? "#FFFFFF" : (full || past ? "#94A3B8" : "#334155"),
+                            cursor: (full || past) ? "not-allowed" : "pointer",
+                            fontWeight: sel ? 800 : 500
+                          }}
+                        >
+                          {disp}
+                        </button>
+                      );
+                    })
                   )}
                 </div>
               </div>
 
-              {/* Gross Amount */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <label style={{ width: "75px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Gross Total
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, height: "30px", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "4px", padding: "0 8px", display: "flex", alignItems: "center", fontWeight: 800, fontSize: "13px", color: "#0F172A" }}>
-                  ₹{sub.toFixed(2)}
+              {/* Col 3: BP */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  BP (Sys/Dia)
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "2px" }}>
+                  <input type="number" placeholder="120" style={{ ...tableInp, textAlign: "center", flex: 1 }} value={vitalBpSys} onChange={e => setVitalBpSys(e.target.value)} />
+                  <span style={{ color: "#94A3B8", fontSize: "11px" }}>/</span>
+                  <input type="number" placeholder="80" style={{ ...tableInp, textAlign: "center", flex: 1 }} value={vitalBpDia} onChange={e => setVitalBpDia(e.target.value)} />
                 </div>
               </div>
 
-              {/* Net Payable */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <label style={{ width: "75px", textAlign: "right", fontSize: "11.5px", fontWeight: 700, color: "#059669", flexShrink: 0 }}>
-                  Net Payable
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, height: "30px", background: "#ECFDF5", border: "1.5px solid #10B981", borderRadius: "4px", padding: "0 8px", display: "flex", alignItems: "center", fontWeight: 900, fontSize: "13.5px", color: "#065F46" }}>
-                  ₹{total.toFixed(2)}
+              {/* Col 4 (Row 7): Empty spacer */}
+              <div></div>
+
+              {/* ═══ ROW 8: Remaining Vitals (Height, Weight, Pulse, Temp, BMI) ═══ */}
+              {/* Col 1: Pulse & Temp */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  Pulse / Temp
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", gap: "3px" }}>
+                  <input type="number" placeholder="Pulse" style={{ ...tableInp, textAlign: "center", flex: 1 }} value={vitalPulse} onChange={e => setVitalPulse(e.target.value)} />
+                  <input type="number" step="0.1" placeholder="Temp °F" style={{ ...tableInp, textAlign: "center", flex: 1 }} value={vitalTemp} onChange={e => setVitalTemp(e.target.value)} />
                 </div>
               </div>
 
-              {/* Amount Paid & Balance Due */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <label style={{ width: "75px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Amount Paid
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, display: "flex", gap: "4px", alignItems: "center" }}>
+              {/* Col 2: Height & Weight */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  Height / Weight
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", gap: "3px" }}>
+                  <input type="number" step="0.5" placeholder="Ht (cm)" style={{ ...tableInp, textAlign: "center", flex: 1 }} value={vitalHeight} onChange={e => setVitalHeight(e.target.value)} />
+                  <input type="number" step="0.1" placeholder="Wt (kg)" style={{ ...tableInp, textAlign: "center", flex: 1 }} value={vitalWeight} onChange={e => setVitalWeight(e.target.value)} />
+                </div>
+              </div>
+
+              {/* Col 3: BMI */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                  BMI
+                </span>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    style={{ ...tableInp, textAlign: "right", fontWeight: 700 }}
-                    value={formData.amountPaid || ""}
-                    onChange={e => setFormData({ ...formData, amountPaid: e.target.value })}
+                    type="text"
+                    placeholder="23.8"
+                    readOnly
+                    style={{ ...tableInp, background: calcBmi ? "#F0FDF4" : "#F8FAFC", color: calcBmi ? "#047857" : "#64748B", fontWeight: 700, textAlign: "center" }}
+                    value={calcBmi || vitalBmi || ""}
                   />
-                  <span style={{ fontSize: "11px", fontWeight: 800, color: bal > 0 ? "#DC2626" : "#059669", whiteSpace: "nowrap" }}>
-                    {bal > 0 ? `Due: ₹${bal.toFixed(0)}` : "Settled ✓"}
-                  </span>
                 </div>
               </div>
+
+              {/* Col 4 (Row 8): Empty spacer */}
+              <div></div>
+
             </div>
 
-            {/* Bottom Row Action Buttons (Save & Close, matching Reference) */}
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "10px",
-              paddingTop: "8px",
-              borderTop: "1px solid #E2E8F0"
-            }}>
-              <button
-                type="button"
-                onClick={reschedulingAppointment ? handleRescheduleSubmit : (bookingType === "lab" ? handleCreateLabOrder : bookingType === "service" ? handleCreateServiceOrder : handleCreateAppointment)}
-                disabled={loading}
-                style={{
-                  height: "32px",
-                  padding: "0 24px",
-                  borderRadius: "4px",
-                  border: "none",
-                  background: "#0284C7",
-                  color: "#FFFFFF",
-                  fontSize: "12px",
-                  fontWeight: 800,
-                  cursor: loading ? "not-allowed" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  boxShadow: "0 1px 3px rgba(2,132,199,0.3)"
-                }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                {loading
-                  ? "Processing..."
-                  : (reschedulingAppointment
-                      ? "Confirm Reschedule"
-                      : (bookingType === "lab"
-                          ? (isExistingPatient ? "Order Lab Tests & Settle" : "Save & Register Lab Patient")
-                          : (bookingType === "service"
-                              ? (isExistingPatient ? "Book Procedure & Settle" : "Save & Register Procedure Patient")
-                              : (isExistingPatient ? "Book Appointment & Pay" : "Save & Register Patient"))))}
-              </button>
+            {/* ─── HORIZONTAL DIVIDER (Exact match with media_1791438583216.jpg) ─── */}
+            <div style={{ borderTop: "2px solid #0284C7", margin: "10px 0 8px" }}></div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedPatient(null);
-                  setIsExistingPatient(null);
-                  setBookingDiscountPercent(0);
-                  setBookingDiscountReason("");
-                  setFormData({ title: "", name: "", dob: "", age: "", ageMonths: "", ageDays: "", gender: "", contact: "", email: "", doctorId: "", bloodGroup: "", address: "", addressStreet: "", addressCity: "", addressState: "", addressPincode: "", medicalHistory: "", referredBy: "", allergies: "None", currentMedications: "", emergencyContact: "", amountPaid: "", customConsultFee: undefined });
-                }}
-                style={{
-                  height: "32px",
-                  padding: "0 18px",
-                  borderRadius: "4px",
-                  border: "1px solid #CBD5E1",
-                  background: "#FFFFFF",
-                  color: "#475569",
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  cursor: "pointer"
-                }}
-              >
-                Close / Cancel
-              </button>
-            </div>
+            {/* ─── BILLING & SETTLEMENT SECTION (Matching Reference Table Structure) ─── */}
+            {(() => {
+              const rawItems = getBillingItems();
+              const regFee = (!isExistingPatient && rawItems.length > 0) ? 50 : 0;
+              const sub = rawItems.reduce((s, i) => s + i.amount, 0) + regFee;
+              const hasDiscount = Number(bookingDiscountPercent || 0) > 0;
+              const disc = hasDiscount ? (sub * Number(bookingDiscountPercent || 0)) / 100 : 0;
+              const total = Math.max(0, sub - disc);
+              const paid = Number(formData.amountPaid || 0);
+              const bal = Math.max(0, total - paid);
+
+              return (
+                <div>
+                  {/* Billing Metrics Row */}
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr",
+                    columnGap: "12px",
+                    rowGap: "6px",
+                    alignItems: "center"
+                  }}>
+                    {/* PaymentMode */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                      <span style={{ width: "95px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                        PaymentMode
+                      </span>
+                      <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                      <div style={{ flex: 1, display: "flex", gap: "2px" }}>
+                        {["Cash", "UPI", "Card", "Other"].map(mode => {
+                          const isSel = bookingPaymentMethod === mode;
+                          return (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => setBookingPaymentMethod(mode)}
+                              style={{
+                                flex: 1,
+                                height: "26px",
+                                borderRadius: "2px",
+                                border: isSel ? "1.5px solid #0284C7" : "1px solid #CBD5E1",
+                                background: isSel ? "#E0F2FE" : "#FFFFFF",
+                                color: isSel ? "#0369A1" : "#334155",
+                                fontSize: "10.5px",
+                                fontWeight: isSel ? 800 : 500,
+                                cursor: "pointer"
+                              }}
+                            >
+                              {mode}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Discount in % */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                      <span style={{ width: "75px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                        Discount %
+                      </span>
+                      <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                      <div style={{ flex: 1, display: "flex", gap: "2px" }}>
+                        <input
+                          type="number" min="0" max="100" placeholder="0"
+                          style={{ ...tableInp, width: "45px", textAlign: "center" }}
+                          value={bookingDiscountPercent || ""}
+                          onChange={e => setBookingDiscountPercent(e.target.value)}
+                        />
+                        {hasDiscount && (
+                          <input
+                            type="text" placeholder="Reason"
+                            style={{ ...tableInp, flex: 1 }}
+                            value={bookingDiscountReason || ""}
+                            onChange={e => setBookingDiscountReason(e.target.value)}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Gross Amount */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                      <span style={{ width: "80px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                        Gross Amount
+                      </span>
+                      <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                      <div style={{ flex: 1, height: "26px", background: "#F8FAFC", border: "1px solid #CBD5E1", borderRadius: "3px", padding: "0 6px", display: "flex", alignItems: "center", fontSize: "11.5px", fontWeight: 700, color: "#0F172A" }}>
+                        ₹{sub.toFixed(2)}
+                      </div>
+                    </div>
+
+                    {/* Net Amount */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                      <span style={{ width: "75px", textAlign: "left", fontSize: "11px", fontWeight: 700, color: "#059669", flexShrink: 0 }}>
+                        Net Amount
+                      </span>
+                      <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                      <div style={{ flex: 1, height: "26px", background: "#ECFDF5", border: "1.5px solid #10B981", borderRadius: "3px", padding: "0 6px", display: "flex", alignItems: "center", fontSize: "12px", fontWeight: 850, color: "#065F46" }}>
+                        ₹{total.toFixed(2)}
+                      </div>
+                    </div>
+
+                    {/* Amount Paid & Balance */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", height: "26px" }}>
+                      <span style={{ width: "75px", textAlign: "left", fontSize: "11px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                        Amount Paid
+                      </span>
+                      <span style={{ width: "6px", textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#64748B", flexShrink: 0 }}>:</span>
+                      <div style={{ flex: 1, display: "flex", gap: "3px", alignItems: "center" }}>
+                        <input
+                          type="number" min="0" placeholder="0"
+                          style={{ ...tableInp, textAlign: "right", fontWeight: 700, flex: 1 }}
+                          value={formData.amountPaid || ""}
+                          onChange={e => setFormData({ ...formData, amountPaid: e.target.value })}
+                        />
+                        <span style={{ fontSize: "10.5px", fontWeight: 800, color: bal > 0 ? "#DC2626" : "#059669", whiteSpace: "nowrap" }}>
+                          {bal > 0 ? `Due: ₹${bal.toFixed(0)}` : "Settled ✓"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ─── ACTION BUTTONS (Save & Close, exactly matching Reference media_1791438583216.jpg) ─── */}
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    marginTop: "12px",
+                    paddingTop: "6px"
+                  }}>
+                    <button
+                      type="button"
+                      onClick={reschedulingAppointment ? handleRescheduleSubmit : (bookingType === "lab" ? handleCreateLabOrder : bookingType === "service" ? handleCreateServiceOrder : handleCreateAppointment)}
+                      disabled={loading}
+                      style={{
+                        height: "28px",
+                        padding: "0 22px",
+                        borderRadius: "3px",
+                        border: "none",
+                        background: "#0284C7",
+                        color: "#FFFFFF",
+                        fontSize: "12px",
+                        fontWeight: 800,
+                        cursor: loading ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      {loading
+                        ? "Saving..."
+                        : (reschedulingAppointment
+                            ? "Save Reschedule"
+                            : (bookingType === "lab"
+                                ? "Save"
+                                : (bookingType === "service"
+                                    ? "Save"
+                                    : "Save")))}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPatient(null);
+                        setIsExistingPatient(null);
+                        setBookingDiscountPercent(0);
+                        setBookingDiscountReason("");
+                        setFormData({ title: "", name: "", dob: "", age: "", ageMonths: "", ageDays: "", gender: "", contact: "", email: "", doctorId: "", bloodGroup: "", address: "", addressStreet: "", addressCity: "", addressState: "", addressPincode: "", medicalHistory: "", referredBy: "", allergies: "None", currentMedications: "", emergencyContact: "", amountPaid: "", customConsultFee: undefined });
+                      }}
+                      style={{
+                        height: "28px",
+                        padding: "0 18px",
+                        borderRadius: "3px",
+                        border: "none",
+                        background: "#0284C7",
+                        color: "#FFFFFF",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
           </div>
         );
       })()}
@@ -12427,6 +12057,7 @@ const ReceptionistDashboard = () => {
 </div>
 </>
 )}
+
 
           </div>
         )}
