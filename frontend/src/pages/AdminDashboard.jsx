@@ -2611,7 +2611,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     else if (activeTab === 'financials') { main = "Revenue"; sub = "Clinic financial ledger & revenue analytics"; }
     else if (activeTab === 'audit') { main = "Audit Logs"; sub = "Security audit trail & administrative access logs"; }
     else if (activeTab === 'services-catalog') { main = "Pricing & Procedures Catalog"; sub = "Configure procedure costs & OPD fees"; }
-    else if (activeTab === 'lab-catalog') { main = "Hospital Test Catalog"; sub = "Hospital-specific diagnostic test availability, pricing & Global Master activation"; }
+    else if (activeTab === 'lab-catalog') { main = "Hospital Test Catalog"; sub = "Diagnostic test availability & pricing"; }
     else if (activeTab === 'subscription') { main = "Subscription"; sub = subscription ? `${subscription.plan.split(' (')[0]} — ${subscription.status.toLowerCase()}` : "Enterprise plan & license management"; }
     else if (activeTab === 'maintenance') { main = "Maintenance"; sub = "System diagnostic services & database health"; }
     else if (activeTab === 'letterhead') { main = "Letterhead Settings"; sub = "Upload and manage clinic letterhead for doctor prescriptions"; }
@@ -2622,7 +2622,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-        <span className="header-title-main" style={{ fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif", fontWeight: 900, fontSize: '24px', color: '#0F172A', lineHeight: '1.2', letterSpacing: '-0.02em' }}>
+        <span className="header-title-main" style={{ fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: '20px', color: '#0F172A', lineHeight: '1.2', letterSpacing: '-0.02em' }}>
           {main}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#64748B', fontWeight: 600, marginTop: '2px' }}>
@@ -2633,7 +2633,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           {/* User/Clinic Icon */}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           <span style={{ color: '#475569', fontWeight: 700 }}>{clinicName}</span>
-          {sub && <span style={{ color: '#94A3B8', fontSize: '12px', marginLeft: '4px' }}>({sub})</span>}
+          {sub && <span style={{ color: '#94A3B8', fontSize: '11.5px', marginLeft: '2px', fontWeight: 500 }}>· {sub}</span>}
         </div>
       </div>
     );

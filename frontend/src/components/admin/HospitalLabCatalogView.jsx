@@ -291,14 +291,14 @@ export default function HospitalLabCatalogView({ api, showToast, setLoading, cur
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h2 style={{ fontSize: '21px', fontWeight: 900, color: '#0F172A', margin: 0, letterSpacing: '-0.3px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#0F172A', margin: 0, letterSpacing: '-0.3px' }}>
               Hospital Test Catalog
             </h2>
-            <span style={{ fontSize: '11px', fontWeight: 800, color: '#059669', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '12px' }}>
+            <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#059669', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '12px' }}>
               Global Item Master Integration
             </span>
           </div>
-          <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0', fontWeight: 600 }}>
+          <p style={{ fontSize: '12px', color: '#64748B', margin: '3px 0 0 0', fontWeight: 600 }}>
             Manage your hospital's activated diagnostic tests, configure hospital-specific pricing, and activate additional tests from the Global Item Master.
           </p>
         </div>
