@@ -21,8 +21,7 @@ const hospitalMasterConfigSchema = new mongoose.Schema({
   masterItemId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'ItemMaster',
-    required: true,
-    index: true
+    required: true
   },
   category: {
     type: String,

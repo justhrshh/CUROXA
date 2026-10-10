@@ -28,6 +28,7 @@ router.get('/', async (req, res) => {
 
 const LaboratoryMaster = require('../models/LaboratoryMaster');
 const HospitalAffiliateLabConfig = require('../models/HospitalAffiliateLabConfig');
+const HospitalMasterConfig = require('../models/HospitalMasterConfig');
 
 // Get active affiliate labs and configured default for current tenant
 router.get('/affiliates', async (req, res) => {
@@ -102,6 +103,35 @@ router.post('/', async (req, res) => {
         finalLabId = config.defaultLabId._id;
         finalLabName = config.defaultLabId.name;
         finalLabCode = config.defaultLabId.code || '';
+      }
+    }
+
+    // Backend Enforcement: Validate that requested test is active and configured for this hospital in HospitalMasterConfig
+    if (testName && testName.trim()) {
+      const tenantId = (req.tenantId || 'city_hospital').trim().toLowerCase();
+      const activeConfigs = await HospitalMasterConfig.find({
+        tenantId,
+        category: 'Lab Operation',
+        status: 'Active',
+        approvalStatus: 'Approved'
+      }).populate('masterItemId').lean();
+
+      if (activeConfigs.length > 0) {
+        const target = testName.trim().toLowerCase();
+        const matchedConfig = activeConfigs.find(c => {
+          if (!c.masterItemId) return false;
+          const m = c.masterItemId;
+          return (m.itemName && m.itemName.toLowerCase() === target) ||
+                 (m.genericName && m.genericName.toLowerCase() === target) ||
+                 (m.itemCode && m.itemCode.toUpperCase() === (req.body.testCode || '').trim().toUpperCase()) ||
+                 (req.body.masterItemId && String(m._id) === String(req.body.masterItemId));
+        });
+
+        if (!matchedConfig) {
+          return res.status(403).json({
+            error: `Laboratory test '${testName}' is not active or configured for this hospital. Only activated tests can be booked.`
+          });
+        }
       }
     }
 

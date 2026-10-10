@@ -300,7 +300,7 @@ async function generateCanonicalMasterExportWorkbook(category, department, custo
 async function generateMasterExportWorkbook(category, department, customItems = null, options = {}) {
   const exportType = options.exportType || (options.isHospitalCommercial ? 'HOSPITAL_COMMERCIAL' : 'GLOBAL_CANONICAL');
   if (exportType === 'HOSPITAL_COMMERCIAL') {
-    return await generateHospitalCommercialExportWorkbook(category, department, customItems);
+    return await generateHospitalCommercialExportWorkbook(category, department, customItems, options);
   }
   return await generateCanonicalMasterExportWorkbook(category, department, customItems);
 }

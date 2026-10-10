@@ -11423,22 +11423,22 @@ const ReceptionistDashboard = () => {
                   </span>
                 </div>
 
-                {/* 1. Title */}
+                {/* 1. Patient Name (with Integrated Title Dropdown) */}
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
                   <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                    Title <span style={{ color: "#EF4444" }}>*</span>
+                    Patient Name <span style={{ color: "#EF4444" }}>*</span>
                   </label>
                   <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", gap: "4px", alignItems: "center" }}>
                     <select
                       style={{
                         ...tableInp,
-                        height: "30px",
-                        minHeight: "30px",
-                        maxHeight: "30px",
-                        paddingTop: 0,
-                        paddingBottom: 0,
+                        width: "68px",
+                        minWidth: "68px",
+                        maxWidth: "72px",
+                        padding: "0 4px",
                         cursor: "pointer",
+                        fontWeight: 650,
                         ...((!formData.title && isFormStarted) ? { borderColor: "#EF4444" } : {})
                       }}
                       value={formData.title || ""}
@@ -11452,7 +11452,7 @@ const ReceptionistDashboard = () => {
                       }}
                       disabled={Boolean(isExistingPatient)}
                     >
-                      <option value="">-- Title --</option>
+                      <option value="">Title</option>
                       <option value="Mr.">Mr.</option>
                       <option value="Mrs.">Mrs.</option>
                       <option value="Ms.">Ms.</option>
@@ -11460,20 +11460,15 @@ const ReceptionistDashboard = () => {
                       <option value="Master">Master</option>
                       <option value="Dr.">Dr.</option>
                     </select>
-                  </div>
-                </div>
-
-                {/* 2. Patient Name */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                    Patient Name <span style={{ color: "#EF4444" }}>*</span>
-                  </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
                     <input
                       type="text"
                       placeholder="Full name"
-                      style={{ ...tableInp, ...((!formData.name && isFormStarted) ? { borderColor: "#EF4444", boxShadow: "0 0 0 2px rgba(239,68,68,0.12)" } : {}) }}
+                      style={{
+                        ...tableInp,
+                        flex: 1,
+                        minWidth: 0,
+                        ...((!formData.name && isFormStarted) ? { borderColor: "#EF4444", boxShadow: "0 0 0 2px rgba(239,68,68,0.12)" } : {})
+                      }}
                       value={formData.name || ""}
                       onChange={e => setFormData({ ...formData, name: e.target.value })}
                       readOnly={isExistingPatient}
@@ -12144,7 +12139,7 @@ const ReceptionistDashboard = () => {
 
         // ─── CASE A: LAB ORDER ───
         if (bookingType === "lab") {
-          const availableTests = (hospitalLabTests && hospitalLabTests.length > 0) ? hospitalLabTests : DEFAULT_HOSPITAL_LAB_TESTS;
+          const availableTests = Array.isArray(hospitalLabTests) ? hospitalLabTests : [];
           const filteredTests = availableTests.filter(t => {
             const q = labTestSearchQuery.trim().toLowerCase();
             if (!q) return true;
@@ -12240,33 +12235,41 @@ const ReceptionistDashboard = () => {
                         background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "6px",
                         boxShadow: "0 8px 20px rgba(0,0,0,0.12)", zIndex: 10000, maxHeight: "200px", overflowY: "auto"
                       }}>
-                        {filteredTests.map((test, idx) => {
-                          const isAdded = selectedLabTestsList.some(item => (item.testCode && item.testCode === test.testCode) || item.testName === test.testName);
-                          return (
-                            <div
-                              key={idx}
-                              onClick={() => {
-                                if (!isAdded) {
-                                  const matchedLab = affiliateLabsList.find(l => String(l._id) === effectiveLabId) || defaultAffiliateLab;
-                                  setSelectedLabTestsList([
-                                    ...selectedLabTestsList,
-                                    {
-                                      ...test,
-                                      labId: effectiveLabId || (matchedLab?._id ? String(matchedLab._id) : null),
-                                      labName: matchedLab?.name || (affiliateLabsList[0]?.name || 'In-House Laboratory')
-                                    }
-                                  ]);
-                                }
-                                setShowLabTestDropdown(false);
-                                setLabTestSearchQuery("");
-                              }}
-                              style={{ padding: "6px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: isAdded ? "default" : "pointer", background: isAdded ? "#F8FAFC" : "#FFFFFF", borderBottom: "1px solid #F1F5F9" }}
-                            >
-                              <span style={{ fontSize: "12px", fontWeight: 600 }}>{test.testName} {test.category && <span style={{ color: "#059669", fontSize: "10px" }}>({test.category})</span>}</span>
-                              <span style={{ fontSize: "12px", fontWeight: 800, color: "#059669" }}>₹{Number(test.price || 0).toFixed(2)}</span>
-                            </div>
-                          );
-                        })}
+                        {filteredTests.length === 0 ? (
+                          <div style={{ padding: "12px", fontSize: "12px", color: "#64748B", textAlign: "center" }}>
+                            {availableTests.length === 0
+                              ? "No laboratory tests activated for this hospital. Please activate tests in Hospital Test Catalog."
+                              : "No matching active tests found."}
+                          </div>
+                        ) : (
+                          filteredTests.map((test, idx) => {
+                            const isAdded = selectedLabTestsList.some(item => (item.testCode && item.testCode === test.testCode) || item.testName === test.testName);
+                            return (
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  if (!isAdded) {
+                                    const matchedLab = affiliateLabsList.find(l => String(l._id) === effectiveLabId) || defaultAffiliateLab;
+                                    setSelectedLabTestsList([
+                                      ...selectedLabTestsList,
+                                      {
+                                        ...test,
+                                        labId: effectiveLabId || (matchedLab?._id ? String(matchedLab._id) : null),
+                                        labName: matchedLab?.name || (affiliateLabsList[0]?.name || 'In-House Laboratory')
+                                      }
+                                    ]);
+                                  }
+                                  setShowLabTestDropdown(false);
+                                  setLabTestSearchQuery("");
+                                }}
+                                style={{ padding: "6px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: isAdded ? "default" : "pointer", background: isAdded ? "#F8FAFC" : "#FFFFFF", borderBottom: "1px solid #F1F5F9" }}
+                              >
+                                <span style={{ fontSize: "12px", fontWeight: 600 }}>{test.testName} {test.category && <span style={{ color: "#059669", fontSize: "10px" }}>({test.category})</span>}</span>
+                                <span style={{ fontSize: "12px", fontWeight: 800, color: "#059669" }}>₹{Number(test.price || 0).toFixed(2)}</span>
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     )}
                   </div>

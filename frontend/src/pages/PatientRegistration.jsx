@@ -372,40 +372,38 @@ const PatientRegistration = () => {
                 />
               ), true)}
 
-              {renderField("Title", (
-                <select 
-                  className="impressive-select" 
-                  style={selectStyle} 
-                  value={formData.title} 
-                  onChange={e => {
-                    const selectedTitle = e.target.value;
-                    let autoGender = formData.gender;
-                    if (selectedTitle === 'Mr.' || selectedTitle === 'Master') autoGender = 'Male';
-                    else if (selectedTitle === 'Mrs.' || selectedTitle === 'Miss' || selectedTitle === 'Ms.') autoGender = 'Female';
-                    else if (selectedTitle === 'Prefer not to say') autoGender = 'Other';
-                    setFormData({...formData, title: selectedTitle, gender: autoGender});
-                  }}
-                >
-                  <option value="">--Select--</option>
-                  <option value="Mr.">Mr.</option>
-                  <option value="Mrs.">Mrs.</option>
-                  <option value="Ms.">Ms.</option>
-                  <option value="Miss">Miss</option>
-                  <option value="Master">Master</option>
-                  <option value="Dr.">Dr.</option>
-                  <option value="Prefer not to say">Prefer not to say</option>
-                </select>
-              ), true)}
-
               {renderField("Patient Name", (
-                <input 
-                  type="text" 
-                  className="impressive-input" 
-                  style={inputStyle} 
-                  value={formData.name} 
-                  onChange={e => setFormData({...formData, name: e.target.value})} 
-                  placeholder="Full name"
-                />
+                <div style={{ display: 'flex', gap: '6px', width: '100%', alignItems: 'center' }}>
+                  <select 
+                    className="impressive-select" 
+                    style={{ ...selectStyle, width: '78px', minWidth: '78px', flexShrink: 0 }} 
+                    value={formData.title} 
+                    onChange={e => {
+                      const selectedTitle = e.target.value;
+                      let autoGender = formData.gender;
+                      if (selectedTitle === 'Mr.' || selectedTitle === 'Master') autoGender = 'Male';
+                      else if (selectedTitle === 'Mrs.' || selectedTitle === 'Miss' || selectedTitle === 'Ms.') autoGender = 'Female';
+                      else if (selectedTitle === 'Prefer not to say') autoGender = 'Other';
+                      setFormData({...formData, title: selectedTitle, gender: autoGender});
+                    }}
+                  >
+                    <option value="">Title</option>
+                    <option value="Mr.">Mr.</option>
+                    <option value="Mrs.">Mrs.</option>
+                    <option value="Ms.">Ms.</option>
+                    <option value="Miss">Miss</option>
+                    <option value="Master">Master</option>
+                    <option value="Dr.">Dr.</option>
+                  </select>
+                  <input 
+                    type="text" 
+                    className="impressive-input" 
+                    style={{ ...inputStyle, flex: 1, minWidth: 0 }} 
+                    value={formData.name} 
+                    onChange={e => setFormData({...formData, name: e.target.value})} 
+                    placeholder="Full name"
+                  />
+                </div>
               ), true)}
 
               {renderField("Gender", (
