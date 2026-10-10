@@ -2159,11 +2159,17 @@ export async function generateReceiptSlipPdf(activeSlipData, passedConfig = null
   // Items Table
   const items = activeSlipData.items && activeSlipData.items.length > 0 ? activeSlipData.items : [{ description: activeSlipData.testName || 'Consultation / OPD Registration', amount: activeSlipData.totalAmount || 0 }];
 
-  const tableBody = items.map((it, idx) => [
-    idx + 1,
-    it.description || it.name || 'Clinical Service',
-    `₹${Number(it.amount || 0).toFixed(2)}`
-  ]);
+  const tableBody = items.map((it, idx) => {
+    let desc = it.description || it.name || 'Clinical Service';
+    if (it.labName) {
+      desc += `\n[LABORATORY: ${it.labName.toUpperCase()}]`;
+    }
+    return [
+      idx + 1,
+      desc,
+      `₹${Number(it.amount || 0).toFixed(2)}`
+    ];
+  });
 
   autoTable(doc, {
     startY: currentY,

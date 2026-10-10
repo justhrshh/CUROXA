@@ -401,6 +401,24 @@ router.post('/', async (req, res) => {
     let labRequest = null;
     if (req.body.testName || req.body.appointmentType === 'Lab Test') {
       const LabRequest = require('../models/LabRequest');
+      let finalLabId = req.body.labId || null;
+      let finalLabName = req.body.labName || '';
+      let finalLabCode = req.body.labCode || '';
+
+      if (!finalLabId) {
+        try {
+          const HospitalAffiliateLabConfig = require('../models/HospitalAffiliateLabConfig');
+          const config = await HospitalAffiliateLabConfig.findOne({ tenantId: resolvedTenantId }).populate('defaultLabId').lean();
+          if (config && config.defaultLabId && config.defaultLabId.isActive) {
+            finalLabId = config.defaultLabId._id;
+            finalLabName = config.defaultLabId.name;
+            finalLabCode = config.defaultLabId.code || '';
+          }
+        } catch (e) {
+          // graceful fallback
+        }
+      }
+
       labRequest = await LabRequest.create({
         tenantId: resolvedTenantId,
         appointmentId: appointment._id,
@@ -408,7 +426,10 @@ router.post('/', async (req, res) => {
         doctorId: doctorId && doctorId !== 'null' ? doctorId : null,
         testName: req.body.testName || reason || 'Diagnostic Lab Test',
         notes: notes || '',
-        status: 'Pending'
+        status: 'Pending',
+        labId: finalLabId,
+        labName: finalLabName,
+        labCode: finalLabCode
       });
     }
 

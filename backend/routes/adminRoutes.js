@@ -820,4 +820,145 @@ router.delete("/prescription-templates/:id", isAdmin, requireActiveSubscription,
   }
 });
 
+// ============================================================================
+// AFFILIATE LABORATORY MANAGEMENT & DEFAULT LAB CONFIGURATION
+// ============================================================================
+const LaboratoryMaster = require('../models/LaboratoryMaster');
+const HospitalAffiliateLabConfig = require('../models/HospitalAffiliateLabConfig');
+
+// 1. Get all active laboratories available for affiliation
+router.get("/affiliate-labs/available", isAdmin, requireActiveSubscription, async (req, res) => {
+  try {
+    const labs = await LaboratoryMaster.find({ isActive: true }).sort({ name: 1 }).lean();
+    res.json({ success: true, labs });
+  } catch (error) {
+    console.error("Get available affiliate labs error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// 2. Get current hospital's affiliate laboratory configuration
+router.get("/affiliate-labs", isAdmin, requireActiveSubscription, async (req, res) => {
+  try {
+    const config = await HospitalAffiliateLabConfig.findOne({ tenantId: req.tenantId })
+      .populate('affiliateLabIds')
+      .populate('defaultLabId')
+      .lean();
+
+    if (!config) {
+      return res.json({
+        success: true,
+        config: {
+          tenantId: req.tenantId,
+          affiliateLabIds: [],
+          defaultLabId: null,
+          affiliateLabs: [],
+          defaultLab: null
+        }
+      });
+    }
+
+    // Filter to ensure only active labs are returned
+    const activeAffiliates = (config.affiliateLabIds || []).filter(l => l && l.isActive);
+    let effectiveDefault = config.defaultLabId && config.defaultLabId.isActive ? config.defaultLabId : null;
+
+    if (effectiveDefault && !activeAffiliates.some(l => l._id.toString() === effectiveDefault._id.toString())) {
+      effectiveDefault = activeAffiliates.length > 0 ? activeAffiliates[0] : null;
+    }
+
+    res.json({
+      success: true,
+      config: {
+        _id: config._id,
+        tenantId: config.tenantId,
+        affiliateLabIds: activeAffiliates.map(l => l._id),
+        affiliateLabs: activeAffiliates,
+        defaultLabId: effectiveDefault ? effectiveDefault._id : null,
+        defaultLab: effectiveDefault,
+        updatedAt: config.updatedAt,
+        updatedByName: config.updatedByName
+      }
+    });
+  } catch (error) {
+    console.error("Get affiliate lab config error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// 3. Save / Update hospital's affiliate laboratory configuration
+router.post("/affiliate-labs", isAdmin, requireActiveSubscription, async (req, res) => {
+  try {
+    let { affiliateLabIds = [], defaultLabId = null } = req.body;
+
+    // Normalize IDs to strings
+    affiliateLabIds = Array.isArray(affiliateLabIds)
+      ? [...new Set(affiliateLabIds.map(id => String(id || '').trim()).filter(Boolean))]
+      : [];
+    defaultLabId = defaultLabId ? String(defaultLabId).trim() : null;
+
+    // Validate that all affiliateLabIds exist and are active in LaboratoryMaster
+    if (affiliateLabIds.length > 0) {
+      const validLabs = await LaboratoryMaster.find({
+        _id: { $in: affiliateLabIds },
+        isActive: true
+      }).lean();
+
+      if (validLabs.length !== affiliateLabIds.length) {
+        return res.status(400).json({
+          error: "One or more selected laboratories do not exist or are inactive."
+        });
+      }
+    }
+
+    // Validate defaultLabId:
+    // When at least one affiliate lab exists:
+    // - Default lab is required.
+    // - If not provided or invalid, auto-select the first affiliated laboratory.
+    // - If provided, it must belong to affiliateLabIds.
+    if (affiliateLabIds.length > 0) {
+      if (!defaultLabId || !affiliateLabIds.includes(defaultLabId)) {
+        defaultLabId = affiliateLabIds[0];
+      }
+    } else {
+      defaultLabId = null;
+    }
+
+    const updated = await HospitalAffiliateLabConfig.findOneAndUpdate(
+      { tenantId: req.tenantId },
+      {
+        tenantId: req.tenantId,
+        affiliateLabIds,
+        defaultLabId,
+        updatedBy: req.user?._id || req.user?.id || null,
+        updatedByName: req.user?.name || 'Administrator'
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).populate('affiliateLabIds').populate('defaultLabId');
+
+    writeAudit(req, 'UPDATE_AFFILIATE_LABS', 'HospitalAffiliateLabConfig', {
+      affiliateCount: affiliateLabIds.length,
+      defaultLabId
+    });
+
+    res.json({
+      success: true,
+      message: "Affiliate laboratory configuration saved successfully.",
+      config: {
+        _id: updated._id,
+        tenantId: updated.tenantId,
+        affiliateLabIds: (updated.affiliateLabIds || []).map(l => l._id),
+        affiliateLabs: updated.affiliateLabIds || [],
+        defaultLabId: updated.defaultLabId ? updated.defaultLabId._id : null,
+        defaultLab: updated.defaultLabId,
+        updatedAt: updated.updatedAt,
+        updatedByName: updated.updatedByName
+      }
+    });
+  } catch (error) {
+    console.error("Save affiliate lab config error:", error);
+    res.status(500).json({ error: error.message || "Failed to save configuration." });
+  }
+});
+
 module.exports = router;
+

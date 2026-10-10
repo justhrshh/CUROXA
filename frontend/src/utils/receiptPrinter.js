@@ -146,6 +146,7 @@ export function generateReceiptHtml(receiptData = {}, clinicName = null, options
         <td style="padding: 3px 6px; text-align: left; font-size: 11px; color: #000; vertical-align: top;">${idx + 1}</td>
         <td style="padding: 3px 6px; text-align: left; font-size: 11px; font-weight: 700; color: #000; vertical-align: top;">
           ${desc.toUpperCase()}
+          ${it.labName ? `<div style="font-size: 9.5px; font-weight: 700; color: #1D4ED8; margin-top: 1px;">LABORATORY: ${it.labName.toUpperCase()}</div>` : ''}
           ${it.sku ? `<div style="font-size: 9.5px; font-weight: normal; color: #444;">SKU: ${it.sku}</div>` : ''}
         </td>
         <td style="padding: 3px 6px; text-align: left; font-size: 11px; color: #000; vertical-align: top;">${sampleType}</td>

@@ -8,7 +8,10 @@ const labRequestSchema = new mongoose.Schema({
   testName: { type: String, required: true },
   notes: { type: String },
   status: { type: String, enum: ['Pending', 'In Progress', 'Completed'], default: 'Pending' },
-  results: { type: String }
+  results: { type: String },
+  labId: { type: mongoose.Schema.Types.ObjectId, ref: 'LaboratoryMaster', index: true },
+  labName: { type: String, trim: true, default: '' },
+  labCode: { type: String, trim: true, default: '' }
 }, { timestamps: true });
 
 // Compound indexes for fast per-tenant status/queue lookups

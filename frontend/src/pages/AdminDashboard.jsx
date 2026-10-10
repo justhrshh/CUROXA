@@ -1018,6 +1018,21 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   const [viewingDpdpRequest, setViewingDpdpRequest] = useState(null);
   const [dpdpResolutionNotes, setDpdpResolutionNotes] = useState('');
 
+  // Affiliate Laboratory Management states
+  const [availableMasterLabs, setAvailableMasterLabs] = useState([]);
+  const [affiliateLabConfig, setAffiliateLabConfig] = useState({
+    affiliateLabIds: [],
+    affiliateLabs: [],
+    defaultLabId: null,
+    defaultLab: null
+  });
+  const [selectedAffiliateLabIds, setSelectedAffiliateLabIds] = useState([]);
+  const [selectedDefaultLabId, setSelectedDefaultLabId] = useState('');
+  const [affiliateLabSearch, setAffiliateLabSearch] = useState('');
+  const [isAffiliateLabDropdownOpen, setIsAffiliateLabDropdownOpen] = useState(false);
+  const [affiliateLabSaving, setAffiliateLabSaving] = useState(false);
+  const [affiliateLabLoading, setAffiliateLabLoading] = useState(false);
+
   // Lab Request Processing Modal states (from Alerts / Live queue)
   const [processingLabAlert, setProcessingLabAlert] = useState(null);
   const [labResultText, setLabResultText] = useState('');
@@ -1154,7 +1169,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   const [sectionOpen, setSectionOpen] = useState({
     clinic: true,
     finance: true,
-    settings: false
+    settings: true
   });
 
   const toggleSection = (sectionKey) => {
@@ -1381,6 +1396,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     fetchSubscription();
     fetchNotifications();
     fetchLabTestCatalog();
+    fetchAffiliateLabs();
 
     const tId = currentUser.tenantId || localStorage.getItem('tenantId');
     if (tId) {
@@ -1730,6 +1746,69 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       setLabTestCatalog(response.data || []);
     } catch (err) {
       console.error('Failed to fetch lab test catalog in Admin', err);
+    }
+  };
+
+  const fetchAffiliateLabs = async () => {
+    setAffiliateLabLoading(true);
+    try {
+      const [availRes, configRes] = await Promise.all([
+        api.get('/admin/affiliate-labs/available'),
+        api.get('/admin/affiliate-labs')
+      ]);
+
+      const available = availRes.data?.labs || [];
+      const cfg = configRes.data?.config || {
+        affiliateLabIds: [],
+        affiliateLabs: [],
+        defaultLabId: null,
+        defaultLab: null
+      };
+
+      setAvailableMasterLabs(available);
+      setAffiliateLabConfig(cfg);
+
+      const currentIds = (cfg.affiliateLabIds || []).map(id => String(id));
+      setSelectedAffiliateLabIds(currentIds);
+
+      const defId = cfg.defaultLabId ? String(cfg.defaultLabId) : (currentIds[0] || '');
+      setSelectedDefaultLabId(defId);
+    } catch (err) {
+      console.error('Failed to fetch affiliate labs configuration:', err);
+    } finally {
+      setAffiliateLabLoading(false);
+    }
+  };
+
+  const handleSaveAffiliateLabs = async () => {
+    if (selectedAffiliateLabIds.length > 0 && !selectedDefaultLabId) {
+      showToast('Please select a Default Laboratory from your selected affiliate labs.', 'error');
+      return;
+    }
+    if (selectedDefaultLabId && !selectedAffiliateLabIds.includes(selectedDefaultLabId)) {
+      showToast('The designated default laboratory must be in the list of selected affiliate labs.', 'error');
+      return;
+    }
+
+    setAffiliateLabSaving(true);
+    try {
+      const res = await api.post('/admin/affiliate-labs', {
+        affiliateLabIds: selectedAffiliateLabIds,
+        defaultLabId: selectedDefaultLabId || null
+      });
+
+      if (res.data?.success) {
+        showToast('Affiliate laboratory configuration saved successfully!', 'success');
+        const updatedCfg = res.data.config;
+        setAffiliateLabConfig(updatedCfg);
+        setSelectedAffiliateLabIds((updatedCfg.affiliateLabIds || []).map(id => String(id)));
+        setSelectedDefaultLabId(updatedCfg.defaultLabId ? String(updatedCfg.defaultLabId) : '');
+      }
+    } catch (err) {
+      console.error('Failed to save affiliate lab configuration:', err);
+      showToast(err.response?.data?.error || 'Failed to save configuration.', 'error');
+    } finally {
+      setAffiliateLabSaving(false);
     }
   };
 
@@ -11980,6 +12059,33 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         </div>
                         <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'lab-catalog' ? 700 : 600, color: activeTab === 'lab-catalog' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
                           Lab Tests Catalog
+                        </span>
+                  {isSubscriptionRestricted && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
+                      </div>
+                    )}
+
+                    {tenantModules.laboratory?.enabled !== false && (
+                      <div 
+                        className={`sidebar-link ${activeTab === 'affiliate-labs' ? 'active' : ''}`}
+                        onClick={() => handleNavTabClick('affiliate-labs')}
+                        style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                      >
+                        {activeTab === 'affiliate-labs' && (
+                          <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
+                        )}
+                        <div className="sidebar-link-icon" style={{
+                          background: activeTab === 'affiliate-labs' ? '#0F172A' : '#F1F5F9',
+                          color: activeTab === 'affiliate-labs' ? '#FFFFFF' : '#64748B'
+                        }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2v7.31L4.89 20a2 2 0 0 0 1.78 3h14.66a2 2 0 0 0 1.78-3L18 9.31V2"/><path d="M8.5 2h7"/><path d="M14 9.3V14"/></svg>
+                        </div>
+                        <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'affiliate-labs' ? 700 : 600, color: activeTab === 'affiliate-labs' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
+                          Affiliate Labs
                         </span>
                   {isSubscriptionRestricted && (
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', flexShrink: 0 }}>
@@ -24876,6 +24982,487 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
               )}
+            </div>
+          );
+        })()}
+
+        {/* TAB: AFFILIATE LABORATORY MANAGEMENT & DEFAULT LAB SELECTION */}
+        {!isSubscriptionRestricted && activeTab === 'affiliate-labs' && (() => {
+          const filteredEligibleLabs = availableMasterLabs.filter(lab => {
+            const q = affiliateLabSearch.trim().toLowerCase();
+            if (!q) return true;
+            return (lab.name || '').toLowerCase().includes(q) ||
+                   (lab.code || '').toLowerCase().includes(q) ||
+                   (lab.address || '').toLowerCase().includes(q) ||
+                   (lab.city || '').toLowerCase().includes(q) ||
+                   (lab.accreditation || '').toLowerCase().includes(q);
+          });
+
+          const selectedLabObjects = selectedAffiliateLabIds.map(id => {
+            return availableMasterLabs.find(l => String(l._id) === String(id)) || 
+                   (affiliateLabConfig.affiliateLabs || []).find(l => String(l._id) === String(id)) ||
+                   { _id: id, name: `Laboratory (${id.slice(-6)})`, code: 'LAB' };
+          });
+
+          return (
+            <div className="tab-content active" style={{ animation: 'slideUp 0.4s ease-out', padding: '28px', maxWidth: '1200px', margin: '0 auto' }}>
+              {/* Header Banner */}
+              <div style={{ background: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '24px 28px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(15,23,42,0.03)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                      <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB' }}>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10 2v7.31L4.89 20a2 2 0 0 0 1.78 3h14.66a2 2 0 0 0 1.78-3L18 9.31V2"/>
+                          <path d="M8.5 2h7"/>
+                          <path d="M14 9.3V14"/>
+                        </svg>
+                      </div>
+                      <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+                        Affiliate Laboratory Management
+                      </h2>
+                    </div>
+                    <p style={{ fontSize: '13.5px', color: '#64748B', margin: 0, fontWeight: 500 }}>
+                      Configure affiliated diagnostic centers & reference laboratories for your hospital and designate the default facility for test bookings.
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={fetchAffiliateLabs}
+                      disabled={affiliateLabLoading}
+                      style={{
+                        padding: '10px 18px',
+                        background: '#F8FAFC',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '10px',
+                        color: '#475569',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                      </svg>
+                      Reload
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveAffiliateLabs}
+                      disabled={affiliateLabSaving || affiliateLabLoading}
+                      style={{
+                        padding: '10px 24px',
+                        background: '#2563EB',
+                        border: 'none',
+                        borderRadius: '10px',
+                        color: '#FFFFFF',
+                        fontWeight: 800,
+                        fontSize: '13.5px',
+                        cursor: affiliateLabSaving ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        boxShadow: '0 4px 12px rgba(37,99,235,0.25)',
+                        opacity: affiliateLabSaving ? 0.7 : 1
+                      }}
+                    >
+                      {affiliateLabSaving ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                          Saving Configuration...
+                        </>
+                      ) : (
+                        <>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                            <polyline points="17 21 17 13 7 13 7 21"/>
+                            <polyline points="7 3 7 8 15 8"/>
+                          </svg>
+                          Save Configuration
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {affiliateLabConfig.updatedByName && (
+                  <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#64748B' }}>
+                    <span style={{ fontWeight: 600 }}>Last Modified:</span>
+                    <span style={{ fontWeight: 700, color: '#334155' }}>
+                      {new Date(affiliateLabConfig.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span>by</span>
+                    <span style={{ fontWeight: 700, color: '#2563EB' }}>{affiliateLabConfig.updatedByName}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Configuration Form Card */}
+              <div style={{ background: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '28px', boxShadow: '0 4px 12px rgba(15,23,42,0.03)' }}>
+                {affiliateLabLoading ? (
+                  <div style={{ padding: '60px 20px', textAlign: 'center', color: '#64748B' }}>
+                    <div style={{ fontSize: '16px', fontWeight: 700, marginBottom: '6px' }}>Loading laboratory master and hospital settings...</div>
+                    <div style={{ fontSize: '13px' }}>Please wait a moment</div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '26px' }}>
+                    
+                    {/* SECTION 1: SEARCH & MULTI-SELECT AFFILIATE LABS */}
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <label style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>1. Select Affiliate Laboratories</span>
+                          <span style={{ color: '#EF4444' }}>*</span>
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B', background: '#F1F5F9', padding: '2px 8px', borderRadius: '6px' }}>
+                            {selectedAffiliateLabIds.length} Selected
+                          </span>
+                        </label>
+                        {selectedAffiliateLabIds.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedAffiliateLabIds([]);
+                              setSelectedDefaultLabId('');
+                            }}
+                            style={{ background: 'none', border: 'none', color: '#EF4444', fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                          >
+                            Clear All Selections
+                          </button>
+                        )}
+                      </div>
+                      <p style={{ fontSize: '12.5px', color: '#64748B', marginBottom: '12px' }}>
+                        Search and select authorized external diagnostic labs and pathology testing facilities eligible to fulfill test bookings.
+                      </p>
+
+                      {/* Searchable Multi-Select Control */}
+                      <div style={{ position: 'relative' }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <div style={{ position: 'relative', flex: 1 }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}>
+                              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                            <input
+                              type="text"
+                              value={affiliateLabSearch}
+                              onChange={(e) => {
+                                setAffiliateLabSearch(e.target.value);
+                                setIsAffiliateLabDropdownOpen(true);
+                              }}
+                              onFocus={() => setIsAffiliateLabDropdownOpen(true)}
+                              placeholder="Search laboratory catalog by name, code, city, or accreditation..."
+                              style={{
+                                width: '100%',
+                                height: '44px',
+                                padding: '0 12px 0 38px',
+                                border: '1.5px solid #CBD5E1',
+                                borderRadius: '10px',
+                                fontSize: '13.5px',
+                                fontWeight: 600,
+                                outline: 'none'
+                              }}
+                            />
+                            {affiliateLabSearch && (
+                              <button
+                                type="button"
+                                onClick={() => setAffiliateLabSearch('')}
+                                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontWeight: 800 }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setIsAffiliateLabDropdownOpen(!isAffiliateLabDropdownOpen)}
+                            style={{
+                              height: '44px',
+                              padding: '0 16px',
+                              background: '#F8FAFC',
+                              border: '1.5px solid #CBD5E1',
+                              borderRadius: '10px',
+                              fontWeight: 700,
+                              fontSize: '13px',
+                              color: '#334155',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            Browse All ({availableMasterLabs.length})
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="6 9 12 15 18 9"/>
+                            </svg>
+                          </button>
+                        </div>
+
+                        {/* Dropdown Menu */}
+                        {isAffiliateLabDropdownOpen && (
+                          <div 
+                            style={{
+                              position: 'absolute',
+                              top: '100%',
+                              left: 0,
+                              right: 0,
+                              marginTop: '6px',
+                              background: '#FFFFFF',
+                              border: '1px solid #CBD5E1',
+                              borderRadius: '12px',
+                              boxShadow: '0 16px 36px rgba(15,23,42,0.14)',
+                              zIndex: 1000,
+                              maxHeight: '320px',
+                              overflowY: 'auto',
+                              padding: '6px'
+                            }}
+                          >
+                            <div style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                Available Laboratory Catalog ({filteredEligibleLabs.length})
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setIsAffiliateLabDropdownOpen(false)}
+                                style={{ background: 'none', border: 'none', fontSize: '11.5px', fontWeight: 700, color: '#2563EB', cursor: 'pointer' }}
+                              >
+                                Close Dropdown
+                              </button>
+                            </div>
+
+                            {filteredEligibleLabs.length === 0 ? (
+                              <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+                                No laboratories match your search query.
+                              </div>
+                            ) : (
+                              filteredEligibleLabs.map((lab) => {
+                                const isSelected = selectedAffiliateLabIds.includes(String(lab._id));
+                                return (
+                                  <div
+                                    key={lab._id}
+                                    onClick={() => {
+                                      const labIdStr = String(lab._id);
+                                      if (isSelected) {
+                                        const newSelected = selectedAffiliateLabIds.filter(id => id !== labIdStr);
+                                        setSelectedAffiliateLabIds(newSelected);
+                                        if (selectedDefaultLabId === labIdStr) {
+                                          setSelectedDefaultLabId(newSelected.length > 0 ? newSelected[0] : '');
+                                        }
+                                      } else {
+                                        const newSelected = [...selectedAffiliateLabIds, labIdStr];
+                                        setSelectedAffiliateLabIds(newSelected);
+                                        if (!selectedDefaultLabId) {
+                                          setSelectedDefaultLabId(labIdStr);
+                                        }
+                                      }
+                                    }}
+                                    style={{
+                                      padding: '10px 12px',
+                                      borderRadius: '8px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      cursor: 'pointer',
+                                      background: isSelected ? '#EFF6FF' : 'transparent',
+                                      borderBottom: '1px solid #F8FAFC',
+                                      transition: 'background 0.15s ease'
+                                    }}
+                                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#F8FAFC'; }}
+                                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        readOnly
+                                        style={{ width: '16px', height: '16px', accentColor: '#2563EB', cursor: 'pointer' }}
+                                      />
+                                      <div>
+                                        <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#0F172A' }}>
+                                          {lab.name}
+                                        </div>
+                                        <div style={{ fontSize: '11.5px', color: '#64748B', display: 'flex', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
+                                          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2563EB', background: '#DBEAFE', padding: '1px 5px', borderRadius: '4px' }}>
+                                            {lab.code}
+                                          </span>
+                                          {lab.accreditation && <span>• {lab.accreditation}</span>}
+                                          {lab.city && <span>• {lab.city}</span>}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {isSelected && (
+                                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#2563EB', background: '#DBEAFE', padding: '3px 8px', borderRadius: '6px' }}>
+                                        Selected
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Selected Labs Chips Grid */}
+                      <div style={{ marginTop: '14px' }}>
+                        {selectedLabObjects.length === 0 ? (
+                          <div style={{ padding: '16px 20px', borderRadius: '10px', background: '#F8FAFC', border: '1.5px dashed #CBD5E1', color: '#64748B', fontSize: '13px', textAlign: 'center' }}>
+                            No affiliated laboratories selected yet. Use the search field above to choose one or more laboratories.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {selectedLabObjects.map((lab) => {
+                              const isDefault = selectedDefaultLabId === String(lab._id);
+                              return (
+                                <div
+                                  key={lab._id}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '6px 12px',
+                                    borderRadius: '10px',
+                                    background: isDefault ? '#FEF3C7' : '#EFF6FF',
+                                    border: isDefault ? '1.5px solid #F59E0B' : '1.5px solid #BFDBFE',
+                                    color: '#0F172A',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                                  }}
+                                >
+                                  <div>
+                                    <span style={{ fontSize: '12.5px', fontWeight: 700 }}>
+                                      {lab.name}
+                                    </span>
+                                    {isDefault && (
+                                      <span style={{ marginLeft: '6px', fontSize: '10px', fontWeight: 800, background: '#D97706', color: '#FFFFFF', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                        Default Lab
+                                      </span>
+                                    )}
+                                    <span style={{ marginLeft: '6px', fontSize: '11px', color: '#64748B', fontFamily: 'monospace' }}>
+                                      ({lab.code})
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const labIdStr = String(lab._id);
+                                      const newSelected = selectedAffiliateLabIds.filter(id => id !== labIdStr);
+                                      setSelectedAffiliateLabIds(newSelected);
+                                      if (selectedDefaultLabId === labIdStr) {
+                                        setSelectedDefaultLabId(newSelected.length > 0 ? newSelected[0] : '');
+                                      }
+                                    }}
+                                    title="Remove this affiliated laboratory"
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#EF4444',
+                                      cursor: 'pointer',
+                                      padding: '2px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      fontWeight: 800,
+                                      fontSize: '13px'
+                                    }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ height: '1px', background: '#E2E8F0' }} />
+
+                    {/* SECTION 2: DESIGNATE DEFAULT LABORATORY */}
+                    <div>
+                      <label style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', display: 'block', marginBottom: '4px' }}>
+                        2. Default Laboratory Designation <span style={{ color: '#EF4444' }}>*</span>
+                      </label>
+                      <p style={{ fontSize: '12.5px', color: '#64748B', marginBottom: '12px' }}>
+                        When receptionists book a diagnostic test, this laboratory will be preselected by default while still allowing them to choose another affiliated lab.
+                      </p>
+
+                      <div style={{ maxWidth: '520px' }}>
+                        <select
+                          value={selectedDefaultLabId}
+                          onChange={(e) => setSelectedDefaultLabId(e.target.value)}
+                          disabled={selectedAffiliateLabIds.length === 0}
+                          style={{
+                            width: '100%',
+                            height: '44px',
+                            padding: '0 12px',
+                            border: '1.5px solid #CBD5E1',
+                            borderRadius: '10px',
+                            fontSize: '13.5px',
+                            fontWeight: 700,
+                            color: selectedDefaultLabId ? '#0F172A' : '#94A3B8',
+                            background: selectedAffiliateLabIds.length === 0 ? '#F1F5F9' : '#FFFFFF',
+                            outline: 'none',
+                            cursor: selectedAffiliateLabIds.length === 0 ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          {selectedAffiliateLabIds.length === 0 ? (
+                            <option value="">(Select affiliate laboratories first)</option>
+                          ) : (
+                            selectedLabObjects.map((lab) => (
+                              <option key={lab._id} value={lab._id}>
+                                {lab.name} [{lab.code}]
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </div>
+
+                      {selectedDefaultLabId && (
+                        <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#059669', fontWeight: 700 }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                          <span>Valid default lab designated for all automatic test bookings.</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ height: '1px', background: '#E2E8F0' }} />
+
+                    {/* SECTION 3: RECEPTIONIST PREVIEW SUMMARY */}
+                    <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '18px 20px', border: '1px solid #E2E8F0' }}>
+                      <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#334155', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                        Active Operational Summary
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginTop: '10px' }}>
+                        <div>
+                          <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>Affiliated Laboratories</div>
+                          <div style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
+                            {selectedAffiliateLabIds.length} Facilities
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>Preselected Default Lab</div>
+                          <div style={{ fontSize: '14px', fontWeight: 800, color: selectedDefaultLabId ? '#2563EB' : '#94A3B8', marginTop: '4px' }}>
+                            {selectedLabObjects.find(l => String(l._id) === selectedDefaultLabId)?.name || 'None Configured'}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>Multi-Test Support</div>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: '#059669', marginTop: '4px' }}>
+                            Per-Test Lab Routing Active
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+              </div>
             </div>
           );
         })()}

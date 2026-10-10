@@ -26,10 +26,85 @@ router.get('/', async (req, res) => {
   }
 });
 
+const LaboratoryMaster = require('../models/LaboratoryMaster');
+const HospitalAffiliateLabConfig = require('../models/HospitalAffiliateLabConfig');
+
+// Get active affiliate labs and configured default for current tenant
+router.get('/affiliates', async (req, res) => {
+  try {
+    const config = await HospitalAffiliateLabConfig.findOne({ tenantId: req.tenantId })
+      .populate('affiliateLabIds')
+      .populate('defaultLabId')
+      .lean();
+
+    if (!config) {
+      return res.json({
+        success: true,
+        affiliateLabs: [],
+        defaultLab: null,
+        defaultLabId: null
+      });
+    }
+
+    const activeAffiliates = (config.affiliateLabIds || []).filter(l => l && l.isActive);
+    let effectiveDefault = config.defaultLabId && config.defaultLabId.isActive ? config.defaultLabId : null;
+
+    if (effectiveDefault && !activeAffiliates.some(l => l._id.toString() === effectiveDefault._id.toString())) {
+      effectiveDefault = activeAffiliates.length > 0 ? activeAffiliates[0] : null;
+    }
+
+    res.json({
+      success: true,
+      affiliateLabs: activeAffiliates,
+      defaultLab: effectiveDefault,
+      defaultLabId: effectiveDefault ? effectiveDefault._id : null
+    });
+  } catch (error) {
+    console.error("Get affiliate labs error in labRoutes:", error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Create lab request (scoped to tenant)
 router.post('/', async (req, res) => {
-  const { appointmentId, patientId, doctorId, testName, notes, status, results } = req.body;
+  const { appointmentId, patientId, doctorId, testName, notes, status, results, labId, labName } = req.body;
   try {
+    let finalLabId = null;
+    let finalLabName = (labName || '').trim();
+    let finalLabCode = '';
+
+    // Validate labId if provided
+    if (labId) {
+      // 1. Check if lab exists in LaboratoryMaster
+      const labDoc = await LaboratoryMaster.findOne({ _id: labId, isActive: true }).lean();
+      if (!labDoc) {
+        return res.status(400).json({ error: 'Selected laboratory does not exist or is inactive.' });
+      }
+
+      // 2. Check if this lab is affiliated with this tenant
+      const config = await HospitalAffiliateLabConfig.findOne({ tenantId: req.tenantId }).lean();
+      if (config && config.affiliateLabIds && config.affiliateLabIds.length > 0) {
+        const isAffiliated = config.affiliateLabIds.some(id => id.toString() === String(labId));
+        if (!isAffiliated) {
+          return res.status(400).json({ error: 'Selected laboratory is not an affiliated laboratory for this hospital.' });
+        }
+      }
+
+      finalLabId = labDoc._id;
+      finalLabName = labDoc.name;
+      finalLabCode = labDoc.code || '';
+    } else {
+      // If labId not explicitly provided, auto-assign default lab if configured
+      const config = await HospitalAffiliateLabConfig.findOne({ tenantId: req.tenantId })
+        .populate('defaultLabId')
+        .lean();
+      if (config && config.defaultLabId && config.defaultLabId.isActive) {
+        finalLabId = config.defaultLabId._id;
+        finalLabName = config.defaultLabId.name;
+        finalLabCode = config.defaultLabId.code || '';
+      }
+    }
+
     const request = await LabRequest.create({
       tenantId: req.tenantId,
       appointmentId,
@@ -38,7 +113,10 @@ router.post('/', async (req, res) => {
       testName,
       notes,
       status,
-      results
+      results,
+      labId: finalLabId,
+      labName: finalLabName,
+      labCode: finalLabCode
     });
     const io = req.app.get("io");
     if (io && req.tenantId) {

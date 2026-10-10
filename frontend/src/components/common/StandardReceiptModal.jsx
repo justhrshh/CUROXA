@@ -460,6 +460,11 @@ export default function StandardReceiptModal({
                       <td style={{ padding: '3px 6px', textAlign: 'left', fontSize: '11px', color: '#000', verticalAlign: 'top' }}>{idx + 1}</td>
                       <td style={{ padding: '3px 6px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#000', verticalAlign: 'top' }}>
                         {String(desc).toUpperCase()}
+                        {it.labName && (
+                          <div style={{ fontSize: '9.5px', fontWeight: 700, color: '#1D4ED8', marginTop: '1px' }}>
+                            LABORATORY: {it.labName.toUpperCase()}
+                          </div>
+                        )}
                         {it.sku && <div style={{ fontSize: '9.5px', fontWeight: 'normal', color: '#444' }}>SKU: {it.sku}</div>}
                       </td>
                       <td style={{ padding: '3px 6px', textAlign: 'left', fontSize: '11px', color: '#000', verticalAlign: 'top' }}>{sampleType}</td>

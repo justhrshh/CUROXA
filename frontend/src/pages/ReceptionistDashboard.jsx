@@ -724,6 +724,11 @@ const ReceptionistDashboard = () => {
   // Multiple Direct Lab Tests Selection list state
   const [selectedLabTestsList, setSelectedLabTestsList] = useState([]);
 
+  // Hospital Affiliate Laboratories & Default Lab state
+  const [affiliateLabsList, setAffiliateLabsList] = useState([]);
+  const [defaultAffiliateLab, setDefaultAffiliateLab] = useState(null);
+  const [selectedBookingLabId, setSelectedBookingLabId] = useState('');
+
   // Dynamic Clinical Services (Dental, Root Canal, Braces, Physiotherapy) catalog & list state
   const [hospitalClinicalServices, setHospitalClinicalServices] = useState([
     { serviceName: 'Dental — Root Canal Treatment (RCT)', serviceCode: 'DEN-201', department: 'Dental', price: 3500 },
@@ -1221,10 +1226,13 @@ const ReceptionistDashboard = () => {
 
         if (pendingRegistrationPayload.isLabOnly) {
           // Direct Lab Test Order Execution (No Doctor Required)
+          const pLabData = pendingRegistrationPayload.labData || {};
           await api.post('/labs', {
             patientId: finalPatientId,
-            testName: pendingRegistrationPayload.labData.testName,
-            notes: pendingRegistrationPayload.labData.notes || 'Direct Reception Walk-In Lab Test',
+            testName: pLabData.testName,
+            labId: pLabData.labId || null,
+            labName: pLabData.labName || '',
+            notes: pLabData.notes || 'Direct Reception Walk-In Lab Test',
             status: 'Pending'
           });
 
@@ -2180,6 +2188,22 @@ const ReceptionistDashboard = () => {
         console.error("Failed to fetch discount setting", discErr);
       }
 
+      try {
+        const affRes = await api.get('/labs/affiliates');
+        if (affRes.data?.success) {
+          const labs = affRes.data.affiliateLabs || [];
+          const defLab = affRes.data.defaultLab || null;
+          setAffiliateLabsList(labs);
+          setDefaultAffiliateLab(defLab);
+          if (defLab?._id) {
+            setSelectedBookingLabId(prev => prev || String(defLab._id));
+          } else if (labs.length > 0) {
+            setSelectedBookingLabId(prev => prev || String(labs[0]._id));
+          }
+        }
+      } catch (affErr) {
+        console.warn("Failed to fetch affiliate labs for receptionist:", affErr);
+      }
 
       // Also refresh coverage-related data
       await fetchCoverageData();
@@ -2233,16 +2257,25 @@ const ReceptionistDashboard = () => {
         await api.post('/labs', {
           patientId: targetPatientId,
           testName: testItem.testName,
+          labId: testItem.labId || selectedBookingLabId || (defaultAffiliateLab ? defaultAffiliateLab._id : null),
+          labName: testItem.labName || (affiliateLabsList.find(l => String(l._id) === String(testItem.labId || selectedBookingLabId))?.name) || defaultAffiliateLab?.name || '',
           notes: 'Direct Walk-In Laboratory Test Order',
           status: 'Pending'
         });
       }
 
-      // Create Billing record listing all tests
-      const items = selectedLabTestsList.map(t => ({
-        description: `Lab Test: ${t.testName}`,
-        amount: Number(t.price || 0)
-      }));
+      // Create Billing record listing all tests with designated laboratory
+      const items = selectedLabTestsList.map(t => {
+        const itemLabName = t.labName || (affiliateLabsList.find(l => String(l._id) === String(t.labId || selectedBookingLabId))?.name) || defaultAffiliateLab?.name || '';
+        return {
+          description: `Lab Test: ${t.testName}`,
+          testName: t.testName,
+          labName: itemLabName,
+          labId: t.labId || selectedBookingLabId || null,
+          sampleType: t.sampleType || 'Specimen',
+          amount: Number(t.price || 0)
+        };
+      });
       if (!isExistingPatient) {
         items.push({ description: 'Registration Fee', amount: 50 });
       }
@@ -12043,8 +12076,61 @@ const ReceptionistDashboard = () => {
             return (t.testName || '').toLowerCase().includes(q) || (t.category || '').toLowerCase().includes(q) || (t.testCode || '').toLowerCase().includes(q);
           });
 
+          // Resolve active affiliate lab options
+          const effectiveLabId = selectedBookingLabId || (defaultAffiliateLab ? String(defaultAffiliateLab._id) : (affiliateLabsList[0] ? String(affiliateLabsList[0]._id) : ''));
+          const currentLabObj = affiliateLabsList.find(l => String(l._id) === effectiveLabId) || defaultAffiliateLab;
+
           return (
-            <div style={{ padding: "10px 16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ padding: "10px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              {/* 1. SELECT LABORATORY DROPDOWN */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 700, color: "#1E293B", flexShrink: 0 }}>
+                  Select Laboratory <span style={{ color: "#EF4444" }}>*</span>
+                </label>
+                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px" }}>
+                  <select
+                    value={effectiveLabId}
+                    onChange={(e) => {
+                      const newLabId = e.target.value;
+                      setSelectedBookingLabId(newLabId);
+                      // Update any already-added test items that match previous bulk selection
+                      setSelectedLabTestsList(prev => prev.map(t => {
+                        const matchedLab = affiliateLabsList.find(l => String(l._id) === newLabId);
+                        return {
+                          ...t,
+                          labId: newLabId,
+                          labName: matchedLab?.name || t.labName || ''
+                        };
+                      }));
+                    }}
+                    style={{
+                      ...tableInp,
+                      fontWeight: 700,
+                      color: effectiveLabId ? "#0F172A" : "#64748B",
+                      background: "#FFFFFF",
+                      cursor: "pointer"
+                    }}
+                  >
+                    {affiliateLabsList.length === 0 ? (
+                      <option value="">(No affiliated labs configured - Main Clinic Lab)</option>
+                    ) : (
+                      affiliateLabsList.map((lab) => (
+                        <option key={lab._id} value={lab._id}>
+                          {lab.name} {defaultAffiliateLab && String(defaultAffiliateLab._id) === String(lab._id) ? "★ [Default Lab]" : `[${lab.code || 'LAB'}]`}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  {defaultAffiliateLab && String(defaultAffiliateLab._id) === effectiveLabId && (
+                    <span style={{ fontSize: "10.5px", fontWeight: 800, color: "#D97706", background: "#FEF3C7", padding: "2px 7px", borderRadius: "4px", whiteSpace: "nowrap" }}>
+                      Default Lab
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. SEARCH & ADD TEST */}
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Search Test <span style={{ color: "#EF4444" }}>*</span>
@@ -12071,7 +12157,17 @@ const ReceptionistDashboard = () => {
                           <div
                             key={idx}
                             onClick={() => {
-                              if (!isAdded) setSelectedLabTestsList([...selectedLabTestsList, test]);
+                              if (!isAdded) {
+                                const matchedLab = affiliateLabsList.find(l => String(l._id) === effectiveLabId) || defaultAffiliateLab;
+                                setSelectedLabTestsList([
+                                  ...selectedLabTestsList,
+                                  {
+                                    ...test,
+                                    labId: effectiveLabId || (matchedLab?._id ? String(matchedLab._id) : null),
+                                    labName: matchedLab?.name || (affiliateLabsList[0]?.name || 'In-House Laboratory')
+                                  }
+                                ]);
+                              }
                               setShowLabTestDropdown(false);
                               setLabTestSearchQuery("");
                             }}
@@ -12087,14 +12183,78 @@ const ReceptionistDashboard = () => {
                 </div>
               </div>
 
-              {/* Selected tests chips */}
+              {/* Selected tests chips with lab badge and per-test lab switcher */}
               {selectedLabTestsList.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", paddingLeft: "107px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", paddingLeft: "107px" }}>
                   {selectedLabTestsList.map((test, idx) => (
-                    <span key={idx} style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#065F46", padding: "2px 8px", borderRadius: "4px", fontSize: "11.5px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                      {test.testName} • ₹{test.price}
-                      <button type="button" onClick={() => setSelectedLabTestsList(selectedLabTestsList.filter((_, i) => i !== idx))} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontWeight: 800 }}>✕</button>
-                    </span>
+                    <div
+                      key={idx}
+                      style={{
+                        background: "#F8FAFC",
+                        border: "1px solid #CBD5E1",
+                        borderRadius: "6px",
+                        padding: "6px 10px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "8px"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                        <span style={{ fontSize: "12px", fontWeight: 800, color: "#0F172A" }}>
+                          {test.testName}
+                        </span>
+                        <span style={{ fontSize: "11.5px", fontWeight: 800, color: "#059669" }}>
+                          ₹{test.price}
+                        </span>
+                        {/* Per-test lab selection */}
+                        {affiliateLabsList.length > 1 ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: "4px", marginLeft: "auto" }}>
+                            <span style={{ fontSize: "11px", color: "#64748B", fontWeight: 600 }}>Lab:</span>
+                            <select
+                              value={test.labId || effectiveLabId}
+                              onChange={(e) => {
+                                const newTestLabId = e.target.value;
+                                const matchedLab = affiliateLabsList.find(l => String(l._id) === newTestLabId);
+                                setSelectedLabTestsList(prev => prev.map((item, i) => i === idx ? {
+                                  ...item,
+                                  labId: newTestLabId,
+                                  labName: matchedLab?.name || item.labName
+                                } : item));
+                              }}
+                              style={{
+                                fontSize: "11.5px",
+                                height: "26px",
+                                border: "1px solid #CBD5E1",
+                                borderRadius: "4px",
+                                padding: "0 6px",
+                                fontWeight: 700,
+                                background: "#FFFFFF",
+                                color: "#2563EB"
+                              }}
+                            >
+                              {affiliateLabsList.map(lab => (
+                                <option key={lab._id} value={lab._id}>
+                                  {lab.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <span style={{ marginLeft: "auto", fontSize: "11px", fontWeight: 700, color: "#2563EB", background: "#EFF6FF", padding: "2px 6px", borderRadius: "4px" }}>
+                            {test.labName || currentLabObj?.name || 'In-House Laboratory'}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedLabTestsList(selectedLabTestsList.filter((_, i) => i !== idx))}
+                        style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontWeight: 800, fontSize: "13px", padding: "0 4px" }}
+                        title="Remove Test"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
