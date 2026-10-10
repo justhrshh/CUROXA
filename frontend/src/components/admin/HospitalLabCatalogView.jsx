@@ -370,7 +370,7 @@ export default function HospitalLabCatalogView({ api, showToast, setLoading, cur
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            + Activate Global Test
+            Activate Global Test
           </button>
         </div>
       </div>
@@ -470,7 +470,7 @@ export default function HospitalLabCatalogView({ api, showToast, setLoading, cur
                   <div style={{ color: '#0F172A', fontWeight: 800, fontSize: '14px', marginBottom: '4px' }}>No laboratory tests found</div>
                   <div style={{ color: '#64748B', fontSize: '12.5px' }}>
                     {catalog.length === 0
-                      ? "Your hospital has not activated any tests yet. Click '+ Activate Global Test' to select tests from the Global Item Master."
+                      ? "Your hospital has not activated any tests yet. Click 'Activate Global Test' to select tests from the Global Item Master."
                       : "No tests match your current search and filter criteria."}
                   </div>
                 </td>
@@ -628,7 +628,7 @@ export default function HospitalLabCatalogView({ api, showToast, setLoading, cur
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#0F172A' }}>
-                  + Activate Test from Global Item Master
+                  Activate Test from Global Item Master
                 </h3>
                 <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
                   Select an existing canonical test from the Global Item Master and configure your hospital price.
