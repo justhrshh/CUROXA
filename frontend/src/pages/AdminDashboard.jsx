@@ -25160,7 +25160,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                       </svg>
-                      + Register New Lab
+                      Register New Lab
                     </button>
                     <button
                       type="button"
@@ -25653,7 +25653,23 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                           type="text"
                           required
                           value={customLabForm.name}
-                          onChange={e => setCustomLabForm({ ...customLabForm, name: e.target.value })}
+                          onChange={e => {
+                            const nameVal = e.target.value;
+                            let autoCode = '';
+                            if (nameVal.trim()) {
+                              const clean = nameVal.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                              const prefix = clean.slice(0, 3).padEnd(3, 'X');
+                              let hash = 0;
+                              for (let i = 0; i < nameVal.length; i++) hash = (hash * 31 + nameVal.charCodeAt(i)) % 900;
+                              const num = String(100 + Math.abs(hash)).padStart(3, '0');
+                              autoCode = `LAB-${prefix}-${num}`;
+                            }
+                            setCustomLabForm(prev => ({
+                              ...prev,
+                              name: nameVal,
+                              code: !prev.isManualCode ? autoCode : prev.code
+                            }));
+                          }}
                           placeholder="e.g. Thyrocare Central Diagnostic Laboratory"
                           style={{ width: '100%', height: '40px', padding: '0 12px', border: '1.5px solid #CBD5E1', borderRadius: '8px', fontSize: '13px', fontWeight: 600, outline: 'none' }}
                         />
@@ -25661,15 +25677,18 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                         <div>
-                          <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
-                            Lab Code / Identifier
+                          <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <span>Lab Code / Identifier</span>
+                            <span style={{ fontSize: '10.5px', fontWeight: 750, color: '#059669', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '1px 6px', borderRadius: '4px' }}>
+                              Auto-Generated
+                            </span>
                           </label>
                           <input
                             type="text"
                             value={customLabForm.code}
-                            onChange={e => setCustomLabForm({ ...customLabForm, code: e.target.value.toUpperCase() })}
-                            placeholder="e.g. LAB-THY-001 (Auto-generated if empty)"
-                            style={{ width: '100%', height: '38px', padding: '0 12px', border: '1.5px solid #CBD5E1', borderRadius: '8px', fontSize: '12.5px', fontWeight: 600, outline: 'none' }}
+                            onChange={e => setCustomLabForm({ ...customLabForm, code: e.target.value.toUpperCase(), isManualCode: Boolean(e.target.value.trim()) })}
+                            placeholder="Auto-generates as you type..."
+                            style={{ width: '100%', height: '38px', padding: '0 12px', border: '1.5px solid #CBD5E1', borderRadius: '8px', fontSize: '12.5px', fontWeight: 700, fontFamily: 'monospace', color: '#1E293B', background: '#F8FAFC', outline: 'none' }}
                           />
                         </div>
                         <div>

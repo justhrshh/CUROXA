@@ -11387,6 +11387,8 @@ const ReceptionistDashboard = () => {
 
         const tableInp = {
           height: "30px",
+          minHeight: "30px",
+          maxHeight: "30px",
           borderRadius: "4px",
           border: "1px solid #CBD5E1",
           background: "#FFFFFF",
@@ -11397,400 +11399,452 @@ const ReceptionistDashboard = () => {
           padding: "0 8px",
           outline: "none",
           boxSizing: "border-box",
+          lineHeight: "28px",
           transition: "border-color 0.15s ease, box-shadow 0.15s ease"
         };
 
         return (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 200px", gap: "16px", padding: "12px 16px", alignItems: "start" }}>
 
-            {/* LEFT SIDE: 3-COLUMN TABLE GRID WITH HORIZONTAL [LABEL : INPUT] PAIRS */}
+            {/* LEFT SIDE: 3 DISTINCT SMART COLUMNS [Personal Details | Contact Details | Residential Address] */}
             <div style={{
               display: "grid",
               gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              columnGap: "16px",
-              rowGap: "7px"
+              columnGap: "18px",
+              alignItems: "start"
             }}>
 
-              {/* ROW 1: Title | Patient Name * | Gender * */}
-              {/* Col 1: Title */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Title <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <select
-                    style={{ ...tableInp, cursor: "pointer", ...((!formData.title && isFormStarted) ? { borderColor: "#EF4444" } : {}) }}
-                    value={formData.title || ""}
-                    onChange={e => {
-                      const t = e.target.value;
-                      let g = formData.gender;
-                      if (t === "Mr." || t === "Master") g = "Male";
-                      else if (t === "Mrs." || t === "Miss" || t === "Ms.") g = "Female";
-                      else if (t === "Prefer not to say") g = "Other";
-                      setFormData({ ...formData, title: t, gender: g });
-                    }}
-                    disabled={Boolean(isExistingPatient)}
-                  >
-                    <option value="">-- Title --</option>
-                    <option value="Mr.">Mr.</option>
-                    <option value="Mrs.">Mrs.</option>
-                    <option value="Ms.">Ms.</option>
-                    <option value="Miss">Miss</option>
-                    <option value="Master">Master</option>
-                    <option value="Dr.">Dr.</option>
-                  </select>
+              {/* ─── COLUMN 1: PERSONAL DETAILS ─── */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px", paddingBottom: "3px", borderBottom: "1.5px solid #BAE6FD" }}>
+                  <span style={{ fontSize: "11px" }}>👤</span>
+                  <span style={{ fontSize: "10.5px", fontWeight: 800, color: "#0369A1", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Personal Details
+                  </span>
                 </div>
-              </div>
 
-              {/* Col 2: Patient Name * */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Patient Name <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="Full name"
-                    style={{ ...tableInp, ...((!formData.name && isFormStarted) ? { borderColor: "#EF4444", boxShadow: "0 0 0 2px rgba(239,68,68,0.12)" } : {}) }}
-                    value={formData.name || ""}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    readOnly={isExistingPatient}
-                  />
-                </div>
-              </div>
-
-              {/* Col 3: Gender * */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Gender <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <select
-                    style={{ ...tableInp, cursor: "pointer", ...((!formData.gender && isFormStarted) ? { borderColor: "#EF4444" } : {}) }}
-                    value={formData.gender || ""}
-                    onChange={e => setFormData({ ...formData, gender: e.target.value })}
-                    disabled={isExistingPatient}
-                  >
-                    <option value="">-- Gender --</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* ROW 2: DOB | Age (Y/M/D) * | Blood Group */}
-              {/* Col 1: DOB */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  DOB {formData.dob ? <span style={{ color: "#10B981", fontSize: "10px" }}>✓</span> : (!formData.age ? <span style={{ color: "#EF4444" }}>*</span> : null)}
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="date"
-                    style={{ ...tableInp, ...((!formData.dob && !formData.age && isFormStarted) ? { borderColor: "#EF4444" } : {}) }}
-                    value={formData.dob || ""}
-                    max={getLocalDateString()}
-                    onChange={e => handleDobChange(e.target.value)}
-                    readOnly={isExistingPatient}
-                  />
-                </div>
-              </div>
-
-              {/* Col 2: Age (Y/M/D) * */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Age (Y/M/D) {!formData.dob && <span style={{ color: "#EF4444" }}>*</span>}
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0, display: "flex", gap: "3px" }}>
-                  <input
-                    type="number"
-                    min="0"
-                    max="120"
-                    placeholder="Yrs"
-                    style={{ ...tableInp, flex: 1.4, textAlign: "center", padding: "0 2px", ...((!formData.age && !formData.dob && isFormStarted) ? { borderColor: "#EF4444" } : {}) }}
-                    value={formData.age || ""}
-                    onChange={e => setFormData({ ...formData, age: e.target.value })}
-                    readOnly={isExistingPatient}
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    max="11"
-                    placeholder="M"
-                    style={{ ...tableInp, flex: 1, textAlign: "center", padding: "0 2px" }}
-                    value={formData.ageMonths || ""}
-                    onChange={e => setFormData({ ...formData, ageMonths: e.target.value })}
-                    readOnly={isExistingPatient}
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    max="31"
-                    placeholder="D"
-                    style={{ ...tableInp, flex: 1, textAlign: "center", padding: "0 2px" }}
-                    value={formData.ageDays || ""}
-                    onChange={e => setFormData({ ...formData, ageDays: e.target.value })}
-                    readOnly={isExistingPatient}
-                  />
-                </div>
-              </div>
-
-              {/* Col 3: Blood Group */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Blood Group
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <select
-                    style={{ ...tableInp, cursor: "pointer" }}
-                    value={formData.bloodGroup || ""}
-                    onChange={e => setFormData({ ...formData, bloodGroup: e.target.value })}
-                    disabled={isExistingPatient}
-                  >
-                    <option value="">-- Group --</option>
-                    <option value="O+">O+</option>
-                    <option value="O-">O-</option>
-                    <option value="A+">A+</option>
-                    <option value="A-">A-</option>
-                    <option value="B+">B+</option>
-                    <option value="B-">B-</option>
-                    <option value="AB+">AB+</option>
-                    <option value="AB-">AB-</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* ROW 3: Mobile No. * | Emergency Mobile | Email Address * (MANDATORY WITH OTP) */}
-              {/* Col 1: Mobile No. * */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Mobile No. <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="10-digit mobile"
-                    maxLength={10}
-                    style={{ ...tableInp, ...((!formData.contact && isFormStarted) ? { borderColor: "#EF4444", boxShadow: "0 0 0 2px rgba(239,68,68,0.12)" } : {}) }}
-                    value={formData.contact || ""}
-                    onChange={e => {
-                      const v = e.target.value.replace(/\D/g, "").substring(0, 10);
-                      setFormData({ ...formData, contact: v });
-                    }}
-                    readOnly={isExistingPatient}
-                  />
-                </div>
-              </div>
-
-              {/* Col 2: Emergency Mobile */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Emergency No.
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="Alternate mobile"
-                    maxLength={10}
-                    style={tableInp}
-                    value={formData.emergencyContact || ""}
-                    onChange={e => {
-                      const v = e.target.value.replace(/\D/g, "").substring(0, 10);
-                      setFormData({ ...formData, emergencyContact: v });
-                    }}
-                    readOnly={isExistingPatient}
-                  />
-                </div>
-              </div>
-
-              {/* Col 3: Email Address * (STRICTLY MANDATORY WITH OTP) */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px", position: "relative" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Email <span style={{ color: "#EF4444" }}>*</span>
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", alignItems: "center" }}>
-                  <input
-                    type="email"
-                    placeholder="patient@example.com"
-                    style={{
-                      ...tableInp,
-                      paddingRight: (!isExistingPatient && formData.email && !otpVerified) ? "55px" : "8px",
-                      borderColor: otpVerified ? "#10B981" : (!otpVerified && formData.email ? "#F59E0B" : ((!formData.email && isFormStarted) ? "#EF4444" : "#CBD5E1")),
-                      ...((!formData.email && isFormStarted) ? { boxShadow: "0 0 0 2px rgba(239,68,68,0.12)" } : {})
-                    }}
-                    value={formData.email || ""}
-                    onChange={e => {
-                      setFormData({ ...formData, email: e.target.value });
-                      if (otpVerified) setOtpVerified(false);
-                      if (otpSent) setOtpSent(false);
-                    }}
-                    readOnly={isExistingPatient}
-                  />
-                  {/* Inline OTP Verification Status & Trigger */}
-                  {otpVerified ? (
-                    <span style={{ position: "absolute", right: "6px", fontSize: "10px", fontWeight: 800, color: "#059669" }}>
-                      ✓ Verified
-                    </span>
-                  ) : !isExistingPatient && formData.email && (
-                    <button
-                      type="button"
-                      onClick={handleSendOtp}
-                      disabled={sendingOtp}
+                {/* 1. Title */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    Title <span style={{ color: "#EF4444" }}>*</span>
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <select
                       style={{
-                        position: "absolute",
-                        right: "2px",
-                        height: "24px",
-                        padding: "0 6px",
-                        borderRadius: "3px",
-                        border: "none",
-                        background: sendingOtp ? "#94A3B8" : "#0284C7",
-                        color: "#FFFFFF",
-                        fontSize: "10.5px",
-                        fontWeight: 750,
-                        cursor: sendingOtp ? "not-allowed" : "pointer"
+                        ...tableInp,
+                        height: "30px",
+                        minHeight: "30px",
+                        maxHeight: "30px",
+                        paddingTop: 0,
+                        paddingBottom: 0,
+                        cursor: "pointer",
+                        ...((!formData.title && isFormStarted) ? { borderColor: "#EF4444" } : {})
                       }}
+                      value={formData.title || ""}
+                      onChange={e => {
+                        const t = e.target.value;
+                        let g = formData.gender;
+                        if (t === "Mr." || t === "Master") g = "Male";
+                        else if (t === "Mrs." || t === "Miss" || t === "Ms.") g = "Female";
+                        else if (t === "Prefer not to say") g = "Other";
+                        setFormData({ ...formData, title: t, gender: g });
+                      }}
+                      disabled={Boolean(isExistingPatient)}
                     >
-                      {sendingOtp ? "..." : (otpSent ? "Resend" : "Verify")}
-                    </button>
+                      <option value="">-- Title --</option>
+                      <option value="Mr.">Mr.</option>
+                      <option value="Mrs.">Mrs.</option>
+                      <option value="Ms.">Ms.</option>
+                      <option value="Miss">Miss</option>
+                      <option value="Master">Master</option>
+                      <option value="Dr.">Dr.</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 2. Patient Name */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    Patient Name <span style={{ color: "#EF4444" }}>*</span>
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="text"
+                      placeholder="Full name"
+                      style={{ ...tableInp, ...((!formData.name && isFormStarted) ? { borderColor: "#EF4444", boxShadow: "0 0 0 2px rgba(239,68,68,0.12)" } : {}) }}
+                      value={formData.name || ""}
+                      onChange={e => setFormData({ ...formData, name: e.target.value })}
+                      readOnly={isExistingPatient}
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Gender */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    Gender <span style={{ color: "#EF4444" }}>*</span>
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <select
+                      style={{
+                        ...tableInp,
+                        height: "30px",
+                        minHeight: "30px",
+                        maxHeight: "30px",
+                        paddingTop: 0,
+                        paddingBottom: 0,
+                        cursor: "pointer",
+                        ...((!formData.gender && isFormStarted) ? { borderColor: "#EF4444" } : {})
+                      }}
+                      value={formData.gender || ""}
+                      onChange={e => setFormData({ ...formData, gender: e.target.value })}
+                      disabled={isExistingPatient}
+                    >
+                      <option value="">-- Gender --</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 4. Age (Y/M/D) */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    Age (Y/M/D) {!formData.dob && <span style={{ color: "#EF4444" }}>*</span>}
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", gap: "3px" }}>
+                    <input
+                      type="number"
+                      min="0"
+                      max="120"
+                      placeholder="Yrs"
+                      style={{ ...tableInp, flex: 1.4, textAlign: "center", padding: "0 2px", ...((!formData.age && !formData.dob && isFormStarted) ? { borderColor: "#EF4444" } : {}) }}
+                      value={formData.age || ""}
+                      onChange={e => setFormData({ ...formData, age: e.target.value })}
+                      readOnly={isExistingPatient}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      max="11"
+                      placeholder="M"
+                      style={{ ...tableInp, flex: 1, textAlign: "center", padding: "0 2px" }}
+                      value={formData.ageMonths || ""}
+                      onChange={e => setFormData({ ...formData, ageMonths: e.target.value })}
+                      readOnly={isExistingPatient}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      max="31"
+                      placeholder="D"
+                      style={{ ...tableInp, flex: 1, textAlign: "center", padding: "0 2px" }}
+                      value={formData.ageDays || ""}
+                      onChange={e => setFormData({ ...formData, ageDays: e.target.value })}
+                      readOnly={isExistingPatient}
+                    />
+                  </div>
+                </div>
+
+                {/* 5. DOB */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    DOB {formData.dob ? <span style={{ color: "#10B981", fontSize: "10px" }}>✓</span> : (!formData.age ? <span style={{ color: "#EF4444" }}>*</span> : null)}
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="date"
+                      style={{ ...tableInp, ...((!formData.dob && !formData.age && isFormStarted) ? { borderColor: "#EF4444" } : {}) }}
+                      value={formData.dob || ""}
+                      max={getLocalDateString()}
+                      onChange={e => handleDobChange(e.target.value)}
+                      readOnly={isExistingPatient}
+                    />
+                  </div>
+                </div>
+
+                {/* 6. Blood Group */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    Blood Group
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <select
+                      style={{
+                        ...tableInp,
+                        height: "30px",
+                        minHeight: "30px",
+                        maxHeight: "30px",
+                        paddingTop: 0,
+                        paddingBottom: 0,
+                        cursor: "pointer"
+                      }}
+                      value={formData.bloodGroup || ""}
+                      onChange={e => setFormData({ ...formData, bloodGroup: e.target.value })}
+                      disabled={isExistingPatient}
+                    >
+                      <option value="">-- Group --</option>
+                      <option value="O+">O+</option>
+                      <option value="O-">O-</option>
+                      <option value="A+">A+</option>
+                      <option value="A-">A-</option>
+                      <option value="B+">B+</option>
+                      <option value="B-">B-</option>
+                      <option value="AB+">AB+</option>
+                      <option value="AB-">AB-</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* ─── COLUMN 2: CONTACT DETAILS (MOBILE NO. ON TOP & EMERGENCY NO. IN SAME COLUMN) ─── */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px", paddingBottom: "3px", borderBottom: "1.5px solid #A7F3D0" }}>
+                  <span style={{ fontSize: "11px" }}>📞</span>
+                  <span style={{ fontSize: "10.5px", fontWeight: 800, color: "#047857", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Contact Details
+                  </span>
+                </div>
+
+                {/* 1. Mobile No. (Top of Column) */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    Mobile No. <span style={{ color: "#EF4444" }}>*</span>
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="text"
+                      placeholder="10-digit mobile"
+                      maxLength={10}
+                      style={{ ...tableInp, ...((!formData.contact && isFormStarted) ? { borderColor: "#EF4444", boxShadow: "0 0 0 2px rgba(239,68,68,0.12)" } : {}) }}
+                      value={formData.contact || ""}
+                      onChange={e => {
+                        const v = e.target.value.replace(/\D/g, "").substring(0, 10);
+                        setFormData({ ...formData, contact: v });
+                      }}
+                      readOnly={isExistingPatient}
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Emergency No. (Same Column directly underneath Mobile No.) */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    Emergency No.
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="text"
+                      placeholder="Alternate mobile"
+                      maxLength={10}
+                      style={tableInp}
+                      value={formData.emergencyContact || ""}
+                      onChange={e => {
+                        const v = e.target.value.replace(/\D/g, "").substring(0, 10);
+                        setFormData({ ...formData, emergencyContact: v });
+                      }}
+                      readOnly={isExistingPatient}
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Email Address (Mandatory with OTP) */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px", position: "relative" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    Email <span style={{ color: "#EF4444" }}>*</span>
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", alignItems: "center" }}>
+                    <input
+                      type="email"
+                      placeholder="patient@example.com"
+                      style={{
+                        ...tableInp,
+                        paddingRight: (!isExistingPatient && formData.email && !otpVerified) ? "55px" : "8px",
+                        borderColor: otpVerified ? "#10B981" : (!otpVerified && formData.email ? "#F59E0B" : ((!formData.email && isFormStarted) ? "#EF4444" : "#CBD5E1")),
+                        ...((!formData.email && isFormStarted) ? { boxShadow: "0 0 0 2px rgba(239,68,68,0.12)" } : {})
+                      }}
+                      value={formData.email || ""}
+                      onChange={e => {
+                        setFormData({ ...formData, email: e.target.value });
+                        if (otpVerified) setOtpVerified(false);
+                        if (otpSent) setOtpSent(false);
+                      }}
+                      readOnly={isExistingPatient}
+                    />
+                    {/* Inline OTP Verification Status & Trigger */}
+                    {otpVerified ? (
+                      <span style={{ position: "absolute", right: "6px", fontSize: "10px", fontWeight: 800, color: "#059669" }}>
+                        ✓ Verified
+                      </span>
+                    ) : !isExistingPatient && formData.email && (
+                      <button
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={sendingOtp}
+                        style={{
+                          position: "absolute",
+                          right: "2px",
+                          height: "24px",
+                          padding: "0 6px",
+                          borderRadius: "3px",
+                          border: "none",
+                          background: sendingOtp ? "#94A3B8" : "#0284C7",
+                          color: "#FFFFFF",
+                          fontSize: "10.5px",
+                          fontWeight: 750,
+                          cursor: sendingOtp ? "not-allowed" : "pointer"
+                        }}
+                      >
+                        {sendingOtp ? "..." : (otpSent ? "Resend" : "Verify")}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Floating Drawer for OTP Entry */}
+                  {!isExistingPatient && otpSent && !otpVerified && (
+                    <div style={{
+                      position: "absolute",
+                      top: "32px",
+                      right: 0,
+                      zIndex: 20,
+                      background: "#FFFFFF",
+                      border: "1px solid #93C5FD",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+                      borderRadius: "6px",
+                      padding: "6px 8px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "5px"
+                    }}>
+                      <input
+                        type="text"
+                        placeholder="6-digit OTP"
+                        maxLength={6}
+                        style={{ width: "90px", height: "24px", textAlign: "center", fontSize: "11px", border: "1px solid #CBD5E1", borderRadius: "3px", outline: "none" }}
+                        value={verificationOtp}
+                        onChange={e => setVerificationOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVerifyOtp}
+                        disabled={otpVerifying || !verificationOtp}
+                        style={{ height: "24px", padding: "0 8px", background: "#10B981", color: "#FFF", border: "none", borderRadius: "3px", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}
+                      >
+                        {otpVerifying ? "..." : "Confirm"}
+                      </button>
+                    </div>
                   )}
                 </div>
 
-                {/* Floating Drawer for OTP Entry */}
-                {!isExistingPatient && otpSent && !otpVerified && (
-                  <div style={{
-                    position: "absolute",
-                    top: "32px",
-                    right: 0,
-                    zIndex: 20,
-                    background: "#FFFFFF",
-                    border: "1px solid #93C5FD",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-                    borderRadius: "6px",
-                    padding: "6px 8px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "5px"
-                  }}>
+                {/* 4. Referred By */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    Referred By
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <input
                       type="text"
-                      placeholder="6-digit OTP"
-                      maxLength={6}
-                      style={{ width: "90px", height: "24px", textAlign: "center", fontSize: "11px", border: "1px solid #CBD5E1", borderRadius: "3px", outline: "none" }}
-                      value={verificationOtp}
-                      onChange={e => setVerificationOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="Doctor / Clinic / Self"
+                      style={tableInp}
+                      value={formData.referredBy || ""}
+                      onChange={e => setFormData({ ...formData, referredBy: e.target.value })}
+                      readOnly={isExistingPatient}
                     />
-                    <button
-                      type="button"
-                      onClick={handleVerifyOtp}
-                      disabled={otpVerifying || !verificationOtp}
-                      style={{ height: "24px", padding: "0 8px", background: "#10B981", color: "#FFF", border: "none", borderRadius: "3px", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}
-                    >
-                      {otpVerifying ? "..." : "Confirm"}
-                    </button>
                   </div>
-                )}
-              </div>
-
-              {/* ROW 4: City | State | PIN Code */}
-              {/* Col 1: City */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  City
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="City"
-                    style={tableInp}
-                    value={formData.addressCity || ""}
-                    onChange={e => handleAddressFieldChange('addressCity', e.target.value)}
-                    readOnly={isExistingPatient}
-                  />
                 </div>
               </div>
 
-              {/* Col 2: State */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  State
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="State"
-                    style={tableInp}
-                    value={formData.addressState || ""}
-                    onChange={e => handleAddressFieldChange('addressState', e.target.value)}
-                    readOnly={isExistingPatient}
-                  />
+              {/* ─── COLUMN 3: RESIDENTIAL ADDRESS ─── */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px", paddingBottom: "3px", borderBottom: "1.5px solid #DDD6FE" }}>
+                  <span style={{ fontSize: "11px" }}>📍</span>
+                  <span style={{ fontSize: "10.5px", fontWeight: 800, color: "#6D28D9", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Residential Address
+                  </span>
                 </div>
-              </div>
 
-              {/* Col 3: PIN Code */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  PIN Code
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="6-digit PIN"
-                    maxLength={6}
-                    style={{ ...tableInp, textAlign: "center" }}
-                    value={formData.addressPincode || ""}
-                    onChange={e => handleAddressFieldChange('addressPincode', e.target.value.replace(/\D/g, '').substring(0, 6))}
-                    readOnly={isExistingPatient}
-                  />
+                {/* 1. Address / Street */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    Address
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="text"
+                      placeholder="Flat / House No., Building, Street"
+                      style={tableInp}
+                      value={streetValue}
+                      onChange={e => handleAddressFieldChange('addressStreet', e.target.value)}
+                      readOnly={isExistingPatient}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* ROW 5: Street Address (Spans 2 cols) | Referred By (Col 3) */}
-              {/* Street Address spanning Col 1 and 2 */}
-              <div style={{ gridColumn: "span 2", display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Address
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="Flat / House No., Building, Street, Locality"
-                    style={tableInp}
-                    value={streetValue}
-                    onChange={e => handleAddressFieldChange('addressStreet', e.target.value)}
-                    readOnly={isExistingPatient}
-                  />
+                {/* 2. City */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    City
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="text"
+                      placeholder="City"
+                      style={tableInp}
+                      value={formData.addressCity || ""}
+                      onChange={e => handleAddressFieldChange('addressCity', e.target.value)}
+                      readOnly={isExistingPatient}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Col 3: Referred By */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
-                  Referred By
-                </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <input
-                    type="text"
-                    placeholder="Doctor / Clinic / Self"
-                    style={tableInp}
-                    value={formData.referredBy || ""}
-                    onChange={e => setFormData({ ...formData, referredBy: e.target.value })}
-                    readOnly={isExistingPatient}
-                  />
+                {/* 3. State */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    State
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="text"
+                      placeholder="State"
+                      style={tableInp}
+                      value={formData.addressState || ""}
+                      onChange={e => handleAddressFieldChange('addressState', e.target.value)}
+                      readOnly={isExistingPatient}
+                    />
+                  </div>
+                </div>
+
+                {/* 4. PIN Code */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                    PIN Code
+                  </label>
+                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="text"
+                      placeholder="6-digit PIN"
+                      maxLength={6}
+                      style={{ ...tableInp, textAlign: "center" }}
+                      value={formData.addressPincode || ""}
+                      onChange={e => handleAddressFieldChange('addressPincode', e.target.value.replace(/\D/g, '').substring(0, 6))}
+                      readOnly={isExistingPatient}
+                    />
+                  </div>
                 </div>
               </div>
 
