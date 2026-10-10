@@ -742,6 +742,27 @@ const ReceptionistDashboard = () => {
   const [serviceSearchQuery, setServiceSearchQuery] = useState('');
   const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
+  // Click-outside listener to auto-close search dropdowns
+  const labTestDropdownRef = useRef(null);
+  const serviceDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleReceptionistClickOutside = (e) => {
+      if (labTestDropdownRef.current && !labTestDropdownRef.current.contains(e.target)) {
+        setShowLabTestDropdown(false);
+      }
+      if (serviceDropdownRef.current && !serviceDropdownRef.current.contains(e.target)) {
+        setShowServiceDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleReceptionistClickOutside);
+    document.addEventListener('touchstart', handleReceptionistClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleReceptionistClickOutside);
+      document.removeEventListener('touchstart', handleReceptionistClickOutside);
+    };
+  }, []);
+
   // Multiple OPD Appointments List for the same patient at the same time
   const [additionalApptsList, setAdditionalApptsList] = useState([]);
 
@@ -12137,49 +12158,64 @@ const ReceptionistDashboard = () => {
                 </label>
                 <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, position: "relative" }}>
-                  <input
-                    type="text"
-                    placeholder="Search diagnostic test (e.g. CBC, Lipid, Thyroid, Urine)..."
-                    style={tableInp}
-                    value={labTestSearchQuery}
-                    onFocus={() => setShowLabTestDropdown(true)}
-                    onChange={e => { setLabTestSearchQuery(e.target.value); setShowLabTestDropdown(true); }}
-                  />
+                  {/* Transparent Backdrop to close on click outside */}
                   {showLabTestDropdown && (
-                    <div style={{
-                      position: "absolute", top: "100%", left: 0, right: 0, marginTop: "2px",
-                      background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "6px",
-                      boxShadow: "0 8px 20px rgba(0,0,0,0.12)", zIndex: 9999, maxHeight: "200px", overflowY: "auto"
-                    }}>
-                      {filteredTests.map((test, idx) => {
-                        const isAdded = selectedLabTestsList.some(item => (item.testCode && item.testCode === test.testCode) || item.testName === test.testName);
-                        return (
-                          <div
-                            key={idx}
-                            onClick={() => {
-                              if (!isAdded) {
-                                const matchedLab = affiliateLabsList.find(l => String(l._id) === effectiveLabId) || defaultAffiliateLab;
-                                setSelectedLabTestsList([
-                                  ...selectedLabTestsList,
-                                  {
-                                    ...test,
-                                    labId: effectiveLabId || (matchedLab?._id ? String(matchedLab._id) : null),
-                                    labName: matchedLab?.name || (affiliateLabsList[0]?.name || 'In-House Laboratory')
-                                  }
-                                ]);
-                              }
-                              setShowLabTestDropdown(false);
-                              setLabTestSearchQuery("");
-                            }}
-                            style={{ padding: "6px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: isAdded ? "default" : "pointer", background: isAdded ? "#F8FAFC" : "#FFFFFF", borderBottom: "1px solid #F1F5F9" }}
-                          >
-                            <span style={{ fontSize: "12px", fontWeight: 600 }}>{test.testName} {test.category && <span style={{ color: "#059669", fontSize: "10px" }}>({test.category})</span>}</span>
-                            <span style={{ fontSize: "12px", fontWeight: 800, color: "#059669" }}>₹{Number(test.price || 0).toFixed(2)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <div
+                      onClick={() => setShowLabTestDropdown(false)}
+                      onMouseDown={() => setShowLabTestDropdown(false)}
+                      style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 9998,
+                        background: 'transparent'
+                      }}
+                    />
                   )}
+                  <div ref={labTestDropdownRef} style={{ position: "relative", zIndex: 9999 }}>
+                    <input
+                      type="text"
+                      placeholder="Search diagnostic test (e.g. CBC, Lipid, Thyroid, Urine)..."
+                      style={tableInp}
+                      value={labTestSearchQuery}
+                      onFocus={() => setShowLabTestDropdown(true)}
+                      onChange={e => { setLabTestSearchQuery(e.target.value); setShowLabTestDropdown(true); }}
+                    />
+                    {showLabTestDropdown && (
+                      <div style={{
+                        position: "absolute", top: "100%", left: 0, right: 0, marginTop: "2px",
+                        background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "6px",
+                        boxShadow: "0 8px 20px rgba(0,0,0,0.12)", zIndex: 10000, maxHeight: "200px", overflowY: "auto"
+                      }}>
+                        {filteredTests.map((test, idx) => {
+                          const isAdded = selectedLabTestsList.some(item => (item.testCode && item.testCode === test.testCode) || item.testName === test.testName);
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                if (!isAdded) {
+                                  const matchedLab = affiliateLabsList.find(l => String(l._id) === effectiveLabId) || defaultAffiliateLab;
+                                  setSelectedLabTestsList([
+                                    ...selectedLabTestsList,
+                                    {
+                                      ...test,
+                                      labId: effectiveLabId || (matchedLab?._id ? String(matchedLab._id) : null),
+                                      labName: matchedLab?.name || (affiliateLabsList[0]?.name || 'In-House Laboratory')
+                                    }
+                                  ]);
+                                }
+                                setShowLabTestDropdown(false);
+                                setLabTestSearchQuery("");
+                              }}
+                              style={{ padding: "6px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: isAdded ? "default" : "pointer", background: isAdded ? "#F8FAFC" : "#FFFFFF", borderBottom: "1px solid #F1F5F9" }}
+                            >
+                              <span style={{ fontSize: "12px", fontWeight: 600 }}>{test.testName} {test.category && <span style={{ color: "#059669", fontSize: "10px" }}>({test.category})</span>}</span>
+                              <span style={{ fontSize: "12px", fontWeight: 800, color: "#059669" }}>₹{Number(test.price || 0).toFixed(2)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -12279,39 +12315,54 @@ const ReceptionistDashboard = () => {
                 </label>
                 <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, position: "relative" }}>
-                  <input
-                    type="text"
-                    placeholder="Search clinical procedure (e.g. Root Canal, Scaling, Dressing)..."
-                    style={tableInp}
-                    value={serviceSearchQuery}
-                    onFocus={() => setShowServiceDropdown(true)}
-                    onChange={e => { setServiceSearchQuery(e.target.value); setShowServiceDropdown(true); }}
-                  />
+                  {/* Transparent Backdrop to close on click outside */}
                   {showServiceDropdown && (
-                    <div style={{
-                      position: "absolute", top: "100%", left: 0, right: 0, marginTop: "2px",
-                      background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "6px",
-                      boxShadow: "0 8px 20px rgba(0,0,0,0.12)", zIndex: 9999, maxHeight: "200px", overflowY: "auto"
-                    }}>
-                      {filteredServices.map((service, idx) => {
-                        const isAdded = selectedServicesList.some(item => (item.serviceCode && item.serviceCode === service.serviceCode) || item.serviceName === service.serviceName);
-                        return (
-                          <div
-                            key={idx}
-                            onClick={() => {
-                              if (!isAdded) setSelectedServicesList([...selectedServicesList, service]);
-                              setShowServiceDropdown(false);
-                              setServiceSearchQuery("");
-                            }}
-                            style={{ padding: "6px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: isAdded ? "default" : "pointer", background: isAdded ? "#F8FAFC" : "#FFFFFF", borderBottom: "1px solid #F1F5F9" }}
-                          >
-                            <span style={{ fontSize: "12px", fontWeight: 600 }}>{service.serviceName} {service.department && <span style={{ color: "#7C3AED", fontSize: "10px" }}>({service.department})</span>}</span>
-                            <span style={{ fontSize: "12px", fontWeight: 800, color: "#7C3AED" }}>₹{Number(service.price || 0).toFixed(2)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <div
+                      onClick={() => setShowServiceDropdown(false)}
+                      onMouseDown={() => setShowServiceDropdown(false)}
+                      style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 9998,
+                        background: 'transparent'
+                      }}
+                    />
                   )}
+                  <div ref={serviceDropdownRef} style={{ position: "relative", zIndex: 9999 }}>
+                    <input
+                      type="text"
+                      placeholder="Search clinical procedure (e.g. Root Canal, Scaling, Dressing)..."
+                      style={tableInp}
+                      value={serviceSearchQuery}
+                      onFocus={() => setShowServiceDropdown(true)}
+                      onChange={e => { setServiceSearchQuery(e.target.value); setShowServiceDropdown(true); }}
+                    />
+                    {showServiceDropdown && (
+                      <div style={{
+                        position: "absolute", top: "100%", left: 0, right: 0, marginTop: "2px",
+                        background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "6px",
+                        boxShadow: "0 8px 20px rgba(0,0,0,0.12)", zIndex: 10000, maxHeight: "200px", overflowY: "auto"
+                      }}>
+                        {filteredServices.map((service, idx) => {
+                          const isAdded = selectedServicesList.some(item => (item.serviceCode && item.serviceCode === service.serviceCode) || item.serviceName === service.serviceName);
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                if (!isAdded) setSelectedServicesList([...selectedServicesList, service]);
+                                setShowServiceDropdown(false);
+                                setServiceSearchQuery("");
+                              }}
+                              style={{ padding: "6px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: isAdded ? "default" : "pointer", background: isAdded ? "#F8FAFC" : "#FFFFFF", borderBottom: "1px solid #F1F5F9" }}
+                            >
+                              <span style={{ fontSize: "12px", fontWeight: 600 }}>{service.serviceName} {service.department && <span style={{ color: "#7C3AED", fontSize: "10px" }}>({service.department})</span>}</span>
+                              <span style={{ fontSize: "12px", fontWeight: 800, color: "#7C3AED" }}>₹{Number(service.price || 0).toFixed(2)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

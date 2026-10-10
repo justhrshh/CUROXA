@@ -121,6 +121,30 @@ async function runTestSuite() {
       await LabRequest.deleteMany({ _id: { $in: [order1._id, orderLegacy._id] } });
     }
 
+    // 6. Test registering a brand new laboratory and auto-affiliating
+    const customLab = await LaboratoryMaster.create({
+      name: 'City Care Molecular Diagnostics',
+      code: `LAB-CCM-${Date.now().toString().slice(-4)}`,
+      email: 'molecular@citycare.com',
+      contact: '9876543219',
+      city: 'Delhi',
+      accreditation: 'NABL Accredited',
+      isActive: true
+    });
+    const configWithCustom = await HospitalAffiliateLabConfig.findOneAndUpdate(
+      { tenantId: testTenantA },
+      {
+        $addToSet: { affiliateLabIds: customLab._id },
+        defaultLabId: customLab._id
+      },
+      { new: true }
+    );
+    if (!configWithCustom.affiliateLabIds.some(id => String(id) === String(customLab._id)) || String(configWithCustom.defaultLabId) !== String(customLab._id)) {
+      throw new Error('New custom lab auto-affiliation or default designation failed');
+    }
+    console.log(`✓ Verified custom laboratory creation and auto-affiliation: "${customLab.name}"`);
+    await LaboratoryMaster.deleteOne({ _id: customLab._id });
+
     // Cleanup test tenant configs
     await HospitalAffiliateLabConfig.deleteMany({ tenantId: { $in: [testTenantA, testTenantB] } });
     console.log('✓ Cleaned up test database artifacts');

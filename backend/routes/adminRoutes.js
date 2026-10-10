@@ -960,5 +960,107 @@ router.post("/affiliate-labs", isAdmin, requireActiveSubscription, async (req, r
   }
 });
 
+// 4. Register a new Laboratory into master catalog and optionally add directly to hospital affiliates
+router.post("/affiliate-labs/new-lab", isAdmin, requireActiveSubscription, async (req, res) => {
+  try {
+    const {
+      name,
+      code,
+      email = '',
+      contact = '',
+      address = '',
+      city = '',
+      state = '',
+      accreditation = 'NABL / CAP',
+      autoAffiliate = true,
+      setAsDefault = false
+    } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: "Laboratory Name is required." });
+    }
+
+    const cleanName = name.trim();
+    let cleanCode = (code || '').trim().toUpperCase();
+
+    if (!cleanCode) {
+      const prefix = cleanName.replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase() || 'LAB';
+      cleanCode = `LAB-${prefix}-${Math.floor(100 + Math.random() * 900)}`;
+    }
+
+    // Check if code already exists, append random suffix if collision
+    const existingCode = await LaboratoryMaster.findOne({ code: cleanCode });
+    if (existingCode) {
+      cleanCode = `${cleanCode}-${Math.floor(10 + Math.random() * 90)}`;
+    }
+
+    const newLab = await LaboratoryMaster.create({
+      name: cleanName,
+      code: cleanCode,
+      email: email.trim(),
+      contact: contact.trim(),
+      address: address.trim(),
+      city: city.trim(),
+      state: state.trim(),
+      accreditation: accreditation.trim() || 'NABL / CAP',
+      isActive: true
+    });
+
+    writeAudit(req, 'CREATE_LABORATORY_MASTER', 'LaboratoryMaster', {
+      labId: newLab._id,
+      name: newLab.name,
+      code: newLab.code
+    });
+
+    let updatedConfig = null;
+    if (autoAffiliate) {
+      let config = await HospitalAffiliateLabConfig.findOne({ tenantId: req.tenantId });
+      let affIds = config ? config.affiliateLabIds.map(id => id.toString()) : [];
+      if (!affIds.includes(newLab._id.toString())) {
+        affIds.push(newLab._id.toString());
+      }
+      let defLab = config?.defaultLabId ? config.defaultLabId.toString() : null;
+      if (setAsDefault || !defLab) {
+        defLab = newLab._id.toString();
+      }
+
+      updatedConfig = await HospitalAffiliateLabConfig.findOneAndUpdate(
+        { tenantId: req.tenantId },
+        {
+          tenantId: req.tenantId,
+          affiliateLabIds: affIds,
+          defaultLabId: defLab,
+          updatedBy: req.user?._id || req.user?.id || null,
+          updatedByName: req.user?.name || 'Administrator'
+        },
+        { upsert: true, returnDocument: 'after' }
+      ).populate('affiliateLabIds').populate('defaultLabId');
+    }
+
+    const allLabs = await LaboratoryMaster.find({ isActive: true }).sort({ name: 1 }).lean();
+
+    res.json({
+      success: true,
+      message: `Laboratory "${newLab.name}" registered successfully.`,
+      lab: newLab,
+      availableLabs: allLabs,
+      config: updatedConfig ? {
+        _id: updatedConfig._id,
+        tenantId: updatedConfig.tenantId,
+        affiliateLabIds: (updatedConfig.affiliateLabIds || []).map(l => l._id),
+        affiliateLabs: updatedConfig.affiliateLabIds || [],
+        defaultLabId: updatedConfig.defaultLabId ? updatedConfig.defaultLabId._id : null,
+        defaultLab: updatedConfig.defaultLabId,
+        updatedAt: updatedConfig.updatedAt,
+        updatedByName: updatedConfig.updatedByName
+      } : null
+    });
+  } catch (error) {
+    console.error("Create new laboratory error:", error);
+    res.status(500).json({ error: error.message || "Failed to create new laboratory." });
+  }
+});
+
 module.exports = router;
+
 

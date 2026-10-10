@@ -193,8 +193,8 @@ export function generateReceiptHtml(receiptData = {}, clinicName = null, options
   <title>${documentTitle} - ${receiptNo}</title>
   <style>
     @page {
-      size: A4 portrait;
-      margin: 4mm 6mm;
+      size: 210mm 148.5mm;
+      margin: 3.5mm 5mm;
     }
     *, *::before, *::after {
       box-sizing: border-box;
@@ -209,17 +209,23 @@ export function generateReceiptHtml(receiptData = {}, clinicName = null, options
       font-family: Arial, Helvetica, sans-serif;
       font-size: 11px;
       line-height: 1.25;
-      width: 100%;
+      width: 210mm;
+      height: 148.5mm;
     }
     .receipt-container {
       width: 100%;
-      max-width: 198mm;
+      max-width: 200mm;
+      min-height: 139mm;
+      height: 139mm;
       margin: 0 auto;
-      padding: 2.5mm 3.5mm;
+      padding: 3.5mm 5mm;
       box-sizing: border-box;
       overflow: hidden;
       page-break-after: avoid;
       border: 1.5px solid #000000;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }
     table {
       width: 100%;
@@ -237,11 +243,19 @@ export function generateReceiptHtml(receiptData = {}, clinicName = null, options
     @media print {
       html, body {
         width: 210mm !important;
+        height: 148.5mm !important;
         margin: 0 !important;
         padding: 0 !important;
       }
       .receipt-container {
+        width: 200mm !important;
+        max-width: 200mm !important;
+        height: 139mm !important;
+        max-height: 139mm !important;
         margin: 0 auto !important;
+        padding: 3.5mm 5mm !important;
+        border: 1.5px solid #000000 !important;
+        box-sizing: border-box !important;
         page-break-after: avoid !important;
       }
       .no-print {
@@ -462,7 +476,7 @@ export const printReceipt = (receiptData = {}, clinicName = null, options = {}) 
     iframe.style.left = '-9999px';
     iframe.style.top = '-9999px';
     iframe.style.width = '210mm';
-    iframe.style.height = '297mm';
+    iframe.style.height = '148.5mm';
     iframe.style.border = '0';
     document.body.appendChild(iframe);
 

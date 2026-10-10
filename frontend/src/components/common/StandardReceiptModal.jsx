@@ -119,11 +119,12 @@ export default function StandardReceiptModal({
       <style>{`
         @media print {
           @page {
-            size: A4 portrait;
-            margin: 4mm 6mm;
+            size: 210mm 148.5mm;
+            margin: 3.5mm 5mm;
           }
           html, body {
             width: 210mm !important;
+            height: 148.5mm !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #FFFFFF !important;
@@ -143,15 +144,20 @@ export default function StandardReceiptModal({
             left: 0 !important;
             right: 0 !important;
             top: 0 !important;
-            width: 198mm !important;
-            max-width: 198mm !important;
-            max-height: 140mm !important;
+            width: 200mm !important;
+            max-width: 200mm !important;
+            height: 139mm !important;
+            max-height: 139mm !important;
             margin: 0 auto !important;
-            padding: 2.5mm 3.5mm !important;
+            padding: 3.5mm 5mm !important;
             border: 1.5px solid #000000 !important;
             box-shadow: none !important;
             page-break-after: avoid !important;
             overflow: hidden !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
           }
           .no-print {
             display: none !important;

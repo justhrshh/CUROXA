@@ -1032,6 +1032,19 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   const [isAffiliateLabDropdownOpen, setIsAffiliateLabDropdownOpen] = useState(false);
   const [affiliateLabSaving, setAffiliateLabSaving] = useState(false);
   const [affiliateLabLoading, setAffiliateLabLoading] = useState(false);
+  const affiliateLabDropdownRef = useRef(null);
+  const [isAddCustomLabModalOpen, setIsAddCustomLabModalOpen] = useState(false);
+  const [customLabForm, setCustomLabForm] = useState({
+    name: '',
+    code: '',
+    contact: '',
+    email: '',
+    address: '',
+    city: '',
+    accreditation: 'NABL Accredited',
+    makeDefault: false
+  });
+  const [customLabSubmitting, setCustomLabSubmitting] = useState(false);
 
   // Lab Request Processing Modal states (from Alerts / Live queue)
   const [processingLabAlert, setProcessingLabAlert] = useState(null);
@@ -1809,6 +1822,80 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       showToast(err.response?.data?.error || 'Failed to save configuration.', 'error');
     } finally {
       setAffiliateLabSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleAdminClickOutside = (e) => {
+      if (affiliateLabDropdownRef.current && !affiliateLabDropdownRef.current.contains(e.target)) {
+        setIsAffiliateLabDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleAdminClickOutside);
+    document.addEventListener('touchstart', handleAdminClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleAdminClickOutside);
+      document.removeEventListener('touchstart', handleAdminClickOutside);
+    };
+  }, []);
+
+  const handleCreateCustomLab = async (e) => {
+    if (e) e.preventDefault();
+    if (!customLabForm.name.trim()) {
+      showToast('Please enter Laboratory Name', 'error');
+      return;
+    }
+    setCustomLabSubmitting(true);
+    try {
+      const res = await api.post('/admin/affiliate-labs/new-lab', {
+        name: customLabForm.name.trim(),
+        code: customLabForm.code.trim(),
+        contact: customLabForm.contact.trim(),
+        email: customLabForm.email.trim(),
+        address: customLabForm.address.trim(),
+        city: customLabForm.city.trim(),
+        accreditation: customLabForm.accreditation.trim() || 'NABL Accredited',
+        autoAffiliate: true,
+        setAsDefault: customLabForm.makeDefault
+      });
+      if (res.data?.success) {
+        showToast(res.data.message || `Laboratory "${customLabForm.name}" registered successfully!`, 'success');
+        setIsAddCustomLabModalOpen(false);
+        const createdLab = res.data.lab;
+        const newLabId = createdLab ? String(createdLab._id) : '';
+        if (res.data.availableLabs) {
+          setAvailableMasterLabs(res.data.availableLabs);
+        } else if (createdLab) {
+          setAvailableMasterLabs(prev => [createdLab, ...prev]);
+        }
+        if (res.data.config) {
+          const cfg = res.data.config;
+          setAffiliateLabConfig(cfg);
+          const affIds = (cfg.affiliateLabIds || []).map(id => String(id));
+          setSelectedAffiliateLabIds(affIds);
+          setSelectedDefaultLabId(cfg.defaultLabId ? String(cfg.defaultLabId) : (affIds[0] || ''));
+        } else if (newLabId) {
+          setSelectedAffiliateLabIds(prev => prev.includes(newLabId) ? prev : [...prev, newLabId]);
+          if (customLabForm.makeDefault) {
+            setSelectedDefaultLabId(newLabId);
+          }
+        }
+        setCustomLabForm({
+          name: '',
+          code: '',
+          contact: '',
+          email: '',
+          address: '',
+          city: '',
+          accreditation: 'NABL Accredited',
+          makeDefault: false
+        });
+      }
+    } catch (err) {
+      console.error('Create custom lab error:', err);
+      showToast(err.response?.data?.error || 'Failed to create new laboratory', 'error');
+    } finally {
+      setCustomLabSubmitting(false);
     }
   };
 
@@ -12030,7 +12117,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                         background: activeTab === 'services-catalog' ? '#0F172A' : '#F1F5F9',
                         color: activeTab === 'services-catalog' ? '#FFFFFF' : '#64748B'
                       }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M17 9.5a3.5 3.5 0 0 0-7 0c0 2.5 3.5 3.5 4.5s3.5 2.5 3.5 4.5a3.5 3.5 0 0 1-7 0"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
                       </div>
                       <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'services-catalog' ? 700 : 600, color: activeTab === 'services-catalog' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
                         Pricing & Procedures
@@ -25054,6 +25141,29 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     </button>
                     <button
                       type="button"
+                      onClick={() => setIsAddCustomLabModalOpen(true)}
+                      style={{
+                        padding: '10px 18px',
+                        background: '#ECFDF5',
+                        border: '1.5px solid #10B981',
+                        borderRadius: '10px',
+                        color: '#065F46',
+                        fontWeight: 800,
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                      </svg>
+                      + Register New Lab
+                    </button>
+                    <button
+                      type="button"
                       onClick={handleSaveAffiliateLabs}
                       disabled={affiliateLabSaving || affiliateLabLoading}
                       style={{
@@ -25142,65 +25252,81 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
                       {/* Searchable Multi-Select Control */}
                       <div style={{ position: 'relative' }}>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <div style={{ position: 'relative', flex: 1 }}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}>
-                              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                            </svg>
-                            <input
-                              type="text"
-                              value={affiliateLabSearch}
-                              onChange={(e) => {
-                                setAffiliateLabSearch(e.target.value);
-                                setIsAffiliateLabDropdownOpen(true);
-                              }}
-                              onFocus={() => setIsAffiliateLabDropdownOpen(true)}
-                              placeholder="Search laboratory catalog by name, code, city, or accreditation..."
+                        {/* Transparent Backdrop to close on click outside */}
+                        {isAffiliateLabDropdownOpen && (
+                          <div 
+                            onClick={() => setIsAffiliateLabDropdownOpen(false)}
+                            onMouseDown={() => setIsAffiliateLabDropdownOpen(false)}
+                            style={{
+                              position: 'fixed',
+                              inset: 0,
+                              zIndex: 999,
+                              background: 'rgba(0, 0, 0, 0.001)',
+                              cursor: 'default'
+                            }}
+                          />
+                        )}
+
+                        <div ref={affiliateLabDropdownRef} style={{ position: 'relative', zIndex: 1000 }}>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <div style={{ position: 'relative', flex: 1 }}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}>
+                                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                              </svg>
+                              <input
+                                type="text"
+                                value={affiliateLabSearch}
+                                onChange={(e) => {
+                                  setAffiliateLabSearch(e.target.value);
+                                  setIsAffiliateLabDropdownOpen(true);
+                                }}
+                                onFocus={() => setIsAffiliateLabDropdownOpen(true)}
+                                placeholder="Search laboratory catalog by name, code, city, or accreditation..."
+                                style={{
+                                  width: '100%',
+                                  height: '44px',
+                                  padding: '0 12px 0 38px',
+                                  border: '1.5px solid #CBD5E1',
+                                  borderRadius: '10px',
+                                  fontSize: '13.5px',
+                                  fontWeight: 600,
+                                  outline: 'none'
+                                }}
+                              />
+                              {affiliateLabSearch && (
+                                <button
+                                  type="button"
+                                  onClick={() => setAffiliateLabSearch('')}
+                                  style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontWeight: 800 }}
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsAffiliateLabDropdownOpen(!isAffiliateLabDropdownOpen)}
                               style={{
-                                width: '100%',
                                 height: '44px',
-                                padding: '0 12px 0 38px',
+                                padding: '0 16px',
+                                background: '#F8FAFC',
                                 border: '1.5px solid #CBD5E1',
                                 borderRadius: '10px',
-                                fontSize: '13.5px',
-                                fontWeight: 600,
-                                outline: 'none'
+                                fontWeight: 700,
+                                fontSize: '13px',
+                                color: '#334155',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
                               }}
-                            />
-                            {affiliateLabSearch && (
-                              <button
-                                type="button"
-                                onClick={() => setAffiliateLabSearch('')}
-                                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontWeight: 800 }}
-                              >
-                                ✕
-                              </button>
-                            )}
+                            >
+                              Browse All ({availableMasterLabs.length})
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="6 9 12 15 18 9"/>
+                              </svg>
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setIsAffiliateLabDropdownOpen(!isAffiliateLabDropdownOpen)}
-                            style={{
-                              height: '44px',
-                              padding: '0 16px',
-                              background: '#F8FAFC',
-                              border: '1.5px solid #CBD5E1',
-                              borderRadius: '10px',
-                              fontWeight: 700,
-                              fontSize: '13px',
-                              color: '#334155',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px'
-                            }}
-                          >
-                            Browse All ({availableMasterLabs.length})
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="6 9 12 15 18 9"/>
-                            </svg>
-                          </button>
-                        </div>
 
                         {/* Dropdown Menu */}
                         {isAffiliateLabDropdownOpen && (
@@ -25306,6 +25432,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                             )}
                           </div>
                         )}
+                        </div>
                       </div>
 
                       {/* Selected Labs Chips Grid */}
@@ -25463,6 +25590,207 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 )}
               </div>
+              {/* Register New Laboratory Modal */}
+              {isAddCustomLabModalOpen && (
+                <div 
+                  className="admin-modal-overlay" 
+                  onClick={() => setIsAddCustomLabModalOpen(false)}
+                  style={{ 
+                    position: 'fixed',
+                    inset: 0,
+                    background: 'rgba(15, 23, 42, 0.65)',
+                    backdropFilter: 'blur(5px)',
+                    zIndex: 99999,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '20px'
+                  }}
+                >
+                  <div 
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      background: '#FFFFFF',
+                      borderRadius: '18px',
+                      width: '100%',
+                      maxWidth: '560px',
+                      boxShadow: '0 25px 60px rgba(0,0,0,0.25)',
+                      border: '1px solid #E2E8F0',
+                      overflow: 'hidden',
+                      animation: 'slideUp 0.3s ease-out'
+                    }}
+                  >
+                    {/* Modal Header */}
+                    <div style={{ padding: '20px 24px', background: 'linear-gradient(135deg, #065F46 0%, #059669 100%)', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+                            <path d="M10 2v7.31L4.89 20a2 2 0 0 0 1.78 3h14.66a2 2 0 0 0 1.78-3L18 9.31V2"/>
+                            <path d="M8.5 2h7"/>
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800 }}>Register New Laboratory</h3>
+                          <p style={{ margin: 0, fontSize: '12px', opacity: 0.9 }}>Add an external or internal diagnostic facility to master catalog</p>
+                        </div>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setIsAddCustomLabModalOpen(false)}
+                        style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#FFF', width: '30px', height: '30px', borderRadius: '8px', cursor: 'pointer', fontWeight: 800, fontSize: '15px' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {/* Modal Form */}
+                    <form onSubmit={handleCreateCustomLab} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div>
+                        <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#0F172A', display: 'block', marginBottom: '6px' }}>
+                          Laboratory Name <span style={{ color: '#EF4444' }}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={customLabForm.name}
+                          onChange={e => setCustomLabForm({ ...customLabForm, name: e.target.value })}
+                          placeholder="e.g. Thyrocare Central Diagnostic Laboratory"
+                          style={{ width: '100%', height: '40px', padding: '0 12px', border: '1.5px solid #CBD5E1', borderRadius: '8px', fontSize: '13px', fontWeight: 600, outline: 'none' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                        <div>
+                          <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                            Lab Code / Identifier
+                          </label>
+                          <input
+                            type="text"
+                            value={customLabForm.code}
+                            onChange={e => setCustomLabForm({ ...customLabForm, code: e.target.value.toUpperCase() })}
+                            placeholder="e.g. LAB-THY-001 (Auto-generated if empty)"
+                            style={{ width: '100%', height: '38px', padding: '0 12px', border: '1.5px solid #CBD5E1', borderRadius: '8px', fontSize: '12.5px', fontWeight: 600, outline: 'none' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                            Accreditation
+                          </label>
+                          <select
+                            value={customLabForm.accreditation}
+                            onChange={e => setCustomLabForm({ ...customLabForm, accreditation: e.target.value })}
+                            style={{ width: '100%', height: '38px', padding: '0 10px', border: '1.5px solid #CBD5E1', borderRadius: '8px', fontSize: '12.5px', fontWeight: 600, outline: 'none', background: '#FFFFFF' }}
+                          >
+                            <option value="NABL Accredited">NABL Accredited</option>
+                            <option value="CAP Certified">CAP Certified</option>
+                            <option value="ISO 15189 Certified">ISO 15189 Certified</option>
+                            <option value="ICMR Approved">ICMR Approved</option>
+                            <option value="Standard Reference Laboratory">Standard Reference Laboratory</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                        <div>
+                          <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                            Contact Phone
+                          </label>
+                          <input
+                            type="text"
+                            value={customLabForm.contact}
+                            onChange={e => setCustomLabForm({ ...customLabForm, contact: e.target.value })}
+                            placeholder="e.g. 9876543210 / 011-234567"
+                            style={{ width: '100%', height: '38px', padding: '0 12px', border: '1.5px solid #CBD5E1', borderRadius: '8px', fontSize: '12.5px', fontWeight: 600, outline: 'none' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                            Email Address
+                          </label>
+                          <input
+                            type="email"
+                            value={customLabForm.email}
+                            onChange={e => setCustomLabForm({ ...customLabForm, email: e.target.value })}
+                            placeholder="e.g. reports@lab.com"
+                            style={{ width: '100%', height: '38px', padding: '0 12px', border: '1.5px solid #CBD5E1', borderRadius: '8px', fontSize: '12.5px', fontWeight: 600, outline: 'none' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                        <div>
+                          <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                            City / District
+                          </label>
+                          <input
+                            type="text"
+                            value={customLabForm.city}
+                            onChange={e => setCustomLabForm({ ...customLabForm, city: e.target.value })}
+                            placeholder="e.g. New Delhi"
+                            style={{ width: '100%', height: '38px', padding: '0 12px', border: '1.5px solid #CBD5E1', borderRadius: '8px', fontSize: '12.5px', fontWeight: 600, outline: 'none' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                            Full Address
+                          </label>
+                          <input
+                            type="text"
+                            value={customLabForm.address}
+                            onChange={e => setCustomLabForm({ ...customLabForm, address: e.target.value })}
+                            placeholder="e.g. Sector 18, Medical Complex"
+                            style={{ width: '100%', height: '38px', padding: '0 12px', border: '1.5px solid #CBD5E1', borderRadius: '8px', fontSize: '12.5px', fontWeight: 600, outline: 'none' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ background: '#F8FAFC', padding: '12px 14px', borderRadius: '10px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input
+                          type="checkbox"
+                          id="makeDefaultLabCheckbox"
+                          checked={customLabForm.makeDefault}
+                          onChange={e => setCustomLabForm({ ...customLabForm, makeDefault: e.target.checked })}
+                          style={{ width: '16px', height: '16px', accentColor: '#059669', cursor: 'pointer' }}
+                        />
+                        <label htmlFor="makeDefaultLabCheckbox" style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B', cursor: 'pointer' }}>
+                          Set this new laboratory as Default Facility for test bookings
+                        </label>
+                      </div>
+
+                      {/* Modal Footer */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddCustomLabModalOpen(false)}
+                          style={{ padding: '10px 18px', background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: '8px', color: '#475569', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={customLabSubmitting}
+                          style={{
+                            padding: '10px 22px',
+                            background: '#059669',
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: '#FFFFFF',
+                            fontWeight: 800,
+                            fontSize: '13px',
+                            cursor: customLabSubmitting ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 6px rgba(5,150,105,0.25)'
+                          }}
+                        >
+                          {customLabSubmitting ? 'Registering...' : 'Register & Add Lab'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}
