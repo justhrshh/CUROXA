@@ -45,7 +45,7 @@ export default function MasterManagementView() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState('');
 
-  // Sub-navigation: 'catalog' | 'hospital-pricing' | 'approvals' | 'uploads'
+  // Sub-navigation: 'catalog' | 'hospital-pricing' (Clinic Pricing) | 'approvals' | 'uploads'
   const [activeSubTab, setActiveSubTab] = useState('catalog');
 
   // Master Categories from registry
@@ -176,7 +176,7 @@ export default function MasterManagementView() {
       const dept = deptOverride !== undefined ? deptOverride : selectedDepartment;
       await downloadHospitalExcel(selectedCategory, dept);
     } catch (err) {
-      setExportError(err.message || 'Export Hospital Excel failed');
+      setExportError(err.message || 'Export Clinic Excel failed');
     } finally {
       setIsExporting(false);
     }
@@ -259,7 +259,7 @@ export default function MasterManagementView() {
           Catalog
         </button>
 
-        {/* Hospital Pricing */}
+        {/* Clinic Pricing */}
         <button
           type="button"
           onClick={() => setActiveSubTab('hospital-pricing')}
@@ -279,11 +279,11 @@ export default function MasterManagementView() {
           }}
         >
           <LucideIcon name="building-2" size={13} color={activeSubTab === 'hospital-pricing' ? '#7C3AED' : '#64748B'} />
-          Hospital Pricing
+          Clinic Pricing
         </button>
       </div>
 
-      {/* ── HOSPITAL MASTER PRICING & CONFIGURATION VIEW ── */}
+      {/* ── CLINIC MASTER PRICING & CONFIGURATION VIEW ── */}
       {activeSubTab === 'hospital-pricing' && (
         <HospitalMasterConfigView onSwitchTab={setActiveSubTab} />
       )}

@@ -130,7 +130,7 @@ export default function ExcelDropzone({
               <LucideIcon name="file-spreadsheet" size={26} />
             </div>
             <div style={{ fontSize: '14px', fontWeight: 700, color: '#1E293B' }}>
-              Drag & Drop your Hospital Master Excel workbook here
+              Drag & Drop your Clinic Master Excel workbook here
             </div>
             <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
               or click to browse from your computer (.xlsx or .xls, max 25MB)

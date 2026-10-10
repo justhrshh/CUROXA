@@ -625,7 +625,7 @@ const HospitalIdentityStep = ({ wizardHospital, updateWizardField }) => {
             {wizardHospital && wizardHospital.logo ? (
               <img
                 src={wizardHospital.logo}
-                alt="Hospital Logo"
+                alt="Clinic Logo"
                 style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '6px' }}
               />
             ) : (
@@ -675,9 +675,9 @@ const HospitalIdentityStep = ({ wizardHospital, updateWizardField }) => {
           <p style={{ margin: '4px 0 0 0', fontSize: '9px', color: '#94A3B8', textAlign: 'center' }}>PNG / JPG / SVG · max 2 MB</p>
         </div>
 
-        {/* Hospital Name Edit */}
+        {/* Clinic Name Edit */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '8px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Hospital Name</span>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Clinic Name</span>
           {editingHospName ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <input
@@ -692,7 +692,7 @@ const HospitalIdentityStep = ({ wizardHospital, updateWizardField }) => {
                   outline: 'none', background: '#FFFFFF',
                   boxSizing: 'border-box',
                 }}
-                placeholder="Enter hospital name"
+                placeholder="Enter clinic name"
               />
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
@@ -1164,7 +1164,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
   // Business Intelligence & Reports sub-view state (Step 9)
   const [biSubTab, setBiSubTab] = useState('bi-dashboard'); 
   const [drillDownPath, setDrillDownPath] = useState(['Revenue']);
-  const [customReportForm, setCustomReportForm] = useState({ source: 'Invoices', groupField: 'Hospital', aggType: 'Sum', calcField: 'Amount', reportName: 'New Hospital Ingress Report' });
+  const [customReportForm, setCustomReportForm] = useState({ source: 'Invoices', groupField: 'Clinic', aggType: 'Sum', calcField: 'Amount', reportName: 'New Hospital Ingress Report' });
   const [scheduleReportForm, setScheduleReportForm] = useState({ reportType: 'Weekly Revenue Summary', frequency: 'Weekly', format: 'PDF', recipientEmail: 'ceo@quroxa.com' });
 
   // Global Item Master and Item Requests state
@@ -1356,7 +1356,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   // Support creator form state
   const [newTicketForm, setNewTicketForm] = useState({ hospitalName: '', contactPerson: '', department: 'Pharmacy', priority: 'High', category: 'Technical Issue', assignedExecutive: 'Platform Admin', description: '' });
-  const [broadcastForm, setBroadcastForm] = useState({ audience: 'All Hospital Administrators', subject: '', message: '' });
+  const [broadcastForm, setBroadcastForm] = useState({ audience: 'All Clinic Administrators', subject: '', message: '' });
 
   // Global overlay drawers / search / action states
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
@@ -2947,7 +2947,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
   // Active Onboarding accounts
   const [onboardingHospitals, setOnboardingHospitals] = useState([]);
 
-  // Active Hospitals Database (Step 4 Core)
+  // Active Clinics Database (Step 4 Core)
   const [hospitals, setHospitals] = useState([]);
   const [isTogglingMap, setIsTogglingMap] = useState({});
   const [billingCycle, setBillingCycle] = useState('monthly');
@@ -3452,7 +3452,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const renderOnboardingWizard = () => {
     const steps = [
-      { id: 1, label: 'Basic Information', sub: 'Hospital identity & branding', icon: 'building-2' },
+      { id: 1, label: 'Basic Information', sub: 'Clinic identity & branding', icon: 'building-2' },
       { id: 2, label: 'Legal & Compliance', sub: 'GST, CIN & CDSCO License', icon: 'file-check-2' },
       { id: 3, label: 'Subscription & Licensing', sub: 'Plan selection & quotas', icon: 'credit-card' },
       { id: 4, label: 'User & Role Provisioning', sub: 'Admin master credentials', icon: 'shield-check' },
@@ -3632,7 +3632,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
     const handleAddOnboardingStaff = async (payload) => {
       if (!wizardHospital) {
-        showToast('No active hospital found.', 'error');
+        showToast('No active clinic found.', 'error');
         return;
       }
 
@@ -3777,12 +3777,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
     const getStepValidation = (step) => {
       const missing = [];
       if (step === 1) {
-        if (!wizardHospital.name?.trim()) missing.push('Hospital Name');
+        if (!wizardHospital.name?.trim()) missing.push('Clinic Name');
         if (!wizardHospital.contactName?.trim()) missing.push('Primary Contact Person');
         if (!wizardHospital.contactEmail?.trim()) {
           missing.push('Contact Email');
         } else if (!validateEmailFormat(wizardHospital.contactEmail)) {
-          missing.push('Contact Email in valid format (e.g. name@hospital.com)');
+          missing.push('Contact Email in valid format (e.g. name@clinic.com)');
         }
         if (!wizardHospital.city?.trim()) missing.push('City');
         if (!wizardHospital.address?.trim()) missing.push('Street Address');
@@ -3828,7 +3828,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
         if (!wizardHospital.adminEmail?.trim()) {
           missing.push('Admin Work Email');
         } else if (!validateEmailFormat(wizardHospital.adminEmail)) {
-          missing.push('Admin Work Email in valid format (e.g. admin@hospital.com)');
+          missing.push('Admin Work Email in valid format (e.g. admin@clinic.com)');
         }
         if (!wizardHospital.adminPhone?.trim() || wizardHospital.adminPhone.length !== 10) missing.push('Admin Telephone (10 digits)');
         if (!wizardHospital.adminPassword?.trim()) missing.push('Security Password');
@@ -3991,13 +3991,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
               }}
             >
               <LucideIcon name="arrow-left" style={{ width: '13px', height: '13px' }} />
-              <span>Back to Hospitals</span>
+              <span>Back to Clinics</span>
             </div>
 
             {/* Title Row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <h1 style={{ margin: 0, fontSize: '19px', fontWeight: 850, color: '#0F172A', letterSpacing: '-0.3px' }}>
-                Add New Hospital
+                Add New Clinic
               </h1>
               <span style={{
                 display: 'inline-flex',
@@ -4030,7 +4030,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               </span>
             </div>
             <p style={{ margin: 0, fontSize: '12px', color: '#64748B' }}>
-              Register a corporate hospital and configure their enterprise license, facilities, compliance, and administrator credentials.
+              Register a corporate clinic and configure their enterprise license, facilities, compliance, and administrator credentials.
             </p>
           </div>
 
@@ -4109,7 +4109,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 </>
               ) : (
                 <>
-                  <span>{wizardStep === totalSteps ? 'Register Hospital' : 'Save & Next'}</span>
+                  <span>{wizardStep === totalSteps ? 'Register Clinic' : 'Save & Next'}</span>
                   <LucideIcon name="arrow-right" style={{ width: '14px', height: '14px' }} />
                 </>
               )}
@@ -4365,7 +4365,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       }}>
                         <LucideIcon name="building-2" style={{ width: '12px', height: '12px', color: '#2563EB' }} />
                         <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                          1. Hospital Core Information
+                          1. Clinic Core Information
                         </span>
                       </div>
 
@@ -4373,7 +4373,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <FloatingInput
                             compact
-                            label="Hospital Name"
+                            label="Clinic Name"
                             required
                             value={wizardHospital.name || ''}
                             onChange={e => updateWizardField('name', e.target.value)}
@@ -4384,7 +4384,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           <div style={{ position: 'relative', width: '100%' }}>
                             <FloatingInput
                               compact
-                              label="Hospital Type"
+                              label="Clinic Type"
                               optional
                               value={wizardHospital.hospitalType || ''}
                               onFocus={() => setHospitalTypeSearchOpen(true)}
@@ -4636,7 +4636,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     </div>
                   </div>
 
-                  {/* RIGHT COLUMN: Hospital Identity & Branding Logo Card */}
+                  {/* RIGHT COLUMN: Clinic Identity & Branding Logo Card */}
                   <div style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -4648,7 +4648,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 850, color: '#0F172A' }}>Hospital Logo</span>
+                      <span style={{ fontSize: '12px', fontWeight: 850, color: '#0F172A' }}>Clinic Logo</span>
                       <span style={{
                         fontSize: '8.5px',
                         fontWeight: 750,
@@ -4696,7 +4696,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       {wizardHospital?.logo ? (
                         <img
                           src={wizardHospital.logo}
-                          alt="Hospital Logo"
+                          alt="Clinic Logo"
                           style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '6px' }}
                         />
                       ) : (
@@ -5108,7 +5108,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         CLINICAL OPERATIONS <span style={{ color: '#EF4444', fontWeight: 800 }}>*</span>
                       </h4>
                       <p style={{ margin: '3px 0 0', fontSize: '11.5px', color: '#64748B' }}>
-                        Configure the clinical operating mode and active functional modules for this hospital node.
+                        Configure the clinical operating mode and active functional modules for this clinic node.
                       </p>
                     </div>
 
@@ -5186,7 +5186,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             </strong>
                           </div>
                           <p style={{ margin: 0, fontSize: '11px', color: '#64748B', lineHeight: 1.45, paddingLeft: '22px' }}>
-                            Doctors use Quroxa for HR/self-service only. Clinical consultation and handwritten prescriptions are handled through the hospital's offline workflow.
+                            Doctors use Quroxa for HR/self-service only. Clinical consultation and handwritten prescriptions are handled through the clinic's offline workflow.
                           </p>
                         </div>
                       </div>
@@ -5196,10 +5196,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       <div>
                         <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '2px' }}>
-                          HOSPITAL SERVICES & MODULE CONFIGURATION
+                          CLINIC SERVICES & MODULE CONFIGURATION
                         </label>
                         <p style={{ margin: 0, fontSize: '11px', color: '#64748B' }}>
-                          Enable or disable specific modules based on hospital facilities.
+                          Enable or disable specific modules based on clinic facilities.
                         </p>
                       </div>
 
@@ -5308,7 +5308,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
                       {(!wizardHospital.provisionedUsers || wizardHospital.provisionedUsers.length === 0) ? (
                         <div style={{ gridColumn: '1 / -1', padding: '24px', textAlign: 'center', background: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: '10px' }}>
-                          <span style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>No staff members provisioned yet. Click "+ Add Onboarding User" above to add staff to this hospital.</span>
+                          <span style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>No staff members provisioned yet. Click "+ Add Onboarding User" above to add staff to this clinic.</span>
                         </div>
                       ) : (
                         wizardHospital.provisionedUsers.map((u, i) => {
@@ -5439,7 +5439,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             onChange={e => updateWizardField('adminEmail', e.target.value)} 
                           />
                           {wizardHospital.adminEmail && !validateEmailFormat(wizardHospital.adminEmail) && (
-                            <span style={{ fontSize: '10.5px', color: '#EF4444', marginTop: '4px', fontWeight: 600 }}>⚠️ Please enter a valid email address (e.g. admin@hospital.com).</span>
+                            <span style={{ fontSize: '10.5px', color: '#EF4444', marginTop: '4px', fontWeight: 600 }}>⚠️ Please enter a valid email address (e.g. admin@clinic.com).</span>
                           )}
                         </div>
                         <div style={styles.formCol}>
@@ -5512,7 +5512,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>Step 5: Review & Validation</h2>
-                      <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#64748B' }}>Review all completed configurations before activating the hospital.</p>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#64748B' }}>Review all completed configurations before activating the clinic.</p>
                     </div>
                     <div style={{ display: 'flex', gap: '10px' }}>
                       <button 
@@ -5622,7 +5622,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {[
-                        { id: 1, title: 'Step 1: Basic Info & Branding', desc: 'Hospital identity, branding emblem & location verified.', details: `Hospital Name: ${wizardHospital.name || 'Not Provided'}\nLogo: ${wizardHospital.logo ? 'Uploaded' : 'None'}\nContact Email: ${wizardHospital.contactEmail || 'Not Provided'}\nCity: ${wizardHospital.city || 'Not Provided'}` },
+                        { id: 1, title: 'Step 1: Basic Info & Branding', desc: 'Hospital identity, branding emblem & location verified.', details: `Clinic Name: ${wizardHospital.name || 'Not Provided'}\nLogo: ${wizardHospital.logo ? 'Uploaded' : 'None'}\nContact Email: ${wizardHospital.contactEmail || 'Not Provided'}\nCity: ${wizardHospital.city || 'Not Provided'}` },
                         { id: 2, title: 'Step 2: Legal & Compliance', desc: 'Regulatory documents and compliance certifications signed.', details: `PAN Number: ${wizardHospital.panNumber || 'Not Provided'}\nGSTIN: ${wizardHospital.gstin || 'Not Provided'}\nCorporate ID (CIN): ${wizardHospital.corpId || 'Not Provided'}\nAuthorized Signatory: ${wizardHospital.signatoryName || 'Not Provided'}\nDrug License: ${wizardHospital.drugLicense || 'Not Provided'}` },
                         { id: 3, title: 'Step 3: Subscription & Licensing', desc: 'Entitlements, clinical operating mode & active modules.', details: `Subscription Tier: ${(wizardHospital.subscriptionPlan || 'Not Provided').toUpperCase()}\nBilling Cycle: ${(wizardHospital.billingCycle || 'Not Provided').toUpperCase()}\nContract Duration: ${wizardHospital.contractDurationYears || 0} Year(s)\nDoctor Clinical Mode: ${wizardHospital.doctorClinicalMode || 'ONLINE'}\nModules: Reception (${isModuleEnabled('reception') ? 'ON' : 'OFF'}), Doctor (${isModuleEnabled('doctor') ? 'ON' : 'OFF'}), Pharmacy (${isModuleEnabled('pharmacy') ? 'ON' : 'OFF'}), Laboratory (${isModuleEnabled('laboratory') ? 'ON' : 'OFF'})` },
                         { id: 4, title: 'Step 4: User & Role Provisioning', desc: 'RBAC matrices applied to staff members.', details: `Sandbox Database Link: ${wizardHospital.sandboxDbUrl || 'Pending'}\nAdmin Username: ${wizardHospital.adminEmail || 'Not Provided'}\nProvisioned Users: Configured` }
@@ -5688,7 +5688,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       <strong style={{ fontSize: '14px', color: '#0F172A', fontWeight: 805 }}>Outstanding Issues</strong>
                       {(() => {
                         const issues = [];
-                        if (!wizardHospital.name) issues.push({ severity: 'HIGH', label: 'Hospital Name Missing', module: 'Identity', desc: 'Specify name in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 1 });
+                        if (!wizardHospital.name) issues.push({ severity: 'HIGH', label: 'Clinic Name Missing', module: 'Identity', desc: 'Specify name in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 1 });
                         if (!wizardHospital.contactEmail) issues.push({ severity: 'MEDIUM', label: 'Contact Email Missing', module: 'Identity', desc: 'Provide contact details in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Today', step: 1 });
                         if (!wizardHospital.panNumber) issues.push({ severity: 'HIGH', label: 'PAN Document Missing', module: 'Compliance', desc: 'Upload PAN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 2 });
                         if (!wizardHospital.gstin) issues.push({ severity: 'HIGH', label: 'GSTIN Registration Missing', module: 'Compliance', desc: 'Provide GSTIN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 2 });
@@ -5712,7 +5712,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                     {(() => {
                       const issues = [];
-                      if (!wizardHospital.name) issues.push({ severity: 'HIGH', label: 'Hospital Name Missing', module: 'Identity', desc: 'Specify name in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 1 });
+                      if (!wizardHospital.name) issues.push({ severity: 'HIGH', label: 'Clinic Name Missing', module: 'Identity', desc: 'Specify name in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 1 });
                       if (!wizardHospital.contactEmail) issues.push({ severity: 'MEDIUM', label: 'Contact Email Missing', module: 'Identity', desc: 'Provide contact details in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Today', step: 1 });
                       if (!wizardHospital.panNumber) issues.push({ severity: 'HIGH', label: 'PAN Document Missing', module: 'Compliance', desc: 'Upload PAN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 2 });
                       if (!wizardHospital.gstin) issues.push({ severity: 'HIGH', label: 'GSTIN Registration Missing', module: 'Compliance', desc: 'Provide GSTIN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 2 });
@@ -5996,7 +5996,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     </div>
                     <div>
                       <div style={{ fontSize: '14px', fontWeight: 850, color: wizardHospital.name ? '#0F172A' : '#64748B' }}>
-                        {wizardHospital.name || 'Hospital Name Unspecified'}
+                        {wizardHospital.name || 'Clinic Name Unspecified'}
                       </div>
                       <div style={{ 
                         fontSize: '10px', 
@@ -6270,7 +6270,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   transition: 'all 0.2s'
                 }}
               >
-                {isActivating ? 'Onboarding Hospital...' : 'Complete Onboarding & Go Live'}
+                {isActivating ? 'Onboarding Clinic...' : 'Complete Onboarding & Go Live'}
                 {!isActivating && <LucideIcon name="rocket" style={{ width: '15px', height: '15px' }} />}
               </button>
             )}
@@ -6292,8 +6292,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
             }}
           >
             <StaffOnboardingPage 
-              hospitalName={wizardHospital?.name || 'Hospital'}
-              backLabel="Back to Hospital Onboarding"
+              hospitalName={wizardHospital?.name || 'Clinic'}
+              backLabel="Back to Clinic Onboarding"
               availableRoles={[
                 { value: 'doctor', label: 'Doctor' },
                 { value: 'receptionist', label: 'Receptionist' },
@@ -6301,7 +6301,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 { value: 'hr', label: 'HR Manager' },
                 { value: 'pharmacist', label: 'Pharmacist' },
                 { value: 'laboratory', label: 'Lab Technician' },
-                { value: 'admin', label: 'Hospital Admin' },
+                { value: 'admin', label: 'Clinic Admin' },
                 { value: 'staff', label: 'Other Employee' }
               ]}
               showToast={showToast}
@@ -6737,7 +6737,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 <LucideIcon name="search" style={{ position: 'absolute', left: '10px', width: '14px', height: '14px', color: '#94A3B8' }} />
                 <input
                   type="text"
-                  placeholder="Search hospitals by name, code, domain..."
+                  placeholder="Search clinics by name, code, domain..."
                   value={hospitalSearch}
                   onChange={(e) => setHospitalSearch(e.target.value)}
                   style={{
@@ -6757,7 +6757,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 <LucideIcon name="search" style={{ position: 'absolute', left: '10px', width: '14px', height: '14px', color: '#94A3B8' }} />
                 <input
                   type="text"
-                  placeholder="Search invoices, transactions, hospitals..."
+                  placeholder="Search invoices, transactions, clinics..."
                   value={financeSearchQuery}
                   onChange={(e) => setFinanceSearchQuery(e.target.value)}
                   style={{
@@ -7033,15 +7033,15 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                       <div style={{ ...styles.glassCard, borderLeft: '5px solid #EF4444' }}>
                         <h3 style={styles.cardHeaderTitle}>Database Operations & Purge Control</h3>
-                        <p style={styles.cardHeaderSub}>Perform a complete wipe of the system. This deletes all hospital accounts, clinical records, invoices, support tickets, and scheduling logs while preserving your Super Admin login credentials.</p>
+                        <p style={styles.cardHeaderSub}>Perform a complete wipe of the system. This deletes all clinic accounts, clinical records, invoices, support tickets, and scheduling logs while preserving your Super Admin login credentials.</p>
                         
                         <div style={{ marginTop: '20px' }}>
                           <button 
                             style={{ ...styles.btnPrimary, background: '#EF4444', border: 'none', color: '#FFF', padding: '10px 16px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }} 
                             onClick={() => {
                               setConfirmModalConfig({
-                                title: 'Purge Operational & Hospital Data',
-                                message: 'WARNING: This will permanently delete all hospital entries, doctor accounts, patients, invoices, and clinical data from the database. Only your Super Admin login will remain active. Are you sure you want to proceed?',
+                                title: 'Purge Operational & Clinic Data',
+                                message: 'WARNING: This will permanently delete all clinic entries, doctor accounts, patients, invoices, and clinical data from the database. Only your Super Admin login will remain active. Are you sure you want to proceed?',
                                 confirmText: 'Yes, Purge Database',
                                 cancelText: 'Cancel',
                                 danger: true,
@@ -7069,7 +7069,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               });
                             }}
                           >
-                            Purge All Operational & Hospital Data
+                            Purge All Operational & Clinic Data
                           </button>
                         </div>
                       </div>
@@ -7133,7 +7133,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <LucideIcon name="search" style={{ position: 'absolute', left: '14px', width: '17px', height: '17px', color: '#6366F1', zIndex: 1 }} />
                     <input
                       type="text"
-                      placeholder="Search hospitals, tickets, telemetry, logs, reports..."
+                      placeholder="Search clinics, tickets, telemetry, logs, reports..."
                       style={{
                         height: '42px',
                         width: '100%',
@@ -7308,7 +7308,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   position: 'relative',
                   zIndex: 1
                 }}>
-                  {/* Card 1: TOTAL HOSPITALS (Electric Blue Gradient with Radial Glow) */}
+                  {/* Card 1: TOTAL CLINICS (Electric Blue Gradient with Radial Glow) */}
                   <div 
                     onClick={() => setActiveTab('hospitals')}
                     style={{
@@ -7344,7 +7344,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         <LucideIcon name="building-2" style={{ width: '17px', height: '17px' }} />
                       </div>
                       <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                        TOTAL HOSPITALS
+                        TOTAL CLINICS
                       </span>
                     </div>
 
@@ -7386,7 +7386,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     }} />
                   </div>
 
-                  {/* Card 2: ACTIVE HOSPITALS (Teal / Emerald Gradient with Radial Glow) */}
+                  {/* Card 2: ACTIVE CLINICS (Teal / Emerald Gradient with Radial Glow) */}
                   <div 
                     onClick={() => setActiveTab('hospitals')}
                     style={{
@@ -7422,7 +7422,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         <LucideIcon name="activity" style={{ width: '17px', height: '17px' }} />
                       </div>
                       <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#115E59', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                        ACTIVE HOSPITALS
+                        ACTIVE CLINICS
                       </span>
                     </div>
 
@@ -8049,7 +8049,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   boxShadow: '0 12px 32px -4px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.04)'
                 }}>
                   {[
-                    { title: 'Onboard Hospital', desc: 'Register tenant', icon: 'hospital', action: () => setActiveTab('hospital-onboarding'), color: '#2563EB', bg: '#EFF6FF' },
+                    { title: 'Onboard Clinic', desc: 'Register tenant', icon: 'hospital', action: () => setActiveTab('hospital-onboarding'), color: '#2563EB', bg: '#EFF6FF' },
                     { title: 'Pricing Settings', desc: 'Subscriptions', icon: 'layers', action: () => setActiveTab('subscription-mgmt'), color: '#7C3AED', bg: '#F5F3FF' },
                     { title: 'Broadcast Alerts', desc: 'Notify tenants', icon: 'megaphone', action: () => setActiveTab('broadcast-center'), color: '#D97706', bg: '#FEF3C7' },
                     { title: 'Customer Support', desc: 'SLA tickets', icon: 'headset', action: () => { setActiveTab('support-success'); setSupportSubTab('support-dashboard'); }, color: '#DB2777', bg: '#FDF2F8' },
@@ -8136,7 +8136,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: 'calc(100vh - 104px)', padding: '24px', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                   <div>
-                    <h2 style={{ ...styles.cardHeaderTitle, margin: 0 }}>Hospital Onboarding Engine</h2>
+                    <h2 style={{ ...styles.cardHeaderTitle, margin: 0 }}>Clinic Onboarding Engine</h2>
                     <p style={{ ...styles.cardHeaderSub, margin: '2px 0 0 0' }}>Manage verification checklists, document validation, and administrator provisioning.</p>
                   </div>
                   <button 
@@ -8144,7 +8144,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     onClick={handleAutoCreateOnboarding}
                   >
                     <LucideIcon name="plus" style={{ width: '16px', height: '16px' }} />
-                    Add Hospital for Onboarding
+                    Add Clinic for Onboarding
                   </button>
                 </div>
 
@@ -8165,7 +8165,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         return activeOnboardings.length === 0 ? (
                           <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748B', fontSize: '12.5px' }}>
                             <LucideIcon name="info" style={{ width: '32px', height: '32px', color: '#CBD5E1', margin: '0 auto 10px auto' }} />
-                            No hospitals in onboarding pipeline.
+                            No clinics in onboarding pipeline.
                           </div>
                         ) : (
                           activeOnboardings.map(h => {
@@ -8226,7 +8226,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         </div>
                         <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#1E293B', margin: '0 0 8px 0' }}>Review Verification Dossier</h3>
                         <p style={{ fontSize: '13px', color: '#64748B', maxWidth: '380px', margin: 0 }}>
-                          Select a hospital from the onboarding pipeline list on the left to verify credentials and provision admin access.
+                          Select a clinic from the onboarding pipeline list on the left to verify credentials and provision admin access.
                         </p>
                       </div>
                     ) : (
@@ -8530,7 +8530,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   gstVerificationDetails: {
                                     verifiedAt: 'Current Verification Check',
                                     tradeName: selectedOnboardingHospital.name,
-                                    address: 'Hospital Registration Address'
+                                    address: 'Clinic Registration Address'
                                   },
                                   license: 'DL-293849/2026',
                                   isLicenseVerified: true,
@@ -8539,7 +8539,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                     licenseeName: selectedOnboardingHospital.name,
                                     validUntil: 'December 31, 2031'
                                   },
-                                  address: 'Hospital Registration Address',
+                                  address: 'Clinic Registration Address',
                                   adminName: selectedOnboardingHospital.adminName || `Admin ${selectedOnboardingHospital.name}`,
                                   adminEmail: selectedOnboardingHospital.adminEmail || 'admin@hospital.com',
                                   adminPhone: selectedOnboardingHospital.adminPhone || '9988776655',
@@ -8611,13 +8611,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 <div style={{ ...styles.pageBodyScroll, minHeight: 0, gap: '20px', paddingBottom: '60px' }}>
                   {/* Top Header */}
                   <div>
-                    <h2 style={styles.cardHeaderTitle}>Connected Corporate Hospitals Index</h2>
+                    <h2 style={styles.cardHeaderTitle}>Connected Corporate Clinics Index</h2>
                     <p style={styles.cardHeaderSub}>Review tenant health scores, configure software module gates, manage user limits, or apply suspensions.</p>
                   </div>
 
                   {/* KPI Metrics Ribbon (FULL WIDTH 100%) */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
-                      {/* Card 1: TOTAL HOSPITALS (Blue Gradient) */}
+                      {/* Card 1: TOTAL CLINICS (Blue Gradient) */}
                       <div
                         style={{
                           padding: '16px 18px',
@@ -8652,7 +8652,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               <LucideIcon name="building-2" style={{ width: '15px', height: '15px' }} />
                             </div>
                             <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                              TOTAL HOSPITALS
+                              TOTAL CLINICS
                             </span>
                           </div>
                           <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#1D4ED8', background: 'rgba(219, 234, 254, 0.8)', border: '1px solid #BFDBFE', padding: '2px 7px', borderRadius: '12px' }}>
@@ -8919,7 +8919,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         }}
                         onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 30px rgba(239, 68, 68, 0.15)'; }}
                         onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(239, 68, 68, 0.08)'; }}
-                        title="Click to filter hospitals with expired plans"
+                        title="Click to filter clinics with expired plans"
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -8994,7 +8994,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         <LucideIcon name="search" style={{ position: 'absolute', left: '12px', width: '15px', height: '15px', color: '#64748B' }} />
                         <input 
                           type="text" 
-                          placeholder="Search hospitals by name, code or CSM..." 
+                          placeholder="Search clinics by name, code or CSM..." 
                           value={hospitalSearch}
                           onChange={e => {
                             setHospitalSearch(e.target.value);
@@ -9057,7 +9057,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       </div>
                     </div>
 
-                    {/* Hospitals Grid / Table */}
+                    {/* Clinics Grid / Table */}
                     <div style={{
                       background: '#FFFFFF',
                       borderRadius: '18px',
@@ -9068,8 +9068,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       <table style={styles.dataTable}>
                         <thead>
                           <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                            <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>HOSPITAL DETAILS</th>
-                            <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>HOSPITAL ID</th>
+                            <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CLINIC DETAILS</th>
+                            <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CLINIC ID</th>
                             <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PORTAL</th>
                             <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CS OWNER</th>
                             <th style={{ ...styles.tableTh, padding: '12px 18px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LIFECYCLE</th>
@@ -9232,7 +9232,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                         cursor: 'pointer',
                                         transition: 'all 0.15s ease'
                                       }}
-                                      title="Edit hospital logo & name"
+                                      title="Edit clinic logo & name"
                                     >
                                       <LucideIcon name="pencil" style={{ width: '12px', height: '12px' }} />
                                       <span>Edit</span>
@@ -9331,8 +9331,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', padding: '0 4px', flexWrap: 'wrap', gap: '10px' }}>
                       <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 400 }}>
                         {filteredHospitals.length > 0 
-                          ? `Showing ${startIndex + 1} to ${Math.min(endIndex, filteredHospitals.length)} of ${filteredHospitals.length} hospitals (10 per page)` 
-                          : 'Showing 0 of 0 hospitals'
+                          ? `Showing ${startIndex + 1} to ${Math.min(endIndex, filteredHospitals.length)} of ${filteredHospitals.length} clinics (10 per page)` 
+                          : 'Showing 0 of 0 clinics'
                         }
                       </span>
                       <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
@@ -9462,7 +9462,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         ))}
                         {hospitals.filter(h => (h.healthScore || 100) < 90 || h.status === 'Suspended').length === 0 && (
                           <div style={{ fontSize: '11px', color: '#64748B', textAlign: 'center', padding: '10px 0' }}>
-                            ✓ All connected hospital systems operating smoothly.
+                            ✓ All connected clinic systems operating smoothly.
                           </div>
                         )}
                       </div>
@@ -9710,7 +9710,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginTop: '16px' }}>
                   {(() => {
-                    const defaultDepts = ['Hospital Onboarding', 'Customer Success', 'Finance & Billing', 'System Administration'];
+                    const defaultDepts = ['Clinic Onboarding', 'Customer Success', 'Finance & Billing', 'System Administration'];
                     const databaseDepts = Array.from(new Set(employees.map(e => e.department))).filter(Boolean);
                     const allDepts = Array.from(new Set([...defaultDepts, ...databaseDepts]));
 
@@ -9828,7 +9828,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   <table style={styles.dataTable}>
                     <thead>
                       <tr>
-                        <th style={styles.tableTh}>Hospital Customer</th>
+                        <th style={styles.tableTh}>Clinic Customer</th>
                         <th style={styles.tableTh}>Subscription Plan</th>
                         <th style={styles.tableTh}>Outstanding Amount</th>
                         <th style={styles.tableTh}>Renewal Date / Due Date</th>
@@ -9878,7 +9878,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {[
                         { role: 'Super Admin', desc: 'Full root access to global SaaS settings, logs, backup, and billing actions.' },
-                        { role: 'Hospital Admin', desc: 'Access to tenant-specific configurations, employee management, and billing details.' },
+                        { role: 'Clinic Admin', desc: 'Access to tenant-specific configurations, employee management, and billing details.' },
                         { role: 'Doctor', desc: 'Access to Clinical Notes, Patient Prescriptions, EMR, and consultation schedules.' },
                         { role: 'Receptionist', desc: 'Access to Patient Registrations, OPD queues, Appointments, and token generations.' },
                         { role: 'Pharmacist', desc: 'Access to Pharmacy procurement, GRN inventory, and medicine dispensations.' },
@@ -9994,7 +9994,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       {/* Hospital Portal Identity & Access */}
                       <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <strong style={{ fontSize: '10px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>HOSPITAL PORTAL ACCESS</strong>
+                          <strong style={{ fontSize: '10px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CLINIC PORTAL ACCESS</strong>
                           {hosp.hospitalId ? (
                             <span style={{ fontFamily: 'monospace', fontWeight: 750, fontSize: '11px', background: '#DBEAFE', color: '#1E40AF', padding: '2px 8px', borderRadius: '4px', border: '1px solid #BFDBFE' }}>
                               {hosp.hospitalId}
@@ -10086,7 +10086,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               border: '1px solid #BBF7D0',
                               cursor: 'pointer'
                             }}
-                            title="Edit hospital branding & logo"
+                            title="Edit clinic branding & logo"
                           >
                             <LucideIcon name="pencil" style={{ width: '13px', height: '13px' }} />
                             <span>Edit Branding</span>
@@ -10561,7 +10561,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                         status: upgradeAmount === 0 ? 'Paid' : 'Pending',
                                         billingCycle: billingCycle === 'annual' ? 'Annual' : 'Monthly',
                                         billingPeriod: 'Subscription Upgrade Cycle',
-                                        address: hosp.address || 'Hospital Address',
+                                        address: hosp.address || 'Clinic Address',
                                         gstin: hosp.gstin || '27AAAAA1111A1Z1',
                                         notes: `Subscription plan upgraded to ${val}.`
                                       })
@@ -10872,7 +10872,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                       {/* Admin Credentials */}
                       <div>
-                        <strong style={{ fontSize: '10px', color: '#64748B', display: 'block', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>HOSPITAL ADMIN CREDENTIALS</strong>
+                        <strong style={{ fontSize: '10px', color: '#64748B', display: 'block', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CLINIC ADMIN CREDENTIALS</strong>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>ADMIN USERNAME (STAFF ID / PHONE)</span>
@@ -11024,7 +11024,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 if (res.ok) {
                                   const updated = await res.json();
                                   setHospitals(prev => prev.map(h => (h._id && updated._id ? h._id === updated._id : h.code === hosp.code) ? { ...h, ...updated, status: nextStatus } : h));
-                                  showToast(`Hospital "${hosp.name}" ${nextStatus === 'Suspended' ? 'suspended' : 'reactivated'} successfully!`, nextStatus === 'Suspended' ? 'warning' : 'success');
+                                  showToast(`Clinic "${hosp.name}" ${nextStatus === 'Suspended' ? 'suspended' : 'reactivated'} successfully!`, nextStatus === 'Suspended' ? 'warning' : 'success');
                                   // Refresh full list from backend
                                   try {
                                     const refreshRes = await fetch('/api/superadmin/hospitals', { headers: { 'Authorization': `Bearer ${token}` } });
@@ -11034,11 +11034,11 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   } catch (_) {}
                                 } else {
                                   const errData = await res.json().catch(() => ({}));
-                                  showToast(errData.error || 'Failed to update hospital status.', 'error');
+                                  showToast(errData.error || 'Failed to update clinic status.', 'error');
                                 }
                               } catch (err) {
                                 console.error(err);
-                                showToast('Error updating hospital status.', 'error');
+                                showToast('Error updating clinic status.', 'error');
                               }
                             }}
                           >
@@ -11049,13 +11049,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             style={{ border: '1px solid #EF4444', background: '#FFF', color: '#EF4444', width: '100%', padding: '10px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
                             onClick={() => {
                               setConfirmModalConfig({
-                                title: 'Delete Hospital Account',
-                                message: `Are you sure you want to permanently delete the hospital "${hosp.name}"? This action cannot be undone. All staff user accounts, patients, and clinical records will be permanently purged.`,
-                                confirmText: 'Yes, Delete Hospital',
+                                title: 'Delete Clinic Account',
+                                message: `Are you sure you want to permanently delete the clinic "${hosp.name}"? This action cannot be undone. All staff user accounts, patients, and clinical records will be permanently purged.`,
+                                confirmText: 'Yes, Delete Clinic',
                                 cancelText: 'Cancel',
                                 danger: true,
                                 onConfirm: async () => {
-                                  setConfirmModalConfig(prev => ({ ...prev, isLoading: true, confirmText: 'Deleting Hospital...' }));
+                                  setConfirmModalConfig(prev => ({ ...prev, isLoading: true, confirmText: 'Deleting Clinic...' }));
                                   const token = getSuperAdminToken();
                                   const deleteTargetId = hosp._id || hosp.code || hosp.id;
                                   try {
@@ -11067,7 +11067,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                       setHospitals(prev => prev.filter(h => (h._id ? h._id !== hosp._id : h.code !== hosp.code)));
                                       setSelectedHospitalId(null);
                                       setIsConfigDrawerOpen(false);
-                                      showToast(`Hospital "${hosp.name}" and all associated data deleted successfully!`, 'success');
+                                      showToast(`Clinic "${hosp.name}" and all associated data deleted successfully!`, 'success');
                                       try {
                                         const refreshRes = await fetch('/api/superadmin/hospitals', { headers: { 'Authorization': `Bearer ${token}` } });
                                         if (refreshRes.ok) {
@@ -11076,11 +11076,11 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                       } catch (_) {}
                                     } else {
                                       const errData = await res.json().catch(() => ({}));
-                                      showToast(errData.error || 'Failed to delete hospital.', 'error');
+                                      showToast(errData.error || 'Failed to delete clinic.', 'error');
                                     }
                                   } catch (err) {
                                     console.error(err);
-                                    showToast('Error deleting hospital.', 'error');
+                                    showToast('Error deleting clinic.', 'error');
                                   } finally {
                                     setConfirmModalConfig(null);
                                   }
@@ -11088,7 +11088,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               });
                             }}
                           >
-                            Delete Hospital Account
+                            Delete Clinic Account
                           </button>
                         </div>
                       </div>
@@ -11144,7 +11144,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           SaaS Pricing Plans & Limits
                         </h2>
                         <p style={{ ...styles.cardHeaderSub, margin: '3px 0 0 0', fontSize: '12.5px' }}>
-                          Configure subscription tiers, price metrics, and resource allocation templates. Active subscriber counts are live from the hospitals database.
+                          Configure subscription tiers, price metrics, and resource allocation templates. Active subscriber counts are live from the clinics database.
                         </p>
                       </div>
                     </div>
@@ -11338,7 +11338,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '14px', background: '#F8FAFC', padding: '10px', borderRadius: '10px', border: '1px solid #F1F5F9' }}>
                                 <div style={{ textAlign: 'center' }}>
                                   <div style={{ fontSize: '17px', fontWeight: 900, color: planColor }}>{activeCount}</div>
-                                  <div style={{ fontSize: '8.5px', color: '#64748B', fontWeight: 750, letterSpacing: '0.3px' }}>ACTIVE HOSPITALS</div>
+                                  <div style={{ fontSize: '8.5px', color: '#64748B', fontWeight: 750, letterSpacing: '0.3px' }}>ACTIVE CLINICS</div>
                                 </div>
                                 <div style={{ width: '1px', background: '#E2E8F0' }} />
                                 <div style={{ textAlign: 'center' }}>
@@ -11391,7 +11391,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '14px', background: '#F0FDF4', padding: '10px', borderRadius: '10px', border: '1px solid #DCFCE7' }}>
                                 <div style={{ textAlign: 'center' }}>
                                   <div style={{ fontSize: '17px', fontWeight: 900, color: '#10B981' }}>{activeCount}</div>
-                                  <div style={{ fontSize: '8.5px', color: '#047857', fontWeight: 750, letterSpacing: '0.3px' }}>ACTIVE HOSPITALS</div>
+                                  <div style={{ fontSize: '8.5px', color: '#047857', fontWeight: 750, letterSpacing: '0.3px' }}>ACTIVE CLINICS</div>
                                 </div>
                                 <div style={{ width: '1px', background: '#BBF7D0' }} />
                                 <div style={{ textAlign: 'center' }}>
@@ -11448,7 +11448,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             borderRadius: '12px',
                             border: '1px solid #DBEAFE'
                           }}>
-                            {filteredSubHospitals.length} Hospitals
+                            {filteredSubHospitals.length} Clinics
                           </span>
                         </h3>
                         <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#64748B', fontWeight: 400 }}>
@@ -11559,7 +11559,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         <thead>
                           <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                             <th style={{ padding: '11px 16px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                              Hospital Name
+                              Clinic Name
                             </th>
                             <th style={{ padding: '11px 16px', fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                               Active Plan
@@ -11613,7 +11613,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   onMouseEnter={(e) => e.currentTarget.style.background = '#F8FAFC'}
                                   onMouseLeave={(e) => e.currentTarget.style.background = '#FFFFFF'}
                                 >
-                                  {/* Hospital Name */}
+                                  {/* Clinic Name */}
                                   <td style={{ padding: '12px 16px', fontSize: '13px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                       <div style={{
@@ -11699,7 +11699,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             <tr>
                               <td colSpan="5" style={{ padding: '36px 16px', textAlign: 'center', color: '#94A3B8', fontSize: '12.5px', fontWeight: 400 }}>
                                 <LucideIcon name="search-x" style={{ width: '24px', height: '24px', margin: '0 auto 6px auto', display: 'block', opacity: 0.5 }} />
-                                No hospitals found matching "{subSearch}".
+                                No clinics found matching "{subSearch}".
                               </td>
                             </tr>
                           )}
@@ -11719,7 +11719,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       }}>
                         {/* Info */}
                         <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 400 }}>
-                          Showing <span style={{ color: '#1E293B', fontWeight: 550 }}>{(safeCurrentPage - 1) * subItemsPerPage + 1}</span> to <span style={{ color: '#1E293B', fontWeight: 550 }}>{Math.min(safeCurrentPage * subItemsPerPage, filteredSubHospitals.length)}</span> of <span style={{ color: '#1E293B', fontWeight: 550 }}>{filteredSubHospitals.length}</span> hospitals
+                          Showing <span style={{ color: '#1E293B', fontWeight: 550 }}>{(safeCurrentPage - 1) * subItemsPerPage + 1}</span> to <span style={{ color: '#1E293B', fontWeight: 550 }}>{Math.min(safeCurrentPage * subItemsPerPage, filteredSubHospitals.length)}</span> of <span style={{ color: '#1E293B', fontWeight: 550 }}>{filteredSubHospitals.length}</span> clinics
                         </div>
 
                         {/* Page Buttons */}
@@ -11838,7 +11838,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       <thead>
                         <tr>
                           <th style={styles.tableTh}>Ticket ID</th>
-                          <th style={styles.tableTh}>Hospital</th>
+                          <th style={styles.tableTh}>Clinic</th>
                           <th style={styles.tableTh}>Category</th>
                           <th style={styles.tableTh}>Priority</th>
                           <th style={styles.tableTh}>Status</th>
@@ -12093,10 +12093,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         <label style={styles.formLabel}>TARGET AUDIENCE</label>
                         <select 
                           style={{ ...styles.formInput, width: '100%', boxSizing: 'border-box' }}
-                          value={broadcastForm.audience || 'All Hospital Administrators'}
+                          value={broadcastForm.audience || 'All Clinic Administrators'}
                           onChange={(e) => setBroadcastForm({ ...broadcastForm, audience: e.target.value })}
                         >
-                          <option>All Hospital Administrators</option>
+                          <option>All Clinic Administrators</option>
                           <option>Only Active Tiers</option>
                           <option>Only Under-maintenance Tiers</option>
                         </select>
@@ -12141,14 +12141,14 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               body: JSON.stringify({
                                 subject: broadcastForm.subject,
                                 message: broadcastForm.message,
-                                audience: broadcastForm.audience || 'All Hospital Administrators'
+                                audience: broadcastForm.audience || 'All Clinic Administrators'
                               })
                             });
 
                             if (res.ok) {
                               showToast('Broadcast dispatch sent immediately!', 'success');
                               setBroadcastForm({
-                                audience: 'All Hospital Administrators',
+                                audience: 'All Clinic Administrators',
                                 subject: '',
                                 message: ''
                               });
@@ -12182,7 +12182,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         Receiver Screen Preview
                       </h4>
                       <p style={{ fontSize: '11px', color: '#64748B', marginTop: '-6px', marginBottom: '14px', lineHeight: 1.4 }}>
-                        This is how the urgent broadcast alert modal appears on target hospital administrators' active screens:
+                        This is how the urgent broadcast alert modal appears on target clinic administrators' active screens:
                       </p>
 
                       <div style={{
@@ -12342,7 +12342,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               const invoiceExportColumns = [
                 { header: 'Sr. No', key: 'srNo' },
                 { header: 'Invoice #', key: 'invoiceNum' },
-                { header: 'Hospital Account', key: 'hospital' },
+                { header: 'Clinic Account', key: 'hospital' },
                 { header: 'Plan Tier', key: 'subscription' },
                 { header: 'Billing Date', key: 'invoiceDate' },
                 { header: 'Due Date', key: 'dueDate' },
@@ -12357,7 +12357,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               const getExportRows = () => filteredInvoices.map((inv, idx) => ({
                 'Sr. No': idx + 1,
                 'Invoice #': inv.invoiceNum || '',
-                'Hospital Account': inv.hospital || '',
+                'Clinic Account': inv.hospital || '',
                 'Plan Tier': inv.subscription || '',
                 'Billing Date': inv.invoiceDate || '',
                 'Due Date': inv.dueDate || '',
@@ -12429,7 +12429,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   const pdfColumns = [
                     { header: 'Sr. No', key: 'srNo' },
                     { header: 'Invoice #', key: 'invoiceNum' },
-                    { header: 'Hospital', key: 'hospital' },
+                    { header: 'Clinic', key: 'hospital' },
                     { header: 'Plan Tier', key: 'subscription' },
                     { header: 'Date', key: 'invoiceDate' },
                     { header: 'Net (Rs)', key: 'amount' },
@@ -12440,7 +12440,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   const pdfRows = filteredInvoices.map((inv, idx) => ({
                     'Sr. No': idx + 1,
                     'Invoice #': inv.invoiceNum || '',
-                    'Hospital': inv.hospital || '',
+                    'Clinic': inv.hospital || '',
                     'Plan Tier': inv.subscription || '',
                     'Date': inv.invoiceDate || '',
                     'Net (Rs)': (inv.amount || 0).toLocaleString('en-IN'),
@@ -12839,7 +12839,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         <LucideIcon name="search" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: '15px', height: '15px', color: '#94A3B8' }} />
                         <input
                           type="text"
-                          placeholder="Search invoice #, hospital, plan..."
+                          placeholder="Search invoice #, clinic, plan..."
                           value={financeSearchQuery}
                           onChange={(e) => setFinanceSearchQuery(e.target.value)}
                           style={{
@@ -13096,7 +13096,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                             <th style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', width: '42px', whiteSpace: 'nowrap' }}>#</th>
                             <th style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Invoice #</th>
-                            <th style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Hospital Account</th>
+                            <th style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Clinic Account</th>
                             <th 
                               onClick={() => setFinanceSortBy(prev => prev === 'plan_asc' ? 'plan_desc' : 'plan_asc')}
                               style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: financeSortBy.startsWith('plan') ? '#2563EB' : '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
@@ -13480,18 +13480,18 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 </div>
                               </div>
 
-                              {/* Bill To (Client Hospital) */}
+                              {/* Bill To (Client Clinic) */}
                               <div style={{ background: '#F8FAFC', padding: '14px 16px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
                                 <div style={{ fontSize: '11px', fontWeight: 700, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-                                  BILLED TO (CLIENT HOSPITAL)
+                                  BILLED TO (CLIENT CLINIC)
                                 </div>
                                 <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>
                                   {inv.hospital}
                                 </div>
                                 <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '4px', lineHeight: '1.4' }}>
-                                  {inv.address || 'Registered Hospital Premises / Medical Center'}<br />
-                                  <strong>GSTIN:</strong> {inv.gstin || 'Unregistered / B2C Hospital Client'}<br />
-                                  <strong>Service Type:</strong> SaaS Hospital Management Software
+                                  {inv.address || 'Registered Clinic Premises / Medical Center'}<br />
+                                  <strong>GSTIN:</strong> {inv.gstin || 'Unregistered / B2C Clinic Client'}<br />
+                                  <strong>Service Type:</strong> SaaS Clinic Management Software
                                 </div>
                               </div>
                             </div>
@@ -13510,7 +13510,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
                                     <td style={{ padding: '12px 14px' }}>
                                       <div style={{ fontWeight: 700, fontSize: '13px', color: '#0F172A' }}>
-                                        Quroxa Hospital Management Platform — {inv.subscription}
+                                        Quroxa Clinic Management Platform — {inv.subscription}
                                       </div>
                                       <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
                                         Software-as-a-Service monthly subscription license & multi-tenant cloud operations
@@ -13630,7 +13630,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             {/* EMPLOYEES & WORKLOAD TAB */}
             {isTabAllowed && activeTab === 'hr-mgmt' && (() => {
               const platformRoles = [
-                { key: 'Onboarding Manager', icon: 'user-plus', color: '#2563EB', bg: '#EFF6FF', desc: 'Handles hospital onboarding and hospital management' },
+                { key: 'Onboarding Manager', icon: 'user-plus', color: '#2563EB', bg: '#EFF6FF', desc: 'Handles clinic onboarding and clinic management' },
                 { key: 'Ticket Manager', icon: 'headset', color: '#8B5CF6', bg: '#F5F3FF', desc: 'Manages customer support tickets and platform announcements' },
                 { key: 'Finance Manager', icon: 'wallet', color: '#10B981', bg: '#ECFDF5', desc: 'Manages subscriptions, finance, and platform financial reports' }
               ];
@@ -13953,7 +13953,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             <select value={employeeForm.department} onChange={e => setEmployeeForm(p => ({ ...p, department: e.target.value }))} style={styles.filterSelect}>
                               <option value="" disabled>Select Department</option>
                               <option>General</option>
-                              <option>Hospital Onboarding</option>
+                              <option>Clinic Onboarding</option>
                               <option>Customer Success</option>
                               <option>Engineering</option>
                               <option>Finance</option>
@@ -14199,7 +14199,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   if (res.ok) {
                     const newRep = await res.json();
                     setCustomReports(prev => [newRep, ...prev]);
-                    setCustomReportForm({ source: 'Invoices', groupField: 'Hospital', aggType: 'Sum', calcField: 'Amount', reportName: '' });
+                    setCustomReportForm({ source: 'Invoices', groupField: 'Clinic', aggType: 'Sum', calcField: 'Amount', reportName: '' });
                     showToast('Report template created successfully!', 'success');
                   } else {
                     showToast('Failed to create report template', 'error');
@@ -14473,7 +14473,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         {/* Interactive Plan Distribution Metrics */}
                         <div style={styles.glassCard}>
                           <h3 style={styles.cardHeaderTitle}>Plan Distribution Metrics</h3>
-                          <span style={styles.cardHeaderSub}>Subscription shares of active hospital clients</span>
+                          <span style={styles.cardHeaderSub}>Subscription shares of active clinic clients</span>
                           
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '12px' }}>
                             <div style={{ position: 'relative', width: '150px', height: '150px' }}>
@@ -14595,7 +14595,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             <thead>
                               <tr>
                                 <th style={styles.tableTh}>Invoice #</th>
-                                <th style={styles.tableTh}>Hospital</th>
+                                <th style={styles.tableTh}>Clinic</th>
                                 <th style={styles.tableTh}>Subscription</th>
                                 <th style={styles.tableTh}>Invoice Date</th>
                                 <th style={styles.tableTh}>Amount</th>
@@ -14686,7 +14686,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         </span>
                       </div>
                       <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
-                        Canonical catalog shared across all Quroxa hospitals · Centrally managed by Super Admin
+                        Canonical catalog shared across all Quroxa clinics · Centrally managed by Super Admin
                       </p>
                     </div>
 
@@ -14764,7 +14764,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       }}
                     >
                       <LucideIcon name="clipboard-list" style={{ width: '14px', height: '14px' }} />
-                      <span>Hospital Item Requests</span>
+                      <span>Clinic Item Requests</span>
                       {pendingRequestsCount > 0 && (
                         <span style={{ fontSize: '10.5px', background: '#FEF2F2', color: '#DC2626', fontWeight: 800, padding: '1px 6px', borderRadius: '10px' }}>
                           {pendingRequestsCount} pending
@@ -15059,7 +15059,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         )}
                       </div>
                       <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
-                        Hospital requests to add items to the Global Item Master · Review, deduplicate, and link or approve
+                        Clinic requests to add items to the Global Item Master · Review, deduplicate, and link or approve
                       </p>
                     </div>
 
@@ -15148,7 +15148,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       }}
                     >
                       <LucideIcon name="clipboard-list" style={{ width: '14px', height: '14px' }} />
-                      <span>Hospital Item Requests ({itemRequestsPagination.total})</span>
+                      <span>Clinic Item Requests ({itemRequestsPagination.total})</span>
                       {pendingRequestsCount > 0 && (
                         <span style={{ fontSize: '10.5px', background: '#FEF2F2', color: '#DC2626', fontWeight: 800, padding: '1px 6px', borderRadius: '10px' }}>
                           {pendingRequestsCount}
@@ -15185,7 +15185,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       <LucideIcon name="search" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: '15px', height: '15px', color: '#94A3B8' }} />
                       <input
                         type="text"
-                        placeholder="Search Request No, Item Name, Hospital..."
+                        placeholder="Search Request No, Item Name, Clinic..."
                         value={requestSearch}
                         onChange={e => setRequestSearch(e.target.value)}
                         style={{ width: '100%', padding: '8px 12px 8px 36px', fontSize: '12.5px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#F8FAFC', outline: 'none', boxSizing: 'border-box' }}
@@ -15199,7 +15199,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       <thead>
                         <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                           <th style={styles.tableTh}>Request No</th>
-                          <th style={styles.tableTh}>Hospital</th>
+                          <th style={styles.tableTh}>Clinic</th>
                           <th style={styles.tableTh}>Requested Item & Specs</th>
                           <th style={styles.tableTh}>Type</th>
                           <th style={styles.tableTh}>Requested By</th>
@@ -15260,7 +15260,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 </td>
                                 <td style={styles.tableTd}>
                                   <span style={{ fontSize: '12px', color: '#475569' }}>
-                                    {req.requestedBy?.name || req.requestedBy || 'Hospital Staff'}
+                                    {req.requestedBy?.name || req.requestedBy || 'Clinic Staff'}
                                   </span>
                                 </td>
                                 <td style={styles.tableTd}>
@@ -15454,7 +15454,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                       ⚠️ Possible matching canonical item(s) found in Global Catalog:
                                     </div>
                                     <div style={{ fontSize: '11.5px', color: '#7F1D1D', marginBottom: '8px' }}>
-                                      To avoid catalog pollution, link this hospital request to the existing canonical item:
+                                      To avoid catalog pollution, link this clinic request to the existing canonical item:
                                     </div>
                                     {duplicateCheckResult.map(dup => (
                                       <div key={dup._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', background: '#FFFFFF', padding: '8px 12px', borderRadius: '8px', border: '1px solid #FECACA' }}>
@@ -15791,7 +15791,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               <LucideIcon name="search" style={{ width: '20px', height: '20px', color: '#64748B' }} />
               <input 
                 type="text" 
-                placeholder="Search tabs, hospitals, onboarding, tickets..." 
+                placeholder="Search tabs, clinics, onboarding, tickets..." 
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 style={styles.searchModalInput}
@@ -15815,8 +15815,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
               
               const matchedTabs = [
                 { id: 'dashboard', name: 'Overview / Analytics Dashboard' },
-                { id: 'hospital-onboarding', name: 'Hospital Onboarding & Pipeline' },
-                { id: 'hospitals', name: 'Connected Corporate Hospitals' },
+                { id: 'hospital-onboarding', name: 'Clinic Onboarding & Pipeline' },
+                { id: 'hospitals', name: 'Connected Corporate Clinics' },
                 { id: 'subscription-mgmt', name: 'Subscription Management & Pricing' },
                 { id: 'support-success', name: 'Client Support Tickets & SLA Desk' },
                 { id: 'broadcast-center', name: 'Platform Broadcast Center' },
@@ -15858,10 +15858,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         </div>
                       )}
 
-                      {/* Connected Hospitals */}
+                      {/* Connected Clinics */}
                       {matchedHospitals.length > 0 && (
                         <div>
-                          <div style={{ padding: '8px 16px', background: '#F8FAFC', fontSize: '10px', fontWeight: 800, color: '#64748B', borderBottom: '1px solid #F1F5F9' }}>CONNECTED HOSPITALS</div>
+                          <div style={{ padding: '8px 16px', background: '#F8FAFC', fontSize: '10px', fontWeight: 800, color: '#64748B', borderBottom: '1px solid #F1F5F9' }}>CONNECTED CLINICS</div>
                           {matchedHospitals.map(h => (
                             <div 
                               key={h._id} 
@@ -16026,7 +16026,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   <LucideIcon name="image" style={{ width: '20px', height: '20px' }} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Edit Hospital Branding</h3>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Edit Clinic Branding</h3>
                   <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
                     {logoEditHosp.hospitalId ? `Portal ID: ${logoEditHosp.hospitalId}` : `Code: ${logoEditHosp.code}`}
                   </div>
@@ -16041,16 +16041,16 @@ const SuperAdminDashboard = ({ initialTab }) => {
               </button>
             </div>
 
-            {/* Hospital Name field */}
+            {/* Clinic Name field */}
             <div style={{ marginBottom: '18px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                Hospital Name
+                Clinic Name
               </label>
               <input
                 type="text"
                 value={logoEditNameDraft}
                 onChange={e => setLogoEditNameDraft(e.target.value)}
-                placeholder="Enter hospital name"
+                placeholder="Enter clinic name"
                 style={{
                   width: '100%',
                   padding: '10px 14px',
@@ -16067,7 +16067,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             {/* Logo Dropzone & Controls */}
             <div style={{ marginBottom: '18px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                Hospital Logo
+                Clinic Logo
               </label>
               
               <div
@@ -16384,7 +16384,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             }} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={styles.formRow}>
                 <div style={styles.formCol}>
-                  <label style={styles.formLabel}>HOSPITAL CODE</label>
+                  <label style={styles.formLabel}>CLINIC CODE</label>
                   <input
                     type="text"
                     required
@@ -16442,7 +16442,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     type="email"
                     required
                     style={styles.formInput}
-                    placeholder="e.g. admin@hospital.com"
+                    placeholder="e.g. admin@clinic.com"
                     value={activateForm.adminEmail}
                     onChange={e => setActivateForm({ ...activateForm, adminEmail: e.target.value })}
                   />
@@ -16643,7 +16643,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               <div style={{ display: 'inline-flex', padding: '8px', background: 'rgba(255,255,255,0.15)', borderRadius: '12px', marginBottom: '12px' }}>
                 <LucideIcon name="check-circle" style={{ width: '28px', height: '28px', color: '#6EE7B7' }} />
               </div>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800 }}>Hospital Created Successfully!</h3>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800 }}>Clinic Created Successfully!</h3>
               <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#DBEAFE' }}>
                 {portalSuccessModal.name} has been activated and is ready for live access.
               </p>
@@ -16652,7 +16652,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', background: '#FFFFFF' }}>
               <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>Public Hospital ID</span>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>Public Clinic ID</span>
                   <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '14px', background: '#EFF6FF', color: '#1E40AF', padding: '4px 10px', borderRadius: '6px', border: '1px solid #BFDBFE', letterSpacing: '0.5px' }}>
                     {portalSuccessModal.hospitalId || 'Unavailable'}
                   </span>
@@ -16660,7 +16660,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                 <div>
                   <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
-                    Hospital Portal URL
+                    Clinic Portal URL
                   </label>
                   <div style={{
                     display: 'flex',
@@ -16758,7 +16758,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     cursor: 'pointer'
                   }}
                 >
-                  Go to Hospitals
+                  Go to Clinics
                 </button>
               </div>
             </div>
@@ -17240,8 +17240,8 @@ const menuGroups = [
   {
     group: 'Business',
     items: [
-      { id: 'hospital-onboarding', label: 'Hospital Onboarding', icon: 'user-plus' },
-      { id: 'hospitals', label: 'Hospitals', icon: 'building-2' },
+      { id: 'hospital-onboarding', label: 'Clinic Onboarding', icon: 'user-plus' },
+      { id: 'hospitals', label: 'Clinics', icon: 'building-2' },
       { id: 'subscription-mgmt', label: 'Subscription Management', icon: 'credit-card' }
     ]
   },

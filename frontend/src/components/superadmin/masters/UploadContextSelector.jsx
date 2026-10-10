@@ -68,10 +68,10 @@ export default function UploadContextSelector({
           </div>
           <div>
             <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Hospital Master Ingestion Context
+              Clinic Master Ingestion Context
             </h4>
             <p style={{ fontSize: '11px', color: '#64748B', margin: 0 }}>
-              Select target hospital, category, and department to bind upload and download exact template.
+              Select target clinic, category, and department to bind upload and download exact template.
             </p>
           </div>
         </div>
@@ -81,7 +81,7 @@ export default function UploadContextSelector({
           type="button"
           onClick={onDownloadTemplate}
           disabled={!isTemplateReady || downloadingTemplate}
-          title={!isTemplateReady ? 'Please select Hospital, Category, and Department first' : 'Download clean verified template'}
+          title={!isTemplateReady ? 'Please select Clinic, Category, and Department first' : 'Download clean verified template'}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -116,11 +116,11 @@ export default function UploadContextSelector({
         borderRadius: '8px',
         border: '1px solid #F1F5F9'
       }}>
-        {/* STEP 1: Target Hospital */}
+        {/* STEP 1: Target Clinic */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
             <span style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#2563EB', color: '#FFFFFF', fontSize: '10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>1</span>
-            Target Hospital:
+            Target Clinic:
           </label>
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <select
@@ -142,7 +142,7 @@ export default function UploadContextSelector({
                 WebkitAppearance: 'none'
               }}
             >
-              <option value="">-- Select Hospital ▼ --</option>
+              <option value="">-- Select Clinic ▼ --</option>
               {hospitals.map(h => (
                 <option key={h.code || h.hospitalId} value={h.code || h.hospitalId}>
                   {h.name} ({h.code || h.hospitalId})

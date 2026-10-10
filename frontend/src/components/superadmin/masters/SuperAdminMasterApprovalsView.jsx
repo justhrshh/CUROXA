@@ -513,7 +513,7 @@ export default function SuperAdminMasterApprovalsView() {
               </span>
             </div>
             <p style={{ fontSize: '11.5px', color: '#64748B', margin: 0, marginTop: '1px' }}>
-              Review, verify, and approve hospital requests across Item Master & Vendor Master
+              Review, verify, and approve clinic requests across Item Master & Vendor Master
             </p>
           </div>
         </div>
@@ -677,7 +677,7 @@ export default function SuperAdminMasterApprovalsView() {
         <div style={{ flex: '1 1 240px', minWidth: '220px', position: 'relative' }}>
           <input
             type="text"
-            placeholder="Search by Request No, Item/Vendor Name, Hospital..."
+            placeholder="Search by Request No, Item/Vendor Name, Clinic..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
@@ -741,7 +741,7 @@ export default function SuperAdminMasterApprovalsView() {
           </div>
         )}
 
-        {/* Hospital Filter */}
+        {/* Clinic Filter */}
         <div>
           <select
             value={tenantFilter}
@@ -756,7 +756,7 @@ export default function SuperAdminMasterApprovalsView() {
               color: '#334155'
             }}
           >
-            <option value="ALL">All Hospitals</option>
+            <option value="ALL">All Clinics</option>
             {hospitals.map(h => (
               <option key={h.code || h.name} value={h.code || h.name}>
                 {h.name}
@@ -786,7 +786,7 @@ export default function SuperAdminMasterApprovalsView() {
               No Master Requests Found
             </h4>
             <p style={{ margin: 0, fontSize: '12px' }}>
-              Requests submitted by hospitals for Item Master and Vendor Master will appear here for SuperAdmin review.
+              Requests submitted by clinics for Item Master and Vendor Master will appear here for SuperAdmin review.
             </p>
           </div>
         ) : (
@@ -796,7 +796,7 @@ export default function SuperAdminMasterApprovalsView() {
                 <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <th style={{ padding: '10px 14px', fontWeight: 800 }}>Request No</th>
                   <th style={{ padding: '10px 14px', fontWeight: 800 }}>Master Type</th>
-                  <th style={{ padding: '10px 14px', fontWeight: 800 }}>Hospital Tenant</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 800 }}>Clinic Tenant</th>
                   <th style={{ padding: '10px 14px', fontWeight: 800 }}>Requested Entity</th>
                   <th style={{ padding: '10px 14px', fontWeight: 800 }}>Details / Commercials</th>
                   <th style={{ padding: '10px 14px', fontWeight: 800 }}>Submitted</th>
@@ -882,7 +882,7 @@ export default function SuperAdminMasterApprovalsView() {
                         )}
                       </td>
 
-                      {/* 3. Hospital Tenant */}
+                      {/* 3. Clinic Tenant */}
                       <td style={{ padding: '12px 14px' }}>
                         <div style={{ fontWeight: 700, color: '#0F172A' }}>{req.hospitalName || req.tenantId}</div>
                         <div style={{ fontSize: '11px', color: '#64748B' }}>{req.tenantId}</div>
@@ -1097,7 +1097,7 @@ export default function SuperAdminMasterApprovalsView() {
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: 800, color: activeItemRequest.requestType === 'ASSIGN_EXISTING_GLOBAL_ITEM' ? '#1E40AF' : '#166534' }}>
                     {activeItemRequest.requestType === 'ASSIGN_EXISTING_GLOBAL_ITEM'
-                      ? 'Path A: Assign Existing Global Item to Hospital'
+                      ? 'Path A: Assign Existing Global Item to Clinic'
                       : 'Path B: Proposal for Brand-New Global Master Item'}
                   </div>
                   <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>
@@ -1176,7 +1176,7 @@ export default function SuperAdminMasterApprovalsView() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '3px' }}>
-                      Hospital MRP (₹)
+                      Clinic MRP (₹)
                     </label>
                     <div style={{ fontSize: '11px', color: '#475569', marginBottom: '3px' }}>
                       Requested: <strong>₹{Number(activeItemRequest.requestedMrp || 0).toFixed(2)}</strong>
@@ -1198,7 +1198,7 @@ export default function SuperAdminMasterApprovalsView() {
 
                   <div>
                     <label style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '3px' }}>
-                      Hospital Net Rate (₹)
+                      Clinic Net Rate (₹)
                     </label>
                     <div style={{ fontSize: '11px', color: '#475569', marginBottom: '3px' }}>
                       Requested: <strong>₹{Number(activeItemRequest.requestedNetRate || 0).toFixed(2)}</strong>
@@ -1220,7 +1220,7 @@ export default function SuperAdminMasterApprovalsView() {
 
                   <div>
                     <label style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '3px' }}>
-                      Hospital Cost (₹)
+                      Clinic Cost (₹)
                     </label>
                     <div style={{ fontSize: '11px', color: '#475569', marginBottom: '3px' }}>
                       Requested: <strong>₹{Number(activeItemRequest.requestedHospitalCost || 0).toFixed(2)}</strong>
@@ -1346,7 +1346,7 @@ export default function SuperAdminMasterApprovalsView() {
               Confirm Request Rejection
             </h4>
             <p style={{ fontSize: '12px', color: '#64748B', margin: '0 0 14px 0' }}>
-              Please provide a clear reason why request <strong>{activeItemRequest?.requestNo}</strong> cannot be approved. The hospital will be notified.
+              Please provide a clear reason why request <strong>{activeItemRequest?.requestNo}</strong> cannot be approved. The clinic will be notified.
             </p>
 
             <textarea
@@ -1414,7 +1414,7 @@ export default function SuperAdminMasterApprovalsView() {
               Match With Existing Canonical Global Master
             </h4>
             <p style={{ fontSize: '11.5px', color: '#64748B', margin: '0 0 12px 0' }}>
-              Convert this <strong>NEW_GLOBAL_ITEM</strong> proposal into a <strong>Path A assignment request</strong>. This links the hospital request to an existing canonical master item, preventing duplicate ItemMaster creation.
+              Convert this <strong>NEW_GLOBAL_ITEM</strong> proposal into a <strong>Path A assignment request</strong>. This links the clinic request to an existing canonical master item, preventing duplicate ItemMaster creation.
             </p>
 
             <input

@@ -52,6 +52,16 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  title: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  employeeId: {
+    type: String,
+    trim: true,
+    sparse: true
+  },
   name: {
     type: String,
     required: true,
@@ -241,5 +251,12 @@ const userSchema = new mongoose.Schema({
 
 // Unique index for uniqueness per tenant
 userSchema.index({ tenantId: 1, staff_id: 1 }, { unique: true });
+userSchema.index(
+  { tenantId: 1, employeeId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { employeeId: { $type: "string" } }
+  }
+);
 
 module.exports = mongoose.model('User', userSchema);

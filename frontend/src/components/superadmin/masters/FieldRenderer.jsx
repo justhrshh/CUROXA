@@ -336,7 +336,7 @@ export default function FieldRenderer({
             userSelect: 'none',
             lineHeight: 1.2
           }}
-          title={`${clientHeader} (Excel Col ${excelColumn})${systemRequired ? ' [System Required Field]' : ''}${isPricingField ? ' [Hospital Price]' : ''}`}
+          title={`${clientHeader} (Excel Col ${excelColumn})${systemRequired ? ' [System Required Field]' : ''}${isPricingField ? ' [Clinic Price]' : ''}`}
         >
           <span>{formattedLabel}</span>
           {systemRequired && <span style={{ color: '#E11D48', marginLeft: '3px', fontWeight: 900, fontSize: '13px' }}>*</span>}

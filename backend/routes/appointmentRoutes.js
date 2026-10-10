@@ -150,16 +150,36 @@ router.get('/', async (req, res) => {
     bills.forEach(b => {
       if (b.appointmentId) {
         const key = b.appointmentId.toString();
-        // Prefer 'Paid' status if any bill for this appointment is Paid
+        // If multiple bills, pick the paid or most recent one
         if (!billingMap[key] || b.status === 'Paid') {
-          billingMap[key] = b.status;
+          billingMap[key] = {
+            status: b.status,
+            totalAmount: b.totalAmount,
+            amountPaid: b.amountPaid !== undefined ? b.amountPaid : (b.status === 'Paid' ? b.totalAmount : 0),
+            balanceDue: b.balanceDue !== undefined ? b.balanceDue : (b.status === 'Paid' ? 0 : b.totalAmount),
+            paymentMethod: b.paymentMethod,
+            payments: b.payments || [],
+            billId: b._id
+          };
         }
       }
     });
 
     let appsWithBilling = appointments.map(app => {
       const appObj = app.toObject();
-      appObj.billingStatus = billingMap[app._id.toString()] || 'Unpaid';
+      const bInfo = billingMap[app._id.toString()];
+      appObj.billingStatus = bInfo ? bInfo.status : 'Unpaid';
+      appObj.billDetails = bInfo || null;
+
+      // Ensure consistency: if bill is Paid, appointment paymentStatus is Paid
+      if (bInfo && bInfo.status === 'Paid') {
+        appObj.paymentStatus = 'Paid';
+        if (appObj.status === 'Pending Approval' || appObj.status === 'Pending') {
+          appObj.status = 'Confirmed';
+        }
+      } else if (bInfo && bInfo.status === 'Partially Paid') {
+        appObj.paymentStatus = 'Partially Paid';
+      }
       return appObj;
     });
 
@@ -531,6 +551,14 @@ router.put('/:id/approve', async (req, res) => {
     const Billing = require('../models/Billing');
     const doctorObj = appointment.doctorId;
 
+    // CRITICAL: If appointment is already Paid, do NOT request payment again!
+    let existingBill = await Billing.findOne({ appointmentId: appointment._id });
+    if (appointment.paymentStatus === 'Paid' || (existingBill && existingBill.status === 'Paid')) {
+      return res.status(400).json({
+        error: 'Appointment payment has already been completed in full. No further payment request needed.'
+      });
+    }
+
     // 1. Check if patient has already been charged the One-Time Registration Fee in this tenant
     const existingRegBill = await Billing.findOne({
       tenantId: appointment.tenantId,
@@ -632,10 +660,27 @@ router.post('/:id/pay', async (req, res) => {
 
     const Billing = require('../models/Billing');
     const paymentMethod = req.body.paymentMethod || 'Online (UPI/Card)';
+    const transactionRef = req.body.transactionRef || req.body.razorpay_payment_id || `TXN-ONLINE-${Date.now()}`;
     
     // Find or create bill
     let bill = await Billing.findOne({ appointmentId: appointment._id });
     if (bill) {
+      const payableAmt = bill.totalAmount || 0;
+      // Add online payment entry if not already recorded
+      if (!bill.payments) bill.payments = [];
+      const alreadyHasThisTxn = bill.payments.some(p => p.transactionRef && p.transactionRef === transactionRef);
+      if (!alreadyHasThisTxn) {
+        bill.payments.push({
+          paymentId: `PAY-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          amount: payableAmt,
+          method: paymentMethod,
+          source: 'Online',
+          transactionRef,
+          recordedBy: 'Patient Online Portal',
+          recordedByName: req.user?.name || 'Patient',
+          recordedAt: new Date()
+        });
+      }
       bill.status = 'Paid';
       bill.paymentMethod = paymentMethod;
       await bill.save();

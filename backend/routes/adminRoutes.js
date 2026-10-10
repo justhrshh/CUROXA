@@ -115,9 +115,14 @@ router.post("/users", isHrOrAdmin, requireActiveSubscription, async (req, res) =
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
 
+    const { generateHospitalEmployeeId } = require("../utils/identifierEngine");
+    const authoritativeEmployeeId = await generateHospitalEmployeeId(req.tenantId);
+
     const newUser = await User.create({
       tenantId: req.tenantId,
       staff_id,
+      employeeId: authoritativeEmployeeId,
+      title: (req.body.title || '').trim(),
       password_hash: hash,
       role,
       name,
@@ -155,7 +160,7 @@ router.post("/users", isHrOrAdmin, requireActiveSubscription, async (req, res) =
       publicQueueId: role === 'doctor' ? ('q_' + require('crypto').randomBytes(10).toString('hex')) : undefined
     });
 
-    writeAudit(req, "staff_created", newUser._id, { staff_id, role, name });
+    writeAudit(req, "staff_created", newUser._id, { staff_id, employeeId: authoritativeEmployeeId, role, name, title: newUser.title });
 
     res.status(201).json(newUser);
   } catch (error) {
@@ -171,9 +176,14 @@ router.put("/users/:id", isHrOrAdmin, requireActiveSubscription, async (req, res
   console.log(`[UPDATE USER] ID: ${id}, Body:`, JSON.stringify(req.body));
 
   try {
+    const existingStaff = await User.findOne({ _id: id, tenantId: req.tenantId });
+    if (!existingStaff) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
     const updateFields = {};
     const allowedFields = [
-      'name', 'role', 'specialty', 'email', 'phone', 'gender', 'dob', 
+      'name', 'title', 'role', 'specialty', 'email', 'phone', 'gender', 'dob', 
       'bloodGroup', 'address', 'emergencyContact', 'aadhaar', 'pan', 
       'department', 'designation', 'employmentType', 'joiningDate', 
       'reportingManagerId', 'reportingManagerName', 'workLocation', 
@@ -188,6 +198,12 @@ router.put("/users/:id", isHrOrAdmin, requireActiveSubscription, async (req, res
         updateFields[field] = req.body[field];
       }
     });
+
+    // Ensure legacy staff members missing employeeId receive one upon update
+    if (!existingStaff.employeeId && existingStaff.role !== 'patient') {
+      const { generateHospitalEmployeeId } = require("../utils/identifierEngine");
+      updateFields.employeeId = await generateHospitalEmployeeId(req.tenantId);
+    }
 
     if (req.body.role === "doctor") {
       updateFields.max_slots = req.body.max_slots ? Number(req.body.max_slots) : 10;

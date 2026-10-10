@@ -97,7 +97,7 @@ function InlineImportPreview({ previewData, onClose, onConfirmImport, isImportin
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginTop: '4px', fontSize: '11.5px', color: '#64748B' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Building2 size={13} />
-                  Hospital: <strong style={{ color: '#0F172A' }}>{tenant?.name || tenant?.id || '—'}</strong>
+                  Clinic: <strong style={{ color: '#0F172A' }}>{tenant?.name || tenant?.id || '—'}</strong>
                   {tenant?.code && tenant.code !== tenant.name && ` (${tenant.code})`}
                 </span>
                 <span>·</span>
@@ -164,12 +164,12 @@ function InlineImportPreview({ previewData, onClose, onConfirmImport, isImportin
             />
             <div>
               <span style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A', display: 'block' }}>
-                Allow Repricing of Existing Hospital Catalog Items
+                Allow Repricing of Existing Clinic Catalog Items
               </span>
               <p style={{ fontSize: '11px', color: allowRepricing ? '#6D28D9' : '#64748B', margin: '3px 0 0 0', lineHeight: 1.4 }}>
                 {allowRepricing
-                  ? `Enabled: Imported prices will overwrite existing hospital catalog prices for matching items (${summary?.repricingDiffs || 0} items affected).`
-                  : 'Disabled: Existing hospital catalog prices remain strictly frozen and untouched.'}
+                  ? `Enabled: Imported prices will overwrite existing clinic catalog prices for matching items (${summary?.repricingDiffs || 0} items affected).`
+                  : 'Disabled: Existing clinic catalog prices remain strictly frozen and untouched.'}
               </p>
             </div>
           </label>
@@ -270,7 +270,7 @@ function InlineImportPreview({ previewData, onClose, onConfirmImport, isImportin
             ) : (
               <>
                 <ShieldCheck size={15} />
-                Confirm &amp; Import Hospital Catalog
+                Confirm &amp; Import Clinic Catalog
               </>
             )}
           </button>
@@ -418,7 +418,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
       const blob = await res.blob();
       const safeCat = downloadCategory.replace(/\s+/g, '_');
       const deptSuffix = downloadDepartment && downloadDepartment !== 'all' ? `_${downloadDepartment.replace(/\s+/g, '_')}` : '_All_Departments';
-      const hospPrefix = downloadHospital ? `Hospital_${downloadHospital}_` : 'Quroxa_';
+      const hospPrefix = downloadHospital ? `Clinic_${downloadHospital}_` : 'Quroxa_';
       const safeFilename = `${hospPrefix}${safeCat}${deptSuffix}.xlsx`;
 
       const link = document.createElement('a');
@@ -445,7 +445,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
       return;
     }
     if (!uploadHospital) {
-      setError('Target Hospital is mandatory for upload. Please select a hospital.');
+      setError('Target Clinic is mandatory for upload. Please select a clinic.');
       return;
     }
     if (!uploadCategory) {
@@ -617,10 +617,10 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
               </span>
             </div>
 
-            {/* Target Hospital Selector (Optional for download) */}
+            {/* Target Clinic Selector (Optional for download) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
-                Target Hospital (Optional — Pre-populates Existing Pricing):
+                Target Clinic (Optional — Pre-populates Existing Pricing):
               </label>
               <select
                 value={downloadHospital}
@@ -742,7 +742,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
               </div>
               <div>• <strong>Scope:</strong> {(!downloadDepartment || downloadDepartment === 'all') && downloadCatConfig?.hasDepartment ? `Exports ALL ${downloadDepartments.length} departments into ONE workbook; preserves Department in each row.` : downloadDepartment ? `Exports only ${downloadDepartment} department.` : 'Standard category catalogue.'}</div>
               <div>• <strong>Commercial Columns:</strong> Always includes <strong>MRP</strong> and <strong>Net Rate</strong>.</div>
-              <div>• <strong>Pricing State:</strong> {downloadHospital ? `Populates configured prices for ${downloadHospital}.` : 'Blank commercial columns ready for hospital price entry.'}</div>
+              <div>• <strong>Pricing State:</strong> {downloadHospital ? `Populates configured prices for ${downloadHospital}.` : 'Blank commercial columns ready for clinic price entry.'}</div>
             </div>
 
             {/* Action Button */}
@@ -808,7 +808,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
                     SECTION B — UPLOAD MASTER
                   </h3>
                   <span style={{ fontSize: '11px', color: '#64748B' }}>
-                    Hospital commercial selection & repricing ingestion
+                    Clinic commercial selection & repricing ingestion
                   </span>
                 </div>
               </div>
@@ -817,10 +817,10 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
               </span>
             </div>
 
-            {/* Target Hospital (Required) */}
+            {/* Target Clinic (Required) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ color: '#DC2626' }}>*</span> Target Hospital:
+                <span style={{ color: '#DC2626' }}>*</span> Target Clinic:
               </label>
               <select
                 value={uploadHospital}
@@ -839,7 +839,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
                   cursor: 'pointer'
                 }}
               >
-                <option value="">-- Select Target Hospital (Required) --</option>
+                <option value="">-- Select Target Clinic (Required) --</option>
                 {hospitals.map(h => (
                   <option key={h.code || h.hospitalId} value={h.code || h.hospitalId}>
                     {h.name} ({h.code || h.hospitalId})
@@ -1022,7 +1022,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <History size={16} color="#64748B" />
             <h3 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Recent Hospital Catalog Ingestion History
+              Recent Clinic Catalog Ingestion History
             </h3>
           </div>
           <button
@@ -1050,7 +1050,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
 
         {history.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '24px', color: '#94A3B8', fontSize: '12px', fontStyle: 'italic' }}>
-            No recent hospital catalog ingestion batches found.
+            No recent clinic catalog ingestion batches found.
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -1058,7 +1058,7 @@ export default function HospitalMasterUploadView({ onSwitchTab }) {
               <thead>
                 <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontWeight: 700 }}>
                   <th style={{ padding: '8px 10px' }}>Batch ID & Date</th>
-                  <th style={{ padding: '8px 10px' }}>Target Hospital</th>
+                  <th style={{ padding: '8px 10px' }}>Target Clinic</th>
                   <th style={{ padding: '8px 10px' }}>Category & Scope</th>
                   <th style={{ padding: '8px 10px' }}>Original File</th>
                   <th style={{ padding: '8px 10px', textAlign: 'center' }}>New / Repriced</th>

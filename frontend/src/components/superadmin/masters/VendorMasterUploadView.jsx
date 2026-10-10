@@ -87,7 +87,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
 
       const blob = await res.blob();
       const filename = downloadHospital
-        ? `Hospital_${downloadHospital}_Vendor_Master.xlsx`
+        ? `Clinic_${downloadHospital}_Vendor_Master.xlsx`
         : `Quroxa_Vendor_Master_${new Date().toISOString().split('T')[0]}.xlsx`;
 
       const link = document.createElement('a');
@@ -112,7 +112,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
       return;
     }
     if (!selectedHospital) {
-      setError('Please select a target hospital for vendor association.');
+      setError('Please select a target clinic for vendor association.');
       return;
     }
 
@@ -238,16 +238,16 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
                 Vendor Master Ingestion Completed Successfully
               </h3>
               <p style={{ fontSize: '12px', color: '#047857', margin: 0 }}>
-                Target Hospital: <strong>{importResult.hospitalName || importResult.tenantId}</strong>
+                Target Clinic: <strong>{importResult.hospitalName || importResult.tenantId}</strong>
               </p>
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
             <div style={{ background: '#ECFDF5', padding: '12px', borderRadius: '8px', border: '1px solid #A7F3D0' }}>
-              <span style={{ fontSize: '11px', color: '#065F46', fontWeight: 700, textTransform: 'uppercase' }}>Associated with Hospital</span>
+              <span style={{ fontSize: '11px', color: '#065F46', fontWeight: 700, textTransform: 'uppercase' }}>Associated with Clinic</span>
               <div style={{ fontSize: '20px', fontWeight: 800, color: '#047857' }}>{importResult.associatedCount} vendors</div>
-              <span style={{ fontSize: '10.5px', color: '#059669' }}>Added / verified in hospital catalog</span>
+              <span style={{ fontSize: '10.5px', color: '#059669' }}>Added / verified in clinic catalog</span>
             </div>
             <div style={{ background: '#FEF3C7', padding: '12px', borderRadius: '8px', border: '1px solid #FDE68A' }}>
               <span style={{ fontSize: '11px', color: '#92400E', fontWeight: 700, textTransform: 'uppercase' }}>Routed to SuperAdmin</span>
@@ -314,10 +314,10 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
               </span>
             </div>
 
-            {/* Target Hospital Selector for Download */}
+            {/* Target Clinic Selector for Download */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
-                Source Scope / Target Hospital:
+                Source Scope / Target Clinic:
               </label>
               <select
                 value={downloadHospital}
@@ -339,7 +339,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
                 <option value="">Global Master (All Canonical Vendors / Reference)</option>
                 {hospitals.map(h => (
                   <option key={h.code || h.hospitalId} value={h.code || h.hospitalId}>
-                    {h.name} ({h.code || h.hospitalId}) — Hospital Associated Vendors
+                    {h.name} ({h.code || h.hospitalId}) — Clinic Associated Vendors
                   </option>
                 ))}
               </select>
@@ -364,7 +364,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
               </div>
               <div>• Sheet Name: <strong>Store Vendor Master</strong></div>
               <div>• 49 client-verified columns from Vendor Master registry</div>
-              <div>• {downloadHospital ? `Exports only vendors associated with hospital (${downloadHospital})` : 'Exports the full global vendor catalog for reference / onboarding'}</div>
+              <div>• {downloadHospital ? `Exports only vendors associated with clinic (${downloadHospital})` : 'Exports the full global vendor catalog for reference / onboarding'}</div>
             </div>
 
             {/* Download Action Button */}
@@ -429,7 +429,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
                     SECTION B — UPLOAD MASTER
                   </h3>
                   <span style={{ fontSize: '11px', color: '#64748B' }}>
-                    Additive hospital association & vendor onboarding
+                    Additive clinic association & vendor onboarding
                   </span>
                 </div>
               </div>
@@ -438,10 +438,10 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
               </span>
             </div>
 
-            {/* Target Hospital Selector for Upload (Required) */}
+            {/* Target Clinic Selector for Upload (Required) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ color: '#DC2626' }}>*</span> Target Hospital:
+                <span style={{ color: '#DC2626' }}>*</span> Target Clinic:
               </label>
               <select
                 value={selectedHospital}
@@ -460,7 +460,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
                   cursor: 'pointer'
                 }}
               >
-                <option value="">-- Select Target Hospital (Required) --</option>
+                <option value="">-- Select Target Clinic (Required) --</option>
                 {hospitals.map(h => (
                   <option key={h.code || h.hospitalId} value={h.code || h.hospitalId}>
                     {h.name} ({h.code || h.hospitalId})
@@ -485,7 +485,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
                 <ShieldCheck size={14} color="#16a34a" />
                 Ingestion Safeguards
               </div>
-              <div>• <strong>Additive Ingestion:</strong> Existing hospital vendors will NOT be deleted.</div>
+              <div>• <strong>Additive Ingestion:</strong> Existing clinic vendors will NOT be deleted.</div>
               <div>• <strong>Unmatched Vendors:</strong> Safely routed to SuperAdmin Approval queue.</div>
             </div>
 
@@ -577,7 +577,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
                   Vendor Master Ingestion Preview
                 </h3>
                 <p style={{ fontSize: '11.5px', color: '#64748B', margin: 0 }}>
-                  Target Hospital: <strong>{hospitals.find(h => (h.code || h.hospitalId) === selectedHospital)?.name || selectedHospital}</strong>
+                  Target Clinic: <strong>{hospitals.find(h => (h.code || h.hospitalId) === selectedHospital)?.name || selectedHospital}</strong>
                 </p>
               </div>
               <button
@@ -650,7 +650,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
                           r.isAlreadyAssociated ? (
                             <span style={{ color: '#64748B', fontSize: '11px' }}>Already Associated (Retained)</span>
                           ) : (
-                            <span style={{ color: '#059669', fontWeight: 700, fontSize: '11px' }}>+ Add to Hospital</span>
+                            <span style={{ color: '#059669', fontWeight: 700, fontSize: '11px' }}>+ Add to Clinic</span>
                           )
                         ) : (
                           <span style={{ color: '#D97706', fontWeight: 700, fontSize: '11px' }}>&rsaquo; Route to Approval</span>
@@ -677,7 +677,7 @@ export default function VendorMasterUploadView({ onSwitchTab }) {
               background: '#F8FAFC'
             }}>
               <span style={{ fontSize: '11.5px', color: '#64748B' }}>
-                Ingestion is non-destructive. Hospital associations are additive.
+                Ingestion is non-destructive. Clinic associations are additive.
               </span>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button

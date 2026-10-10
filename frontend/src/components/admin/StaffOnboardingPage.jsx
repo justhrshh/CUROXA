@@ -94,9 +94,11 @@ export default function StaffOnboardingPage({
 
   // Core Form State
   const [formData, setFormData] = useState({
+    title: rolesList[0]?.value === 'doctor' ? 'Dr.' : 'Mr.',
     name: '',
     phone: '',
     staff_id: '',
+    employeeId: '',
     email: '',
     joiningDate: new Date().toISOString().split('T')[0],
     password: '',
@@ -153,9 +155,17 @@ export default function StaffOnboardingPage({
       desig = 'System Administrator';
     }
 
+    let newTitle = formData.title;
+    if (newRole === 'doctor' && (newTitle === 'Mr.' || !newTitle)) {
+      newTitle = 'Dr.';
+    } else if (newRole !== 'doctor' && newTitle === 'Dr.') {
+      newTitle = 'Mr.';
+    }
+
     setFormData(prev => ({
       ...prev,
       role: newRole,
+      title: newTitle,
       department: dept,
       designation: desig
     }));
@@ -284,6 +294,7 @@ export default function StaffOnboardingPage({
     const errors = {};
 
     // Validate Required Fields
+    if (!formData.title || !formData.title.trim()) errors.title = 'Title is required.';
     if (!formData.name.trim()) errors.name = 'Full legal name is required.';
     if (!formData.phone.trim()) {
       errors.phone = 'Phone number is required.';
@@ -334,6 +345,7 @@ export default function StaffOnboardingPage({
 
     // Construct backend payload
     const payload = {
+      title: formData.title || 'Mr.',
       name: formData.name.trim(),
       phone: formData.phone.trim(),
       staff_id: formData.phone.trim(),
@@ -363,7 +375,7 @@ export default function StaffOnboardingPage({
       aadhaar: formData.aadhaar || undefined,
       pan: formData.pan ? formData.pan.toUpperCase() : undefined,
       address: formData.address || undefined,
-      emergencyContact: (formData.emergencyContactName || formData.emergencyContactPhone) ? {
+      emergencyContact: (formData.emergencyContactName || formData.emergencyContactPhone || formData.emergencyContactRelation) ? {
         name: formData.emergencyContactName,
         relation: formData.emergencyContactRelation,
         phone: formData.emergencyContactPhone
@@ -538,223 +550,288 @@ export default function StaffOnboardingPage({
               </span>
             </div>
 
-            {/* ROW 1: Name, Phone, Login ID */}
-            {/* Col 1: Full Legal Name */}
-            <div style={fieldRow}>
-              <span style={labelStyle}>
-                Full Legal Name <span style={{ color: '#EF4444' }}>*</span>
-              </span>
-              <span style={colonStyle}>:</span>
-              <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-                <input
-                  type="text"
-                  name="name"
-                  placeholder="e.g. Dr. Rajesh Sharma"
-                  value={formData.name}
-                  onChange={e => {
-                    setFormData({ ...formData, name: e.target.value });
-                    if (fieldErrors.name) setFieldErrors(prev => ({ ...prev, name: '' }));
-                  }}
-                  style={{
-                    ...tableInp,
-                    ...(fieldErrors.name ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Col 2: Phone Number */}
-            <div style={fieldRow}>
-              <span style={labelStyle}>
-                Phone Number <span style={{ color: '#EF4444' }}>*</span>
-              </span>
-              <span style={colonStyle}>:</span>
-              <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-                <input
-                  type="tel"
-                  name="phone"
-                  maxLength={10}
-                  placeholder="10-digit mobile number"
-                  value={formData.phone}
-                  onChange={e => {
-                    const digits = e.target.value.replace(/\D/g, '');
-                    setFormData({
-                      ...formData,
-                      phone: digits,
-                      staff_id: digits
-                    });
-                    if (fieldErrors.phone) setFieldErrors(prev => ({ ...prev, phone: '' }));
-                  }}
-                  style={{
-                    ...tableInp,
-                    ...(fieldErrors.phone ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Col 3: System Login ID (Auto-populated from phone) */}
-            <div style={fieldRow}>
-              <span style={labelStyle}>
-                System Login ID
-              </span>
-              <span style={colonStyle}>:</span>
-              <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  name="staff_id"
-                  readOnly
-                  value={formData.phone || 'Auto-populated from Phone'}
-                  style={{
-                    ...tableInp,
-                    background: '#F8FAFC',
-                    fontFamily: 'monospace',
-                    fontWeight: 700,
-                    color: '#475569',
-                    paddingRight: formData.phone.length === 10 ? '75px' : '8px',
-                    cursor: 'not-allowed'
-                  }}
-                />
-                {formData.phone.length === 10 && (
-                  <span style={{
-                    position: 'absolute',
-                    right: '6px',
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    color: '#059669',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '2px'
-                  }}>
-                    <Check style={{ width: 11, height: 11, strokeWidth: 3 }} /> Valid ID
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* ROW 2: Password, Confirm Password, Work Location */}
-            {/* Col 1: Login Password */}
-            <div style={fieldRow}>
-              <span style={labelStyle}>
-                Login Password <span style={{ color: '#EF4444' }}>*</span>
-              </span>
-              <span style={colonStyle}>:</span>
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    name="password"
-                    placeholder="Enter password"
-                    value={formData.password}
+            <div style={{
+              gridColumn: '1 / -1',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+              columnGap: '16px',
+              rowGap: '6px',
+              alignItems: 'center'
+            }}>
+              {/* ROW 1: Title, Name, Phone, Login ID */}
+              {/* Col 1: Title */}
+              <div style={fieldRow}>
+                <span style={{ ...labelStyle, width: '90px' }}>
+                  Title <span style={{ color: '#EF4444' }}>*</span>
+                </span>
+                <span style={colonStyle}>:</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <select
+                    id="title-select"
+                    name="title"
+                    value={formData.title}
+                    onChange={e => {
+                      setFormData({ ...formData, title: e.target.value });
+                      if (fieldErrors.title) setFieldErrors(prev => ({ ...prev, title: '' }));
+                    }}
                     style={{
                       ...tableInp,
-                      paddingRight: '26px',
-                      letterSpacing: (!showPassword && formData.password) ? '0.18em' : 'normal',
-                      fontSize: (!showPassword && formData.password) ? '14px' : '11.5px',
-                      ...(fieldErrors.password ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
+                      cursor: 'pointer',
+                      fontWeight: 650,
+                      ...(fieldErrors.title ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
                     }}
+                  >
+                    <option value="">Select Title</option>
+                    <option value="Mr.">Mr.</option>
+                    <option value="Mrs.">Mrs.</option>
+                    <option value="Ms.">Ms.</option>
+                    <option value="Dr.">Dr.</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Col 2: Full Legal Name */}
+              <div style={fieldRow}>
+                <span style={{ ...labelStyle, width: '105px' }}>
+                  Full Legal Name <span style={{ color: '#EF4444' }}>*</span>
+                </span>
+                <span style={colonStyle}>:</span>
+                <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+                  <input
+                    type="text"
+                    name="name"
+                    placeholder="e.g. Rajesh Sharma"
+                    value={formData.name}
                     onChange={e => {
-                      setFormData({ ...formData, password: e.target.value });
-                      if (fieldErrors.password) setFieldErrors(prev => ({ ...prev, password: '' }));
+                      setFormData({ ...formData, name: e.target.value });
+                      if (fieldErrors.name) setFieldErrors(prev => ({ ...prev, name: '' }));
+                    }}
+                    style={{
+                      ...tableInp,
+                      ...(fieldErrors.name ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
                     }}
                   />
+                </div>
+              </div>
+
+              {/* Col 3: Phone Number */}
+              <div style={fieldRow}>
+                <span style={{ ...labelStyle, width: '95px' }}>
+                  Phone Number <span style={{ color: '#EF4444' }}>*</span>
+                </span>
+                <span style={colonStyle}>:</span>
+                <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+                  <input
+                    type="tel"
+                    name="phone"
+                    maxLength={10}
+                    placeholder="10-digit mobile"
+                    value={formData.phone}
+                    onChange={e => {
+                      const digits = e.target.value.replace(/\D/g, '');
+                      setFormData({
+                        ...formData,
+                        phone: digits,
+                        staff_id: digits
+                      });
+                      if (fieldErrors.phone) setFieldErrors(prev => ({ ...prev, phone: '' }));
+                    }}
+                    style={{
+                      ...tableInp,
+                      ...(fieldErrors.phone ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Col 4: System Login ID (Auto-populated from phone) */}
+              <div style={fieldRow}>
+                <span style={{ ...labelStyle, width: '105px' }}>
+                  System Login ID
+                </span>
+                <span style={colonStyle}>:</span>
+                <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    name="staff_id"
+                    readOnly
+                    value={formData.phone || 'Auto-populated from Phone'}
+                    style={{
+                      ...tableInp,
+                      background: '#F8FAFC',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      color: '#475569',
+                      paddingRight: formData.phone.length === 10 ? '75px' : '8px',
+                      cursor: 'not-allowed'
+                    }}
+                  />
+                  {formData.phone.length === 10 && (
+                    <span style={{
+                      position: 'absolute',
+                      right: '6px',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      color: '#059669',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '2px'
+                    }}>
+                      <Check style={{ width: 11, height: 11, strokeWidth: 3 }} /> Valid ID
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* ROW 2: Employee ID, Password, Confirm Password, Work Location */}
+              {/* Col 1: Employee ID */}
+              <div style={fieldRow}>
+                <span style={{ ...labelStyle, width: '90px' }}>
+                  Employee ID
+                </span>
+                <span style={colonStyle}>:</span>
+                <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+                  <input
+                    type="text"
+                    name="employeeId"
+                    readOnly
+                    value={formData.employeeId || 'Auto-generated on creation'}
+                    style={{
+                      ...tableInp,
+                      background: '#F8FAFC',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      color: '#64748B',
+                      cursor: 'not-allowed'
+                    }}
+                    title="Authoritative Employee ID generated on creation by server"
+                  />
+                </div>
+              </div>
+
+              {/* Col 2: Login Password */}
+              <div style={fieldRow}>
+                <span style={{ ...labelStyle, width: '105px' }}>
+                  Login Password <span style={{ color: '#EF4444' }}>*</span>
+                </span>
+                <span style={colonStyle}>:</span>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      placeholder="Enter password"
+                      value={formData.password}
+                      style={{
+                        ...tableInp,
+                        paddingRight: '26px',
+                        letterSpacing: (!showPassword && formData.password) ? '0.18em' : 'normal',
+                        fontSize: (!showPassword && formData.password) ? '14px' : '11.5px',
+                        ...(fieldErrors.password ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
+                      }}
+                      onChange={e => {
+                        setFormData({ ...formData, password: e.target.value });
+                        if (fieldErrors.password) setFieldErrors(prev => ({ ...prev, password: '' }));
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{ position: 'absolute', right: '5px', background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', padding: 0 }}
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff style={{ width: 13, height: 13 }} /> : <Eye style={{ width: 13, height: 13 }} />}
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{ position: 'absolute', right: '5px', background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', padding: 0 }}
-                    title={showPassword ? 'Hide password' : 'Show password'}
+                    onClick={generateSecurePassword}
+                    style={{
+                      height: '26px',
+                      padding: '0 6px',
+                      borderRadius: '3px',
+                      border: '1px solid #BFDBFE',
+                      background: '#EFF6FF',
+                      color: '#1D4ED8',
+                      fontSize: '10.5px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      flexShrink: 0
+                    }}
+                    title="Generate strong random password"
                   >
-                    {showPassword ? <EyeOff style={{ width: 13, height: 13 }} /> : <Eye style={{ width: 13, height: 13 }} />}
+                    <Sparkles style={{ width: 11, height: 11 }} />
+                    <span>Generate</span>
                   </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={generateSecurePassword}
-                  style={{
-                    height: '26px',
-                    padding: '0 6px',
-                    borderRadius: '3px',
-                    border: '1px solid #BFDBFE',
-                    background: '#EFF6FF',
-                    color: '#1D4ED8',
-                    fontSize: '10.5px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '3px',
-                    flexShrink: 0
-                  }}
-                  title="Generate strong random password"
-                >
-                  <Sparkles style={{ width: 11, height: 11 }} />
-                  <span>Generate</span>
-                </button>
               </div>
-            </div>
 
-            {/* Col 2: Confirm Password */}
-            <div style={fieldRow}>
-              <span style={labelStyle}>
-                Confirm Password <span style={{ color: '#EF4444' }}>*</span>
-              </span>
-              <span style={colonStyle}>:</span>
-              <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  name="confirmPassword"
-                  placeholder="Re-enter password"
-                  value={formData.confirmPassword}
-                  style={{
-                    ...tableInp,
-                    paddingRight: formData.confirmPassword ? '80px' : '26px',
-                    letterSpacing: (!showConfirmPassword && formData.confirmPassword) ? '0.18em' : 'normal',
-                    fontSize: (!showConfirmPassword && formData.confirmPassword) ? '14px' : '11.5px',
-                    ...(fieldErrors.confirmPassword ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
-                  }}
-                  onChange={e => {
-                    setFormData({ ...formData, confirmPassword: e.target.value });
-                    if (fieldErrors.confirmPassword) setFieldErrors(prev => ({ ...prev, confirmPassword: '' }));
-                  }}
-                />
-                {formData.confirmPassword && (
-                  <span style={{
-                    position: 'absolute',
-                    right: '25px',
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    color: formData.password === formData.confirmPassword ? '#059669' : '#DC2626'
-                  }}>
-                    {formData.password === formData.confirmPassword ? '✓ Matched' : 'Mismatch'}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  style={{ position: 'absolute', right: '5px', background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', padding: 0 }}
-                  title={showConfirmPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showConfirmPassword ? <EyeOff style={{ width: 13, height: 13 }} /> : <Eye style={{ width: 13, height: 13 }} />}
-                </button>
+              {/* Col 3: Confirm Password */}
+              <div style={fieldRow}>
+                <span style={{ ...labelStyle, width: '110px' }}>
+                  Confirm Password <span style={{ color: '#EF4444' }}>*</span>
+                </span>
+                <span style={colonStyle}>:</span>
+                <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    name="confirmPassword"
+                    placeholder="Re-enter password"
+                    value={formData.confirmPassword}
+                    style={{
+                      ...tableInp,
+                      paddingRight: formData.confirmPassword ? '80px' : '26px',
+                      letterSpacing: (!showConfirmPassword && formData.confirmPassword) ? '0.18em' : 'normal',
+                      fontSize: (!showConfirmPassword && formData.confirmPassword) ? '14px' : '11.5px',
+                      ...(fieldErrors.confirmPassword ? { borderColor: '#EF4444', background: '#FEF2F2' } : {})
+                    }}
+                    onChange={e => {
+                      setFormData({ ...formData, confirmPassword: e.target.value });
+                      if (fieldErrors.confirmPassword) setFieldErrors(prev => ({ ...prev, confirmPassword: '' }));
+                    }}
+                  />
+                  {formData.confirmPassword && (
+                    <span style={{
+                      position: 'absolute',
+                      right: '25px',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      color: formData.password === formData.confirmPassword ? '#059669' : '#DC2626'
+                    }}>
+                      {formData.password === formData.confirmPassword ? '✓ Matched' : 'Mismatch'}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={{ position: 'absolute', right: '5px', background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', padding: 0 }}
+                    title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfirmPassword ? <EyeOff style={{ width: 13, height: 13 }} /> : <Eye style={{ width: 13, height: 13 }} />}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {/* Col 3: Work Location / Facility */}
-            <div style={fieldRow}>
-              <span style={labelStyle}>
-                Work Location
-              </span>
-              <span style={colonStyle}>:</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <input
-                  type="text"
-                  name="workLocation"
-                  placeholder="Main Wing - Clinical Center"
-                  value={formData.workLocation}
-                  onChange={e => setFormData({ ...formData, workLocation: e.target.value })}
-                  style={tableInp}
-                />
+              {/* Col 4: Work Location */}
+              <div style={fieldRow}>
+                <span style={{ ...labelStyle, width: '90px' }}>
+                  Work Location
+                </span>
+                <span style={colonStyle}>:</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input
+                    type="text"
+                    name="workLocation"
+                    placeholder="Main Wing - Clinical Center"
+                    value={formData.workLocation}
+                    onChange={e => setFormData({ ...formData, workLocation: e.target.value })}
+                    style={tableInp}
+                  />
+                </div>
               </div>
             </div>
 
@@ -1242,6 +1319,7 @@ export default function StaffOnboardingPage({
                 SECTION 5: PERSONAL, STATUTORY & EMERGENCY DETAILS (OPTIONAL)
                ══════════════════════════════════════════════════════════════════ */}
             <div
+              id="section-personal-details-toggle"
               onClick={() => setShowOptionalDetails(!showOptionalDetails)}
               style={{
                 ...sectionHeaderStyle,
@@ -1418,13 +1496,21 @@ export default function StaffOnboardingPage({
                   </span>
                   <span style={colonStyle}>:</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <input
-                      type="text"
-                      placeholder="e.g. Spouse / Parent"
+                    <select
+                      id="emergency-relation-select"
+                      name="emergencyContactRelation"
                       value={formData.emergencyContactRelation}
                       onChange={e => setFormData({ ...formData, emergencyContactRelation: e.target.value })}
-                      style={tableInp}
-                    />
+                      style={{ ...tableInp, cursor: 'pointer' }}
+                    >
+                      <option value="">-- Select Relationship --</option>
+                      {Boolean(formData.emergencyContactRelation && !['Spouse', 'Parent', 'Child', 'Sibling', 'Relative', 'Guardian', 'Other'].includes(formData.emergencyContactRelation)) && (
+                        <option value={formData.emergencyContactRelation}>{formData.emergencyContactRelation}</option>
+                      )}
+                      {['Spouse', 'Parent', 'Child', 'Sibling', 'Relative', 'Guardian', 'Other'].map(rel => (
+                        <option key={rel} value={rel}>{rel}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 

@@ -1712,7 +1712,7 @@ export default function VendorMasterView() {
               <thead>
                 <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 700, fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <th style={{ padding: '8px 10px', width: '110px' }}>Request No</th>
-                  <th style={{ padding: '8px 10px', width: '130px' }}>Hospital</th>
+                  <th style={{ padding: '8px 10px', width: '130px' }}>Clinic</th>
                   <th style={{ padding: '8px 10px', minWidth: '170px' }}>Proposed Supplier</th>
                   <th style={{ padding: '8px 10px', width: '140px' }}>Contact Person</th>
                   <th style={{ padding: '8px 10px', width: '130px' }}>GST / PAN</th>
@@ -1787,7 +1787,7 @@ export default function VendorMasterView() {
                         </td>
                         <td style={{ padding: '7px 10px', fontSize: '10.5px', color: '#64748B' }}>
                           <div>{new Date(req.createdAt).toLocaleDateString()}</div>
-                          <div style={{ fontSize: '10px' }}>by {req.submittedBy || 'Hospital Staff'}</div>
+                          <div style={{ fontSize: '10px' }}>by {req.submittedBy || 'Clinic Staff'}</div>
                         </td>
                         <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                           <span style={{

@@ -852,9 +852,14 @@ export default function EmployeeDirectoryView({
                         <div className="min-w-0">
                           <div 
                             onClick={() => onSelectEmployee(emp.id)}
-                            className="font-extrabold text-slate-900 hover:text-blue-600 cursor-pointer transition-colors text-xs truncate max-w-[160px]"
+                            className="font-extrabold text-slate-900 hover:text-blue-600 cursor-pointer transition-colors text-xs flex items-center gap-1.5"
                           >
-                            {emp.name}
+                            <span className="truncate max-w-[140px]">{emp.title ? `${emp.title} ${emp.name}` : emp.name}</span>
+                            {emp.employeeId && (
+                              <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[9.5px] font-mono font-bold shrink-0">
+                                {emp.employeeId}
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] text-slate-500 font-medium truncate max-w-[160px] mt-0.5">
                             {emp.designation || (roleKey.includes('doctor') ? 'Consultant Practitioner' : roleKey.includes('reception') ? 'Receptionist' : roleKey.includes('hr') ? 'HR Manager' : 'Staff Member')}

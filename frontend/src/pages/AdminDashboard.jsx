@@ -3093,6 +3093,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     return {
       id: userId,
       staff_id: user.staff_id || userId,
+      employeeId: user.employeeId || '',
+      title: user.title || '',
       name: user.name,
       email: user.email || '',
       phone: user.phone || '',
@@ -14662,8 +14664,15 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                                         {item.initials || getInitials(item.name)}
                                       </div>
                                       <div style={{ minWidth: 0 }}>
-                                        <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px', whiteSpace: 'nowrap' }}>
-                                          {item.name}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px', whiteSpace: 'nowrap' }}>
+                                            {item.title ? `${item.title} ${item.name}` : item.name}
+                                          </span>
+                                          {item.employeeId && (
+                                            <span style={{ background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', fontSize: '10px', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', fontFamily: 'monospace' }}>
+                                              {item.employeeId}
+                                            </span>
+                                          )}
                                         </div>
                                         <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 550, marginTop: '1px', whiteSpace: 'nowrap' }}>
                                           {item.designation || (item.role === 'doctor' ? 'Consultant Practitioner' : item.role === 'hr' ? 'HR Manager' : item.role === 'receptionist' ? 'Front Desk Staff' : 'Employee')}

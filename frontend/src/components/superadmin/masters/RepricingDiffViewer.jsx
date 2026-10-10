@@ -14,7 +14,7 @@ export default function RepricingDiffViewer({ rowPricingDiff, category }) {
   const fields = [
     { key: 'mrp', label: 'MRP' },
     { key: 'netRate', label: 'Net Rate' },
-    { key: 'hospitalCost', label: 'Hospital Cost' }
+    { key: 'hospitalCost', label: 'Clinic Cost' }
   ];
 
   const activeDiffs = fields.filter(f => diffs[f.key] && diffs[f.key].changed);

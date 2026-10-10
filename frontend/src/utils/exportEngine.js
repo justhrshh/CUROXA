@@ -1483,8 +1483,9 @@ export function flattenPoForExport(poList) {
  * Strictly excludes sensitive HR/payroll fields (Aadhaar, PAN, Bank Account, IFSC, CTC, Passwords).
  */
 export const staffExportColumns = [
-  { key: 'staff_id', header: 'Staff ID', extractor: r => r.staff_id || r.id || '--' },
-  { key: 'name', header: 'Full Name', extractor: r => r.name || '--' },
+  { key: 'employeeId', header: 'Employee ID', extractor: r => r.employeeId || '--' },
+  { key: 'staff_id', header: 'System Login ID', extractor: r => r.staff_id || r.id || '--' },
+  { key: 'name', header: 'Full Name', extractor: r => r.title ? `${r.title} ${r.name}` : (r.name || '--') },
   { key: 'role', header: 'Role', extractor: r => r.role ? r.role.charAt(0).toUpperCase() + r.role.slice(1) : '--' },
   { key: 'department', header: 'Department', extractor: r => r.dept || r.department || r.specialty || '--' },
   { key: 'designation', header: 'Designation', extractor: r => r.designation || (r.role ? r.role.charAt(0).toUpperCase() + r.role.slice(1) : '--') },
@@ -2322,7 +2323,7 @@ export function exportHospitalValidationReportPdf({
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(148, 163, 184); // Slate 400
-  doc.text('ENTERPRISE HOSPITAL ONBOARDING & PRE-ACTIVATION VALIDATION DOSSIER', marginX + 5, 21);
+  doc.text('ENTERPRISE CLINIC ONBOARDING & PRE-ACTIVATION VALIDATION DOSSIER', marginX + 5, 21);
 
   // Right Side Header Metadata
   doc.setFont('helvetica', 'bold');
@@ -2437,17 +2438,17 @@ export function exportHospitalValidationReportPdf({
   const leftX = marginX;
   const rightX = marginX + colW + 3;
 
-  // Box 1: Hospital Identity (Left Column Upper) - H = 34mm
+  // Box 1: Clinic Identity (Left Column Upper) - H = 34mm
   const sec1Items = [
-    { label: 'Hospital Name', value: hospital.name || 'New Hospital Onboarding' },
+    { label: 'Clinic Name', value: hospital.name || 'New Clinic Onboarding' },
     { label: 'Tenant Code', value: hospital.code || 'med-new-h-512' },
-    { label: 'Primary Contact', value: `${hospital.contactName || 'Hospital Admin'} (${hospital.contactPhone || '+91 98105 02343'})` },
+    { label: 'Primary Contact', value: `${hospital.contactName || 'Clinic Admin'} (${hospital.contactPhone || '+91 98105 02343'})` },
     { label: 'Contact Email', value: hospital.contactEmail || 'admin@hospital.com' },
     { label: 'Facility Address', value: `${hospital.address || 'Medical Enclave'}, ${hospital.city || 'New Delhi'}` },
     { label: 'Operating Locale', value: `${hospital.timezone || 'Asia/Kolkata (IST)'} | ${hospital.currency || 'INR'} | ${hospital.language || 'English'}` },
     { label: 'Shifts & Format', value: `${hospital.dateFormat || 'DD/MM/YYYY'} | General Shift (09:00 - 18:00)` }
   ];
-  drawSectionBox(leftX, 48, colW, 34, '1. Hospital Identity & Location', sec1Items);
+  drawSectionBox(leftX, 48, colW, 34, '1. Clinic Identity & Location', sec1Items);
 
   // Box 2: Legal & Statutory Compliance (Right Column Upper) - H = 34mm
   const sec2Items = [
@@ -2622,7 +2623,7 @@ export function exportHospitalValidationReportPdf({
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(5.4);
   doc.setTextColor(4, 120, 87);
-  const certText = `This document certifies that ${hospital.name || 'New Hospital Onboarding'} has successfully satisfied all architectural, clinical, statutory, and security verification prerequisites. The multi-tenant environment is formally authorized and cleared for production go-live activation.`;
+  const certText = `This document certifies that ${hospital.name || 'New Clinic Onboarding'} has successfully satisfied all architectural, clinical, statutory, and security verification prerequisites. The multi-tenant environment is formally authorized and cleared for production go-live activation.`;
   doc.text(doc.splitTextToSize(certText, contentWidth - 7), marginX + 3.5, certY + 7.5);
 
   // 7. SIGNATORY STAMPS & VERIFICATION SEAL (H = 22mm)
@@ -2656,7 +2657,7 @@ export function exportHospitalValidationReportPdf({
   doc.setTextColor(100, 116, 139);
   doc.text('Quroxa Cloud Operations · Digital Signature: CRX-AUTH-2026', marginX + 3.5, sigY + 18);
 
-  // Box 2: Hospital Managing Director / Signatory
+  // Box 2: Clinic Managing Director / Signatory
   const sig2X = marginX + ((contentWidth - 3) / 2) + 3;
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(203, 213, 225);
@@ -2665,7 +2666,7 @@ export function exportHospitalValidationReportPdf({
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(5.8);
   doc.setTextColor(100, 116, 139);
-  doc.text('HOSPITAL CLINICAL / EXECUTIVE LEAD', sig2X + 3.5, sigY + 4);
+  doc.text('CLINIC CLINICAL / EXECUTIVE LEAD', sig2X + 3.5, sigY + 4);
 
   // Stamp badge
   doc.setFillColor(239, 246, 255);

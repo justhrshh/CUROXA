@@ -14,7 +14,7 @@ const appointmentSchema = new mongoose.Schema({
 
   paymentStatus: {
     type: String,
-    enum: ['Pending', 'Paid', 'Refunded'],
+    enum: ['Pending', 'Partially Paid', 'Paid', 'Refunded'],
     default: 'Pending'
   },
   source: {

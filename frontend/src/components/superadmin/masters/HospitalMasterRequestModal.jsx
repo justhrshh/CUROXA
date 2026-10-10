@@ -131,7 +131,7 @@ export default function HospitalMasterRequestModal({
         });
         if (isMounted && res.data.success) {
           if (res.data.alreadyConfigured) {
-            setDuplicateWarningA('This item is already configured in your hospital catalog.');
+            setDuplicateWarningA('This item is already configured in your clinic catalog.');
           } else if (res.data.pendingRequest) {
             setDuplicateWarningA(`An active request (${res.data.pendingRequest.requestNo}) is already pending review.`);
           } else {
@@ -292,11 +292,11 @@ export default function HospitalMasterRequestModal({
                 <LucideIcon name="file-plus" size={18} />
               </div>
               <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Hospital Master Request
+                Clinic Master Request
               </h2>
             </div>
             <p style={{ fontSize: '12px', color: '#64748B', margin: '4px 0 0 0' }}>
-              Request item configuration for hospital: <strong>{hospitalName || tenantId}</strong> ({tenantId})
+              Request item configuration for clinic: <strong>{hospitalName || tenantId}</strong> ({tenantId})
             </p>
           </div>
           <button
@@ -409,7 +409,7 @@ export default function HospitalMasterRequestModal({
                 color: '#1E40AF',
                 lineHeight: '1.5'
               }}>
-                <strong>Path A Workflow:</strong> Search canonical items in the Global Catalog. On SuperAdmin approval, this item will be activated for your hospital with your requested local commercial pricing. Global master attributes remain immutable.
+                <strong>Path A Workflow:</strong> Search canonical items in the Global Catalog. On SuperAdmin approval, this item will be activated for your clinic with your requested local commercial pricing. Global master attributes remain immutable.
               </div>
 
               {/* Category & Department selectors */}
@@ -584,11 +584,11 @@ export default function HospitalMasterRequestModal({
               {/* Requested Pricing */}
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#1E293B', marginBottom: '8px' }}>
-                  Requested Hospital Commercial Rates (₹)
+                  Requested Clinic Commercial Rates (₹)
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                   <div>
-                    <span style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>Hospital MRP (₹)</span>
+                    <span style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>Clinic MRP (₹)</span>
                     <input
                       type="number"
                       step="0.01"
@@ -605,7 +605,7 @@ export default function HospitalMasterRequestModal({
                     />
                   </div>
                   <div>
-                    <span style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>Hospital Net Rate (₹)</span>
+                    <span style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>Clinic Net Rate (₹)</span>
                     <input
                       type="number"
                       step="0.01"
@@ -622,7 +622,7 @@ export default function HospitalMasterRequestModal({
                     />
                   </div>
                   <div>
-                    <span style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>Hospital Cost (₹)</span>
+                    <span style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>Clinic Cost (₹)</span>
                     <input
                       type="number"
                       step="0.01"
@@ -713,7 +713,7 @@ export default function HospitalMasterRequestModal({
                 color: '#166534',
                 lineHeight: '1.5'
               }}>
-                <strong>Path B Workflow:</strong> If an item does not exist in the Global Catalog, propose it using the verified client schema. On SuperAdmin approval, a canonical global item will be created and configured for your hospital.
+                <strong>Path B Workflow:</strong> If an item does not exist in the Global Catalog, propose it using the verified client schema. On SuperAdmin approval, a canonical global item will be created and configured for your clinic.
               </div>
 
               {/* Category & Department selectors */}
@@ -809,11 +809,11 @@ export default function HospitalMasterRequestModal({
               {/* Requested Pricing */}
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#1E293B', marginBottom: '8px' }}>
-                  Requested Hospital Commercial Rates (₹)
+                  Requested Clinic Commercial Rates (₹)
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                   <div>
-                    <span style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>Hospital MRP (₹)</span>
+                    <span style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>Clinic MRP (₹)</span>
                     <input
                       type="number"
                       step="0.01"
@@ -830,7 +830,7 @@ export default function HospitalMasterRequestModal({
                     />
                   </div>
                   <div>
-                    <span style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>Hospital Net Rate (₹)</span>
+                    <span style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>Clinic Net Rate (₹)</span>
                     <input
                       type="number"
                       step="0.01"
@@ -847,7 +847,7 @@ export default function HospitalMasterRequestModal({
                     />
                   </div>
                   <div>
-                    <span style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>Hospital Cost (₹)</span>
+                    <span style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>Clinic Cost (₹)</span>
                     <input
                       type="number"
                       step="0.01"

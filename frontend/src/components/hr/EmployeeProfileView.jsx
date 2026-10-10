@@ -530,9 +530,16 @@ export default function EmployeeProfileView({
             )}
             <div className="space-y-1.5">
               <div className="flex flex-col sm:flex-row items-center gap-2.5">
-                <h2 className="text-2xl font-display font-extrabold text-slate-900 tracking-tight">{employee.name}</h2>
+                <h2 className="text-2xl font-display font-extrabold text-slate-900 tracking-tight">
+                  {employee.title ? `${employee.title} ${employee.name}` : employee.name}
+                </h2>
+                {employee.employeeId && (
+                  <span className="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-extrabold rounded-lg text-[10.5px] uppercase font-mono shadow-2xs">
+                    EMP ID: {employee.employeeId}
+                  </span>
+                )}
                 <span className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold rounded-lg text-[10.5px] uppercase font-mono shadow-2xs">
-                  {employee.staff_id || employee.id}
+                  Login: {employee.staff_id || employee.id}
                 </span>
               </div>
               <p className="text-slate-600 font-semibold text-xs flex items-center justify-center sm:justify-start gap-1.5">
@@ -854,7 +861,19 @@ export default function EmployeeProfileView({
                   <div>
                     <span className="text-[10px] text-blue-500 font-semibold block mb-1">RELATIONSHIP TIE</span>
                     {isEditingPersonal ? (
-                      <input type="text" className="w-full h-7 px-2 border border-blue-200 rounded bg-white text-xs outline-none focus:border-blue-500" value={personalFormData.emergencyContact.relation} onChange={e => setPersonalFormData({...personalFormData, emergencyContact: {...personalFormData.emergencyContact, relation: e.target.value}})} />
+                      <select 
+                        className="w-full h-7 px-2 border border-blue-200 rounded bg-white text-xs outline-none focus:border-blue-500 cursor-pointer" 
+                        value={personalFormData.emergencyContact?.relation || ''} 
+                        onChange={e => setPersonalFormData({...personalFormData, emergencyContact: {...personalFormData.emergencyContact, relation: e.target.value}})}
+                      >
+                        <option value="">-- Select Relationship --</option>
+                        {Boolean(personalFormData.emergencyContact?.relation && !['Spouse', 'Parent', 'Child', 'Sibling', 'Relative', 'Guardian', 'Other'].includes(personalFormData.emergencyContact.relation)) && (
+                          <option value={personalFormData.emergencyContact.relation}>{personalFormData.emergencyContact.relation}</option>
+                        )}
+                        {['Spouse', 'Parent', 'Child', 'Sibling', 'Relative', 'Guardian', 'Other'].map(rel => (
+                          <option key={rel} value={rel}>{rel}</option>
+                        ))}
+                      </select>
                     ) : (
                       <span className="font-semibold text-slate-800">{employee.emergencyContact?.relation || 'Not provided'}</span>
                     )}

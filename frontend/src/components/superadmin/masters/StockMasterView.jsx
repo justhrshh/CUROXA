@@ -67,7 +67,7 @@ export default function StockMasterView({ onSwitchTab }) {
           setBatches(list);
         }
       } catch (err) {
-        if (isMounted) setError('Failed to load hospital stock balances.');
+        if (isMounted) setError('Failed to load clinic stock balances.');
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -130,7 +130,7 @@ export default function StockMasterView({ onSwitchTab }) {
               </span>
             </div>
             <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>
-              Real-time hospital inventory balances, batch tracking, and commercial valuations
+              Real-time clinic inventory balances, batch tracking, and commercial valuations
             </p>
           </div>
         </div>
@@ -235,7 +235,7 @@ export default function StockMasterView({ onSwitchTab }) {
           </div>
         ) : filteredBatches.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
-            No stock inventory found for hospital <strong>{selectedHospital}</strong>.
+            No stock inventory found for clinic <strong>{selectedHospital}</strong>.
             <div style={{ marginTop: '8px', fontSize: '12px' }}>
               Use the Stock Master Upload flow or complete a Goods Receipt (GRN) to intake inventory.
             </div>

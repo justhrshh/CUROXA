@@ -75,9 +75,19 @@ export default function StandardReceiptModal({
   const balanceDue = Math.max(0, totalAmount - amountPaid);
 
   const paymentMethod = receiptData.paymentMethod || receiptData.paymentMode || 'Cash';
-  const settlementLines = receiptData.settlements || [
-    `${paymentMethod}::(${amountPaid.toFixed(2)}) Settlement on ${formatReceiptDateOnly(Date.now())} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ${amountPaid.toFixed(2)}`
-  ];
+  const rawSettlements = receiptData.settlements || receiptData.payments || [];
+  const settlementLines = Array.isArray(rawSettlements) && rawSettlements.length > 0
+    ? rawSettlements.map(item => {
+        if (typeof item === 'string') return item;
+        const method = item.method || 'Payment';
+        const amt = Number(item.amount || 0).toFixed(2);
+        const refStr = item.transactionRef ? ` [Ref: ${item.transactionRef}]` : '';
+        const dateStr = item.date ? formatReceiptDateOnly(item.date) : formatReceiptDateOnly(Date.now());
+        return `${method}::(₹${amt}) Settlement on ${dateStr}${refStr}`;
+      })
+    : [
+        `${paymentMethod}::(${amountPaid.toFixed(2)}) Settlement on ${formatReceiptDateOnly(Date.now())} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ${amountPaid.toFixed(2)}`
+      ];
 
   const createdBy = (receiptData.createdBy || receiptData.pharmacistName || currentUser.name || 'RECEPTIONIST').toUpperCase();
   const printDateTime = new Date().toLocaleDateString('en-US') + '   ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });

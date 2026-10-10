@@ -22,7 +22,7 @@ export default function CommonMasterUploadView({ onSwitchTab }) {
     {
       id: 'item-master',
       title: 'Item Master',
-      subtitle: 'Global catalogue + hospital commercial selection/pricing',
+      subtitle: 'Global catalogue + clinic commercial selection/pricing',
       icon: 'package',
       activeColor: '#2563EB',
       lightColor: '#EFF6FF',
@@ -31,7 +31,7 @@ export default function CommonMasterUploadView({ onSwitchTab }) {
     {
       id: 'vendor-master',
       title: 'Vendor Master',
-      subtitle: '49-column Store Vendor Master + hospital association',
+      subtitle: '49-column Store Vendor Master + clinic association',
       icon: 'truck',
       activeColor: '#059669',
       lightColor: '#ECFDF5',
@@ -40,11 +40,11 @@ export default function CommonMasterUploadView({ onSwitchTab }) {
     {
       id: 'stock-master',
       title: 'Stock Master',
-      subtitle: 'Hospital-scoped inventory balances & batch tracking',
+      subtitle: 'Clinic-scoped inventory balances & batch tracking',
       icon: 'boxes',
       activeColor: '#7C3AED',
       lightColor: '#FAF5FF',
-      badge: 'Hospital Scoped'
+      badge: 'Clinic Scoped'
     }
   ];
 

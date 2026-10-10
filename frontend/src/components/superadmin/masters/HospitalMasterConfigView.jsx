@@ -222,7 +222,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
         throw new Error(data.error || 'Failed to assign master item');
       }
 
-      setSuccessMessage(`Assigned [${selectedMasterItem.itemCode}] to hospital '${selectedTenantId}' successfully`);
+      setSuccessMessage(`Assigned [${selectedMasterItem.itemCode}] to clinic '${selectedTenantId}' successfully`);
       setTimeout(() => setSuccessMessage(''), 4000);
       setIsAssignModalOpen(false);
       fetchConfigs();
@@ -276,7 +276,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
         throw new Error(data.error || 'Failed to update pricing');
       }
 
-      setSuccessMessage(`Updated hospital pricing successfully`);
+      setSuccessMessage(`Updated clinic pricing successfully`);
       setTimeout(() => setSuccessMessage(''), 4000);
       setIsEditModalOpen(false);
       fetchConfigs();
@@ -290,7 +290,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
   // 8. Unassign Master Item
   const handleUnassign = async (config) => {
     const itemCode = config.masterItemId?.itemCode || 'Item';
-    if (!window.confirm(`Are you sure you want to remove item [${itemCode}] from hospital '${selectedTenantId}'?`)) {
+    if (!window.confirm(`Are you sure you want to remove item [${itemCode}] from clinic '${selectedTenantId}'?`)) {
       return;
     }
     try {
@@ -307,7 +307,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Failed to unassign item');
       }
-      setSuccessMessage(`Removed item from hospital catalog`);
+      setSuccessMessage(`Removed item from clinic catalog`);
       setTimeout(() => setSuccessMessage(''), 4000);
       fetchConfigs();
     } catch (err) {
@@ -351,7 +351,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>
-                Hospital Tenant:
+                Clinic Tenant:
               </span>
               <select
                 value={selectedTenantId}
@@ -397,7 +397,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
             Assigned Items: <strong style={{ color: '#0F172A' }}>{pagination.total}</strong>
           </span>
 
-          {/* Primary Business Workflow: Upload Hospital Master */}
+          {/* Primary Business Workflow: Upload Clinic Master */}
           {onSwitchTab && (
             <button
               type="button"
@@ -418,7 +418,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
               }}
             >
               <LucideIcon name="upload-cloud" size={14} />
-              Upload Hospital Master
+              Upload Clinic Master
             </button>
           )}
 
@@ -427,7 +427,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
             type="button"
             onClick={handleOpenAssignModal}
             disabled={!selectedTenantId}
-            title={!selectedTenantId ? 'Select a hospital first' : 'Manually assign an individual item'}
+            title={!selectedTenantId ? 'Select a clinic first' : 'Manually assign an individual item'}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -594,7 +594,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
         </button>
       </div>
 
-      {/* ── 3. HOSPITAL ASSIGNED CATALOG TABLE ── */}
+      {/* ── 3. CLINIC ASSIGNED CATALOG TABLE ── */}
       <div style={{
         background: '#FFFFFF',
         borderRadius: '12px',
@@ -610,8 +610,8 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569', minWidth: '200px' }}>Item Name</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>Category</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>Department</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#7C3AED', textAlign: 'right' }}>Hospital MRP</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#7C3AED', textAlign: 'right' }}>Hospital Net Rate</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#7C3AED', textAlign: 'right' }}>Clinic MRP</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#7C3AED', textAlign: 'right' }}>Clinic Net Rate</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569', textAlign: 'right' }}>Cost</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569', textAlign: 'center' }}>Local Status</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569', textAlign: 'right' }}>Actions</th>
@@ -623,7 +623,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
                   <td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#64748B' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                       <LucideIcon name="loader-2" size={18} className="animate-spin" />
-                      <span>Loading hospital configurations...</span>
+                      <span>Loading clinic configurations...</span>
                     </div>
                   </td>
                 </tr>
@@ -636,7 +636,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
                         No items assigned to {selectedHospitalObj?.name || selectedTenantId}
                       </div>
                       <div style={{ fontSize: '13px', maxWidth: '420px' }}>
-                        This hospital currently has no active master item assignments. Click below to adopt and price canonical global items.
+                        This clinic currently has no active master item assignments. Click below to adopt and price canonical global items.
                       </div>
                       <button
                         type="button"
@@ -709,12 +709,12 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
                         {cfg.department || m.department || '—'}
                       </td>
 
-                      {/* Hospital MRP */}
+                      {/* Clinic MRP */}
                       <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#7C3AED' }}>
                         ₹{Number(cfg.mrp || 0).toFixed(2)}
                       </td>
 
-                      {/* Hospital Net Rate */}
+                      {/* Clinic Net Rate */}
                       <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>
                         ₹{Number(cfg.netRate || 0).toFixed(2)}
                       </td>
@@ -744,7 +744,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(cfg)}
-                            title="Edit Hospital Pricing"
+                            title="Edit Clinic Pricing"
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -766,7 +766,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
                           <button
                             type="button"
                             onClick={() => handleUnassign(cfg)}
-                            title="Unassign from Hospital"
+                            title="Unassign from Clinic"
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -879,10 +879,10 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
             }}>
               <div>
                 <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Assign Canonical Master Item to Hospital
+                  Assign Canonical Master Item to Clinic
                 </h3>
                 <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>
-                  Target Hospital: <strong style={{ color: '#7C3AED' }}>{selectedHospitalObj?.name} ({selectedTenantId})</strong>
+                  Target Clinic: <strong style={{ color: '#7C3AED' }}>{selectedHospitalObj?.name} ({selectedTenantId})</strong>
                 </p>
               </div>
               <button
@@ -994,15 +994,15 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
                   </div>
                 )}
 
-                {/* Hospital Pricing Fields */}
+                {/* Clinic Pricing Fields */}
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '8px' }}>
-                    2. Configure Hospital-Specific Rates (Isolated to this Tenant):
+                    2. Configure Clinic-Specific Rates (Isolated to this Tenant):
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
                     <div>
                       <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                        Hospital MRP (₹)
+                        Clinic MRP (₹)
                       </label>
                       <input
                         type="number"
@@ -1022,7 +1022,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
                     </div>
                     <div>
                       <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                        Hospital Net Rate (₹)
+                        Clinic Net Rate (₹)
                       </label>
                       <input
                         type="number"
@@ -1042,7 +1042,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
                     </div>
                     <div>
                       <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                        Hospital Cost (₹)
+                        Clinic Cost (₹)
                       </label>
                       <input
                         type="number"
@@ -1168,7 +1168,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
             }}>
               <div>
                 <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Edit Hospital Pricing Overrides
+                  Edit Clinic Pricing Overrides
                 </h3>
                 <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>
                   Tenant: <strong style={{ color: '#7C3AED' }}>{selectedHospitalObj?.name}</strong>
@@ -1196,7 +1196,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
                   [{editingConfig.masterItemId?.itemCode}] {editingConfig.masterItemId?.itemName || editingConfig.masterItemId?.genericName}
                 </div>
                 <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                  Canonical Master Item · Changes below are strictly isolated to this hospital
+                  Canonical Master Item · Changes below are strictly isolated to this clinic
                 </div>
               </div>
 
@@ -1204,7 +1204,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
                 <div>
                   <label style={{ fontSize: '11px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
-                    Hospital MRP (₹)
+                    Clinic MRP (₹)
                   </label>
                   <input
                     type="number"
@@ -1223,7 +1223,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
                 </div>
                 <div>
                   <label style={{ fontSize: '11px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
-                    Hospital Net Rate (₹)
+                    Clinic Net Rate (₹)
                   </label>
                   <input
                     type="number"
@@ -1244,7 +1244,7 @@ export default function HospitalMasterConfigView({ onSwitchTab }) {
 
               <div>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
-                  Hospital Cost (₹)
+                  Clinic Cost (₹)
                 </label>
                 <input
                   type="number"

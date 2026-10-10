@@ -197,6 +197,8 @@ router.post("/refresh", async (req, res) => {
     const tokenPayload = {
       id: user._id,
       staff_id: user.staff_id,
+      employeeId: user.employeeId || "",
+      title: user.title || "",
       role: user.role,
       name: user.name,
       tenantId: session.tenantId,
@@ -509,6 +511,8 @@ router.post("/login", tenantMiddleware, async (req, res) => {
     let tokenPayload = {
       id: user._id,
       staff_id: user.staff_id,
+      employeeId: user.employeeId || '',
+      title: user.title || '',
       role: user.role,
       name: user.name,
       tenantId: user.tenantId,
@@ -2296,7 +2300,7 @@ router.get("/users/all", verifyToken, async (req, res) => {
   try {
     const users = await User.find(
       { tenantId: req.tenantId, role: { $nin: ["patient"] } },
-      "name role phone email staff_id"
+      "name title role phone email staff_id employeeId"
     );
     res.json(users);
   } catch (error) {

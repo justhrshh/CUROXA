@@ -267,6 +267,7 @@ router.post("/leaves", verifyToken, async (req, res) => {
       tenantId: req.tenantId,
       $or: [
         { staff_id: employeeId },
+        { employeeId: employeeId },
         ...(isObjId ? [{ _id: employeeId }] : [])
       ]
     }).lean();
@@ -629,6 +630,7 @@ router.get("/leave-ledger", verifyToken, async (req, res) => {
         tenantId: req.tenantId,
         $or: [
           { staff_id: staffId },
+          { employeeId: staffId },
           ...(isObjId ? [{ _id: staffId }] : [])
         ]
       }).lean();

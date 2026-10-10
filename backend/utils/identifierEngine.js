@@ -293,6 +293,41 @@ async function backfillPatientIdentifiers() {
   };
 }
 
+/**
+ * Atomically generates a hospital-scoped, sequential, human-readable Employee ID.
+ * Format: EMP-<6_DIGIT_SEQ> (e.g. EMP-000001, EMP-000127).
+ * Never exposes database _id. Safe against race conditions and concurrent requests.
+ *
+ * @param {string} tenantId
+ * @returns {Promise<string>} Hospital Employee ID
+ */
+async function generateHospitalEmployeeId(tenantId) {
+  const normalizedTenant = String(tenantId || 'city_hospital').trim().toLowerCase();
+  const counterKey = `emp:${normalizedTenant}`;
+  const User = require('../models/User');
+
+  let nextSeq = 1;
+  let candidate = '';
+  let exists = true;
+  let attempts = 0;
+
+  while (exists && attempts < 30) {
+    attempts++;
+    const counterDoc = await Counter.findOneAndUpdate(
+      { key: counterKey },
+      { $inc: { seq: 1 } },
+      { upsert: true, returnDocument: 'after' }
+    );
+    nextSeq = counterDoc.seq;
+    candidate = `EMP-${String(nextSeq).padStart(6, '0')}`;
+
+    // Verify uniqueness within tenant
+    exists = await User.exists({ tenantId: normalizedTenant, employeeId: candidate });
+  }
+
+  return candidate;
+}
+
 module.exports = {
   CHARSET,
   UHID_LENGTH,
@@ -304,5 +339,6 @@ module.exports = {
   getHospitalPrefix,
   generateHospitalPatientId,
   generateVisitId,
+  generateHospitalEmployeeId,
   backfillPatientIdentifiers
 };

@@ -75,7 +75,7 @@ export default function ImportPreviewModal({
                 <FileCheck2 className="w-5 h-5" />
               </span>
               <h2 className="text-lg font-bold text-slate-800">
-                Hospital Catalog Import Preview
+                Clinic Catalog Import Preview
               </h2>
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                 Server-Authoritative Session
@@ -84,7 +84,7 @@ export default function ImportPreviewModal({
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 mt-1 font-medium">
               <span className="flex items-center gap-1">
                 <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                Hospital: <strong className="text-slate-700">{tenant?.name || tenant?.id}</strong> ({tenant?.code || '—'})
+                Clinic: <strong className="text-slate-700">{tenant?.name || tenant?.id}</strong> ({tenant?.code || '—'})
               </span>
               <span>•</span>
               <span className="flex items-center gap-1">
@@ -151,16 +151,16 @@ export default function ImportPreviewModal({
                 />
                 <div>
                   <span className="text-xs font-bold text-slate-800 block">
-                    Allow Repricing of Existing Hospital Catalog Items
+                    Allow Repricing of Existing Clinic Catalog Items
                   </span>
                   <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
                     {allowRepricing ? (
                       <span className="text-purple-700 font-semibold">
-                        Enabled: Imported prices will overwrite existing hospital catalog prices for matching items ({summary?.repricingDiffs || 0} items affected).
+                        Enabled: Imported prices will overwrite existing clinic catalog prices for matching items ({summary?.repricingDiffs || 0} items affected).
                       </span>
                     ) : (
                       <span>
-                        Disabled: Existing hospital catalog prices remain strictly frozen and untouched.
+                        Disabled: Existing clinic catalog prices remain strictly frozen and untouched.
                       </span>
                     )}
                   </p>
@@ -248,7 +248,7 @@ export default function ImportPreviewModal({
               ) : (
                 <>
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Confirm & Import Hospital Catalog</span>
+                  <span>Confirm & Import Clinic Catalog</span>
                 </>
               )}
             </button>

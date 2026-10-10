@@ -43,7 +43,7 @@ export default function ImportResultSummary({
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold text-slate-800">
-              Hospital Catalog Ingestion Complete
+              Clinic Catalog Ingestion Complete
             </h2>
             <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
               Audit Batch: {batchId?.substring(0, 10)}...
@@ -51,7 +51,7 @@ export default function ImportResultSummary({
           </div>
           <p className="text-xs text-slate-500 mt-1">
             Successfully imported and configured catalog items for{' '}
-            <strong className="text-slate-700">{hospitalName || 'the selected hospital'}</strong> under category{' '}
+            <strong className="text-slate-700">{hospitalName || 'the selected clinic'}</strong> under category{' '}
             <strong className="text-slate-700">{category}</strong>.
           </p>
         </div>
@@ -65,7 +65,7 @@ export default function ImportResultSummary({
             <PlusCircle className="w-4 h-4" />
           </div>
           <div className="text-2xl font-black text-emerald-900">{createdCount}</div>
-          <p className="text-[11px] text-emerald-700 mt-1">Added to hospital catalog</p>
+          <p className="text-[11px] text-emerald-700 mt-1">Added to clinic catalog</p>
         </div>
 
         <div className="p-4 rounded-xl bg-purple-50 border border-purple-200">
@@ -74,7 +74,7 @@ export default function ImportResultSummary({
             <RefreshCw className="w-4 h-4" />
           </div>
           <div className="text-2xl font-black text-purple-900">{repricedCount}</div>
-          <p className="text-[11px] text-purple-700 mt-1">Hospital prices updated</p>
+          <p className="text-[11px] text-purple-700 mt-1">Clinic prices updated</p>
         </div>
 
         <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
@@ -128,7 +128,7 @@ export default function ImportResultSummary({
             onClick={onViewCatalog}
             className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl shadow-sm transition-all"
           >
-            <span>View Hospital Catalog</span>
+            <span>View Clinic Catalog</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         )}

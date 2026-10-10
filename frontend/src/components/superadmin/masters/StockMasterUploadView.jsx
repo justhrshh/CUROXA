@@ -61,7 +61,7 @@ export default function StockMasterUploadView({ onSwitchTab }) {
   // Download Empty Template
   const handleDownloadTemplate = async () => {
     if (!selectedHospital) {
-      setError('Please select a target hospital first.');
+      setError('Please select a target clinic first.');
       return;
     }
     try {
@@ -98,7 +98,7 @@ export default function StockMasterUploadView({ onSwitchTab }) {
   // Export Current Hospital Stock
   const handleExportStock = async () => {
     if (!selectedHospital) {
-      setError('Please select a target hospital first.');
+      setError('Please select a target clinic first.');
       return;
     }
     try {
@@ -123,7 +123,7 @@ export default function StockMasterUploadView({ onSwitchTab }) {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(link.href);
-      setSuccessMessage('Current hospital stock exported successfully.');
+      setSuccessMessage('Current clinic stock exported successfully.');
       setTimeout(() => setSuccessMessage(''), 4000);
     } catch (err) {
       setError(err.message || 'Error exporting stock.');
@@ -136,7 +136,7 @@ export default function StockMasterUploadView({ onSwitchTab }) {
   const handleUploadPreview = async (fileToUpload) => {
     const file = fileToUpload || selectedFile;
     if (!selectedHospital) {
-      setError('Please select a target hospital first.');
+      setError('Please select a target clinic first.');
       return;
     }
     if (!file) {
@@ -255,7 +255,7 @@ export default function StockMasterUploadView({ onSwitchTab }) {
         </div>
       )}
 
-      {/* Target Hospital Selector Strip */}
+      {/* Target Clinic Selector Strip */}
       <div style={{
         background: '#FFFFFF',
         borderRadius: '10px',
@@ -273,17 +273,17 @@ export default function StockMasterUploadView({ onSwitchTab }) {
           </div>
           <div>
             <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Hospital Inventory Scope
+              Clinic Inventory Scope
             </h4>
             <span style={{ fontSize: '11px', color: '#64748B' }}>
-              Stock Master imports physical inventory into the selected hospital's ledger.
+              Stock Master imports physical inventory into the selected clinic's ledger.
             </span>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '280px' }}>
           <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-            Target Hospital:
+            Target Clinic:
           </label>
           <select
             value={selectedHospital}
@@ -305,7 +305,7 @@ export default function StockMasterUploadView({ onSwitchTab }) {
               cursor: 'pointer'
             }}
           >
-            <option value="">-- Select Target Hospital --</option>
+            <option value="">-- Select Target Clinic --</option>
             {hospitals.map(h => (
               <option key={h.code || h.hospitalId} value={h.code || h.hospitalId}>
                 {h.name} ({h.code || h.hospitalId})
@@ -366,7 +366,7 @@ export default function StockMasterUploadView({ onSwitchTab }) {
               Approved Stock Master Architecture
             </div>
             <div>• <strong>Empty Template:</strong> Contains only approved headers. No fake inventory rows or fabricated prices.</div>
-            <div>• <strong>Canonical Reference:</strong> Item Code references Hospital Master Catalog. Unlisted items cannot be imported.</div>
+            <div>• <strong>Canonical Reference:</strong> Item Code references Clinic Master Catalog. Unlisted items cannot be imported.</div>
             <div>• <strong>Pricing Rule:</strong> Captures Buying Price and MRP. Buying Price must be ≤ MRP.</div>
             <div>• <strong>Selling Price:</strong> Determined exclusively at Dispense (Selling Price = MRP - Discount).</div>
           </div>
@@ -420,7 +420,7 @@ export default function StockMasterUploadView({ onSwitchTab }) {
               }}
             >
               <FileSpreadsheet size={14} />
-              <span>{isExportingStock ? 'Exporting...' : 'Export Current Hospital Stock (.xlsx)'}</span>
+              <span>{isExportingStock ? 'Exporting...' : 'Export Current Clinic Stock (.xlsx)'}</span>
             </button>
           </div>
         </div>
@@ -471,7 +471,7 @@ export default function StockMasterUploadView({ onSwitchTab }) {
               <ShieldCheck size={14} color="#16A34A" />
               Pre-Commit Validation Checks
             </div>
-            <div>• Validates Item Code exists in current hospital's approved catalog.</div>
+            <div>• Validates Item Code exists in current clinic's approved catalog.</div>
             <div>• Rejects Buying Price &gt; MRP violations automatically.</div>
             <div>• Enforces expiry dates are in the future and batches are valid.</div>
           </div>

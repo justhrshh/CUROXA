@@ -416,6 +416,7 @@ const ReceptionistDashboard = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedBillForPayment, setSelectedBillForPayment] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [splitPaymentRows, setSplitPaymentRows] = useState([{ method: 'Cash', amount: '' }]);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountReason, setDiscountReason] = useState('');
   const [allowedDiscountPercent, setAllowedDiscountPercent] = useState(10);
@@ -674,6 +675,8 @@ const ReceptionistDashboard = () => {
   ];
   const [receptionDoctorAvailability, setReceptionDoctorAvailability] = useState({ available: true, slots: DEFAULT_RECEPTION_SLOTS, reason: null });
   const [bookingPaymentMethod, setBookingPaymentMethod] = useState('');
+  const [isBookingSplitPayment, setIsBookingSplitPayment] = useState(false);
+  const [bookingPaymentRows, setBookingPaymentRows] = useState([{ method: 'Cash', amount: '', transactionRef: '', notes: '' }]);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [verificationOtp, setVerificationOtp] = useState('');
@@ -1379,45 +1382,69 @@ const ReceptionistDashboard = () => {
         resetRegistrationForm();
         switchTab('appointments');
       } else {
-        // Normal billing flow
-        const payload = {
-          status: 'Paid',
-          paymentMethod: paymentMethod,
-          discountPercent: Number(discountPercent),
-          discountAmount: discAmt,
-          originalAmount: origAmt,
-          totalAmount: finalAmt,
-          discountReason: discountPercent > 0 ? discountReason.trim() : ''
-        };
-        await api.put(`/billing/${selectedBillForPayment._id}`, payload);
-        
-        // Sync the associated appointment status to Paid
-        const apptId = selectedBillForPayment.appointmentId?._id || selectedBillForPayment.appointmentId;
-        if (apptId) {
-          await api.put(`/appointments/${apptId}`, { status: 'Paid' }).catch(err => {
-            console.warn("Failed to sync appointment status to Paid:", err);
-          });
+        // Normal billing flow with multimode split payment support in ONE single submission
+        // 1. Filter and validate payment entries
+        const validPaymentEntries = splitPaymentRows
+          .map(r => ({
+            method: r.method || 'Cash',
+            amount: Number(r.amount),
+            source: 'Counter',
+            transactionRef: (r.transactionRef || '').trim()
+          }))
+          .filter(r => !isNaN(r.amount) && r.amount > 0);
+
+        if (validPaymentEntries.length === 0) {
+          showToast("Please enter at least one payment amount greater than ₹0", "error");
+          setIsSettlingPayment(false);
+          return;
         }
 
-        const patientObj = selectedBillForPayment.patientId || {};
+        const totalEntered = validPaymentEntries.reduce((sum, r) => sum + r.amount, 0);
+        const currentPaid = (selectedBillForPayment.payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        const remainingDue = Math.max(0, finalAmt - currentPaid);
+
+        if (totalEntered > remainingDue + 0.01) {
+          showToast(`Total entered (₹${totalEntered.toFixed(2)}) exceeds remaining due (₹${remainingDue.toFixed(2)})`, "error");
+          setIsSettlingPayment(false);
+          return;
+        }
+
+        // Generate client-side idempotency requestId for double-click / network retry protection
+        const requestId = `REQ-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+        const collectPayload = {
+          payments: validPaymentEntries,
+          discountPercent: Number(discountPercent),
+          discountReason: discountPercent > 0 ? discountReason.trim() : '',
+          requestId
+        };
+
+        const collectRes = await api.post(`/billing/${selectedBillForPayment._id}/collect-payment`, collectPayload);
+        const updatedBill = collectRes.data.bill || selectedBillForPayment;
+
+        const patientObj = updatedBill.patientId || selectedBillForPayment.patientId || {};
+        const methodSummary = validPaymentEntries.map(e => `${e.method}: ₹${e.amount.toFixed(2)}`).join(' + ');
+
         setActiveSlipData({
-          receiptNo: `REC-${(selectedBillForPayment._id || '').slice(-6).toUpperCase()}`,
+          receiptNo: `REC-${(updatedBill._id || '').slice(-6).toUpperCase()}`,
           date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
           patientName: patientObj.name || 'Patient',
           patientId: getFormattedPatientId(patientObj._id || selectedBillForPayment.patientId),
           contact: patientObj.contact || 'N/A',
           ageGender: `${patientObj.age || 'N/A'} / ${patientObj.gender || 'N/A'}`,
-          testName: (selectedBillForPayment.items || []).map(i => i.description).join(', ') || 'Medical Services',
-          items: selectedBillForPayment.items || [{ description: 'Clinic Services', amount: finalAmt }],
+          testName: (updatedBill.items || selectedBillForPayment.items || []).map(i => i.description).join(', ') || 'Medical Services',
+          items: updatedBill.items || selectedBillForPayment.items || [{ description: 'Clinic Services', amount: finalAmt }],
           originalAmount: origAmt,
           discountAmount: discAmt,
-          totalAmount: finalAmt,
-          paymentMethod: paymentMethod,
+          totalAmount: updatedBill.totalAmount || finalAmt,
+          amountPaid: updatedBill.amountPaid || (currentPaid + totalEntered),
+          paymentMethod: updatedBill.paymentMethod || methodSummary,
+          settlements: (updatedBill.payments || []).map(p => `${p.method}: ₹${Number(p.amount).toFixed(2)}${p.transactionRef ? ` (${p.transactionRef})` : ''} on ${new Date(p.recordedAt || Date.now()).toLocaleDateString()}`),
           hospitalName: currentUser.tenantName || 'Quroxa Medical Center'
         });
         setShowSlipPdfModal(true);
 
-        showToast("Billing status updated to Paid successfully! Receipt generated.", "success");
+        showToast(collectRes.data.message || "Payment processed successfully! Receipt generated.", "success");
       }
 
       setShowPaymentModal(false);
@@ -1425,7 +1452,7 @@ const ReceptionistDashboard = () => {
       fetchData();
     } catch (err) {
       console.error(err);
-      showToast(err.response?.data?.error || "Failed to process payment and registration.", "error");
+      showToast(err.response?.data?.error || "Failed to process payment.", "error");
     } finally {
       setIsSettlingPayment(false);
     }
@@ -2166,7 +2193,7 @@ const ReceptionistDashboard = () => {
       showToast("Please add at least one lab test to the order.", "error");
       return;
     }
-    if (!bookingPaymentMethod) {
+    if (!isBookingSplitPayment && !bookingPaymentMethod) {
       showToast("Please select a payment method.", "error");
       return;
     }
@@ -2224,6 +2251,52 @@ const ReceptionistDashboard = () => {
       const discAmt = (origAmt * Number(bookingDiscountPercent || 0)) / 100;
       const finalAmt = Math.max(0, origAmt - discAmt);
 
+      // Validate payments
+      const effectivePayments = isBookingSplitPayment
+        ? bookingPaymentRows.filter(r => Number(r.amount) > 0).map(r => ({
+            method: r.method,
+            amount: Number(r.amount),
+            transactionRef: (r.transactionRef || '').trim(),
+            source: 'Reception',
+            notes: (r.notes || '').trim()
+          }))
+        : (Number(formData.amountPaid !== undefined && formData.amountPaid !== '' ? formData.amountPaid : finalAmt) > 0 ? [{
+            method: bookingPaymentMethod || 'Cash',
+            amount: Number(formData.amountPaid !== undefined && formData.amountPaid !== '' ? formData.amountPaid : finalAmt),
+            transactionRef: '',
+            source: 'Reception',
+            notes: ''
+          }] : []);
+
+      const totalPaidAmount = Math.round(effectivePayments.reduce((s, p) => s + p.amount, 0) * 100) / 100;
+
+      if (isBookingSplitPayment) {
+        if (effectivePayments.length === 0 && finalAmt > 0) {
+          showToast("Please enter at least one payment method and amount.", "error");
+          setLoading(false);
+          return;
+        }
+        if (totalPaidAmount > finalAmt) {
+          showToast(`Total payment (₹${totalPaidAmount}) exceeds net payable (₹${finalAmt}).`, "error");
+          setLoading(false);
+          return;
+        }
+      } else {
+        if (totalPaidAmount > finalAmt) {
+          showToast(`Payment amount (₹${totalPaidAmount}) exceeds net payable (₹${finalAmt}).`, "error");
+          setLoading(false);
+          return;
+        }
+      }
+
+      const effectiveMethod = effectivePayments.length > 0
+        ? [...new Set(effectivePayments.map(p => p.method))].join(' + ')
+        : (bookingPaymentMethod || 'Cash');
+
+      const computedBillingStatus = (totalPaidAmount >= finalAmt && finalAmt > 0)
+        ? 'Paid'
+        : (totalPaidAmount > 0 ? 'Partially Paid' : 'Unpaid');
+
       await api.post('/billing', {
         patientId: targetPatientId,
         items,
@@ -2231,9 +2304,12 @@ const ReceptionistDashboard = () => {
         discountPercent: Number(bookingDiscountPercent || 0),
         discountAmount: discAmt,
         totalAmount: finalAmt,
-        paymentMethod: bookingPaymentMethod,
+        paymentMethod: effectiveMethod,
+        payments: effectivePayments,
+        amountPaid: totalPaidAmount,
         discountReason: discAmt > 0 ? bookingDiscountReason.trim() : '',
-        status: 'Paid'
+        status: computedBillingStatus,
+        requestId: `REQ-LAB-${Date.now()}-${Math.floor(Math.random() * 1000)}`
       });
 
       // Generate Slip PDF Data
@@ -2249,7 +2325,11 @@ const ReceptionistDashboard = () => {
         originalAmount: origAmt,
         discountAmount: discAmt,
         totalAmount: finalAmt,
-        paymentMethod: bookingPaymentMethod,
+        amountPaid: totalPaidAmount,
+        balanceDue: Math.max(0, finalAmt - totalPaidAmount),
+        paymentMethod: effectiveMethod,
+        payments: effectivePayments,
+        settlements: effectivePayments,
         hospitalName: currentUser.tenantName || 'Quroxa Medical Center'
       });
       setShowSlipPdfModal(true);
@@ -2259,6 +2339,9 @@ const ReceptionistDashboard = () => {
       // Reset
       setSelectedLabTestsList([]);
       setBookingPaymentMethod('');
+      setBookingPaymentRows([{ method: 'Cash', amount: '', transactionRef: '', notes: '' }]);
+      setIsBookingSplitPayment(false);
+      setFormData(prev => ({ ...prev, amountPaid: '' }));
       setBookingDiscountPercent(0);
       setBookingDiscountReason('');
       fetchData();
@@ -2275,7 +2358,7 @@ const ReceptionistDashboard = () => {
       showToast("Please add at least one clinical service/procedure.", "error");
       return;
     }
-    if (!bookingPaymentMethod) {
+    if (!isBookingSplitPayment && !bookingPaymentMethod) {
       showToast("Please select a payment method.", "error");
       return;
     }
@@ -2323,6 +2406,52 @@ const ReceptionistDashboard = () => {
       const discAmt = (origAmt * Number(bookingDiscountPercent || 0)) / 100;
       const finalAmt = Math.max(0, origAmt - discAmt);
 
+      // Validate payments
+      const effectivePayments = isBookingSplitPayment
+        ? bookingPaymentRows.filter(r => Number(r.amount) > 0).map(r => ({
+            method: r.method,
+            amount: Number(r.amount),
+            transactionRef: (r.transactionRef || '').trim(),
+            source: 'Reception',
+            notes: (r.notes || '').trim()
+          }))
+        : (Number(formData.amountPaid !== undefined && formData.amountPaid !== '' ? formData.amountPaid : finalAmt) > 0 ? [{
+            method: bookingPaymentMethod || 'Cash',
+            amount: Number(formData.amountPaid !== undefined && formData.amountPaid !== '' ? formData.amountPaid : finalAmt),
+            transactionRef: '',
+            source: 'Reception',
+            notes: ''
+          }] : []);
+
+      const totalPaidAmount = Math.round(effectivePayments.reduce((s, p) => s + p.amount, 0) * 100) / 100;
+
+      if (isBookingSplitPayment) {
+        if (effectivePayments.length === 0 && finalAmt > 0) {
+          showToast("Please enter at least one payment method and amount.", "error");
+          setLoading(false);
+          return;
+        }
+        if (totalPaidAmount > finalAmt) {
+          showToast(`Total payment (₹${totalPaidAmount}) exceeds net payable (₹${finalAmt}).`, "error");
+          setLoading(false);
+          return;
+        }
+      } else {
+        if (totalPaidAmount > finalAmt) {
+          showToast(`Payment amount (₹${totalPaidAmount}) exceeds net payable (₹${finalAmt}).`, "error");
+          setLoading(false);
+          return;
+        }
+      }
+
+      const effectiveMethod = effectivePayments.length > 0
+        ? [...new Set(effectivePayments.map(p => p.method))].join(' + ')
+        : (bookingPaymentMethod || 'Cash');
+
+      const computedBillingStatus = (totalPaidAmount >= finalAmt && finalAmt > 0)
+        ? 'Paid'
+        : (totalPaidAmount > 0 ? 'Partially Paid' : 'Unpaid');
+
       await api.post('/billing', {
         patientId: targetPatientId,
         items,
@@ -2330,9 +2459,12 @@ const ReceptionistDashboard = () => {
         discountPercent: Number(bookingDiscountPercent || 0),
         discountAmount: discAmt,
         totalAmount: finalAmt,
-        paymentMethod: bookingPaymentMethod,
+        paymentMethod: effectiveMethod,
+        payments: effectivePayments,
+        amountPaid: totalPaidAmount,
         discountReason: discAmt > 0 ? bookingDiscountReason.trim() : '',
-        status: 'Paid'
+        status: computedBillingStatus,
+        requestId: `REQ-SRV-${Date.now()}-${Math.floor(Math.random() * 1000)}`
       });
 
       // Generate Slip PDF Data
@@ -2348,7 +2480,11 @@ const ReceptionistDashboard = () => {
         originalAmount: origAmt,
         discountAmount: discAmt,
         totalAmount: finalAmt,
-        paymentMethod: bookingPaymentMethod,
+        amountPaid: totalPaidAmount,
+        balanceDue: Math.max(0, finalAmt - totalPaidAmount),
+        paymentMethod: effectiveMethod,
+        payments: effectivePayments,
+        settlements: effectivePayments,
         hospitalName: currentUser.tenantName || 'Quroxa Medical Center'
       });
       setShowSlipPdfModal(true);
@@ -2358,6 +2494,9 @@ const ReceptionistDashboard = () => {
       // Reset
       setSelectedServicesList([]);
       setBookingPaymentMethod('');
+      setBookingPaymentRows([{ method: 'Cash', amount: '', transactionRef: '', notes: '' }]);
+      setIsBookingSplitPayment(false);
+      setFormData(prev => ({ ...prev, amountPaid: '' }));
       setBookingDiscountPercent(0);
       setBookingDiscountReason('');
       fetchData();
@@ -3326,7 +3465,7 @@ const ReceptionistDashboard = () => {
         }
       }
 
-      if (!bookingPaymentMethod) {
+      if (!isBookingSplitPayment && !bookingPaymentMethod) {
         showToast("Please select a Payment Method before confirming.", "error");
         setLoading(false);
         return;
@@ -3422,6 +3561,52 @@ const ReceptionistDashboard = () => {
       const discAmt = (origAmt * Number(bookingDiscountPercent || 0)) / 100;
       const finalAmt = Math.max(0, origAmt - discAmt);
 
+      // Validate payments
+      const effectivePayments = isBookingSplitPayment
+        ? bookingPaymentRows.filter(r => Number(r.amount) > 0).map(r => ({
+            method: r.method,
+            amount: Number(r.amount),
+            transactionRef: (r.transactionRef || '').trim(),
+            source: 'Reception',
+            notes: (r.notes || '').trim()
+          }))
+        : (Number(formData.amountPaid !== undefined && formData.amountPaid !== '' ? formData.amountPaid : finalAmt) > 0 ? [{
+            method: bookingPaymentMethod || 'Cash',
+            amount: Number(formData.amountPaid !== undefined && formData.amountPaid !== '' ? formData.amountPaid : finalAmt),
+            transactionRef: '',
+            source: 'Reception',
+            notes: ''
+          }] : []);
+
+      const totalPaidAmount = Math.round(effectivePayments.reduce((s, p) => s + p.amount, 0) * 100) / 100;
+
+      if (isBookingSplitPayment) {
+        if (effectivePayments.length === 0 && finalAmt > 0) {
+          showToast("Please enter at least one payment method and amount.", "error");
+          setLoading(false);
+          return;
+        }
+        if (totalPaidAmount > finalAmt) {
+          showToast(`Total payment (₹${totalPaidAmount}) exceeds net payable (₹${finalAmt}).`, "error");
+          setLoading(false);
+          return;
+        }
+      } else {
+        if (totalPaidAmount > finalAmt) {
+          showToast(`Payment amount (₹${totalPaidAmount}) exceeds net payable (₹${finalAmt}).`, "error");
+          setLoading(false);
+          return;
+        }
+      }
+
+      const effectiveMethod = effectivePayments.length > 0
+        ? [...new Set(effectivePayments.map(p => p.method))].join(' + ')
+        : (bookingPaymentMethod || 'Cash');
+
+      const computedBillingStatus = (totalPaidAmount >= finalAmt && finalAmt > 0)
+        ? 'Paid'
+        : (totalPaidAmount > 0 ? 'Partially Paid' : 'Unpaid');
+
       let isAddOnProcessed = false;
       if (addOnOriginAppt) {
         const existingBill = bills.find(b => {
@@ -3441,6 +3626,8 @@ const ReceptionistDashboard = () => {
             discountPercent: currentDiscountPercent,
             discountAmount: newDiscountAmount,
             totalAmount: newTotalAmount,
+            paymentMethod: effectiveMethod,
+            payments: [...(existingBill.payments || []), ...effectivePayments],
             discountReason: newDiscountAmount > 0 ? (bookingDiscountReason.trim() || existingBill.discountReason || 'Add-On Discount') : ''
           });
           isAddOnProcessed = true;
@@ -3456,9 +3643,12 @@ const ReceptionistDashboard = () => {
           discountPercent: Number(bookingDiscountPercent || 0),
           discountAmount: discAmt,
           totalAmount: finalAmt,
-          paymentMethod: bookingPaymentMethod || 'Cash',
+          paymentMethod: effectiveMethod,
+          payments: effectivePayments,
+          amountPaid: totalPaidAmount,
           discountReason: discAmt > 0 ? bookingDiscountReason.trim() : '',
-          status: 'Paid'
+          status: computedBillingStatus,
+          requestId: `REQ-BOOK-${Date.now()}-${Math.floor(Math.random() * 1000)}`
         });
       }
 
@@ -3524,7 +3714,11 @@ const ReceptionistDashboard = () => {
         originalAmount: finalOrigAmt,
         discountAmount: finalDiscAmt,
         totalAmount: finalTotalAmt,
-        paymentMethod: bookingPaymentMethod || 'Cash',
+        amountPaid: totalPaidAmount,
+        balanceDue: Math.max(0, finalTotalAmt - totalPaidAmount),
+        paymentMethod: effectiveMethod,
+        payments: effectivePayments,
+        settlements: effectivePayments,
         hospitalName: currentUser.tenantName || 'Quroxa Medical Center'
       });
       setShowSlipPdfModal(true);
@@ -3540,6 +3734,9 @@ const ReceptionistDashboard = () => {
       setIsExistingPatient(null);
       setSelectedPatient(null);
       setBookingPaymentMethod('');
+      setBookingPaymentRows([{ method: 'Cash', amount: '', transactionRef: '', notes: '' }]);
+      setIsBookingSplitPayment(false);
+      setFormData(prev => ({ ...prev, amountPaid: '' }));
       setBookingDiscountPercent(0);
       setBookingDiscountReason('');
       setOtpVerified(false);
@@ -12221,8 +12418,12 @@ const ReceptionistDashboard = () => {
         const hasDiscount = Number(bookingDiscountPercent || 0) > 0;
         const disc = hasDiscount ? (sub * Number(bookingDiscountPercent || 0)) / 100 : 0;
         const total = Math.max(0, sub - disc);
-        const paid = Number(formData.amountPaid || 0);
-        const bal = Math.max(0, total - paid);
+
+        const splitTotalEntered = Math.round(bookingPaymentRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0) * 100) / 100;
+        const totalEntered = isBookingSplitPayment ? splitTotalEntered : Number(formData.amountPaid || 0);
+        const bal = Math.max(0, total - totalEntered);
+        const isOverpaid = totalEntered > total;
+        const remainingBalance = Math.max(0, Math.round((total - splitTotalEntered) * 100) / 100);
 
         const tableInp = {
           height: "30px",
@@ -12256,12 +12457,18 @@ const ReceptionistDashboard = () => {
                 <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, display: "flex", gap: "3px" }}>
                   {["Cash", "UPI", "Card", "Other"].map(mode => {
-                    const isSel = bookingPaymentMethod === mode;
+                    const isSel = !isBookingSplitPayment && bookingPaymentMethod === mode;
                     return (
                       <button
                         key={mode}
                         type="button"
-                        onClick={() => setBookingPaymentMethod(mode)}
+                        onClick={() => {
+                          setIsBookingSplitPayment(false);
+                          setBookingPaymentMethod(mode);
+                          if (!formData.amountPaid || Number(formData.amountPaid) === 0) {
+                            setFormData(prev => ({ ...prev, amountPaid: total > 0 ? String(total) : "" }));
+                          }
+                        }}
                         style={{
                           flex: 1,
                           height: "30px",
@@ -12278,6 +12485,38 @@ const ReceptionistDashboard = () => {
                       </button>
                     );
                   })}
+                  {/* Split / Multi-Mode Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !isBookingSplitPayment;
+                      setIsBookingSplitPayment(next);
+                      if (next && bookingPaymentRows.length <= 1) {
+                        const initAmt = Number(formData.amountPaid || total || 0);
+                        setBookingPaymentRows([
+                          { method: bookingPaymentMethod || 'Cash', amount: initAmt > 0 ? String(initAmt) : '', transactionRef: '', notes: '' }
+                        ]);
+                      }
+                    }}
+                    style={{
+                      padding: "0 8px",
+                      height: "30px",
+                      borderRadius: "4px",
+                      border: isBookingSplitPayment ? "1.5px solid #7C3AED" : "1px dashed #8B5CF6",
+                      background: isBookingSplitPayment ? "#F5F3FF" : "#FFFFFF",
+                      color: isBookingSplitPayment ? "#6D28D9" : "#7C3AED",
+                      fontSize: "11px",
+                      fontWeight: 800,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "3px",
+                      whiteSpace: "nowrap"
+                    }}
+                    title="Toggle multi-mode split payment"
+                  >
+                    <span>⚡</span> Multi-Mode
+                  </button>
                 </div>
               </div>
 
@@ -12338,20 +12577,256 @@ const ReceptionistDashboard = () => {
                 </label>
                 <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, display: "flex", gap: "4px", alignItems: "center" }}>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    style={{ ...tableInp, textAlign: "right", fontWeight: 700 }}
-                    value={formData.amountPaid || ""}
-                    onChange={e => setFormData({ ...formData, amountPaid: e.target.value })}
-                  />
-                  <span style={{ fontSize: "11px", fontWeight: 800, color: bal > 0 ? "#DC2626" : "#059669", whiteSpace: "nowrap" }}>
-                    {bal > 0 ? `Due: ₹${bal.toFixed(0)}` : "Settled ✓"}
+                  {isBookingSplitPayment ? (
+                    <div style={{ ...tableInp, display: "flex", alignItems: "center", justifyContent: "flex-end", background: "#F1F5F9", color: "#0F172A", fontWeight: 800, paddingRight: "8px" }}>
+                      ₹{splitTotalEntered.toFixed(2)}
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      style={{ ...tableInp, textAlign: "right", fontWeight: 700 }}
+                      value={formData.amountPaid || ""}
+                      onChange={e => setFormData({ ...formData, amountPaid: e.target.value })}
+                    />
+                  )}
+                  <span style={{
+                    fontSize: "11px",
+                    fontWeight: 800,
+                    color: isOverpaid ? "#DC2626" : (bal > 0 ? "#DC2626" : "#059669"),
+                    whiteSpace: "nowrap"
+                  }}>
+                    {isOverpaid ? `❌ Over: ₹${(totalEntered - total).toFixed(0)}` : (bal > 0 ? `Due: ₹${bal.toFixed(0)}` : "Settled ✓")}
                   </span>
                 </div>
               </div>
             </div>
+
+            {/* ⚡ MULTIMODE BREAKDOWN PANEL */}
+            {isBookingSplitPayment && (
+              <div style={{
+                background: "#F8FAFC",
+                border: "1px solid #CBD5E1",
+                borderRadius: "6px",
+                padding: "10px 14px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+                marginTop: "2px"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ fontSize: "11.5px", fontWeight: 800, color: "#6D28D9", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+                      ⚡ Multi-Mode Payment Breakdown
+                    </span>
+                    <span style={{ fontSize: "11px", color: "#64748B" }}>
+                      (Collect multiple payment methods simultaneously)
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "11.5px" }}>
+                    <span style={{ color: "#475569" }}>
+                      Total Entered: <strong style={{ color: "#0F172A" }}>₹{splitTotalEntered.toFixed(2)}</strong>
+                    </span>
+                    <span style={{ color: "#475569" }}>
+                      Net Payable: <strong style={{ color: "#059669" }}>₹{total.toFixed(2)}</strong>
+                    </span>
+                    {isOverpaid ? (
+                      <span style={{ background: "#FEE2E2", color: "#B91C1C", fontWeight: 800, padding: "2px 8px", borderRadius: "4px" }}>
+                        ❌ Overpayment: ₹{(splitTotalEntered - total).toFixed(2)}
+                      </span>
+                    ) : remainingBalance === 0 && splitTotalEntered > 0 ? (
+                      <span style={{ background: "#D1FAE5", color: "#065F46", fontWeight: 800, padding: "2px 8px", borderRadius: "4px" }}>
+                        ✓ Balanced (Remaining: ₹0.00)
+                      </span>
+                    ) : (
+                      <span style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 800, padding: "2px 8px", borderRadius: "4px" }}>
+                        Remaining: ₹{remainingBalance.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Rows */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {bookingPaymentRows.map((row, idx) => (
+                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748B", width: "18px" }}>
+                        #{idx + 1}
+                      </span>
+                      <select
+                        value={row.method}
+                        onChange={e => {
+                          const updated = [...bookingPaymentRows];
+                          updated[idx].method = e.target.value;
+                          setBookingPaymentRows(updated);
+                        }}
+                        style={{
+                          height: "30px",
+                          padding: "0 8px",
+                          borderRadius: "4px",
+                          border: "1px solid #CBD5E1",
+                          background: "#FFFFFF",
+                          fontSize: "11.5px",
+                          fontWeight: 700,
+                          color: "#1E293B",
+                          width: "130px"
+                        }}
+                      >
+                        {["Cash", "UPI", "Card", "Bank Transfer", "Cheque", "Online", "Other"].map(m => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+
+                      <div style={{ position: "relative", width: "130px" }}>
+                        <span style={{ position: "absolute", left: "8px", top: "6px", fontSize: "11px", fontWeight: 700, color: "#64748B" }}>₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="0.00"
+                          value={row.amount}
+                          onChange={e => {
+                            const updated = [...bookingPaymentRows];
+                            updated[idx].amount = e.target.value;
+                            setBookingPaymentRows(updated);
+                          }}
+                          style={{
+                            height: "30px",
+                            paddingLeft: "20px",
+                            paddingRight: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #CBD5E1",
+                            background: "#FFFFFF",
+                            fontSize: "11.5px",
+                            fontWeight: 700,
+                            color: "#0F172A",
+                            width: "100%",
+                            boxSizing: "border-box"
+                          }}
+                        />
+                      </div>
+
+                      <input
+                        type="text"
+                        placeholder={row.method === 'UPI' ? 'UPI Ref / UTR / Txn ID' : row.method === 'Card' ? 'Card / POS Auth Code' : 'Reference / Remarks (optional)'}
+                        value={row.transactionRef || ''}
+                        onChange={e => {
+                          const updated = [...bookingPaymentRows];
+                          updated[idx].transactionRef = e.target.value;
+                          setBookingPaymentRows(updated);
+                        }}
+                        style={{
+                          height: "30px",
+                          padding: "0 8px",
+                          borderRadius: "4px",
+                          border: "1px solid #CBD5E1",
+                          background: "#FFFFFF",
+                          fontSize: "11.5px",
+                          color: "#334155",
+                          flex: 1
+                        }}
+                      />
+
+                      {bookingPaymentRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBookingPaymentRows(bookingPaymentRows.filter((_, i) => i !== idx));
+                          }}
+                          style={{
+                            height: "30px",
+                            width: "30px",
+                            borderRadius: "4px",
+                            border: "1px solid #FECACA",
+                            background: "#FEF2F2",
+                            color: "#DC2626",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "12px",
+                            fontWeight: 800
+                          }}
+                          title="Remove payment row"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Multi-mode row action buttons */}
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingTop: "4px" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextMethod = bookingPaymentRows.some(r => r.method === 'UPI')
+                        ? (bookingPaymentRows.some(r => r.method === 'Card') ? 'Cash' : 'Card')
+                        : 'UPI';
+                      setBookingPaymentRows([
+                        ...bookingPaymentRows,
+                        { method: nextMethod, amount: remainingBalance > 0 ? String(remainingBalance) : '', transactionRef: '', notes: '' }
+                      ]);
+                    }}
+                    style={{
+                      height: "28px",
+                      padding: "0 10px",
+                      borderRadius: "4px",
+                      border: "1px solid #0284C7",
+                      background: "#F0F9FF",
+                      color: "#0369A1",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px"
+                    }}
+                  >
+                    <span>+</span> Add Payment Method
+                  </button>
+
+                  {remainingBalance > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = [...bookingPaymentRows];
+                        const lastIdx = updated.length - 1;
+                        if (!updated[lastIdx].amount || Number(updated[lastIdx].amount) === 0) {
+                          updated[lastIdx].amount = String(remainingBalance);
+                        } else {
+                          updated.push({
+                            method: updated[lastIdx].method === 'Cash' ? 'UPI' : 'Cash',
+                            amount: String(remainingBalance),
+                            transactionRef: '',
+                            notes: ''
+                          });
+                        }
+                        setBookingPaymentRows(updated);
+                      }}
+                      style={{
+                        height: "28px",
+                        padding: "0 10px",
+                        borderRadius: "4px",
+                        border: "1px solid #10B981",
+                        background: "#ECFDF5",
+                        color: "#065F46",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      ⚡ Auto-Fill Balance (₹{remainingBalance.toFixed(2)})
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Bottom Row Action Buttons (Save & Close, matching Reference) */}
             <div style={{
@@ -12365,33 +12840,35 @@ const ReceptionistDashboard = () => {
               <button
                 type="button"
                 onClick={reschedulingAppointment ? handleRescheduleSubmit : (bookingType === "lab" ? handleCreateLabOrder : bookingType === "service" ? handleCreateServiceOrder : handleCreateAppointment)}
-                disabled={loading}
+                disabled={loading || isOverpaid}
                 style={{
                   height: "32px",
                   padding: "0 24px",
                   borderRadius: "4px",
                   border: "none",
-                  background: "#0284C7",
+                  background: isOverpaid ? "#94A3B8" : "#0284C7",
                   color: "#FFFFFF",
                   fontSize: "12px",
                   fontWeight: 800,
-                  cursor: loading ? "not-allowed" : "pointer",
+                  cursor: (loading || isOverpaid) ? "not-allowed" : "pointer",
                   display: "flex",
                   alignItems: "center",
                   gap: "6px",
-                  boxShadow: "0 1px 3px rgba(2,132,199,0.3)"
+                  boxShadow: isOverpaid ? "none" : "0 1px 3px rgba(2,132,199,0.3)"
                 }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                 {loading
                   ? "Processing..."
-                  : (reschedulingAppointment
-                      ? "Confirm Reschedule"
-                      : (bookingType === "lab"
-                          ? (isExistingPatient ? "Order Lab Tests & Settle" : "Save & Register Lab Patient")
-                          : (bookingType === "service"
-                              ? (isExistingPatient ? "Book Procedure & Settle" : "Save & Register Procedure Patient")
-                              : (isExistingPatient ? "Book Appointment & Pay" : "Save & Register Patient"))))}
+                  : isOverpaid
+                    ? "Payment Exceeds Net Payable"
+                    : (reschedulingAppointment
+                        ? "Confirm Reschedule"
+                        : (bookingType === "lab"
+                            ? (isExistingPatient ? "Order Lab Tests & Settle" : "Save & Register Lab Patient")
+                            : (bookingType === "service"
+                                ? (isExistingPatient ? "Book Procedure & Settle" : "Save & Register Procedure Patient")
+                                : (isExistingPatient ? "Book Appointment & Pay" : "Save & Register Patient"))))}
               </button>
 
               <button
@@ -12401,6 +12878,9 @@ const ReceptionistDashboard = () => {
                   setIsExistingPatient(null);
                   setBookingDiscountPercent(0);
                   setBookingDiscountReason("");
+                  setBookingPaymentMethod('');
+                  setBookingPaymentRows([{ method: 'Cash', amount: '', transactionRef: '', notes: '' }]);
+                  setIsBookingSplitPayment(false);
                   setFormData({ title: "", name: "", dob: "", age: "", ageMonths: "", ageDays: "", gender: "", contact: "", email: "", doctorId: "", bloodGroup: "", address: "", addressStreet: "", addressCity: "", addressState: "", addressPincode: "", medicalHistory: "", referredBy: "", allergies: "None", currentMedications: "", emergencyContact: "", amountPaid: "", customConsultFee: undefined });
                 }}
                 style={{
@@ -17626,45 +18106,79 @@ const ReceptionistDashboard = () => {
       {/* APPOINTMENT DETAILS MODAL */}
       {detailsModalOpen && selectedAppointment && (
         <div className="details-modal-overlay" onClick={() => { setDetailsModalOpen(false); setShowDeleteConfirm(false); }}>
-          <div className="details-modal-card" onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#1A1D23' }}>Appointment Details</h2>
-              <button className="btn-close" onClick={() => { setDetailsModalOpen(false); setShowDeleteConfirm(false); }}><i data-lucide="x"></i></button>
-            </div>
-            
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
-                <div style={{ width: '48px', height: '48px', borderRadius: '4px', background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 800 }}>
+          <div 
+            className="details-modal-card" 
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: '960px',
+              width: '95%',
+              maxHeight: '92vh',
+              overflowY: 'auto',
+              padding: '28px 32px',
+              borderRadius: '16px',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '16px', borderBottom: '1px solid #E2E8F0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{ width: '46px', height: '46px', borderRadius: '10px', background: 'var(--primary-light, #EFF6FF)', color: 'var(--primary, #2563EB)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 800 }}>
                   {getInitials(selectedAppointment.patientId?.name)}
                 </div>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '14px', color: '#1A1D23' }}>{selectedAppointment.patientId?.name}</div>
-                  <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>ID: #{selectedAppointment.patientId?._id?.substring(18).toUpperCase()}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>{selectedAppointment.patientId?.name || 'Patient'}</h2>
+                    <span style={{ fontSize: '11px', background: '#F1F5F9', color: '#475569', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                      ID: #{selectedAppointment.patientId?._id ? selectedAppointment.patientId._id.substring(18).toUpperCase() : 'N/A'}
+                    </span>
+                    <span className={`status-badge ${(selectedAppointment.status || '').toLowerCase().replace(/\s+/g, '-')}`} style={{ fontSize: '11px', margin: 0, padding: '2px 8px' }}>
+                      {selectedAppointment.status || 'Scheduled'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 500, marginTop: '3px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    {selectedAppointment.patientId?.phone && <span>📞 {selectedAppointment.patientId.phone}</span>}
+                    {selectedAppointment.patientId?.gender && <span>👤 {selectedAppointment.patientId.gender}</span>}
+                    {selectedAppointment.patientId?.age && <span>🎂 {selectedAppointment.patientId.age} yrs</span>}
+                  </div>
                 </div>
               </div>
-              
+              <button 
+                className="btn-close" 
+                onClick={() => { setDetailsModalOpen(false); setShowDeleteConfirm(false); }}
+                style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}
+              >
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+            
+            <div style={{ marginBottom: '20px' }}>
               {/* Token & Live Queue Status Card */}
               {(() => {
                 const isCancelled = selectedAppointment.status === 'Cancelled';
                 const isCompleted = selectedAppointment.status === 'Completed' || selectedAppointment.status === 'Checked Out';
+                const formatApptDate = (dateVal) => {
+                  if (!dateVal) return '';
+                  const d = new Date(dateVal);
+                  if (isNaN(d.getTime())) return String(dateVal);
+                  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                };
 
                 if (selectedAppointment.tokenNumber && !isCompleted && !isCancelled) {
                   return (
-                    <div style={{ background: '#EFF6FF', border: '1.5px solid #60A5FA', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ background: '#EFF6FF', border: '1.5px solid #60A5FA', borderRadius: '10px', padding: '14px 18px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                       <div>
                         <div style={{ fontSize: '11px', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live OPD Token</div>
                         <div style={{ fontSize: '18px', fontWeight: 900, color: '#1D4ED8', marginTop: '1px' }}>Token #{selectedAppointment.tokenNumber}</div>
-                        <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px' }}>
+                        <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>
                           Slot: {selectedAppointment.tokenSlotId || selectedAppointment.time} • Queue Status: {selectedAppointment.queueStatus || 'Waiting in Queue'}
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span style={{ background: '#DBEAFE', color: '#1E40AF', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 800 }}>
+                        <span style={{ background: '#DBEAFE', color: '#1E40AF', padding: '5px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 800 }}>
                           Checked In
                         </span>
                         {doctorClinicalMode === 'OFFLINE' && selectedAppointment.status === 'Prescription Pending' && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 800 }}>
+                            <span style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', padding: '5px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 800 }}>
                               Prescription Pending
                             </span>
                             <button
@@ -17674,14 +18188,14 @@ const ReceptionistDashboard = () => {
                                 background: '#0D9488',
                                 color: '#FFFFFF',
                                 fontWeight: 800,
-                                padding: '5px 12px',
+                                padding: '6px 14px',
                                 borderRadius: '6px',
                                 fontSize: '11px',
                                 cursor: 'pointer',
                                 border: 'none',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '4px',
+                                gap: '6px',
                                 boxShadow: '0 1px 4px rgba(13, 148, 136, 0.25)'
                               }}
                               onClick={() => handleOpenUploadPrescription(selectedAppointment)}
@@ -17697,7 +18211,7 @@ const ReceptionistDashboard = () => {
                                 background: '#F1F5F9',
                                 color: '#475569',
                                 fontWeight: 800,
-                                padding: '5px 10px',
+                                padding: '6px 12px',
                                 borderRadius: '6px',
                                 fontSize: '11px',
                                 cursor: 'pointer',
@@ -17714,7 +18228,7 @@ const ReceptionistDashboard = () => {
                           </div>
                         )}
                         {doctorClinicalMode === 'OFFLINE' && selectedAppointment.noPrescriptionProvided && (
-                          <span style={{ background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 800 }}>
+                          <span style={{ background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', padding: '5px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 800 }}>
                             No Prescription Provided
                           </span>
                         )}
@@ -17727,13 +18241,13 @@ const ReceptionistDashboard = () => {
                               color: '#0D9488',
                               border: '1px solid #99F6E4',
                               fontWeight: 800,
-                              padding: '5px 12px',
+                              padding: '6px 14px',
                               borderRadius: '6px',
                               fontSize: '11px',
                               cursor: 'pointer',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '4px'
+                              gap: '6px'
                             }}
                             onClick={() => handleViewOfflinePrescription(selectedAppointment)}
                             title="View doctor's handwritten prescription images"
@@ -17750,14 +18264,14 @@ const ReceptionistDashboard = () => {
                               background: '#0D9488',
                               color: '#FFFFFF',
                               fontWeight: 800,
-                              padding: '5px 12px',
+                              padding: '6px 14px',
                               borderRadius: '6px',
                               fontSize: '11px',
                               cursor: 'pointer',
                               border: 'none',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '4px',
+                              gap: '6px',
                               boxShadow: '0 1px 4px rgba(13, 148, 136, 0.25)'
                             }}
                             disabled={isFinishingConsultation === selectedAppointment._id}
@@ -17771,7 +18285,7 @@ const ReceptionistDashboard = () => {
                         <button
                           type="button"
                           className="btn"
-                          style={{ background: '#FFFFFF', border: '1px solid #93C5FD', color: '#2563EB', fontWeight: 700, padding: '4px 8px', borderRadius: '6px', fontSize: '11px', cursor: 'pointer' }}
+                          style={{ background: '#FFFFFF', border: '1px solid #93C5FD', color: '#2563EB', fontWeight: 700, padding: '5px 10px', borderRadius: '6px', fontSize: '11px', cursor: 'pointer' }}
                           disabled={isCheckingIn}
                           onClick={() => handleCheckInAppointment(selectedAppointment)}
                           title="Re-verify check-in token"
@@ -17785,26 +18299,27 @@ const ReceptionistDashboard = () => {
 
                 if (!isCancelled && !isCompleted) {
                   const isToday = isAppointmentToday(selectedAppointment.date);
+                  const formattedApptDate = formatApptDate(selectedAppointment.date);
                   return (
-                    <div style={{ background: isToday ? '#FFFBEB' : '#F8FAFC', border: `1.5px solid ${isToday ? '#FCD34D' : '#E2E8F0'}`, borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ background: isToday ? '#FFFBEB' : '#F8FAFC', border: `1.5px solid ${isToday ? '#FCD34D' : '#E2E8F0'}`, borderRadius: '10px', padding: '14px 18px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                       <div>
                         <div style={{ fontSize: '11px', fontWeight: 800, color: isToday ? '#92400E' : '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           {isToday ? 'Patient Arrival & Token' : 'Scheduled Appointment'}
                         </div>
-                        <div style={{ fontSize: '13px', fontWeight: 800, color: isToday ? '#78350F' : '#1E293B' }}>
-                          {isToday ? 'Patient has not checked in yet' : `Scheduled for ${selectedAppointment.date}`}
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: isToday ? '#78350F' : '#1E293B', marginTop: '2px' }}>
+                          {isToday ? 'Patient has not checked in yet' : `Scheduled for ${formattedApptDate}`}
                         </div>
-                        <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                        <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px' }}>
                           {isToday 
                             ? "Check in patient upon arrival to allocate an atomic server-generated token and enter doctor's live queue."
-                            : `Check-in opens on the day of the appointment (${selectedAppointment.date}).`}
+                            : `Check-in opens on the day of the appointment (${formattedApptDate}).`}
                         </div>
                       </div>
                       {isToday ? (
                         <button
                           type="button"
                           className="btn btn-primary"
-                          style={{ background: '#D97706', borderColor: '#D97706', color: '#FFFFFF', fontWeight: 800, padding: '8px 16px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          style={{ background: '#D97706', borderColor: '#D97706', color: '#FFFFFF', fontWeight: 800, padding: '8px 18px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                           disabled={isCheckingIn}
                           onClick={() => handleCheckInAppointment(selectedAppointment)}
                         >
@@ -17814,10 +18329,10 @@ const ReceptionistDashboard = () => {
                         <button
                           type="button"
                           disabled
-                          style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', color: '#94A3B8', fontWeight: 700, padding: '8px 16px', borderRadius: '6px', fontSize: '12px', cursor: 'not-allowed', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                          title={`Check-in is only available on scheduled date (${selectedAppointment.date})`}
+                          style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', color: '#94A3B8', fontWeight: 700, padding: '8px 18px', borderRadius: '8px', fontSize: '12px', cursor: 'not-allowed', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          title={`Check-in is only available on scheduled date (${formattedApptDate})`}
                         >
-                          Check-in on {selectedAppointment.date}
+                          Check-in on {formattedApptDate}
                         </button>
                       )}
                     </div>
@@ -17828,12 +18343,20 @@ const ReceptionistDashboard = () => {
               })()}
               
               {/* Online Request Approval Action Box */}
-
               {(() => {
                 const currentStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
-                if (currentStatus === 'Pending' || currentStatus === 'Pending Approval') {
+                const associatedBill = bills.find(b => {
+                  const appBId = b.appointmentId?._id || b.appointmentId;
+                  return appBId && appBId.toString() === selectedAppointment._id.toString();
+                });
+                const isAlreadyPaid = (associatedBill && (associatedBill.status === 'Paid' || (associatedBill.amountPaid >= associatedBill.totalAmount && associatedBill.totalAmount > 0))) || 
+                                     selectedAppointment.paymentStatus === 'Paid' || 
+                                     selectedAppointment.billingStatus === 'Paid';
+
+                // CRITICAL RULE: If payment is ALREADY completed, NEVER show "Action Required: Approve & Request Payment"
+                if (!isAlreadyPaid && (currentStatus === 'Pending' || currentStatus === 'Pending Approval')) {
                   return (
-                    <div style={{ background: '#EFF6FF', border: '1.5px solid #3B82F6', borderRadius: '8px', padding: '14px 16px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ background: '#EFF6FF', border: '1.5px solid #3B82F6', borderRadius: '10px', padding: '14px 18px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                       <div>
                         <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E40AF', display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span style={{ background: '#2563EB', color: 'white', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 900 }}>ACTION REQUIRED</span>
@@ -17864,7 +18387,7 @@ const ReceptionistDashboard = () => {
                         <button
                           type="button"
                           className="btn btn-danger"
-                          style={{ background: '#EF4444', color: 'white', fontWeight: 800, padding: '8px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', border: 'none' }}
+                          style={{ background: '#EF4444', color: 'white', fontWeight: 800, padding: '8px 14px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', border: 'none' }}
                           onClick={async () => {
                             try {
                               await api.put('/appointments/' + selectedAppointment._id + '/reject');
@@ -17885,289 +18408,400 @@ const ReceptionistDashboard = () => {
                 return null;
               })()}
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
-                {(() => {
-                  const originalStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
-                  const isLocked = originalStatus === 'Cancelled' || originalStatus === 'Completed' || originalStatus === 'Checked Out';
-                  const isCompleted = originalStatus === 'Completed' || originalStatus === 'Checked Out';
-
-                  if (isLocked) {
-                    return (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', padding: '10px 14px', borderRadius: '2px', fontSize: '12.5px', color: '#92400E', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <i data-lucide="lock" style={{ width: '14px', height: '14px', flexShrink: 0 }}></i>
-                          <span>Status Lock: This appointment has been {originalStatus}. It cannot be rescheduled or modified.</span>
-                        </div>
-
-                        {isCompleted && (
-                          <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '16px' }}>
-                            <h3 style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B', marginBottom: '12px' }}>Clinical Summary</h3>
-                            
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '16px' }}>
-                              <div>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Prescribed Medicines</span>
-                                  {selectedAppointmentDetails.prescriptions.length > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDirectSharePrescription(selectedAppointment._id, selectedAppointment.patientId)}
-                                      style={{
-                                        border: '1px solid #BFDBFE',
-                                        background: '#EFF6FF',
-                                        color: '#1D4ED8',
-                                        borderRadius: '6px',
-                                        padding: '2px 8px',
-                                        fontSize: '11px',
-                                        fontWeight: 750,
-                                        cursor: 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '4px'
-                                      }}
-                                      title="Share prescription via branded email"
-                                    >
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                        <rect width="20" height="16" x="2" y="4" rx="2"/>
-                                        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-                                      </svg>
-                                      Share Email
-                                    </button>
-                                  )}
-                                </div>
-                                {selectedAppointmentDetails.prescriptions.length === 0 ? (
-                                  <div style={{ fontSize: '13px', color: '#64748B', fontStyle: 'italic' }}>No active prescription.</div>
-                                ) : (
-                                  selectedAppointmentDetails.prescriptions.map((presc, idx) => (
-                                    <div key={presc._id || idx} style={{ background: '#EFF6FF', padding: '10px 12px', borderRadius: '2px', marginBottom: '6px', border: '1px solid #DBEAFE' }}>
-                                      {(presc.items || []).map((item, i) => (
-                                        <div key={i} style={{ fontSize: '13px', color: '#1E293B', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                          <i data-lucide="pill" style={{ width: '13px', height: '13px', color: '#2563EB' }}></i> {item.name} - {item.dosage} ({item.duration})
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-
-                              <div>
-                                <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>Ordered Lab Tests</div>
-                                {selectedAppointmentDetails.labs.length === 0 ? (
-                                  <div style={{ fontSize: '13px', color: '#64748B', fontStyle: 'italic' }}>No lab tests ordered.</div>
-                                ) : (
-                                  <div style={{ background: '#F0FDF4', padding: '10px 12px', borderRadius: '2px', border: '1px solid #DCFCE7' }}>
-                                    {selectedAppointmentDetails.labs.map((lab, idx) => (
-                                      <div key={lab._id || idx} style={{ fontSize: '13px', color: '#16A34A', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                          <i data-lucide="flask-conical" style={{ width: '13px', height: '13px', color: '#16A34A' }}></i> {lab.testName}
-                                        </span>
-                                        <span style={{ fontSize: '11px', background: '#DCFCE7', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>{lab.status}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '8px', color: '#1A1D23' }}>Reschedule Doctor</label>
-                        <select
-                          className="form-control"
-                          style={{ background: 'white', border: '1px solid #CBD5E1', borderRadius: '2px', height: '26px', width: '100%', padding: '0 12px', fontWeight: 600, appearance: 'none', cursor: 'pointer' }}
-                          value={selectedAppointment.doctorId?._id || selectedAppointment.doctorId || ''}
-                          onChange={(e) => {
-                            const newDocId = e.target.value;
-                            const newDocObj = doctors.find(d => String(d._id) === String(newDocId)) || newDocId;
-                            setSelectedAppointment({...selectedAppointment, doctorId: newDocObj, time: ''});
-                          }}
-                        >
-                          <option value="">Select Doctor</option>
-                          {doctors.map(d => (
-                            <option key={d._id} value={d._id}>Dr. {d.name} ({d.specialty || 'General'})</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '8px', color: '#1A1D23' }}>Reschedule Date</label>
-                        <input 
-                          type="date" 
-                          className="form-control" 
-                          style={{ background: 'white', border: '1px solid #CBD5E1', borderRadius: '2px', height: '26px', width: '100%', padding: '0 12px', fontWeight: 600 }}
-                          value={(() => {
-                            if (!selectedAppointment.date) return '';
-                            const d = new Date(selectedAppointment.date);
-                            if (isNaN(d.getTime())) return '';
-                            const year = d.getFullYear();
-                            const month = String(d.getMonth() + 1).padStart(2, '0');
-                            const day = String(d.getDate()).padStart(2, '0');
-                            return `${year}-${month}-${day}`;
-                          })()}
-                          min={getLocalDateString()}
-                          onChange={(e) => setSelectedAppointment({...selectedAppointment, date: e.target.value})} 
-                        />
-                      </div>
-
-                      {!rescheduleAvailability.available && (
-                        <div style={{ color: '#EF4444', background: '#FEF2F2', padding: '12px', borderRadius: '2px', fontSize: '12px', fontWeight: 700, border: '1px solid #FEE2E2' }}>
-                          Doctor Unavailable: {rescheduleAvailability.reason || 'Doctor is on leave or weekly off'}
-                        </div>
-                      )}
-
-                      {rescheduleAvailability.available && (
-                        <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '8px', color: '#1A1D23' }}>Reschedule Time Slot</label>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '8px', maxHeight: '140px', overflowY: 'auto', paddingRight: '4px', border: '1px solid #E2E8F0', padding: '10px', borderRadius: '2px', background: '#F8FAFC' }}>
-                            {(rescheduleAvailability.slots && rescheduleAvailability.slots.length > 0 ? rescheduleAvailability.slots : DEFAULT_RECEPTION_SLOTS).map(time => {
-                              const docId = selectedAppointment.doctorId?._id || selectedAppointment.doctorId;
-                              const cleanTimeSlotStr = (s) => s ? s.split(/\(Limit:/i)[0].trim().toLowerCase() : '';
-                              const targetTimeClean = cleanTimeSlotStr(time);
-
-                              let limit = 10;
-                              const selectedDocObj = doctors.find(d => String(d._id) === String(docId));
-                              if (selectedDocObj) {
-                                  limit = selectedDocObj.max_slots || 10;
-                              }
-
-                              const match = time.match(/\(Limit:\s*(\d+)\)/i);
-                              if (match) {
-                                  limit = parseInt(match[1], 10);
-                              }
-
-                              let bookedCount = 0;
-                              const targetDateStr = new Date(selectedAppointment.date).toDateString();
-                              bookedCount = appointments.filter(app => {
-                                  if (app._id === selectedAppointment._id) return false;
-                                  if (app.status === 'Cancelled') return false;
-                                  const appDocId = app.doctorId?._id || app.doctorId;
-                                  if (String(appDocId) !== String(docId)) return false;
-                                  const appDateStr = new Date(app.date).toDateString();
-                                  if (appDateStr !== targetDateStr) return false;
-                                  return cleanTimeSlotStr(app.time) === targetTimeClean;
-                              }).length;
-
-                              const isFull = bookedCount >= limit;
-                              const isPast = isPastSlot(selectedAppointment.date, time);
-                              const isSelected = selectedAppointment.time === time;
-                              const displayTime = time.split(/\(Limit:/i)[0].trim();
-
-                              return (
-                                <button
-                                  key={time}
-                                  type="button"
-                                  disabled={isFull || isPast}
-                                  onClick={() => { if (!isFull && !isPast) setSelectedAppointment({ ...selectedAppointment, time }); }}
-                                  style={{
-                                    minHeight: '26px',
-                                    padding: '4px 8px',
-                                    borderRadius: '2px',
-                                    border: isSelected ? '2px solid #2563EB' : '1px solid #CBD5E1',
-                                    background: (isFull || isPast) ? '#E2E8F0' : (isSelected ? '#EFF6FF' : 'white'),
-                                    color: (isFull || isPast) ? '#94A3B8' : (isSelected ? '#2563EB' : '#1E293B'),
-                                    fontWeight: isSelected ? 800 : 600,
-                                    fontSize: '11px',
-                                    cursor: (isFull || isPast) ? 'not-allowed' : 'pointer',
-                                    transition: 'all 0.15s',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    opacity: isPast ? 0.65 : 1
-                                  }}
-                                >
-                                  <span style={{ fontWeight: 700 }}>{displayTime}</span>
-                                  {isPast ? (
-                                    <span style={{ fontSize: '9px', fontWeight: 800, color: '#94A3B8' }}>(Past)</span>
-                                  ) : (
-                                    <span style={{ fontSize: '9px', opacity: 0.8 }}>({bookedCount}/{limit})</span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-
+              {/* Main Content Grid: Left Column (Doctor, Date, Slot) vs Right Column (Billing, Clinical Summary) */}
               {(() => {
+                const originalStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
+                const isLocked = originalStatus === 'Cancelled' || originalStatus === 'Completed' || originalStatus === 'Checked Out';
+                const isCompleted = originalStatus === 'Completed' || originalStatus === 'Checked Out';
                 const associatedBill = bills.find(b => {
                   const appBId = b.appointmentId?._id || b.appointmentId;
                   return appBId && appBId.toString() === selectedAppointment._id.toString();
                 });
-                if (!associatedBill) return null;
+
                 return (
-                  <div style={{ marginTop: '24px', padding: '16px', borderRadius: '4px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Billing & Invoice</span>
-                      <span className={`status-badge ${associatedBill.status === 'Paid' ? 'available' : 'pending'}`} style={{ margin: 0, padding: '4px 10px', fontSize: '11px', fontWeight: 700 }}>
-                        {associatedBill.status || 'Unpaid'}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Invoice Number:</span>
-                        <span style={{ color: '#0F172A', fontWeight: 700 }}>#INV-{(associatedBill._id || '').substring(Math.max(0, (associatedBill._id || '').length - 6)).toUpperCase() || 'N/A'}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Total Charge:</span>
-                        <span style={{ color: '#0F172A', fontWeight: 700 }}>₹{(associatedBill.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      {associatedBill.discountPercent > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#EF4444' }}>
-                          <span>Discount ({associatedBill.discountPercent}%):</span>
-                          <span>-₹{((associatedBill.originalAmount || associatedBill.totalAmount) - associatedBill.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: isLocked ? '1fr' : '1.15fr 0.85fr', gap: '24px', alignItems: 'start' }}>
+                    {/* Left Column: Doctor, Date, Slots or Locked Status */}
+                    <div>
+                      {isLocked ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', padding: '12px 16px', borderRadius: '8px', fontSize: '13px', color: '#92400E', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <i data-lucide="lock" style={{ width: '16px', height: '16px', flexShrink: 0 }}></i>
+                            <span>Status Lock: This appointment has been {originalStatus}. It cannot be rescheduled or modified.</span>
+                          </div>
+
+                          <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+                            <div>
+                              <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Doctor Assigned</div>
+                              <div style={{ fontSize: '14px', fontWeight: 700, color: '#1E293B', marginTop: '2px' }}>
+                                Dr. {selectedAppointment.doctorId?.name || 'Assigned Doctor'}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#64748B' }}>{selectedAppointment.doctorId?.specialty || 'General'}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Appointment Date</div>
+                              <div style={{ fontSize: '14px', fontWeight: 700, color: '#1E293B', marginTop: '2px' }}>
+                                {(() => {
+                                  if (!selectedAppointment.date) return 'N/A';
+                                  const d = new Date(selectedAppointment.date);
+                                  return isNaN(d.getTime()) ? selectedAppointment.date : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                                })()}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 800, textTransform: 'uppercase' }}>Scheduled Time</div>
+                              <div style={{ fontSize: '14px', fontWeight: 700, color: '#1E293B', marginTop: '2px' }}>
+                                {selectedAppointment.time || 'Not Specified'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {isCompleted && (
+                            <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', padding: '18px 20px', background: '#FFFFFF' }}>
+                              <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Clinical Summary</h3>
+                              
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Prescribed Medicines</span>
+                                    {selectedAppointmentDetails.prescriptions.length > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDirectSharePrescription(selectedAppointment._id, selectedAppointment.patientId)}
+                                        style={{
+                                          border: '1px solid #BFDBFE',
+                                          background: '#EFF6FF',
+                                          color: '#1D4ED8',
+                                          borderRadius: '6px',
+                                          padding: '2px 8px',
+                                          fontSize: '11px',
+                                          fontWeight: 750,
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px'
+                                        }}
+                                        title="Share prescription via branded email"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                          <rect width="20" height="16" x="2" y="4" rx="2"/>
+                                          <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                                        </svg>
+                                        Share Email
+                                      </button>
+                                    )}
+                                  </div>
+                                  {selectedAppointmentDetails.prescriptions.length === 0 ? (
+                                    <div style={{ fontSize: '12.5px', color: '#94A3B8', fontStyle: 'italic', padding: '12px', background: '#F8FAFC', borderRadius: '6px' }}>No active prescription.</div>
+                                  ) : (
+                                    selectedAppointmentDetails.prescriptions.map((presc, idx) => (
+                                      <div key={presc._id || idx} style={{ background: '#EFF6FF', padding: '10px 14px', borderRadius: '8px', marginBottom: '6px', border: '1px solid #DBEAFE' }}>
+                                        {(presc.items || []).map((item, i) => (
+                                          <div key={i} style={{ fontSize: '13px', color: '#1E293B', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: i === presc.items.length - 1 ? 0 : '4px' }}>
+                                            <i data-lucide="pill" style={{ width: '14px', height: '14px', color: '#2563EB' }}></i> {item.name} - {item.dosage} ({item.duration})
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+
+                                <div>
+                                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px' }}>Ordered Lab Tests</div>
+                                  {selectedAppointmentDetails.labs.length === 0 ? (
+                                    <div style={{ fontSize: '12.5px', color: '#94A3B8', fontStyle: 'italic', padding: '12px', background: '#F8FAFC', borderRadius: '6px' }}>No lab tests ordered.</div>
+                                  ) : (
+                                    <div style={{ background: '#F0FDF4', padding: '10px 14px', borderRadius: '8px', border: '1px solid #DCFCE7' }}>
+                                      {selectedAppointmentDetails.labs.map((lab, idx) => (
+                                        <div key={lab._id || idx} style={{ fontSize: '13px', color: '#16A34A', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: idx === selectedAppointmentDetails.labs.length - 1 ? 0 : '6px' }}>
+                                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <i data-lucide="flask-conical" style={{ width: '14px', height: '14px', color: '#16A34A' }}></i> {lab.testName}
+                                          </span>
+                                          <span style={{ fontSize: '11px', background: '#DCFCE7', padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 700 }}>{lab.status}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '18px 20px' }}>
+                          <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '-4px' }}>
+                            Appointment Reschedule
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '6px', color: '#334155' }}>Reschedule Doctor</label>
+                              <select
+                                className="form-control"
+                                style={{ background: 'white', border: '1px solid #CBD5E1', borderRadius: '8px', height: '36px', width: '100%', padding: '0 12px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
+                                value={selectedAppointment.doctorId?._id || selectedAppointment.doctorId || ''}
+                                onChange={(e) => {
+                                  const newDocId = e.target.value;
+                                  const newDocObj = doctors.find(d => String(d._id) === String(newDocId)) || newDocId;
+                                  setSelectedAppointment({...selectedAppointment, doctorId: newDocObj, time: ''});
+                                }}
+                              >
+                                <option value="">Select Doctor</option>
+                                {doctors.map(d => (
+                                  <option key={d._id} value={d._id}>Dr. {d.name} ({d.specialty || 'General'})</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '6px', color: '#334155' }}>Reschedule Date</label>
+                              <input 
+                                type="date" 
+                                className="form-control" 
+                                style={{ background: 'white', border: '1px solid #CBD5E1', borderRadius: '8px', height: '36px', width: '100%', padding: '0 12px', fontWeight: 600, fontSize: '13px' }}
+                                value={(() => {
+                                  if (!selectedAppointment.date) return '';
+                                  const d = new Date(selectedAppointment.date);
+                                  if (isNaN(d.getTime())) return '';
+                                  const year = d.getFullYear();
+                                  const month = String(d.getMonth() + 1).padStart(2, '0');
+                                  const day = String(d.getDate()).padStart(2, '0');
+                                  return `${year}-${month}-${day}`;
+                                })()}
+                                min={getLocalDateString()}
+                                onChange={(e) => setSelectedAppointment({...selectedAppointment, date: e.target.value})} 
+                              />
+                            </div>
+                          </div>
+
+                          {!rescheduleAvailability.available && (
+                            <div style={{ color: '#EF4444', background: '#FEF2F2', padding: '12px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, border: '1px solid #FEE2E2', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span>⚠️</span>
+                              <span>Doctor Unavailable: {rescheduleAvailability.reason || 'Doctor is on leave or weekly off'}</span>
+                            </div>
+                          )}
+
+                          {rescheduleAvailability.available && (
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#334155', margin: 0 }}>Available Time Slots</label>
+                                {selectedAppointment.time && (
+                                  <span style={{ fontSize: '11px', background: '#EFF6FF', color: '#2563EB', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                                    Selected: {selectedAppointment.time}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(115px, 1fr))', gap: '8px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px', border: '1px solid #E2E8F0', padding: '12px', borderRadius: '8px', background: '#F8FAFC' }}>
+                                {(rescheduleAvailability.slots && rescheduleAvailability.slots.length > 0 ? rescheduleAvailability.slots : DEFAULT_RECEPTION_SLOTS).map(time => {
+                                  const docId = selectedAppointment.doctorId?._id || selectedAppointment.doctorId;
+                                  const cleanTimeSlotStr = (s) => s ? s.split(/\(Limit:/i)[0].trim().toLowerCase() : '';
+                                  const targetTimeClean = cleanTimeSlotStr(time);
+
+                                  let limit = 10;
+                                  const selectedDocObj = doctors.find(d => String(d._id) === String(docId));
+                                  if (selectedDocObj) {
+                                      limit = selectedDocObj.max_slots || 10;
+                                  }
+
+                                  const match = time.match(/\(Limit:\s*(\d+)\)/i);
+                                  if (match) {
+                                      limit = parseInt(match[1], 10);
+                                  }
+
+                                  let bookedCount = 0;
+                                  const targetDateStr = new Date(selectedAppointment.date).toDateString();
+                                  bookedCount = appointments.filter(app => {
+                                      if (app._id === selectedAppointment._id) return false;
+                                      if (app.status === 'Cancelled') return false;
+                                      const appDocId = app.doctorId?._id || app.doctorId;
+                                      if (String(appDocId) !== String(docId)) return false;
+                                      const appDateStr = new Date(app.date).toDateString();
+                                      if (appDateStr !== targetDateStr) return false;
+                                      return cleanTimeSlotStr(app.time) === targetTimeClean;
+                                  }).length;
+
+                                  const isFull = bookedCount >= limit;
+                                  const isPast = isPastSlot(selectedAppointment.date, time);
+                                  const isSelected = selectedAppointment.time === time;
+                                  const displayTime = time.split(/\(Limit:/i)[0].trim();
+
+                                  return (
+                                    <button
+                                      key={time}
+                                      type="button"
+                                      disabled={isFull || isPast}
+                                      onClick={() => { if (!isFull && !isPast) setSelectedAppointment({ ...selectedAppointment, time }); }}
+                                      style={{
+                                        minHeight: '34px',
+                                        padding: '6px 8px',
+                                        borderRadius: '6px',
+                                        border: isSelected ? '2px solid #2563EB' : '1px solid #CBD5E1',
+                                        background: (isFull || isPast) ? '#E2E8F0' : (isSelected ? '#EFF6FF' : 'white'),
+                                        color: (isFull || isPast) ? '#94A3B8' : (isSelected ? '#2563EB' : '#1E293B'),
+                                        fontWeight: isSelected ? 800 : 600,
+                                        fontSize: '11px',
+                                        cursor: (isFull || isPast) ? 'not-allowed' : 'pointer',
+                                        transition: 'all 0.15s',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        opacity: isPast ? 0.65 : 1
+                                      }}
+                                    >
+                                      <span style={{ fontWeight: 700 }}>{displayTime}</span>
+                                      {isPast ? (
+                                        <span style={{ fontSize: '9px', fontWeight: 800, color: '#94A3B8' }}>(Past)</span>
+                                      ) : (
+                                        <span style={{ fontSize: '9px', opacity: 0.8 }}>({bookedCount}/{limit})</span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                    {associatedBill.status !== 'Paid' && (
-                      <button
-                        type="button"
-                        className="btn btn-primary animate-in"
-                        style={{
-                          width: '100%',
-                          height: '26px',
-                          borderRadius: '2px',
-                          fontSize: '12px',
-                          fontWeight: 800,
-                          marginTop: '14px',
-                          background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                          border: 'none',
-                          color: '#FFFFFF',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '6px',
-                          boxShadow: '0 2px 4px rgba(16, 185, 129, 0.15)'
-                        }}
-                        onClick={() => {
-                          setSelectedBillForPayment(associatedBill);
-                          setDiscountPercent(0);
-                          setDiscountReason('');
-                          setPaymentMethod('Cash');
-                          setShowPaymentModal(true);
-                          setDetailsModalOpen(false);
-                        }}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-                        <span>Collect Payment & Apply Discount</span>
-                      </button>
-                    )}
+
+                    {/* Right Column: Billing & Financial Overview */}
+                    <div>
+                      {associatedBill ? (() => {
+                        const paidTotal = (associatedBill.payments && associatedBill.payments.length > 0)
+                          ? associatedBill.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+                          : (associatedBill.status === 'Paid' ? (associatedBill.totalAmount || 0) : 0);
+                        const isFullyPaid = associatedBill.status === 'Paid' || (paidTotal >= associatedBill.totalAmount && associatedBill.totalAmount > 0);
+                        const isPartiallyPaid = !isFullyPaid && paidTotal > 0;
+                        const remainingBal = Math.max(0, (associatedBill.totalAmount || 0) - paidTotal);
+
+                        return (
+                          <div style={{ padding: '18px 20px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Billing & Invoice</span>
+                              <span 
+                                className={`status-badge ${isFullyPaid ? 'available' : (isPartiallyPaid ? 'in-consultation' : 'pending')}`} 
+                                style={{ 
+                                  margin: 0, 
+                                  padding: '4px 10px', 
+                                  fontSize: '11px', 
+                                  fontWeight: 800,
+                                  background: isFullyPaid ? '#DCFCE7' : (isPartiallyPaid ? '#FEF3C7' : '#F1F5F9'),
+                                  color: isFullyPaid ? '#15803D' : (isPartiallyPaid ? '#B45309' : '#64748B'),
+                                  border: `1px solid ${isFullyPaid ? '#86EFAC' : (isPartiallyPaid ? '#FCD34D' : '#CBD5E1')}`
+                                }}
+                              >
+                                {isFullyPaid ? '✓ Paid' : (isPartiallyPaid ? 'Partially Paid' : 'Unpaid')}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '6px', borderBottom: '1px dashed #E2E8F0' }}>
+                                <span>Invoice Number:</span>
+                                <span style={{ color: '#0F172A', fontWeight: 700 }}>#INV-{(associatedBill._id || '').substring(Math.max(0, (associatedBill._id || '').length - 6)).toUpperCase() || 'N/A'}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '6px', borderBottom: '1px dashed #E2E8F0' }}>
+                                <span>Consultation Fee:</span>
+                                <span style={{ color: '#0F172A', fontWeight: 700 }}>₹{((associatedBill.originalAmount || associatedBill.totalAmount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              {associatedBill.discountPercent > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#EF4444', paddingBottom: '6px', borderBottom: '1px dashed #E2E8F0' }}>
+                                  <span>Discount ({associatedBill.discountPercent}%):</span>
+                                  <span>-₹{((associatedBill.originalAmount || associatedBill.totalAmount) - associatedBill.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '2px', fontSize: '13.5px' }}>
+                                <span style={{ fontWeight: 800, color: '#0F172A' }}>Payable Amount:</span>
+                                <span style={{ color: '#0F172A', fontWeight: 900 }}>₹{(associatedBill.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16A34A', fontSize: '13px' }}>
+                                <span style={{ fontWeight: 700 }}>Total Paid:</span>
+                                <span style={{ fontWeight: 800 }}>₹{paidTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              {!isFullyPaid && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#DC2626', fontSize: '13.5px', borderTop: '1px solid #FEE2E2', paddingTop: '6px' }}>
+                                  <span style={{ fontWeight: 800 }}>Remaining Due:</span>
+                                  <span style={{ fontWeight: 900 }}>₹{remainingBal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Recorded Payment Entries breakdown */}
+                            {associatedBill.payments && associatedBill.payments.length > 0 && (
+                              <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed #E2E8F0' }}>
+                                <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginBottom: '6px' }}>Payment Breakdown</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {associatedBill.payments.map((p, idx) => (
+                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF', padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', fontSize: '11.5px' }}>
+                                      <span style={{ fontWeight: 700, color: '#1E293B' }}>
+                                        {p.method} <span style={{ color: '#94A3B8', fontWeight: 500 }}>({p.source || 'Counter'})</span>
+                                      </span>
+                                      <span style={{ fontWeight: 800, color: '#16A34A' }}>₹{(Number(p.amount) || 0).toFixed(2)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Collect Payment CTA (Only when Unpaid or Partially Paid) */}
+                            {!isFullyPaid && (
+                              <button
+                                type="button"
+                                className="btn btn-primary animate-in"
+                                style={{
+                                  width: '100%',
+                                  height: '38px',
+                                  borderRadius: '8px',
+                                  fontSize: '12.5px',
+                                  fontWeight: 800,
+                                  marginTop: '16px',
+                                  background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                                  border: 'none',
+                                  color: '#FFFFFF',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '6px',
+                                  boxShadow: '0 2px 6px rgba(16, 185, 129, 0.25)'
+                                }}
+                                onClick={() => {
+                                  setSelectedBillForPayment(associatedBill);
+                                  setDiscountPercent(0);
+                                  setDiscountReason('');
+                                  setPaymentMethod('Cash');
+                                  const remAmount = Math.max(0, (associatedBill.totalAmount || 0) - paidTotal);
+                                  setSplitPaymentRows([{ method: 'Cash', amount: remAmount > 0 ? String(remAmount) : '' }]);
+                                  setShowPaymentModal(true);
+                                  setDetailsModalOpen(false);
+                                }}
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                                <span>{isPartiallyPaid ? `Collect Remaining (₹${remainingBal.toFixed(2)})` : 'Collect Payment & Apply Discount'}</span>
+                              </button>
+                            )}
+
+                            {isFullyPaid && (
+                              <div style={{ marginTop: '14px', padding: '10px 12px', background: '#F0FDF4', borderRadius: '6px', border: '1px solid #DCFCE7', display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontSize: '12px', fontWeight: 700 }}>
+                                <span>✓</span>
+                                <span>Full payment received. No collection required.</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })() : (
+                        <div style={{ padding: '20px', borderRadius: '10px', background: '#F8FAFC', border: '1px dashed #CBD5E1', textAlign: 'center', color: '#64748B' }}>
+                          <div style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>Billing Summary</div>
+                          <p style={{ fontSize: '12.5px', margin: 0, color: '#94A3B8' }}>No invoice currently linked or consultation bill will generate upon check-in.</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })()}
             </div>
             
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', alignItems: 'center', minHeight: '44px' }}>
+            {/* Modal Actions Footer */}
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', alignItems: 'center', paddingTop: '16px', borderTop: '1px solid #E2E8F0', marginTop: '12px' }}>
               {(() => {
                 const originalStatus = appointments.find(a => a._id === selectedAppointment._id)?.status || selectedAppointment.status;
                 const isLocked = originalStatus === 'Cancelled' || originalStatus === 'Completed' || originalStatus === 'Checked Out';
@@ -18175,20 +18809,20 @@ const ReceptionistDashboard = () => {
                 if (showDeleteConfirm) {
                   return (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', animation: 'fadeIn 0.2s ease-out' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#EF4444' }}>Are you sure?</span>
-                      <button className="btn" style={{ background: '#F1F5F9', color: '#64748B', fontWeight: 800, padding: '0 16px', borderRadius: '2px', height: '26px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
-                      <button className="btn" style={{ background: '#EF4444', color: 'white', fontWeight: 800, padding: '0 20px', borderRadius: '2px', height: '26px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { handleDeleteAppointment(selectedAppointment._id); setShowDeleteConfirm(false); }}>Confirm Delete</button>
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: '#EF4444' }}>Are you sure you want to cancel & delete this appointment?</span>
+                      <button className="btn" style={{ background: '#F1F5F9', color: '#64748B', fontWeight: 800, padding: '0 18px', borderRadius: '8px', height: '36px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
+                      <button className="btn" style={{ background: '#EF4444', color: 'white', fontWeight: 800, padding: '0 20px', borderRadius: '8px', height: '36px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { handleDeleteAppointment(selectedAppointment._id); setShowDeleteConfirm(false); }}>Confirm Delete</button>
                     </div>
                   );
                 }
 
                 return (
                   <>
-                    <button className="btn" style={{ background: '#FEE2E2', color: '#EF4444', fontWeight: 800, padding: '0 20px', borderRadius: '2px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowDeleteConfirm(true)}>Delete</button>
+                    <button className="btn" style={{ background: '#FEE2E2', color: '#EF4444', fontWeight: 800, padding: '0 20px', borderRadius: '8px', height: '36px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowDeleteConfirm(true)}>Delete</button>
                     {!isLocked ? (
-                      <button className="btn btn-primary" style={{ fontWeight: 800, padding: '0 24px', borderRadius: '2px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => handleUpdateAppointment(selectedAppointment)}>Save Changes</button>
+                      <button className="btn btn-primary" style={{ fontWeight: 800, padding: '0 24px', borderRadius: '8px', height: '36px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => handleUpdateAppointment(selectedAppointment)}>Save Changes</button>
                     ) : (
-                      <button className="btn btn-secondary" style={{ fontWeight: 800, padding: '0 24px', borderRadius: '2px', height: '26px', background: '#F1F5F9', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setDetailsModalOpen(false); setShowDeleteConfirm(false); }}>Close</button>
+                      <button className="btn btn-secondary" style={{ fontWeight: 800, padding: '0 24px', borderRadius: '8px', height: '36px', background: '#F1F5F9', color: '#475569', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setDetailsModalOpen(false); setShowDeleteConfirm(false); }}>Close</button>
                     )}
                   </>
                 );
@@ -18834,107 +19468,282 @@ const ReceptionistDashboard = () => {
         </div>
       )}
 
-      {showPaymentModal && selectedBillForPayment && (
-        <div className="details-modal-overlay" data-lenis-prevent onClick={() => { setShowPaymentModal(false); setPendingRegistrationPayload(null); }}>
-          <div className="details-modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', padding: '12px' }}>
-            <div className="details-modal-header" style={{ marginBottom: '20px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-              <span className="details-modal-title" style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>Process Appointment Payment</span>
-              <button className="details-modal-close" onClick={() => { setShowPaymentModal(false); setPendingRegistrationPayload(null); }}>✕</button>
-            </div>
-            
-            <form onSubmit={handleMarkAsPaidSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#64748B', marginBottom: '6px' }}>Patient Name</label>
-                <input 
-                  type="text" 
-                  style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '2px', padding: '0 12px', fontSize: '12px', fontWeight: 600, backgroundColor: '#F8FAFC' }}
-                  value={selectedBillForPayment.patientId?.name || 'Unknown'} 
-                  readOnly 
-                />
-              </div>
+      {showPaymentModal && selectedBillForPayment && (() => {
+        const isRegistrationFlow = !!pendingRegistrationPayload;
+        const currentPaid = (selectedBillForPayment.payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        const baseAmount = selectedBillForPayment.originalAmount || selectedBillForPayment.totalAmount;
+        const discountAmt = discountPercent > 0 ? (baseAmount * discountPercent) / 100 : 0;
+        const netPayable = Math.max(0, baseAmount - discountAmt);
+        const remainingDue = Math.max(0, netPayable - currentPaid);
+        const totalEntered = splitPaymentRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+        const diff = remainingDue - totalEntered;
+        const isOverpaid = diff < -0.01;
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+        return (
+          <div className="details-modal-overlay" data-lenis-prevent onClick={() => { setShowPaymentModal(false); setPendingRegistrationPayload(null); }}>
+            <div className="details-modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '540px', width: '95%', padding: '24px 28px', borderRadius: '14px', boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)' }}>
+              <div className="details-modal-header" style={{ marginBottom: '18px', borderBottom: '1px solid #E2E8F0', paddingBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#64748B', marginBottom: '6px' }}>Total Charge</label>
+                  <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                    {isRegistrationFlow ? 'Complete Registration & Payment' : 'Collect Payment (Counter)'}
+                  </h3>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+                    {isRegistrationFlow ? 'One-time OPD registration charge + Consultation' : `Invoice #INV-${(selectedBillForPayment._id || '').slice(-6).toUpperCase()}`}
+                  </div>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => { setShowPaymentModal(false); setPendingRegistrationPayload(null); }}
+                  style={{ width: '30px', height: '30px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontWeight: 800 }}
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <form onSubmit={handleMarkAsPaidSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>Patient Name</label>
                   <input 
                     type="text" 
-                    style={{ width: '100%', height: '40px', border: '1px solid #E2E8F0', borderRadius: '2px', padding: '0 12px', fontSize: '12px', fontWeight: 700, backgroundColor: '#F8FAFC' }}
-                    value={`₹${selectedBillForPayment.totalAmount.toLocaleString()}`} 
+                    style={{ width: '100%', height: '38px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', fontSize: '13px', fontWeight: 600, backgroundColor: '#F8FAFC', color: '#1E293B' }}
+                    value={selectedBillForPayment.patientId?.name || (pendingRegistrationPayload?.patientData?.name) || 'Patient'} 
                     readOnly 
                   />
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#64748B', marginBottom: '6px' }}>Discount (%)</label>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>Total Charge</label>
                     <input 
-                      type="number" 
-                      min="0"
-                      max={allowedDiscountPercent}
-                      style={{ width: '100%', height: '40px', border: '1px solid #CBD5E1', borderRadius: '2px', padding: '0 28px 0 12px', fontSize: '12px', fontWeight: 800 }}
-                      value={discountPercent} 
-                      onChange={e => setDiscountPercent(Math.min(allowedDiscountPercent, Math.max(0, Number(e.target.value))))} 
+                      type="text" 
+                      style={{ width: '100%', height: '38px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 12px', fontSize: '13px', fontWeight: 700, backgroundColor: '#F8FAFC', color: '#1E293B' }}
+                      value={`₹${baseAmount.toLocaleString()}`} 
+                      readOnly 
                     />
-                    <span style={{ position: 'absolute', right: '12px', fontWeight: 800, color: '#64748B' }}>%</span>
                   </div>
-                  <span style={{ fontSize: '10.5px', color: '#64748B', display: 'block', marginTop: '4px', fontWeight: 600 }}>Max limit: {allowedDiscountPercent}%</span>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>Discount (%)</label>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <input 
+                        type="number" 
+                        min="0"
+                        max={allowedDiscountPercent}
+                        style={{ width: '100%', height: '38px', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '0 28px 0 12px', fontSize: '13px', fontWeight: 800 }}
+                        value={discountPercent} 
+                        onChange={e => {
+                          const val = Math.min(allowedDiscountPercent, Math.max(0, Number(e.target.value)));
+                          setDiscountPercent(val);
+                          const newNet = Math.max(0, baseAmount - (baseAmount * val) / 100);
+                          const newRem = Math.max(0, newNet - currentPaid);
+                          if (!isRegistrationFlow && splitPaymentRows.length === 1) {
+                            setSplitPaymentRows([{ ...splitPaymentRows[0], amount: newRem > 0 ? String(newRem) : '' }]);
+                          }
+                        }} 
+                      />
+                      <span style={{ position: 'absolute', right: '12px', fontWeight: 800, color: '#64748B' }}>%</span>
+                    </div>
+                    <span style={{ fontSize: '10.5px', color: '#64748B', display: 'block', marginTop: '3px', fontWeight: 600 }}>Max limit: {allowedDiscountPercent}%</span>
+                  </div>
                 </div>
-              </div>
 
-              {discountPercent > 0 && (
-                <div className="animate-in">
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#EF4444', marginBottom: '6px' }}>Discount Reason *</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Senior Citizen / Staff Relative"
-                    style={{ width: '100%', height: '40px', border: '1px solid #FCA5A5', borderRadius: '2px', padding: '0 12px', fontSize: '12px', fontWeight: 600 }}
-                    value={discountReason} 
-                    onChange={e => setDiscountReason(e.target.value)} 
-                    required={discountPercent > 0}
-                  />
-                </div>
-              )}
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#64748B', marginBottom: '6px' }}>Payment Method</label>
-                <select 
-                  style={{ width: '100%', height: '40px', border: '1px solid #CBD5E1', borderRadius: '2px', padding: '0 8px', fontSize: '12px', fontWeight: 600, background: 'white' }}
-                  value={paymentMethod}
-                  onChange={e => setPaymentMethod(e.target.value)}
-                >
-                  <option value="Cash">Cash</option>
-                  <option value="Card">Card</option>
-                  <option value="UPI">UPI</option>
-                  <option value="Netbanking">Netbanking</option>
-                </select>
-              </div>
-
-              <div style={{ backgroundColor: '#F8FAFC', borderRadius: '2px', padding: '16px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid #E2E8F0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                  <span>Original Total:</span>
-                  <span>₹{selectedBillForPayment.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
                 {discountPercent > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#EF4444', fontWeight: 600 }}>
-                    <span>Discount Applied:</span>
-                    <span>-₹{((selectedBillForPayment.totalAmount * discountPercent) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <div className="animate-in">
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#EF4444', marginBottom: '6px' }}>Discount Reason *</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Senior Citizen / Staff Relative / Special Authorization"
+                      style={{ width: '100%', height: '38px', border: '1px solid #FCA5A5', borderRadius: '8px', padding: '0 12px', fontSize: '12.5px', fontWeight: 600 }}
+                      value={discountReason} 
+                      onChange={e => setDiscountReason(e.target.value)} 
+                      required={discountPercent > 0}
+                    />
                   </div>
                 )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#0F172A', fontWeight: 850, borderTop: '1px dashed #CBD5E1', paddingTop: '8px', marginTop: '4px' }}>
-                  <span>Net Payable Amount:</span>
-                  <span style={{ color: '#2563EB', fontSize: '17px' }}>₹{(selectedBillForPayment.totalAmount - (selectedBillForPayment.totalAmount * discountPercent) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-              </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
-                <button type="button" className="btn btn-secondary" style={{ height: '40px', padding: '0 20px', borderRadius: '2px', fontWeight: 700 }} onClick={() => { setShowPaymentModal(false); setPendingRegistrationPayload(null); }}>Cancel</button>
-                <button type="submit" className="btn btn-primary" style={{ height: '40px', padding: '0 24px', borderRadius: '2px', fontWeight: 800, background: 'var(--primary-gradient)', border: 'none' }} disabled={isSettlingPayment}>
-                  {isSettlingPayment ? 'Processing Payment & Registering...' : 'Complete Payment'}
-                </button>
-              </div>
-            </form>
+                {/* Registration flow single method dropdown (or split rows for normal collection) */}
+                {isRegistrationFlow ? (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>Payment Method</label>
+                    <select 
+                      style={{ width: '100%', height: '38px', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '0 12px', fontSize: '13px', fontWeight: 600, background: 'white' }}
+                      value={paymentMethod}
+                      onChange={e => setPaymentMethod(e.target.value)}
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="Card">Card</option>
+                      <option value="UPI">UPI</option>
+                      <option value="Netbanking">Netbanking</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#475569', margin: 0 }}>
+                        Payment Entries (Supports Split Payment)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const remToFill = Math.max(0, remainingDue - totalEntered);
+                          setSplitPaymentRows([
+                            ...splitPaymentRows,
+                            { method: 'UPI', amount: remToFill > 0 ? String(remToFill) : '', transactionRef: '' }
+                          ]);
+                        }}
+                        style={{
+                          background: '#EFF6FF',
+                          color: '#2563EB',
+                          border: '1px solid #BFDBFE',
+                          borderRadius: '6px',
+                          padding: '4px 10px',
+                          fontSize: '11px',
+                          fontWeight: 750,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        + Add Payment Method
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {splitPaymentRows.map((row, idx) => (
+                        <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#F8FAFC', padding: '8px 10px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', width: '22px' }}>#{idx + 1}</span>
+                          <select
+                            style={{ flex: '1', height: '36px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', fontSize: '12.5px', fontWeight: 700, background: 'white' }}
+                            value={row.method}
+                            onChange={e => {
+                              const newRows = [...splitPaymentRows];
+                              newRows[idx].method = e.target.value;
+                              setSplitPaymentRows(newRows);
+                            }}
+                          >
+                            <option value="Cash">Cash</option>
+                            <option value="UPI">UPI</option>
+                            <option value="Card">Card</option>
+                            <option value="Netbanking">Netbanking</option>
+                          </select>
+                          <div style={{ position: 'relative', width: '130px' }}>
+                            <span style={{ position: 'absolute', left: '8px', top: '9px', fontWeight: 700, color: '#64748B', fontSize: '12px' }}>₹</span>
+                            <input
+                              type="number"
+                              min="1"
+                              step="any"
+                              placeholder="Amount"
+                              style={{ width: '100%', height: '36px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px 0 22px', fontSize: '12.5px', fontWeight: 800 }}
+                              value={row.amount}
+                              onChange={e => {
+                                const newRows = [...splitPaymentRows];
+                                newRows[idx].amount = e.target.value;
+                                setSplitPaymentRows(newRows);
+                              }}
+                              required
+                            />
+                          </div>
+                          {row.method !== 'Cash' && (
+                            <input
+                              type="text"
+                              placeholder="Ref / UTR (optional)"
+                              style={{ width: '130px', height: '36px', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '0 8px', fontSize: '11.5px', fontWeight: 600 }}
+                              value={row.transactionRef || ''}
+                              onChange={e => {
+                                const newRows = [...splitPaymentRows];
+                                newRows[idx].transactionRef = e.target.value;
+                                setSplitPaymentRows(newRows);
+                              }}
+                            />
+                          )}
+                          {splitPaymentRows.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSplitPaymentRows(splitPaymentRows.filter((_, i) => i !== idx));
+                              }}
+                              style={{ border: 'none', background: '#FEE2E2', color: '#EF4444', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}
+                              title="Remove method"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Summary calculation box */}
+                <div style={{ backgroundColor: '#F8FAFC', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#64748B', fontWeight: 600 }}>
+                    <span>Original Total:</span>
+                    <span>₹{baseAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  {discountPercent > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#EF4444', fontWeight: 600 }}>
+                      <span>Discount ({discountPercent}%):</span>
+                      <span>-₹{discountAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  {currentPaid > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#16A34A', fontWeight: 600 }}>
+                      <span>Already Paid:</span>
+                      <span>₹{currentPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#0F172A', fontWeight: 800, borderTop: '1px dashed #CBD5E1', paddingTop: '8px' }}>
+                    <span>Remaining Amount Due:</span>
+                    <span style={{ color: '#2563EB', fontSize: '15px', fontWeight: 900 }}>₹{remainingDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  {!isRegistrationFlow && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', fontWeight: 800, borderTop: '1px solid #E2E8F0', paddingTop: '8px' }}>
+                      <span>Total Entered:</span>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '14.5px', color: isOverpaid ? '#DC2626' : (Math.abs(diff) < 0.01 ? '#16A34A' : '#D97706') }}>
+                          ₹{totalEntered.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </span>
+                        <div style={{ fontSize: '11px', marginTop: '2px', color: isOverpaid ? '#DC2626' : (Math.abs(diff) < 0.01 ? '#16A34A' : '#D97706'), fontWeight: 700 }}>
+                          {isOverpaid ? `❌ Overpayment: ₹${Math.abs(diff).toFixed(2)}` : (Math.abs(diff) < 0.01 ? '✓ Balanced (Remaining: ₹0.00)' : `Remaining to collect: ₹${diff.toFixed(2)}`)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {isOverpaid && (
+                  <div style={{ padding: '10px 12px', background: '#FEF2F2', border: '1px solid #FEE2E2', borderRadius: '8px', color: '#DC2626', fontSize: '12px', fontWeight: 700 }}>
+                    ❌ Overpayment not allowed: Total entered (₹{totalEntered.toFixed(2)}) exceeds remaining due amount of ₹{remainingDue.toFixed(2)}.
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
+                  <button type="button" className="btn btn-secondary" style={{ height: '38px', padding: '0 20px', borderRadius: '8px', fontWeight: 700 }} onClick={() => { setShowPaymentModal(false); setPendingRegistrationPayload(null); }}>Cancel</button>
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary" 
+                    style={{ 
+                      height: '38px', 
+                      padding: '0 24px', 
+                      borderRadius: '8px', 
+                      fontWeight: 800, 
+                      background: (isOverpaid || totalEntered <= 0) ? '#94A3B8' : 'var(--primary-gradient)', 
+                      border: 'none', 
+                      cursor: (isOverpaid || totalEntered <= 0) ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }} 
+                    disabled={isSettlingPayment || isOverpaid || totalEntered <= 0}
+                  >
+                    {isSettlingPayment ? 'Processing...' : (isRegistrationFlow ? 'Complete Payment & Register' : 'Confirm Payment')}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {/* Indent Order Summary / Requisition Tracking Modal */}
       {showIndentModal && selectedIndent && (() => {
         const indentStatusStyle = (s) => {
