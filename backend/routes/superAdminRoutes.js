@@ -721,13 +721,13 @@ router.put('/onboarding/:id', requireRole('Onboarding Manager'), async (req, res
       if (!emailVal.success) return res.status(400).json({ error: "Admin Email: " + emailVal.error });
     }
 
-    if (req.body.panNumber) {
+    if (req.body.panNumber && String(req.body.panNumber).trim() !== '') {
       const val = verifyPAN(req.body.panNumber);
       if (!val.success) return res.status(400).json({ error: val.error });
       const dup = await SuperAdminOnboarding.findOne({ panNumber: req.body.panNumber.trim(), _id: { $ne: req.params.id } });
       if (dup) return res.status(400).json({ error: `PAN Number '${req.body.panNumber}' is already registered in another onboarding setup.` });
     }
-    if (req.body.gstin) {
+    if (req.body.gstin && String(req.body.gstin).trim() !== '') {
       const val = await verifyGSTIN(req.body.gstin);
       if (!val.success) return res.status(400).json({ error: val.error });
       const dupOnb = await SuperAdminOnboarding.findOne({ gstin: req.body.gstin.trim(), _id: { $ne: req.params.id } });
@@ -737,13 +737,13 @@ router.put('/onboarding/:id', requireRole('Onboarding Manager'), async (req, res
         return res.status(400).json({ error: `GSTIN '${req.body.gstin}' is already in use by an active hospital (${dupHosp.name}).` });
       }
     }
-    if (req.body.corpId) {
+    if (req.body.corpId && String(req.body.corpId).trim() !== '') {
       const val = verifyCIN(req.body.corpId);
       if (!val.success) return res.status(400).json({ error: val.error });
       const dup = await SuperAdminOnboarding.findOne({ corpId: req.body.corpId.trim(), _id: { $ne: req.params.id } });
       if (dup) return res.status(400).json({ error: `CIN / Corporate ID '${req.body.corpId}' is already registered in another onboarding setup.` });
     }
-    if (req.body.drugLicense) {
+    if (req.body.drugLicense && String(req.body.drugLicense).trim() !== '') {
       const val = await verifyDrugLicense(req.body.drugLicense);
       if (!val.success) return res.status(400).json({ error: val.error });
       const dupOnb = await SuperAdminOnboarding.findOne({ drugLicense: req.body.drugLicense.trim(), _id: { $ne: req.params.id } });
@@ -753,13 +753,13 @@ router.put('/onboarding/:id', requireRole('Onboarding Manager'), async (req, res
         return res.status(400).json({ error: `Drug License '${req.body.drugLicense}' is already in use by an active hospital (${dupHosp.name}).` });
       }
     }
-    if (req.body.fireSafetyCertificate) {
+    if (req.body.fireSafetyCertificate && String(req.body.fireSafetyCertificate).trim() !== '') {
       const val = verifyCertificate(req.body.fireSafetyCertificate);
       if (!val.success) return res.status(400).json({ error: "Fire Safety Certificate: " + val.error });
       const dup = await SuperAdminOnboarding.findOne({ fireSafetyCertificate: req.body.fireSafetyCertificate.trim(), _id: { $ne: req.params.id } });
       if (dup) return res.status(400).json({ error: `Fire Safety Certificate '${req.body.fireSafetyCertificate}' is already registered in another onboarding setup.` });
     }
-    if (req.body.pollutionCertificate) {
+    if (req.body.pollutionCertificate && String(req.body.pollutionCertificate).trim() !== '') {
       const val = verifyCertificate(req.body.pollutionCertificate);
       if (!val.success) return res.status(400).json({ error: "Pollution Certificate: " + val.error });
       const dup = await SuperAdminOnboarding.findOne({ pollutionCertificate: req.body.pollutionCertificate.trim(), _id: { $ne: req.params.id } });
@@ -1230,6 +1230,46 @@ router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
       if (!['ONLINE', 'OFFLINE'].includes(req.body.doctorClinicalMode)) {
         return res.status(400).json({ error: "Invalid doctorClinicalMode. Allowed values are 'ONLINE' or 'OFFLINE'." });
       }
+    }
+
+    if (req.body.panNumber !== undefined && req.body.panNumber !== null && String(req.body.panNumber).trim() !== '') {
+      const val = verifyPAN(req.body.panNumber);
+      if (!val.success) return res.status(400).json({ error: "PAN Number: " + val.error });
+      req.body.panNumber = String(req.body.panNumber).trim().toUpperCase().slice(0, 10);
+    }
+
+    if (req.body.gst !== undefined && req.body.gst !== null && String(req.body.gst).trim() !== '') {
+      const val = await verifyGSTIN(req.body.gst);
+      if (!val.success) return res.status(400).json({ error: "GSTIN: " + val.error });
+      req.body.gst = String(req.body.gst).trim().toUpperCase().slice(0, 15);
+    }
+
+    if (req.body.corpId !== undefined && req.body.corpId !== null && String(req.body.corpId).trim() !== '') {
+      const val = verifyCIN(req.body.corpId);
+      if (!val.success) return res.status(400).json({ error: "CIN / Corporate ID: " + val.error });
+      req.body.corpId = String(req.body.corpId).trim().toUpperCase().slice(0, 21);
+    }
+
+    if (req.body.license !== undefined && req.body.license !== null && String(req.body.license).trim() !== '') {
+      const val = await verifyDrugLicense(req.body.license);
+      if (!val.success) return res.status(400).json({ error: "Drug License: " + val.error });
+      req.body.license = String(req.body.license).trim().toUpperCase().slice(0, 30);
+    }
+
+    if (req.body.fireSafetyCertificate !== undefined && req.body.fireSafetyCertificate !== null && String(req.body.fireSafetyCertificate).trim() !== '') {
+      const val = verifyCertificate(req.body.fireSafetyCertificate);
+      if (!val.success) return res.status(400).json({ error: "Fire Safety Certificate: " + val.error });
+      req.body.fireSafetyCertificate = String(req.body.fireSafetyCertificate).trim().toUpperCase().slice(0, 30);
+    }
+
+    if (req.body.pollutionCertificate !== undefined && req.body.pollutionCertificate !== null && String(req.body.pollutionCertificate).trim() !== '') {
+      const val = verifyCertificate(req.body.pollutionCertificate);
+      if (!val.success) return res.status(400).json({ error: "Pollution Certificate: " + val.error });
+      req.body.pollutionCertificate = String(req.body.pollutionCertificate).trim().toUpperCase().slice(0, 30);
+    }
+
+    if (req.body.signatoryName !== undefined && req.body.signatoryName !== null && String(req.body.signatoryName).trim() !== '') {
+      req.body.signatoryName = String(req.body.signatoryName).trim().slice(0, 70);
     }
 
     let hospital = null;
@@ -2384,6 +2424,14 @@ router.post('/employees', requireRole(), async (req, res) => {
       return res.status(400).json({ error: `Invalid platform role. Must be one of: ${VALID_ROLES.join(', ')}` });
     }
 
+    if (req.body.mobile !== undefined && req.body.mobile !== null && String(req.body.mobile).trim() !== '') {
+      const cleanMobile = String(req.body.mobile).replace(/\D/g, '');
+      if (cleanMobile.length !== 10) {
+        return res.status(400).json({ error: "Mobile number must be exactly 10 digits." });
+      }
+      req.body.mobile = cleanMobile;
+    }
+
     // Check if employee with same email already exists
     const existingEmployee = await SuperAdminEmployee.findOne({
       email: { $regex: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
@@ -2482,6 +2530,14 @@ router.put('/employees/:id', requireRole(), async (req, res) => {
       if (!VALID_ROLES.includes(req.body.platformRole)) {
         return res.status(400).json({ error: `Invalid platform role. Must be one of: ${VALID_ROLES.join(', ')}` });
       }
+    }
+
+    if (req.body.mobile !== undefined && req.body.mobile !== null && String(req.body.mobile).trim() !== '') {
+      const cleanMobile = String(req.body.mobile).replace(/\D/g, '');
+      if (cleanMobile.length !== 10) {
+        return res.status(400).json({ error: "Mobile number must be exactly 10 digits." });
+      }
+      req.body.mobile = cleanMobile;
     }
 
     const newEmail = req.body.email ? req.body.email.toLowerCase().trim() : '';

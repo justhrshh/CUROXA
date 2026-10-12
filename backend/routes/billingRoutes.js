@@ -49,6 +49,47 @@ router.post('/discount-setting', async (req, res) => {
   }
 });
 
+// Get pending patient payments summary (scoped to tenant)
+router.get('/pending-payments-summary', async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const bills = await Billing.find({
+      tenantId: req.tenantId,
+      status: { $in: ['Unpaid', 'Partially Paid', 'Pending'] }
+    }).select('patientId totalAmount amountPaid balanceDue status payments');
+
+    let totalOutstanding = 0;
+    let outstandingBillsCount = 0;
+    const patientIdSet = new Set();
+
+    bills.forEach(bill => {
+      // Amount Due - Valid Payments Applied
+      const totalAmount = Number(bill.totalAmount) || 0;
+      let paid = Number(bill.amountPaid) || 0;
+      if (Array.isArray(bill.payments) && bill.payments.length > 0) {
+        paid = bill.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      }
+      const due = bill.balanceDue !== undefined ? Number(bill.balanceDue) : Math.max(0, totalAmount - paid);
+      if (due > 0) {
+        totalOutstanding += due;
+        outstandingBillsCount += 1;
+        if (bill.patientId) {
+          patientIdSet.add(String(bill.patientId));
+        }
+      }
+    });
+
+    res.json({
+      totalOutstanding: Math.round(totalOutstanding * 100) / 100,
+      outstandingBillsCount,
+      patientsCount: patientIdSet.size
+    });
+  } catch (error) {
+    console.error("Pending payments summary error:", error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get bills (scoped to tenant)
 router.get('/', async (req, res) => {
   try {

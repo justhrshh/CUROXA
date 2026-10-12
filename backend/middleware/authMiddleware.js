@@ -15,8 +15,32 @@ const verifyToken = (req, res, next) => {
   }
 
   jwt.verify(tokenString, secret, async (err, decoded) => {
-    if (err) return res.status(401).json({ error: 'Unauthorized' });
+    if (err) {
+      if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({ error: 'Token expired. Please re-authenticate.', code: 'TOKEN_EXPIRED' });
+      }
+      return res.status(401).json({ error: 'Unauthorized', code: 'INVALID_TOKEN' });
+    }
     
+    // Check if the hospital tenant account is suspended (superadmins bypass this)
+    const isSuperAdminRole = decoded && (decoded.role === 'superadmin' || decoded.role === 'super_admin' || decoded.role === 'platform_admin');
+    if (decoded && decoded.tenantId && decoded.tenantId !== 'curoxa' && !isSuperAdminRole) {
+      try {
+        const SuperAdminHospital = require('../models/SuperAdminHospital');
+        const hospital = await SuperAdminHospital.findOne({
+          code: String(decoded.tenantId).toLowerCase().trim()
+        }).select('status name');
+        if (hospital && hospital.status === 'Suspended') {
+          return res.status(403).json({
+            error: `Hospital account (${hospital.name || decoded.tenantId}) is suspended. Access denied.`,
+            code: 'ACCOUNT_SUSPENDED'
+          });
+        }
+      } catch (hospErr) {
+        console.warn('[AUTH] Tenant suspension check warning:', hospErr.message);
+      }
+    }
+
     // Patient tokens (from patient portal or registered patients)
     if (decoded && (decoded.role === 'patient' || decoded.isNewPatient)) {
       req.user = decoded;

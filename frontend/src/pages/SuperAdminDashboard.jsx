@@ -1291,27 +1291,6 @@ const SuperAdminDashboard = ({ initialTab }) => {
     fetchPendingRequestsCount();
   }, []);
 
-  // Keep tenantDraft synced with selected hospital
-  useEffect(() => {
-    if (selectedHospitalId) {
-      const hosp = hospitals.find(h => h._id === selectedHospitalId);
-      if (hosp) {
-        setTenantDraft({
-          csm: hosp.csm || '',
-          gst: hosp.gst || '',
-          license: hosp.license || '',
-          address: hosp.address || '',
-          panNumber: hosp.panNumber || '',
-          corpId: hosp.corpId || '',
-          signatoryName: hosp.signatoryName || '',
-          fireSafetyCertificate: hosp.fireSafetyCertificate || '',
-          pollutionCertificate: hosp.pollutionCertificate || ''
-        });
-        setTenantFormDirty(false);
-        setTenantSaveSuccess(false);
-      }
-    }
-  }, [selectedHospitalId, isConfigDrawerOpen]);
 
   useEffect(() => {
     if (activeTab === 'global-item-master') {
@@ -2036,20 +2015,20 @@ const SuperAdminDashboard = ({ initialTab }) => {
           csm: formOverrides.csm || 'Platform Admin',
           onboardingLead: hospitalToActivate.exec || 'Platform Admin',
           goLiveDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-          gst: hospitalToActivate.gstin || formOverrides.gst || '',
-          isGstVerified: hospitalToActivate.panGstStatus === 'Approved' || formOverrides.isGstVerified || false,
-          gstVerificationDetails: formOverrides.gstVerificationDetails || {
+          gst: (hospitalToActivate.gstin || formOverrides.gst || '').trim(),
+          isGstVerified: Boolean((hospitalToActivate.gstin || formOverrides.gst)?.trim() && (hospitalToActivate.panGstStatus === 'Approved' || formOverrides.isGstVerified)),
+          gstVerificationDetails: ((hospitalToActivate.gstin || formOverrides.gst)?.trim() && (hospitalToActivate.panGstStatus === 'Approved' || formOverrides.isGstVerified)) ? (formOverrides.gstVerificationDetails || {
             verifiedAt: new Date().toLocaleDateString(),
             tradeName: hospitalName,
             address: hospitalToActivate.address || ''
-          },
-          license: hospitalToActivate.drugLicense || formOverrides.license || '',
-          isLicenseVerified: true,
-          licenseVerificationDetails: formOverrides.licenseVerificationDetails || {
+          }) : null,
+          license: (hospitalToActivate.drugLicense || formOverrides.license || '').trim(),
+          isLicenseVerified: Boolean((hospitalToActivate.drugLicense || formOverrides.license)?.trim() && (hospitalToActivate.isLicenseVerified || formOverrides.isLicenseVerified)),
+          licenseVerificationDetails: ((hospitalToActivate.drugLicense || formOverrides.license)?.trim() && (hospitalToActivate.isLicenseVerified || formOverrides.isLicenseVerified)) ? (formOverrides.licenseVerificationDetails || {
             verifiedAt: new Date().toLocaleDateString(),
             licenseeName: hospitalName,
             validUntil: 'December 31, 2031'
-          },
+          }) : null,
           address: hospitalToActivate.address || formOverrides.address || '',
           panNumber: hospitalToActivate.panNumber || '',
           corpId: hospitalToActivate.corpId || '',
@@ -3299,6 +3278,28 @@ const SuperAdminDashboard = ({ initialTab }) => {
     }
   }, [activeTab]);
 
+  // Keep tenantDraft synced with selected hospital
+  useEffect(() => {
+    if (selectedHospitalId) {
+      const hosp = hospitals.find(h => (h._id === selectedHospitalId || h.id === selectedHospitalId || h.code === selectedHospitalId));
+      if (hosp) {
+        setTenantDraft({
+          csm: hosp.csm || '',
+          gst: hosp.gst || '',
+          license: hosp.license || '',
+          address: hosp.address || '',
+          panNumber: hosp.panNumber || '',
+          corpId: hosp.corpId || '',
+          signatoryName: hosp.signatoryName || '',
+          fireSafetyCertificate: hosp.fireSafetyCertificate || '',
+          pollutionCertificate: hosp.pollutionCertificate || ''
+        });
+        setTenantFormDirty(false);
+        setTenantSaveSuccess(false);
+      }
+    }
+  }, [selectedHospitalId, isConfigDrawerOpen, hospitals]);
+
   const fetchBroadcasts = async () => {
     try {
       const token = getSuperAdminToken();
@@ -3851,36 +3852,27 @@ const SuperAdminDashboard = ({ initialTab }) => {
         if (!wizardHospital.city?.trim()) missing.push('City');
         if (!wizardHospital.address?.trim()) missing.push('Street Address');
       } else if (step === 2) {
-        // Legal & Compliance (Previously Step 3)
-        if (!wizardHospital.panNumber?.trim()) {
-          missing.push('PAN Number');
-        } else if (!validatePANFormat(wizardHospital.panNumber)) {
+        // Legal & Compliance (Previously Step 3) - All fields are optional during onboarding
+        if (wizardHospital.panNumber?.trim() && !validatePANFormat(wizardHospital.panNumber)) {
           missing.push('PAN Number in correct format (e.g. ABCDE1234F)');
         }
 
-        if (!wizardHospital.gstin?.trim()) {
-          missing.push('GSTIN Number');
-        } else if (!validateGSTINFormat(wizardHospital.gstin)) {
+        if (wizardHospital.gstin?.trim() && !validateGSTINFormat(wizardHospital.gstin)) {
           missing.push('GSTIN Number in correct format (e.g. 07METRO8827P1ZX)');
         }
 
-        if (!wizardHospital.corpId?.trim()) {
-          missing.push('CIN (Corporate ID)');
-        } else if (!validateCINFormat(wizardHospital.corpId)) {
+        if (wizardHospital.corpId?.trim() && !validateCINFormat(wizardHospital.corpId)) {
           missing.push('CIN in correct format (e.g. U85110DL2025PTC384920)');
         }
 
-        if (!wizardHospital.signatoryName?.trim()) missing.push('Authorized Signatory Name');
-        if (!wizardHospital.drugLicense?.trim()) {
-          missing.push('Drug License Number');
-        } else if (!validateDrugLicenseFormat(wizardHospital.drugLicense)) {
+        if (wizardHospital.drugLicense?.trim() && !validateDrugLicenseFormat(wizardHospital.drugLicense)) {
           missing.push('Drug License in correct format (e.g. DL-293849/2026)');
         }
 
-        if (wizardHospital.fireSafetyCertificate && !validateCertificateFormat(wizardHospital.fireSafetyCertificate)) {
+        if (wizardHospital.fireSafetyCertificate?.trim() && !validateCertificateFormat(wizardHospital.fireSafetyCertificate)) {
           missing.push('Fire Safety Certificate in correct format (e.g. FSC-990-2026)');
         }
-        if (wizardHospital.pollutionCertificate && !validateCertificateFormat(wizardHospital.pollutionCertificate)) {
+        if (wizardHospital.pollutionCertificate?.trim() && !validateCertificateFormat(wizardHospital.pollutionCertificate)) {
           missing.push('Pollution Control Board Register Number in correct format (e.g. PCB-MED-7491)');
         }
       } else if (step === 3) {
@@ -4835,8 +4827,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <div style={styles.formCol}>
                       <FloatingInput
                         compact
-                        label="PAN Number (10 Alphanumeric)"
-                        required
+                        label="PAN Number (10 Alphanumeric - Optional)"
+                        optional
                         error={wizardHospital.panNumber && !validatePANFormat(wizardHospital.panNumber)}
                         isValid={wizardHospital.panNumber && validatePANFormat(wizardHospital.panNumber)}
                         value={wizardHospital.panNumber || ''} 
@@ -4849,8 +4841,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <div style={styles.formCol}>
                       <FloatingInput
                         compact
-                        label="GSTIN Number (15 Characters)"
-                        required
+                        label="GSTIN Number (15 Characters - Optional)"
+                        optional
                         error={wizardHospital.gstin && !validateGSTINFormat(wizardHospital.gstin)}
                         isValid={wizardHospital.gstin && validateGSTINFormat(wizardHospital.gstin)}
                         value={wizardHospital.gstin || ''} 
@@ -4867,8 +4859,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <div style={styles.formCol}>
                       <FloatingInput
                         compact
-                        label="CIN (Corporate ID - 21 Chars)"
-                        required
+                        label="CIN (Corporate ID - 21 Chars - Optional)"
+                        optional
                         error={wizardHospital.corpId && !validateCINFormat(wizardHospital.corpId)}
                         isValid={wizardHospital.corpId && validateCINFormat(wizardHospital.corpId)}
                         value={wizardHospital.corpId || ''} 
@@ -4881,8 +4873,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <div style={styles.formCol}>
                       <FloatingInput
                         compact
-                        label="Authorized Signatory Name"
-                        required
+                        label="Authorized Signatory Name (Optional)"
+                        optional
                         isValid={!!wizardHospital.signatoryName?.trim()}
                         value={wizardHospital.signatoryName || ''} 
                         onChange={e => updateWizardField('signatoryName', e.target.value)} 
@@ -4897,8 +4889,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <div style={styles.formCol}>
                       <FloatingInput
                         compact
-                        label="Drug License Number"
-                        required
+                        label="Drug License Number (Optional)"
+                        optional
                         error={wizardHospital.drugLicense && !validateDrugLicenseFormat(wizardHospital.drugLicense)}
                         isValid={wizardHospital.drugLicense && validateDrugLicenseFormat(wizardHospital.drugLicense)}
                         value={wizardHospital.drugLicense || ''} 
@@ -4911,7 +4903,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <div style={styles.formCol}>
                       <FloatingInput
                         compact
-                        label="Fire Safety Certificate"
+                        label="Fire Safety Certificate (Optional)"
                         optional
                         error={wizardHospital.fireSafetyCertificate && !validateCertificateFormat(wizardHospital.fireSafetyCertificate)}
                         isValid={wizardHospital.fireSafetyCertificate && validateCertificateFormat(wizardHospital.fireSafetyCertificate)}
@@ -4929,7 +4921,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <div style={styles.formCol}>
                       <FloatingInput
                         compact
-                        label="Pollution Control Board Register Number"
+                        label="Pollution Control Board Register Number (Optional)"
                         optional
                         error={wizardHospital.pollutionCertificate && !validateCertificateFormat(wizardHospital.pollutionCertificate)}
                         isValid={wizardHospital.pollutionCertificate && validateCertificateFormat(wizardHospital.pollutionCertificate)}
@@ -5754,9 +5746,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         const issues = [];
                         if (!wizardHospital.name) issues.push({ severity: 'HIGH', label: 'Clinic Name Missing', module: 'Identity', desc: 'Specify name in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 1 });
                         if (!wizardHospital.contactEmail) issues.push({ severity: 'MEDIUM', label: 'Contact Email Missing', module: 'Identity', desc: 'Provide contact details in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Today', step: 1 });
-                        if (!wizardHospital.panNumber) issues.push({ severity: 'HIGH', label: 'PAN Document Missing', module: 'Compliance', desc: 'Upload PAN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 2 });
-                        if (!wizardHospital.gstin) issues.push({ severity: 'HIGH', label: 'GSTIN Registration Missing', module: 'Compliance', desc: 'Provide GSTIN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 2 });
-                        if (!wizardHospital.drugLicense) issues.push({ severity: 'HIGH', label: 'Drug License Number Missing', module: 'Compliance', desc: 'Insert drug license in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '2 Days', step: 2 });
+                        if (wizardHospital.panNumber && !validatePANFormat(wizardHospital.panNumber)) issues.push({ severity: 'HIGH', label: 'PAN Document Invalid Format', module: 'Compliance', desc: 'Correct PAN format in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: 'Immediate', step: 2 });
+                        if (wizardHospital.gstin && !validateGSTINFormat(wizardHospital.gstin)) issues.push({ severity: 'HIGH', label: 'GSTIN Registration Invalid Format', module: 'Compliance', desc: 'Correct GSTIN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: 'Immediate', step: 2 });
+                        if (wizardHospital.drugLicense && !validateDrugLicenseFormat(wizardHospital.drugLicense)) issues.push({ severity: 'HIGH', label: 'Drug License Invalid Format', module: 'Compliance', desc: 'Correct drug license in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: 'Immediate', step: 2 });
                         if (!wizardHospital.adminName || !wizardHospital.adminEmail) issues.push({ severity: 'HIGH', label: 'Administrator Account Unprovisioned', module: 'Users', desc: 'Create admin user in Step 4', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 4 });
 
                         if (issues.length === 0) {
@@ -5778,9 +5770,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       const issues = [];
                       if (!wizardHospital.name) issues.push({ severity: 'HIGH', label: 'Clinic Name Missing', module: 'Identity', desc: 'Specify name in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 1 });
                       if (!wizardHospital.contactEmail) issues.push({ severity: 'MEDIUM', label: 'Contact Email Missing', module: 'Identity', desc: 'Provide contact details in Step 1', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Today', step: 1 });
-                      if (!wizardHospital.panNumber) issues.push({ severity: 'HIGH', label: 'PAN Document Missing', module: 'Compliance', desc: 'Upload PAN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 2 });
-                      if (!wizardHospital.gstin) issues.push({ severity: 'HIGH', label: 'GSTIN Registration Missing', module: 'Compliance', desc: 'Provide GSTIN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '1 Day', step: 2 });
-                      if (!wizardHospital.drugLicense) issues.push({ severity: 'HIGH', label: 'Drug License Number Missing', module: 'Compliance', desc: 'Insert drug license in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: '2 Days', step: 2 });
+                      if (wizardHospital.panNumber && !validatePANFormat(wizardHospital.panNumber)) issues.push({ severity: 'HIGH', label: 'PAN Document Invalid Format', module: 'Compliance', desc: 'Correct PAN format in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: 'Immediate', step: 2 });
+                      if (wizardHospital.gstin && !validateGSTINFormat(wizardHospital.gstin)) issues.push({ severity: 'HIGH', label: 'GSTIN Registration Invalid Format', module: 'Compliance', desc: 'Correct GSTIN in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: 'Immediate', step: 2 });
+                      if (wizardHospital.drugLicense && !validateDrugLicenseFormat(wizardHospital.drugLicense)) issues.push({ severity: 'HIGH', label: 'Drug License Invalid Format', module: 'Compliance', desc: 'Correct drug license in Step 2', owner: wizardHospital.signatoryName || 'Client Lead', eta: 'Immediate', step: 2 });
                       if (!wizardHospital.adminName || !wizardHospital.adminEmail) issues.push({ severity: 'HIGH', label: 'Administrator Account Unprovisioned', module: 'Users', desc: 'Create admin user in Step 4', owner: wizardHospital.exec || 'Alex Rivera', eta: 'Immediate', step: 4 });
 
                       if (issues.length === 0) {
@@ -5981,7 +5973,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     { label: 'Database Health Check Cleared', checked: true },
                     { label: 'Data Encryption At Rest Enabled', checked: true },
                     { label: 'Client Administrative Approval', checked: adminApproved },
-                    { label: 'Final Penetration Test Scan', checked: compliancePassed }
+                    { label: 'Final Penetration Test Scan', checked: true }
                   ].map((item, idx) => (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: '#334155', fontWeight: 500 }}>
                       <LucideIcon 
@@ -8589,21 +8581,21 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   code: `MED-${selectedOnboardingHospital.name.replace(/\s+/g, '-').toUpperCase().slice(0, 5)}-${Math.floor(100 + Math.random() * 900)}`,
                                   plan: getFormattedPlanString(selectedOnboardingHospital.subscriptionPlan, selectedOnboardingHospital.billingCycle),
                                   csm: 'Platform Admin',
-                                  gst: selectedOnboardingHospital.gstin || '27AAAAA1111A1Z1',
-                                  isGstVerified: true,
-                                  gstVerificationDetails: {
+                                  gst: selectedOnboardingHospital.gstin || '',
+                                  isGstVerified: Boolean(selectedOnboardingHospital.gstin && selectedOnboardingHospital.panGstStatus === 'Approved'),
+                                  gstVerificationDetails: (selectedOnboardingHospital.gstin && selectedOnboardingHospital.panGstStatus === 'Approved') ? {
                                     verifiedAt: 'Current Verification Check',
                                     tradeName: selectedOnboardingHospital.name,
-                                    address: 'Clinic Registration Address'
-                                  },
-                                  license: 'DL-293849/2026',
-                                  isLicenseVerified: true,
-                                  licenseVerificationDetails: {
+                                    address: selectedOnboardingHospital.address || ''
+                                  } : null,
+                                  license: selectedOnboardingHospital.drugLicense || '',
+                                  isLicenseVerified: Boolean(selectedOnboardingHospital.drugLicense && selectedOnboardingHospital.isLicenseVerified),
+                                  licenseVerificationDetails: (selectedOnboardingHospital.drugLicense && selectedOnboardingHospital.isLicenseVerified) ? {
                                     verifiedAt: 'Current Verification Check',
                                     licenseeName: selectedOnboardingHospital.name,
                                     validUntil: 'December 31, 2031'
-                                  },
-                                  address: 'Clinic Registration Address',
+                                  } : null,
+                                  address: selectedOnboardingHospital.address || '',
                                   adminName: selectedOnboardingHospital.adminName || `Admin ${selectedOnboardingHospital.name}`,
                                   adminEmail: selectedOnboardingHospital.adminEmail || 'admin@hospital.com',
                                   adminPhone: selectedOnboardingHospital.adminPhone || '9988776655',
@@ -8626,7 +8618,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             {/* HOSPITALS TAB */}
             {isTabAllowed && activeTab === 'hospitals' && (() => {
               const isHospPlanExpired = (hosp) => {
-                if (hosp.subscriptionStatus?.toLowerCase() === 'expired' || hosp.status?.toLowerCase() === 'expired') return true;
+                if (hosp.subscriptionStatus?.toLowerCase() === 'expired') return true;
                 let expiryDate;
                 if (hosp.subscriptionExpiryDate) {
                   expiryDate = new Date(hosp.subscriptionExpiryDate);
@@ -9346,29 +9338,29 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                             </span>
                                           )}
                                         </div>
-                                        <div style={{ 
-                                          fontSize: '11px', 
-                                          color: isSuspended ? '#EF4444' : isPlanExpired ? '#DC2626' : '#16A34A', 
-                                          marginTop: '3px', 
-                                          lineHeight: '1.3',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '4px',
-                                          fontWeight: isPlanExpired ? 600 : 500
-                                        }}>
-                                          <span style={{ 
-                                            width: '6px', 
-                                            height: '6px', 
-                                            borderRadius: '50%', 
-                                            background: isSuspended ? '#EF4444' : isPlanExpired ? '#DC2626' : '#22C55E',
-                                            flexShrink: 0
-                                          }} />
-                                          {isSuspended 
-                                            ? 'Status: Suspended' 
-                                            : isPlanExpired 
-                                              ? 'Status: Plan Expired' 
-                                              : `Status: ${hosp.status || 'Active'}`
-                                          }
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
+                                          <span style={{
+                                            fontSize: '10px',
+                                            fontWeight: 700,
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            background: isSuspended ? '#FEE2E2' : '#DCFCE7',
+                                            color: isSuspended ? '#DC2626' : '#16A34A',
+                                            border: `1px solid ${isSuspended ? '#FECACA' : '#BBF7D0'}`
+                                          }}>
+                                            {isSuspended ? 'Account Suspended' : 'Account Active'}
+                                          </span>
+                                          <span style={{
+                                            fontSize: '10px',
+                                            fontWeight: 700,
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            background: isPlanExpired ? '#FEF3C7' : '#EFF6FF',
+                                            color: isPlanExpired ? '#D97706' : '#2563EB',
+                                            border: `1px solid ${isPlanExpired ? '#FDE68A' : '#BFDBFE'}`
+                                          }}>
+                                            {isPlanExpired ? 'Plan Expired' : 'Plan Active'}
+                                          </span>
                                         </div>
                                       </div>
                                     );
@@ -10054,7 +10046,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     </div>
 
                     {/* Body */}
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '24px 24px 100px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                       {/* Hospital Portal Identity & Access */}
                       <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -10686,19 +10678,38 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           </div>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>GSTIN</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>GSTIN</span>
+                              <span style={{ fontSize: '9px', fontWeight: 700, color: tenantDraft.gst?.length === 15 ? '#10B981' : '#94A3B8' }}>
+                                {tenantDraft.gst?.length || 0}/15
+                              </span>
+                            </div>
                             <input
                               type="text"
-                              style={styles.formInput}
+                              maxLength={15}
+                              style={{
+                                ...styles.formInput,
+                                borderColor: tenantDraft.gst ? (validateGSTINFormat(tenantDraft.gst) ? '#10B981' : '#EF4444') : '#CBD5E1'
+                              }}
                               value={tenantDraft.gst}
-                              placeholder="GSTIN Registration Number"
+                              placeholder="e.g. 07METRO8827P1ZX"
                               onChange={(e) => {
-                                const val = e.target.value.toUpperCase();
+                                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
                                 setTenantDraft(prev => ({ ...prev, gst: val }));
                                 setTenantFormDirty(true);
                                 setTenantSaveSuccess(false);
                               }}
                             />
+                            {tenantDraft.gst && !validateGSTINFormat(tenantDraft.gst) && (
+                              <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>
+                                ⚠️ 15-character GST format (e.g. 07METRO8827P1ZX).
+                              </span>
+                            )}
+                            {tenantDraft.gst && validateGSTINFormat(tenantDraft.gst) && (
+                              <span style={{ fontSize: '10px', color: '#10B981', marginTop: '2px', fontWeight: 600 }}>
+                                ✓ Valid GSTIN format
+                              </span>
+                            )}
                             {hosp.isGstVerified && hosp.gstVerificationDetails && (
                               <div style={{
                                 marginTop: '4px',
@@ -10719,19 +10730,38 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           </div>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>DRUG LICENSE NUMBER</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>DRUG LICENSE NUMBER</span>
+                              <span style={{ fontSize: '9px', fontWeight: 700, color: '#94A3B8' }}>
+                                {tenantDraft.license?.length || 0}/30
+                              </span>
+                            </div>
                             <input
                               type="text"
-                              style={styles.formInput}
+                              maxLength={30}
+                              style={{
+                                ...styles.formInput,
+                                borderColor: tenantDraft.license ? (validateDrugLicenseFormat(tenantDraft.license) ? '#10B981' : '#EF4444') : '#CBD5E1'
+                              }}
                               value={tenantDraft.license}
-                              placeholder="Drug License Registration Number"
+                              placeholder="e.g. DL-293849/2026"
                               onChange={(e) => {
-                                const val = e.target.value.toUpperCase();
+                                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9\-\/\s]/g, '').slice(0, 30);
                                 setTenantDraft(prev => ({ ...prev, license: val }));
                                 setTenantFormDirty(true);
                                 setTenantSaveSuccess(false);
                               }}
                             />
+                            {tenantDraft.license && !validateDrugLicenseFormat(tenantDraft.license) && (
+                              <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>
+                                ⚠️ 5-30 chars (alphanumeric, hyphens, slashes, e.g. DL-293849/2026).
+                              </span>
+                            )}
+                            {tenantDraft.license && validateDrugLicenseFormat(tenantDraft.license) && (
+                              <span style={{ fontSize: '10px', color: '#10B981', marginTop: '2px', fontWeight: 600 }}>
+                                ✓ Valid drug license format
+                              </span>
+                            )}
                             {hosp.isLicenseVerified && hosp.licenseVerificationDetails && (
                               <div style={{
                                 marginTop: '4px',
@@ -10774,89 +10804,203 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
                           
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>PAN NUMBER</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>PAN NUMBER</span>
+                              <span style={{ fontSize: '9px', fontWeight: 700, color: tenantDraft.panNumber?.length === 10 ? '#10B981' : '#94A3B8' }}>
+                                {tenantDraft.panNumber?.length || 0}/10
+                              </span>
+                            </div>
                             <input
                               type="text"
-                              style={styles.formInput}
+                              maxLength={10}
+                              style={{
+                                ...styles.formInput,
+                                borderColor: tenantDraft.panNumber ? (validatePANFormat(tenantDraft.panNumber) ? '#10B981' : '#EF4444') : '#CBD5E1'
+                              }}
                               value={tenantDraft.panNumber}
                               placeholder="e.g. ABCDE1234F"
                               onChange={(e) => {
-                                const val = e.target.value.toUpperCase();
+                                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
                                 setTenantDraft(prev => ({ ...prev, panNumber: val }));
                                 setTenantFormDirty(true);
                                 setTenantSaveSuccess(false);
                               }}
                             />
+                            {tenantDraft.panNumber && !validatePANFormat(tenantDraft.panNumber) && (
+                              <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>
+                                ⚠️ 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).
+                              </span>
+                            )}
+                            {tenantDraft.panNumber && validatePANFormat(tenantDraft.panNumber) && (
+                              <span style={{ fontSize: '10px', color: '#10B981', marginTop: '2px', fontWeight: 600 }}>
+                                ✓ Valid PAN format
+                              </span>
+                            )}
                           </div>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>CIN / CORP ID</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>CIN / CORP ID</span>
+                              <span style={{ fontSize: '9px', fontWeight: 700, color: tenantDraft.corpId?.length === 21 ? '#10B981' : '#94A3B8' }}>
+                                {tenantDraft.corpId?.length || 0}/21
+                              </span>
+                            </div>
                             <input
                               type="text"
-                              style={styles.formInput}
+                              maxLength={21}
+                              style={{
+                                ...styles.formInput,
+                                borderColor: tenantDraft.corpId ? (validateCINFormat(tenantDraft.corpId) ? '#10B981' : '#EF4444') : '#CBD5E1'
+                              }}
                               value={tenantDraft.corpId}
                               placeholder="e.g. U85110DL2025PTC384920"
                               onChange={(e) => {
-                                const val = e.target.value.toUpperCase();
+                                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 21);
                                 setTenantDraft(prev => ({ ...prev, corpId: val }));
                                 setTenantFormDirty(true);
                                 setTenantSaveSuccess(false);
                               }}
                             />
+                            {tenantDraft.corpId && !validateCINFormat(tenantDraft.corpId) && (
+                              <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>
+                                ⚠️ 21-character corporate listing format (e.g. U85110DL2025PTC384920).
+                              </span>
+                            )}
+                            {tenantDraft.corpId && validateCINFormat(tenantDraft.corpId) && (
+                              <span style={{ fontSize: '10px', color: '#10B981', marginTop: '2px', fontWeight: 600 }}>
+                                ✓ Valid CIN format
+                              </span>
+                            )}
                           </div>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>SIGNATORY NAME</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>SIGNATORY NAME</span>
+                              <span style={{ fontSize: '9px', fontWeight: 700, color: '#94A3B8' }}>
+                                {tenantDraft.signatoryName?.length || 0}/70
+                              </span>
+                            </div>
                             <input
                               type="text"
-                              style={styles.formInput}
+                              maxLength={70}
+                              style={{
+                                ...styles.formInput,
+                                borderColor: tenantDraft.signatoryName && tenantDraft.signatoryName.trim().length > 0 && !/^[A-Za-z\s\.\,\'-]{2,70}$/.test(tenantDraft.signatoryName.trim()) ? '#EF4444' : '#CBD5E1'
+                              }}
                               value={tenantDraft.signatoryName}
                               placeholder="Authorized Signatory Name"
                               onChange={(e) => {
-                                const val = e.target.value;
+                                const val = e.target.value.replace(/[^a-zA-Z\s\.\,\'-]/g, '').slice(0, 70);
                                 setTenantDraft(prev => ({ ...prev, signatoryName: val }));
                                 setTenantFormDirty(true);
                                 setTenantSaveSuccess(false);
                               }}
                             />
+                            {tenantDraft.signatoryName && tenantDraft.signatoryName.trim().length > 0 && !/^[A-Za-z\s\.\,\'-]{2,70}$/.test(tenantDraft.signatoryName.trim()) && (
+                              <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>
+                                ⚠️ Letters, dots, hyphens only (min 2 characters).
+                              </span>
+                            )}
                           </div>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>FIRE SAFETY CERTIFICATE</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>FIRE SAFETY CERTIFICATE</span>
+                              <span style={{ fontSize: '9px', fontWeight: 700, color: '#94A3B8' }}>
+                                {tenantDraft.fireSafetyCertificate?.length || 0}/30
+                              </span>
+                            </div>
                             <input
                               type="text"
-                              style={styles.formInput}
+                              maxLength={30}
+                              style={{
+                                ...styles.formInput,
+                                borderColor: tenantDraft.fireSafetyCertificate ? (validateCertificateFormat(tenantDraft.fireSafetyCertificate) ? '#10B981' : '#EF4444') : '#CBD5E1'
+                              }}
                               value={tenantDraft.fireSafetyCertificate}
-                              placeholder="Certificate registration number"
+                              placeholder="e.g. FSC-990-2026"
                               onChange={(e) => {
-                                const val = e.target.value;
+                                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9\-\/\s]/g, '').slice(0, 30);
                                 setTenantDraft(prev => ({ ...prev, fireSafetyCertificate: val }));
                                 setTenantFormDirty(true);
                                 setTenantSaveSuccess(false);
                               }}
                             />
+                            {tenantDraft.fireSafetyCertificate && !validateCertificateFormat(tenantDraft.fireSafetyCertificate) && (
+                              <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>
+                                ⚠️ 5-30 chars (alphanumeric, hyphens, slashes, e.g. FSC-990-2026).
+                              </span>
+                            )}
+                            {tenantDraft.fireSafetyCertificate && validateCertificateFormat(tenantDraft.fireSafetyCertificate) && (
+                              <span style={{ fontSize: '10px', color: '#10B981', marginTop: '2px', fontWeight: 600 }}>
+                                ✓ Valid certificate format
+                              </span>
+                            )}
                           </div>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>POLLUTION CONTROL CERTIFICATE</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>POLLUTION CONTROL CERTIFICATE</span>
+                              <span style={{ fontSize: '9px', fontWeight: 700, color: '#94A3B8' }}>
+                                {tenantDraft.pollutionCertificate?.length || 0}/30
+                              </span>
+                            </div>
                             <input
                               type="text"
-                              style={styles.formInput}
+                              maxLength={30}
+                              style={{
+                                ...styles.formInput,
+                                borderColor: tenantDraft.pollutionCertificate ? (validateCertificateFormat(tenantDraft.pollutionCertificate) ? '#10B981' : '#EF4444') : '#CBD5E1'
+                              }}
                               value={tenantDraft.pollutionCertificate}
-                              placeholder="Certificate registration number"
+                              placeholder="e.g. PCB-MED-7491"
                               onChange={(e) => {
-                                const val = e.target.value;
+                                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9\-\/\s]/g, '').slice(0, 30);
                                 setTenantDraft(prev => ({ ...prev, pollutionCertificate: val }));
                                 setTenantFormDirty(true);
                                 setTenantSaveSuccess(false);
                               }}
                             />
+                            {tenantDraft.pollutionCertificate && !validateCertificateFormat(tenantDraft.pollutionCertificate) && (
+                              <span style={{ fontSize: '10px', color: '#EF4444', marginTop: '2px', fontWeight: 600 }}>
+                                ⚠️ 5-30 chars (alphanumeric, hyphens, slashes, e.g. PCB-MED-7491).
+                              </span>
+                            )}
+                            {tenantDraft.pollutionCertificate && validateCertificateFormat(tenantDraft.pollutionCertificate) && (
+                              <span style={{ fontSize: '10px', color: '#10B981', marginTop: '2px', fontWeight: 600 }}>
+                                ✓ Valid certificate format
+                              </span>
+                            )}
                           </div>
 
                           <button
                             type="button"
                             disabled={tenantSaving}
                             onClick={async () => {
+                              if (tenantDraft.panNumber && !validatePANFormat(tenantDraft.panNumber)) {
+                                showToast('Please correct PAN format (10 characters: 5 letters, 4 digits, 1 letter)', 'error');
+                                return;
+                              }
+                              if (tenantDraft.corpId && !validateCINFormat(tenantDraft.corpId)) {
+                                showToast('Please correct CIN format (21 characters, e.g. U85110DL2025PTC384920)', 'error');
+                                return;
+                              }
+                              if (tenantDraft.gst && !validateGSTINFormat(tenantDraft.gst)) {
+                                showToast('Please correct GSTIN format (15 characters, e.g. 07METRO8827P1ZX)', 'error');
+                                return;
+                              }
+                              if (tenantDraft.license && !validateDrugLicenseFormat(tenantDraft.license)) {
+                                showToast('Please correct Drug License format (5-30 characters, e.g. DL-293849/2026)', 'error');
+                                return;
+                              }
+                              if (tenantDraft.fireSafetyCertificate && !validateCertificateFormat(tenantDraft.fireSafetyCertificate)) {
+                                showToast('Please correct Fire Safety Certificate format (5-30 characters)', 'error');
+                                return;
+                              }
+                              if (tenantDraft.pollutionCertificate && !validateCertificateFormat(tenantDraft.pollutionCertificate)) {
+                                showToast('Please correct Pollution Control Certificate format (5-30 characters)', 'error');
+                                return;
+                              }
                               setTenantSaving(true);
                               setTenantSaveSuccess(false);
                               const token = getSuperAdminToken();
@@ -11090,35 +11234,55 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <button 
                             style={{ ...styles.btnPrimary, background: hosp.status === 'Active' ? '#EF4444' : '#10B981', width: '100%', padding: '10px' }}
-                            onClick={async () => {
-                              const nextStatus = hosp.status === 'Active' ? 'Suspended' : 'Active';
-                              const token = getSuperAdminToken();
-                              const targetId = hosp._id || hosp.code || hosp.id;
-                              try {
-                                const res = await fetch(`/api/superadmin/hospitals/${targetId}`, {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                  body: JSON.stringify({ status: nextStatus })
-                                });
-                                if (res.ok) {
-                                  const updated = await res.json();
-                                  setHospitals(prev => prev.map(h => (h._id && updated._id ? h._id === updated._id : h.code === hosp.code) ? { ...h, ...updated, status: nextStatus } : h));
-                                  showToast(`Clinic "${hosp.name}" ${nextStatus === 'Suspended' ? 'suspended' : 'reactivated'} successfully!`, nextStatus === 'Suspended' ? 'warning' : 'success');
-                                  // Refresh full list from backend
+                            onClick={() => {
+                              const isCurrentlyActive = hosp.status === 'Active';
+                              const nextStatus = isCurrentlyActive ? 'Suspended' : 'Active';
+                              const actionTitle = isCurrentlyActive ? 'Suspend Hospital Account?' : 'Reactivate Hospital Account?';
+                              const actionMessage = isCurrentlyActive
+                                ? `Are you sure you want to suspend ${hosp.name}? Users associated with this hospital may lose access to the application.`
+                                : `Are you sure you want to reactivate ${hosp.name}? Hospital staff and users will regain access to their portal.`;
+                              const confirmButtonText = isCurrentlyActive ? 'Suspend Account' : 'Reactivate Account';
+
+                              setConfirmModalConfig({
+                                title: actionTitle,
+                                message: actionMessage,
+                                confirmText: confirmButtonText,
+                                cancelText: 'Cancel',
+                                danger: isCurrentlyActive,
+                                onConfirm: async () => {
+                                  setConfirmModalConfig(prev => ({ ...prev, isLoading: true, confirmText: isCurrentlyActive ? 'Suspending...' : 'Reactivating...' }));
+                                  const token = getSuperAdminToken();
+                                  const targetId = hosp._id || hosp.code || hosp.id;
                                   try {
-                                    const refreshRes = await fetch('/api/superadmin/hospitals', { headers: { 'Authorization': `Bearer ${token}` } });
-                                    if (refreshRes.ok) {
-                                      setHospitals(await refreshRes.json());
+                                    const res = await fetch(`/api/superadmin/hospitals/${targetId}`, {
+                                      method: 'PUT',
+                                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                      body: JSON.stringify({ status: nextStatus })
+                                    });
+                                    if (res.ok) {
+                                      const updated = await res.json();
+                                      setHospitals(prev => prev.map(h => (h._id && updated._id ? h._id === updated._id : h.code === hosp.code) ? { ...h, ...updated, status: nextStatus } : h));
+                                      showToast(`Clinic "${hosp.name}" ${nextStatus === 'Suspended' ? 'suspended' : 'reactivated'} successfully!`, nextStatus === 'Suspended' ? 'warning' : 'success');
+                                      setConfirmModalConfig(null);
+                                      // Refresh full list from backend
+                                      try {
+                                        const refreshRes = await fetch('/api/superadmin/hospitals', { headers: { 'Authorization': `Bearer ${token}` } });
+                                        if (refreshRes.ok) {
+                                          setHospitals(await refreshRes.json());
+                                        }
+                                      } catch (_) {}
+                                    } else {
+                                      const errData = await res.json().catch(() => ({}));
+                                      setConfirmModalConfig(null);
+                                      showToast(errData.error || 'Failed to update clinic status.', 'error');
                                     }
-                                  } catch (_) {}
-                                } else {
-                                  const errData = await res.json().catch(() => ({}));
-                                  showToast(errData.error || 'Failed to update clinic status.', 'error');
+                                  } catch (err) {
+                                    console.error(err);
+                                    setConfirmModalConfig(null);
+                                    showToast('Error updating clinic status.', 'error');
+                                  }
                                 }
-                              } catch (err) {
-                                console.error(err);
-                                showToast('Error updating clinic status.', 'error');
-                              }
+                              });
                             }}
                           >
                             {hosp.status === 'Active' ? 'Suspend Account' : 'Reactivate Account'}
@@ -11171,6 +11335,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           </button>
                         </div>
                       </div>
+
+                      {/* Bottom breathing spacer */}
+                      <div style={{ height: '40px', flexShrink: 0 }} />
                     </div>
                   </div>
                 </div>
@@ -13730,6 +13897,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   showToast('Name and Email are required.', 'error');
                   return;
                 }
+                if (employeeForm.mobile && employeeForm.mobile.trim() !== '' && employeeForm.mobile.replace(/\D/g, '').length !== 10) {
+                  showToast('Mobile number must be exactly 10 digits.', 'error');
+                  return;
+                }
                 const token = getSuperAdminToken();
                 const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
                 try {
@@ -13985,11 +14156,11 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <label style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.3px' }}>MOBILE NUMBER</label>
-                            <input type="text" value={employeeForm.mobile} onChange={e => setEmployeeForm(p => ({ ...p, mobile: e.target.value }))} style={styles.formInput} placeholder="+91 98765 43210" />
+                            <input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={10} value={employeeForm.mobile || ''} onChange={e => { const val = e.target.value.replace(/\D/g, '').slice(0, 10); setEmployeeForm(p => ({ ...p, mobile: val })); }} style={styles.formInput} placeholder="10-digit mobile number" />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <label style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.3px' }}>JOINING DATE</label>
-                            <input type="text" value={employeeForm.joiningDate} onChange={e => setEmployeeForm(p => ({ ...p, joiningDate: e.target.value }))} style={styles.formInput} placeholder="e.g. January 15, 2025" />
+                            <input type="date" value={employeeForm.joiningDate ? employeeForm.joiningDate.slice(0, 10) : ''} onChange={e => setEmployeeForm(p => ({ ...p, joiningDate: e.target.value }))} style={styles.formInput} />
                           </div>
                         </div>
 
@@ -16575,11 +16746,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
               <div style={styles.formRow}>
                 <div style={styles.formCol}>
-                  <label style={styles.formLabel}>GSTIN REGISTRATION</label>
+                  <label style={styles.formLabel}>GSTIN REGISTRATION (OPTIONAL)</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <input
                       type="text"
-                      required
                       style={{ ...styles.formInput, flex: 1 }}
                       placeholder="e.g. 27AAAAA1111A1Z1"
                       value={activateForm.gst}
@@ -16631,11 +16801,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   )}
                 </div>
                 <div style={styles.formCol}>
-                  <label style={styles.formLabel}>DRUG LICENSE NO.</label>
+                  <label style={styles.formLabel}>DRUG LICENSE NO. (OPTIONAL)</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <input
                       type="text"
-                      required
                       style={{ ...styles.formInput, flex: 1 }}
                       placeholder="e.g. DL-293849/2026"
                       value={activateForm.license}

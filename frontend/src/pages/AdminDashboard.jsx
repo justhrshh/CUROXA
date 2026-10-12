@@ -4241,6 +4241,32 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
   const todayRevenue = todayBillsRev + todayPharmacyRev;
 
+  // Pending Patient Payments (Requirement 7: Outstanding = Total Amount - Valid Payments Applied)
+  const pendingBillsList = bills.filter(b => {
+    if (b.status === 'Paid' || b.status === 'Cancelled') return false;
+    const total = Number(b.totalAmount) || 0;
+    let paid = Number(b.amountPaid) || 0;
+    if (Array.isArray(b.payments) && b.payments.length > 0) {
+      paid = b.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    }
+    const due = b.balanceDue !== undefined ? Number(b.balanceDue) : Math.max(0, total - paid);
+    return due > 0;
+  });
+
+  const totalPendingPaymentsAmount = pendingBillsList.reduce((sum, b) => {
+    const total = Number(b.totalAmount) || 0;
+    let paid = Number(b.amountPaid) || 0;
+    if (Array.isArray(b.payments) && b.payments.length > 0) {
+      paid = b.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    }
+    const due = b.balanceDue !== undefined ? Number(b.balanceDue) : Math.max(0, total - paid);
+    return sum + due;
+  }, 0);
+
+  const pendingPaymentsPatientsCount = new Set(
+    pendingBillsList.map(b => (typeof b.patientId === 'object' && b.patientId ? b.patientId._id || b.patientId.id : b.patientId)).filter(Boolean)
+  ).size;
+
   const todayPatientsCount = patients.filter(p => {
     if (!p.createdAt) return false;
     return isSameCalendarDay(p.createdAt, new Date());
@@ -12973,7 +12999,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             {/* ============================================================== */}
             {/* SECTION 1: TOP 4 KPI CARDS (Matching HR Module Visual Language)*/}
             {/* ============================================================== */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
               {/* Card 1: Today's Registrations (Electric Blue Gradient with Bottom-Right Radial Glow) */}
               <div 
                 className="p-5 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
@@ -13187,6 +13213,63 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
                   style={{
                     background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)'
+                  }}
+                />
+              </div>
+
+              {/* Card 5: Pending Patient Payments (Rose / Red Gradient with Top-Right Radial Glow) */}
+              <div 
+                className="p-5 rounded-2xl border border-rose-200/90 shadow-[0_12px_28px_rgba(244,63,94,0.08)] hover:shadow-[0_16px_36px_rgba(244,63,94,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                style={{
+                  background: 'radial-gradient(circle at 100% 0%, rgba(244, 63, 94, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFF1F2 50%, #FFE4E6 100%)'
+                }}
+                onClick={() => { setActiveTab('financials'); }}
+                title="Click to view detailed billing and patient receivables"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-rose-600 to-rose-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-500/25">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  </div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[10px] font-extrabold text-rose-900 uppercase tracking-wider">Pending Patient Payments</span>
+                    {domainSyncing.finance && (
+                      <span className="text-[10px] text-rose-600 animate-spin" title="Syncing finance...">↻</span>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="mt-4 flex items-end justify-between">
+                  <div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
+                      ₹{totalPendingPaymentsAmount >= 1000 ? (totalPendingPaymentsAmount / 1000).toFixed(1) + 'K' : totalPendingPaymentsAmount.toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-xs text-rose-700 font-bold mt-2 truncate flex items-center gap-1.5">
+                      <span>{pendingBillsList.length} bill{pendingBillsList.length === 1 ? '' : 's'}</span>
+                      <span>·</span>
+                      <span>{pendingPaymentsPatientsCount} patient{pendingPaymentsPatientsCount === 1 ? '' : 's'}</span>
+                    </div>
+                  </div>
+
+                  {/* Rose Mini Sparkline */}
+                  <div className="w-16 h-8 shrink-0 relative">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
+                      <defs>
+                        <linearGradient id="kpiRoseGradAdmin" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#F43F5E" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#F43F5E" stopOpacity="0.05"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 16 Q 16 8, 28 20 T 44 14 T 54 26 T 64 8 L 64 32 L 0 32 Z" fill="url(#kpiRoseGradAdmin)" />
+                      <path d="M 0 16 Q 16 8, 28 20 T 44 14 T 54 26 T 64 8" fill="none" stroke="#F43F5E" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Half Gradient Accent Line Beneath Card */}
+                <div 
+                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                  style={{
+                    background: 'linear-gradient(90deg, transparent 0%, #F43F5E 100%)'
                   }}
                 />
               </div>

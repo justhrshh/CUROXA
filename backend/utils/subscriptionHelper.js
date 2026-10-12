@@ -102,11 +102,10 @@ function getHospitalSubscriptionDates(hospital) {
   let isExpired = false;
 
   const explicitExpiredStatus = (
-    String(hospital.subscriptionStatus || '').toLowerCase() === 'expired' ||
-    String(hospital.status || '').toLowerCase() === 'expired'
+    String(hospital.subscriptionStatus || '').toLowerCase() === 'expired'
   );
 
-  if (now >= expiryTime || hospital.status === 'Suspended' || explicitExpiredStatus) {
+  if (now >= expiryTime || explicitExpiredStatus) {
     daysRemaining = 0;
     isExpired = true;
   } else {
@@ -152,24 +151,23 @@ function getHospitalSubscriptionStatus(hospital) {
     };
   }
 
+  const { startDate, expiryDate, isTrial, daysRemaining, isExpired } = getHospitalSubscriptionDates(hospital);
+  const trialUsed = hasHospitalUsedTrial(hospital);
+
   if (hospital.status === 'Suspended') {
-    const dates = getHospitalSubscriptionDates(hospital);
-    const trialUsed = hasHospitalUsedTrial(hospital);
     return {
-      isTrial: dates.isTrial,
-      planType: dates.isTrial ? 'TRIAL' : 'PAID',
-      startDate: dates.startDate,
-      expiryDate: dates.expiryDate,
-      daysRemaining: 0,
-      isExpired: true,
+      isTrial,
+      planType: isTrial ? 'TRIAL' : 'PAID',
+      startDate,
+      expiryDate,
+      daysRemaining: isExpired ? 0 : daysRemaining,
+      isExpired,
       status: 'SUSPENDED',
       subscriptionRestricted: true,
       trialUsed,
       canUseTrial: !trialUsed
     };
   }
-
-  const { startDate, expiryDate, isTrial, daysRemaining, isExpired } = getHospitalSubscriptionDates(hospital);
 
   let status = 'ACTIVE';
   if (isExpired) {
@@ -179,8 +177,6 @@ function getHospitalSubscriptionStatus(hospital) {
   } else if (!isTrial && daysRemaining <= 5) {
     status = 'EXPIRING';
   }
-
-  const trialUsed = hasHospitalUsedTrial(hospital);
 
   return {
     isTrial,
