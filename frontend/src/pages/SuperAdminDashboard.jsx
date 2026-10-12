@@ -1133,6 +1133,20 @@ const SuperAdminDashboard = ({ initialTab }) => {
   // Hospital Management sub-view state
   const [hospitalSubTab, setHospitalSubTab] = useState('list'); 
   const [selectedHospitalId, setSelectedHospitalId] = useState(null);
+  const [tenantDraft, setTenantDraft] = useState({
+    csm: '',
+    gst: '',
+    license: '',
+    address: '',
+    panNumber: '',
+    corpId: '',
+    signatoryName: '',
+    fireSafetyCertificate: '',
+    pollutionCertificate: ''
+  });
+  const [tenantSaving, setTenantSaving] = useState(false);
+  const [tenantSaveSuccess, setTenantSaveSuccess] = useState(false);
+  const [tenantFormDirty, setTenantFormDirty] = useState(false);
   const [selectedPlanForUpgrade, setSelectedPlanForUpgrade] = useState('');
   const [profileActiveTab, setProfileActiveTab] = useState('Overview'); 
 
@@ -1276,6 +1290,28 @@ const SuperAdminDashboard = ({ initialTab }) => {
   useEffect(() => {
     fetchPendingRequestsCount();
   }, []);
+
+  // Keep tenantDraft synced with selected hospital
+  useEffect(() => {
+    if (selectedHospitalId) {
+      const hosp = hospitals.find(h => h._id === selectedHospitalId);
+      if (hosp) {
+        setTenantDraft({
+          csm: hosp.csm || '',
+          gst: hosp.gst || '',
+          license: hosp.license || '',
+          address: hosp.address || '',
+          panNumber: hosp.panNumber || '',
+          corpId: hosp.corpId || '',
+          signatoryName: hosp.signatoryName || '',
+          fireSafetyCertificate: hosp.fireSafetyCertificate || '',
+          pollutionCertificate: hosp.pollutionCertificate || ''
+        });
+        setTenantFormDirty(false);
+        setTenantSaveSuccess(false);
+      }
+    }
+  }, [selectedHospitalId, isConfigDrawerOpen]);
 
   useEffect(() => {
     if (activeTab === 'global-item-master') {
@@ -1557,12 +1593,40 @@ const SuperAdminDashboard = ({ initialTab }) => {
         }
         setIsLogoEditModalOpen(false);
         showToast('Hospital branding updated successfully!', 'success');
+      } else if (res.status === 413) {
+        setLogoEditError('Image is too large. Please upload an image smaller than 2 MB.');
+      } else if (res.status === 415) {
+        setLogoEditError('Unsupported image format. Please upload PNG, JPG, or SVG.');
+      } else if (res.status === 401 || res.status === 403) {
+        setLogoEditError('Unauthorized. Session expired or insufficient permissions. Please log in again.');
       } else {
-        const err = await res.json();
-        setLogoEditError(err.error || 'Failed to save hospital branding.');
+        let errMsg = '';
+        try {
+          const rawText = await res.text();
+          try {
+            const errData = JSON.parse(rawText);
+            errMsg = errData.error || errData.message || (Array.isArray(errData.errors) ? errData.errors.join(', ') : '');
+          } catch (jsonErr) {
+            if (rawText && !rawText.trim().startsWith('<') && rawText.length < 200) {
+              errMsg = rawText.trim();
+            }
+          }
+        } catch (readErr) {}
+        
+        if (!errMsg) {
+          if (res.status === 400) errMsg = 'Invalid input or image data provided.';
+          else if (res.status === 429) errMsg = 'Too many requests. Please wait a moment and try again.';
+          else if (res.status >= 500) errMsg = 'Internal server error while saving branding. Please try again.';
+          else errMsg = `Failed to save hospital branding (HTTP ${res.status}).`;
+        }
+        setLogoEditError(errMsg);
       }
     } catch (e) {
-      setLogoEditError('Network error. Please try again.');
+      if (e && e.name === 'TypeError') {
+        setLogoEditError('Network error. Failed to reach the server. Please check your internet connection.');
+      } else {
+        setLogoEditError(e?.message || 'An unexpected error occurred. Please try again.');
+      }
     } finally {
       setLogoEditSaving(false);
     }
@@ -10610,55 +10674,31 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             <input
                               type="text"
                               style={styles.formInput}
-                              value={hosp.csm || ''}
-                              onChange={async (e) => {
+                              value={tenantDraft.csm}
+                              placeholder="Customer Success Manager"
+                              onChange={(e) => {
                                 const val = e.target.value;
-                                const token = getSuperAdminToken();
-                                try {
-                                  await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
-                                    method: 'PUT',
-                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                    body: JSON.stringify({ csm: val })
-                                  });
-                                  setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, csm: val } : h));
-                                } catch (err) { console.error(err); }
+                                setTenantDraft(prev => ({ ...prev, csm: val }));
+                                setTenantFormDirty(true);
+                                setTenantSaveSuccess(false);
                               }}
                             />
                           </div>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>GSTIN</span>
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              <input
-                                type="text"
-                                style={{ ...styles.formInput, flex: 1 }}
-                                value={hosp.gst || ''}
-                                onChange={async (e) => {
-                                  const val = e.target.value;
-                                  const token = getSuperAdminToken();
-                                  try {
-                                    await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
-                                      method: 'PUT',
-                                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                      body: JSON.stringify({ 
-                                        gst: val,
-                                        isGstVerified: false,
-                                        gstVerificationDetails: null
-                                      })
-                                    });
-                                    setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, gst: val, isGstVerified: false, gstVerificationDetails: null } : h));
-                                  } catch (err) { console.error(err); }
-                                }}
-                              />
-                              <button
-                                type="button"
-                                disabled={isVerifyingGstin}
-                                onClick={() => handleVerifyGstinForExistingHospital(hosp)}
-                                style={{ ...styles.btnSecondary, height: '34px', padding: '0 12px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              >
-                                {isVerifyingGstin ? '...' : hosp.isGstVerified ? '✓' : 'Verify'}
-                              </button>
-                            </div>
+                            <input
+                              type="text"
+                              style={styles.formInput}
+                              value={tenantDraft.gst}
+                              placeholder="GSTIN Registration Number"
+                              onChange={(e) => {
+                                const val = e.target.value.toUpperCase();
+                                setTenantDraft(prev => ({ ...prev, gst: val }));
+                                setTenantFormDirty(true);
+                                setTenantSaveSuccess(false);
+                              }}
+                            />
                             {hosp.isGstVerified && hosp.gstVerificationDetails && (
                               <div style={{
                                 marginTop: '4px',
@@ -10670,7 +10710,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 color: '#166534',
                                 lineHeight: '1.3'
                               }}>
-                                <div style={{ fontWeight: 800 }}>Verified GSTIN Details</div>
+                                <div style={{ fontWeight: 800 }}>Verified GSTIN Record</div>
                                 <div>Legal Name: {hosp.gstVerificationDetails.legalName || hosp.gstVerificationDetails.tradeName}</div>
                                 <div>State: {hosp.gstVerificationDetails.state || 'Registered'}</div>
                                 <div>PAN: {hosp.gstVerificationDetails.pan || 'N/A'}</div>
@@ -10680,37 +10720,18 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B' }}>DRUG LICENSE NUMBER</span>
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              <input
-                                type="text"
-                                style={{ ...styles.formInput, flex: 1 }}
-                                value={hosp.license || ''}
-                                onChange={async (e) => {
-                                  const val = e.target.value;
-                                  const token = getSuperAdminToken();
-                                  try {
-                                    await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
-                                      method: 'PUT',
-                                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                      body: JSON.stringify({ 
-                                        license: val,
-                                        isLicenseVerified: false,
-                                        isLicenseVerifiedDetails: null
-                                      })
-                                    });
-                                    setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, license: val, isLicenseVerified: false, licenseVerificationDetails: null } : h));
-                                  } catch (err) { console.error(err); }
-                                }}
-                              />
-                              <button
-                                type="button"
-                                disabled={isVerifyingLicense}
-                                onClick={() => handleVerifyLicenseForExistingHospital(hosp)}
-                                style={{ ...styles.btnSecondary, height: '34px', padding: '0 12px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              >
-                                {isVerifyingLicense ? '...' : hosp.isLicenseVerified ? '✓' : 'Verify'}
-                              </button>
-                            </div>
+                            <input
+                              type="text"
+                              style={styles.formInput}
+                              value={tenantDraft.license}
+                              placeholder="Drug License Registration Number"
+                              onChange={(e) => {
+                                const val = e.target.value.toUpperCase();
+                                setTenantDraft(prev => ({ ...prev, license: val }));
+                                setTenantFormDirty(true);
+                                setTenantSaveSuccess(false);
+                              }}
+                            />
                             {hosp.isLicenseVerified && hosp.licenseVerificationDetails && (
                               <div style={{
                                 marginTop: '4px',
@@ -10722,7 +10743,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 color: '#166534',
                                 lineHeight: '1.3'
                               }}>
-                                <div style={{ fontWeight: 800 }}>Verified License Details</div>
+                                <div style={{ fontWeight: 800 }}>Verified License Record</div>
                                 <div>Issuer: {hosp.licenseVerificationDetails.issuer || 'CDSCO'}</div>
                                 <div>Valid Until: {hosp.licenseVerificationDetails.validUntil}</div>
                               </div>
@@ -10734,18 +10755,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             <input
                               type="text"
                               style={styles.formInput}
-                              value={hosp.address || ''}
-                              onChange={async (e) => {
+                              value={tenantDraft.address}
+                              placeholder="Registered Clinic Physical Address"
+                              onChange={(e) => {
                                 const val = e.target.value;
-                                const token = getSuperAdminToken();
-                                try {
-                                  await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
-                                    method: 'PUT',
-                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                    body: JSON.stringify({ address: val })
-                                  });
-                                  setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, address: val } : h));
-                                } catch (err) { console.error(err); }
+                                setTenantDraft(prev => ({ ...prev, address: val }));
+                                setTenantFormDirty(true);
+                                setTenantSaveSuccess(false);
                               }}
                             />
                           </div>
@@ -10762,19 +10778,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             <input
                               type="text"
                               style={styles.formInput}
-                              value={hosp.panNumber || ''}
+                              value={tenantDraft.panNumber}
                               placeholder="e.g. ABCDE1234F"
-                              onChange={async (e) => {
+                              onChange={(e) => {
                                 const val = e.target.value.toUpperCase();
-                                setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, panNumber: val } : h));
-                                const token = getSuperAdminToken();
-                                try {
-                                  await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
-                                    method: 'PUT',
-                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                    body: JSON.stringify({ panNumber: val })
-                                  });
-                                } catch (err) { console.error(err); }
+                                setTenantDraft(prev => ({ ...prev, panNumber: val }));
+                                setTenantFormDirty(true);
+                                setTenantSaveSuccess(false);
                               }}
                             />
                           </div>
@@ -10784,19 +10794,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             <input
                               type="text"
                               style={styles.formInput}
-                              value={hosp.corpId || ''}
+                              value={tenantDraft.corpId}
                               placeholder="e.g. U85110DL2025PTC384920"
-                              onChange={async (e) => {
+                              onChange={(e) => {
                                 const val = e.target.value.toUpperCase();
-                                setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, corpId: val } : h));
-                                const token = getSuperAdminToken();
-                                try {
-                                  await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
-                                    method: 'PUT',
-                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                    body: JSON.stringify({ corpId: val })
-                                  });
-                                } catch (err) { console.error(err); }
+                                setTenantDraft(prev => ({ ...prev, corpId: val }));
+                                setTenantFormDirty(true);
+                                setTenantSaveSuccess(false);
                               }}
                             />
                           </div>
@@ -10806,19 +10810,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             <input
                               type="text"
                               style={styles.formInput}
-                              value={hosp.signatoryName || ''}
+                              value={tenantDraft.signatoryName}
                               placeholder="Authorized Signatory Name"
-                              onChange={async (e) => {
+                              onChange={(e) => {
                                 const val = e.target.value;
-                                setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, signatoryName: val } : h));
-                                const token = getSuperAdminToken();
-                                try {
-                                  await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
-                                    method: 'PUT',
-                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                    body: JSON.stringify({ signatoryName: val })
-                                  });
-                                } catch (err) { console.error(err); }
+                                setTenantDraft(prev => ({ ...prev, signatoryName: val }));
+                                setTenantFormDirty(true);
+                                setTenantSaveSuccess(false);
                               }}
                             />
                           </div>
@@ -10828,19 +10826,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             <input
                               type="text"
                               style={styles.formInput}
-                              value={hosp.fireSafetyCertificate || ''}
+                              value={tenantDraft.fireSafetyCertificate}
                               placeholder="Certificate registration number"
-                              onChange={async (e) => {
+                              onChange={(e) => {
                                 const val = e.target.value;
-                                setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, fireSafetyCertificate: val } : h));
-                                const token = getSuperAdminToken();
-                                try {
-                                  await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
-                                    method: 'PUT',
-                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                    body: JSON.stringify({ fireSafetyCertificate: val })
-                                  });
-                                } catch (err) { console.error(err); }
+                                setTenantDraft(prev => ({ ...prev, fireSafetyCertificate: val }));
+                                setTenantFormDirty(true);
+                                setTenantSaveSuccess(false);
                               }}
                             />
                           </div>
@@ -10850,22 +10842,109 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             <input
                               type="text"
                               style={styles.formInput}
-                              value={hosp.pollutionCertificate || ''}
+                              value={tenantDraft.pollutionCertificate}
                               placeholder="Certificate registration number"
-                              onChange={async (e) => {
+                              onChange={(e) => {
                                 const val = e.target.value;
-                                setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, pollutionCertificate: val } : h));
-                                const token = getSuperAdminToken();
-                                try {
-                                  await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
-                                    method: 'PUT',
-                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                    body: JSON.stringify({ pollutionCertificate: val })
-                                  });
-                                } catch (err) { console.error(err); }
+                                setTenantDraft(prev => ({ ...prev, pollutionCertificate: val }));
+                                setTenantFormDirty(true);
+                                setTenantSaveSuccess(false);
                               }}
                             />
                           </div>
+
+                          <button
+                            type="button"
+                            disabled={tenantSaving}
+                            onClick={async () => {
+                              setTenantSaving(true);
+                              setTenantSaveSuccess(false);
+                              const token = getSuperAdminToken();
+                              try {
+                                const payload = {
+                                  csm: tenantDraft.csm,
+                                  gst: tenantDraft.gst,
+                                  license: tenantDraft.license,
+                                  address: tenantDraft.address,
+                                  panNumber: tenantDraft.panNumber,
+                                  corpId: tenantDraft.corpId,
+                                  signatoryName: tenantDraft.signatoryName,
+                                  fireSafetyCertificate: tenantDraft.fireSafetyCertificate,
+                                  pollutionCertificate: tenantDraft.pollutionCertificate
+                                };
+                                const res = await fetch(`/api/superadmin/hospitals/${hosp._id}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                  body: JSON.stringify(payload)
+                                });
+                                if (res.ok) {
+                                  const updated = await res.json();
+                                  setHospitals(prev => prev.map(h => h._id === hosp._id ? { ...h, ...updated } : h));
+                                  setTenantFormDirty(false);
+                                  setTenantSaveSuccess(true);
+                                  showToast('Tenant configuration saved successfully!', 'success');
+                                  setTimeout(() => setTenantSaveSuccess(false), 3000);
+                                } else {
+                                  const errData = await res.json().catch(() => ({}));
+                                  showToast(errData.error || 'Failed to save tenant configuration.', 'error');
+                                }
+                              } catch (err) {
+                                console.error(err);
+                                showToast('Network error saving tenant configuration.', 'error');
+                              } finally {
+                                setTenantSaving(false);
+                              }
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                              width: '100%',
+                              padding: '10px 16px',
+                              borderRadius: '8px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              cursor: tenantSaving ? 'not-allowed' : 'pointer',
+                              transition: 'all 0.2s ease',
+                              background: tenantSaveSuccess ? '#16A34A' : tenantFormDirty ? '#2563EB' : '#0F172A',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              marginTop: '6px',
+                              boxShadow: tenantFormDirty ? '0 2px 8px rgba(37, 99, 235, 0.28)' : '0 1px 3px rgba(0,0,0,0.1)'
+                            }}
+                          >
+                            {tenantSaving ? (
+                              <>
+                                <LucideIcon name="loader-2" className="animate-spin" style={{ width: '14px', height: '14px' }} />
+                                <span>Saving Configuration...</span>
+                              </>
+                            ) : tenantSaveSuccess ? (
+                              <>
+                                <LucideIcon name="check" style={{ width: '14px', height: '14px' }} />
+                                <span>✓ Configuration Saved!</span>
+                              </>
+                            ) : (
+                              <>
+                                <LucideIcon name="save" style={{ width: '14px', height: '14px' }} />
+                                <span>{tenantFormDirty ? 'Save Configuration Changes' : 'Save Details'}</span>
+                              </>
+                            )}
+                          </button>
+
+                          {tenantSaveSuccess && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#166534', fontWeight: 650, background: '#F0FDF4', padding: '6px 10px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
+                              <LucideIcon name="check-circle" style={{ width: '13px', height: '13px', flexShrink: 0 }} />
+                              <span>Details saved successfully!</span>
+                            </div>
+                          )}
+
+                          {tenantFormDirty && !tenantSaveSuccess && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#EA580C', fontWeight: 600, background: '#FFF7ED', padding: '6px 10px', borderRadius: '6px', border: '1px solid #FED7AA' }}>
+                              <LucideIcon name="alert-circle" style={{ width: '13px', height: '13px', flexShrink: 0 }} />
+                              <span>Unsaved changes. Click 'Save Configuration Changes' to persist.</span>
+                            </div>
+                          )}
 
                         </div>
                       </div>
