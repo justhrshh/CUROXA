@@ -8664,7 +8664,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               const paginatedHospitals = filteredHospitals.slice(startIndex, endIndex);
 
               return (
-                <div style={{ ...styles.pageBodyScroll, minHeight: 0, gap: '20px', paddingBottom: '60px' }}>
+                <div style={{ ...styles.pageBodyScroll, minHeight: 0, gap: '20px', paddingBottom: '100px' }}>
                   {/* Top Header */}
                   <div>
                     <h2 style={styles.cardHeaderTitle}>Connected Corporate Clinics Index</h2>
