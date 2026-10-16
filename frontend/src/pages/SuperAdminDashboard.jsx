@@ -1,10 +1,10 @@
 import { getAccessToken, setAccessToken } from '../utils/authTokenStore';
-const getSuperAdminToken = () => getAccessToken() || (typeof localStorage !== 'undefined' ? getSuperAdminToken() : null);
+const getSuperAdminToken = () => getAccessToken() || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('superadminToken')) : null);
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { socket } from '../utils/socket';
-import { handleAutoLogout, clearPortalAuthContext, performLogout } from '../utils/api';
+import { handleAutoLogout, clearPortalAuthContext, performLogout, getPublicFrontendUrl } from '../utils/api';
 import quroxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import { exportHospitalValidationReportPdf, generateExcelFile, generateCsvFile, generatePdfFile } from '../utils/exportEngine';
 import MasterManagementView from '../components/superadmin/masters/MasterManagementView';
@@ -13,6 +13,7 @@ import StockMasterView from '../components/superadmin/masters/StockMasterView';
 import CommonMasterUploadView from '../components/superadmin/masters/CommonMasterUploadView';
 import SuperAdminMasterApprovalsView from '../components/superadmin/masters/SuperAdminMasterApprovalsView';
 import StaffOnboardingPage from '../components/admin/StaffOnboardingPage';
+import HospitalProfileView from '../components/superadmin/HospitalProfileView';
 import { TopbarContext } from '../context/TopbarContext';
 
 const fetch = (...args) => window.fetch(...args);
@@ -761,6 +762,7 @@ const HospitalIdentityStep = ({ wizardHospital, updateWizardField }) => {
 
 const SuperAdminDashboard = ({ initialTab }) => {
   const navigate = useNavigate();
+  const { hospitalId: routeHospitalId } = useParams();
   const superAdminChatEndRef = useRef(null);
   const moduleUpdateTimeouts = useRef({});
   const latestModulesRef = useRef({});
@@ -824,14 +826,17 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(true);
   const [activeTab, setActiveTab] = useState(() => {
+    if (routeHospitalId) return 'hospital-profile';
     return initialTab || DEFAULT_TAB_MAP[currentUserPlatformRole] || 'dashboard';
   });
 
   useEffect(() => {
-    if (initialTab) {
+    if (routeHospitalId) {
+      setActiveTab('hospital-profile');
+    } else if (initialTab) {
       setActiveTab(initialTab);
     }
-  }, [initialTab]);
+  }, [initialTab, routeHospitalId]);
 
   const filteredMenuGroups = menuGroups.map(group => ({
     ...group,
@@ -840,6 +845,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
   
   // Resolve activeTab to base menu id
   const getBaseTabId = (tab) => {
+    if (tab === 'hospital-profile') return 'hospitals';
     if (tab === 'support-success' || tab === 'tickets' || tab === 'customer-support') return 'customer-support';
     if (tab === 'finance-mgmt' || tab === 'finance-revenue' || tab === 'finance-renewals' || tab === 'invoices' || tab === 'finance') return 'finance';
     if (tab === 'hr-mgmt' || tab === 'departments' || tab === 'task-assignments' || tab === 'platform-roles' || tab === 'platform-audits' || tab === 'employees') return 'employees';
@@ -8616,7 +8622,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             )}
 
             {/* HOSPITALS TAB */}
-            {isTabAllowed && activeTab === 'hospitals' && (() => {
+            {isTabAllowed && activeTab === 'hospitals' && !routeHospitalId && (() => {
               const isHospPlanExpired = (hosp) => {
                 if (hosp.subscriptionStatus?.toLowerCase() === 'expired') return true;
                 let expiryDate;
@@ -9147,10 +9153,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   transition: 'all 0.15s ease'
                                 }}
                                 onClick={() => {
-                                  setSelectedHospitalId(hosp._id);
-                                  setSelectedPlanForUpgrade('');
-                                  setCredentialsMsg({ text: '', type: '' });
-                                  setIsConfigDrawerOpen(true);
+                                  const targetId = hosp.hospitalId || hosp._id || hosp.code;
+                                  navigate(`/super-admin/clinics/${targetId}`);
                                 }}
                               >
                                 <td style={{ ...styles.tableTd, padding: '12px 18px', verticalAlign: 'middle' }}>
@@ -9205,7 +9209,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                 <td style={{ ...styles.tableTd, padding: '12px 18px', verticalAlign: 'middle' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <a
-                                      href={hosp.hospitalId ? `${window.location.origin}/portal/${hosp.hospitalId}` : '#'}
+                                      href={hosp.hospitalId ? `${getPublicFrontendUrl()}/portal/${hosp.hospitalId}` : '#'}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       onClick={(e) => {
@@ -9219,7 +9223,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                         padding: '4px 9px',
                                         borderRadius: '6px',
                                         fontSize: '11px',
-                                        fontWeight: 650,
+                                        fontWeight: 655,
                                         textDecoration: 'none',
                                         background: hosp.hospitalId ? '#EFF6FF' : '#F8FAFC',
                                         color: hosp.hospitalId ? '#2563EB' : '#94A3B8',
@@ -9227,7 +9231,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                         cursor: hosp.hospitalId ? 'pointer' : 'not-allowed',
                                         transition: 'all 0.15s ease'
                                       }}
-                                      title={hosp.hospitalId ? `Open ${window.location.origin}/portal/${hosp.hospitalId}` : 'Portal Unavailable'}
+                                      title={hosp.hospitalId ? `Open ${getPublicFrontendUrl()}/portal/${hosp.hospitalId}` : 'Portal Unavailable'}
                                     >
                                       <LucideIcon name="external-link" style={{ width: '12px', height: '12px' }} />
                                       <span>Open</span>
@@ -9238,7 +9242,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         if (!hosp.hospitalId) return;
-                                        const portalUrl = `${window.location.origin}/portal/${hosp.hospitalId}`;
+                                        const portalUrl = `${getPublicFrontendUrl()}/portal/${hosp.hospitalId}`;
                                         navigator.clipboard.writeText(portalUrl).then(() => {
                                           showToast(`Copied portal URL: ${portalUrl}`, 'success');
                                         }).catch(() => {
@@ -9259,7 +9263,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                         cursor: hosp.hospitalId ? 'pointer' : 'not-allowed',
                                         transition: 'all 0.15s ease'
                                       }}
-                                      title={hosp.hospitalId ? `Copy ${window.location.origin}/portal/${hosp.hospitalId}` : 'Portal Unavailable'}
+                                      title={hosp.hospitalId ? `Copy ${getPublicFrontendUrl()}/portal/${hosp.hospitalId}` : 'Portal Unavailable'}
                                     >
                                       <LucideIcon name="copy" style={{ width: '12px', height: '12px' }} />
                                       <span>Copy</span>
@@ -9268,11 +9272,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setLogoEditHosp(hosp);
-                                        setLogoEditDraft(hosp.logo && hosp.logo !== 'H' ? hosp.logo : '');
-                                        setLogoEditNameDraft(hosp.name || '');
-                                        setLogoEditError('');
-                                        setIsLogoEditModalOpen(true);
+                                        const targetId = hosp.hospitalId || hosp._id || hosp.code;
+                                        navigate(`/super-admin/clinics/${targetId}`);
                                       }}
                                       style={{
                                         display: 'inline-flex',
@@ -9751,6 +9752,22 @@ const SuperAdminDashboard = ({ initialTab }) => {
               );
             })()}
 
+            {/* DEDICATED HOSPITAL PROFILE PAGE */}
+            {isTabAllowed && (activeTab === 'hospital-profile' || Boolean(routeHospitalId)) && (
+              <HospitalProfileView
+                hospitalId={routeHospitalId || selectedHospitalId}
+                onBack={() => {
+                  navigate('/hospitals');
+                  setActiveTab('hospitals');
+                }}
+                plans={plans}
+                onImpersonate={(hosp) => setImpersonatingHospital(hosp)}
+                onHospitalUpdated={(updatedHosp) => {
+                  setHospitals(prev => prev.map(h => (h._id === updatedHosp._id || h.hospitalId === updatedHosp.hospitalId ? { ...h, ...updatedHosp } : h)));
+                }}
+              />
+            )}
+
             {/* DEPARTMENTS VIEW */}
             {isTabAllowed && activeTab === 'departments' && (
               <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
@@ -10060,11 +10077,11 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           )}
                         </div>
                         <div style={{ fontSize: '11.5px', color: '#334155', fontFamily: 'monospace', background: '#FFFFFF', padding: '8px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', wordBreak: 'break-all' }}>
-                          {hosp.hospitalId ? `${window.location.origin}/portal/${hosp.hospitalId}` : 'Portal URL Unavailable'}
+                          {hosp.hospitalId ? `${getPublicFrontendUrl()}/portal/${hosp.hospitalId}` : 'Portal URL Unavailable'}
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <a
-                            href={hosp.hospitalId ? `${window.location.origin}/portal/${hosp.hospitalId}` : '#'}
+                            href={hosp.hospitalId ? `${getPublicFrontendUrl()}/portal/${hosp.hospitalId}` : '#'}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => { if (!hosp.hospitalId) e.preventDefault(); }}
@@ -10093,7 +10110,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                             disabled={!hosp.hospitalId}
                             onClick={() => {
                               if (!hosp.hospitalId) return;
-                              const portalUrl = `${window.location.origin}/portal/${hosp.hospitalId}`;
+                              const portalUrl = `${getPublicFrontendUrl()}/portal/${hosp.hospitalId}`;
                               navigator.clipboard.writeText(portalUrl).then(() => {
                                 showToast(`Copied portal URL: ${portalUrl}`, 'success');
                               }).catch(() => {
@@ -16922,7 +16939,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     color: '#0F172A',
                     wordBreak: 'break-all'
                   }}>
-                    {portalSuccessModal.hospitalId ? `${window.location.origin}/portal/${portalSuccessModal.hospitalId}` : 'Unavailable'}
+                    {portalSuccessModal.hospitalId ? `${getPublicFrontendUrl()}/portal/${portalSuccessModal.hospitalId}` : 'Unavailable'}
                   </div>
                 </div>
               </div>
@@ -16933,7 +16950,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   disabled={!portalSuccessModal.hospitalId}
                   onClick={() => {
                     if (!portalSuccessModal.hospitalId) return;
-                    const url = `${window.location.origin}/portal/${portalSuccessModal.hospitalId}`;
+                    const url = `${getPublicFrontendUrl()}/portal/${portalSuccessModal.hospitalId}`;
                     navigator.clipboard.writeText(url).then(() => {
                       showToast(`Copied portal URL: ${url}`, 'success');
                     }).catch(() => {
@@ -16962,7 +16979,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 </button>
 
                 <a
-                  href={portalSuccessModal.hospitalId ? `${window.location.origin}/portal/${portalSuccessModal.hospitalId}` : '#'}
+                  href={portalSuccessModal.hospitalId ? `${getPublicFrontendUrl()}/portal/${portalSuccessModal.hospitalId}` : '#'}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => {

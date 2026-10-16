@@ -30,7 +30,7 @@ const r2 = require('../config/r2');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB limit
 
-const { getPublicAppUrl, getCanonicalLogoUrl } = require('../config/urls');
+const { getPublicAppUrl, getTenantPortalUrl, getCanonicalLogoUrl } = require('../config/urls');
 
 // Helper to resolve frontend base URL dynamically (via centralized config)
 const getFrontendBaseUrl = getPublicAppUrl;
@@ -969,6 +969,67 @@ router.get('/hospitals', requireRole('Onboarding Manager'), async (req, res) => 
   }
 });
 
+router.get('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const mongoose = require('mongoose');
+
+    let hospital = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      hospital = await SuperAdminHospital.findById(id);
+    }
+    if (!hospital) {
+      hospital = await SuperAdminHospital.findOne({
+        $or: [
+          { hospitalId: String(id).toUpperCase().trim() },
+          { code: String(id).toLowerCase().trim() },
+          { code: id }
+        ]
+      });
+    }
+
+    if (!hospital) {
+      return res.status(404).json({ error: 'Hospital record not found.' });
+    }
+
+    const doctorsCount = await User.countDocuments({ tenantId: hospital.code, role: 'doctor' });
+    const staffCount = await User.countDocuments({
+      tenantId: hospital.code,
+      role: { $nin: ['doctor', 'patient', 'admin'] }
+    });
+
+    if (!hospital.limits) {
+      hospital.limits = { doctorsUsed: 0, doctorsLimit: 25, staffUsed: 0, staffLimit: 50, storageUsed: 5.0, storageLimit: 100, patients: 0 };
+    }
+    hospital.limits.doctorsUsed = doctorsCount;
+    hospital.limits.staffUsed = staffCount;
+
+    const adminUser = await User.findOne({ tenantId: hospital.code, role: 'admin' }).lean();
+    const { getHospitalEffectiveModules } = require('../utils/subscriptionHelper');
+    const effectiveModules = await getHospitalEffectiveModules(hospital);
+
+    const hospObj = hospital.toObject();
+    hospObj.effectiveModules = effectiveModules;
+
+    if (adminUser) {
+      hospObj.adminUsername = adminUser.staff_id;
+      hospObj.adminEmail = adminUser.email;
+      hospObj.adminPhone = adminUser.phone;
+      hospObj.adminName = adminUser.name;
+    } else {
+      hospObj.adminUsername = '';
+      hospObj.adminEmail = '';
+      hospObj.adminPhone = '';
+      hospObj.adminName = '';
+    }
+
+    res.json(hospObj);
+  } catch (err) {
+    console.error('Fetch single hospital error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { adminName, adminEmail, adminPhone, adminPassword, ...hospitalData } = req.body;
@@ -1121,8 +1182,7 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
       const { sendEmail } = require('../utils/emailService');
       const { generateCredentialPdf, derivePdfPassword } = require('../utils/credentialPdfGenerator');
 
-      const frontendBaseUrl = getFrontendBaseUrl(req);
-      const portalUrl = hospital.hospitalId ? `${frontendBaseUrl}/portal/${hospital.hospitalId}` : `${frontendBaseUrl}/login`;
+      const portalUrl = getTenantPortalUrl(hospital, req);
 
       const pdfPassword = derivePdfPassword(adminName, adminPhone);
       const pdfBuffer = await generateCredentialPdf({
@@ -1278,7 +1338,7 @@ router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
     }
     if (!hospital) {
       hospital = await SuperAdminHospital.findOneAndUpdate(
-        { $or: [{ code: id }, { code: String(id).toLowerCase().trim() }, { id: id }] },
+        { $or: [{ code: id }, { code: String(id).toLowerCase().trim() }, { hospitalId: String(id).toUpperCase().trim() }, { id: id }] },
         req.body,
         { returnDocument: 'after', runValidators: true }
       );
@@ -1339,7 +1399,19 @@ router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req
       return res.status(400).json({ error: "Please provide adminUsername or adminPassword to update." });
     }
 
-    const hospital = await SuperAdminHospital.findById(req.params.id);
+    let hospital = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      hospital = await SuperAdminHospital.findById(req.params.id);
+    }
+    if (!hospital) {
+      hospital = await SuperAdminHospital.findOne({
+        $or: [
+          { hospitalId: String(req.params.id).toUpperCase().trim() },
+          { code: String(req.params.id).toLowerCase().trim() },
+          { code: req.params.id }
+        ]
+      });
+    }
     if (!hospital) {
       return res.status(404).json({ error: "Hospital not found." });
     }
@@ -1386,8 +1458,7 @@ router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req
     try {
       const { sendEmail } = require('../utils/emailService');
 
-      const frontendBaseUrl = getFrontendBaseUrl(req);
-      const portalUrl = hospital.hospitalId ? `${frontendBaseUrl}/portal/${hospital.hospitalId}` : `${frontendBaseUrl}/login`;
+      const portalUrl = getTenantPortalUrl(hospital, req);
 
       // Email to Hospital Admin
       const credentialsMailHtml = `
@@ -1449,6 +1520,7 @@ router.delete('/hospitals/:id', requireRole('Onboarding Manager'), async (req, r
         $or: [
           { code: id },
           { code: String(id).toLowerCase().trim() },
+          { hospitalId: String(id).toUpperCase().trim() },
           { id: id }
         ]
       });
@@ -2495,7 +2567,7 @@ router.post('/employees', requireRole(), async (req, res) => {
             <p style="margin: 12px 0 0 0; font-size: 12px; color: #6366F1;">Please log in and update your password immediately for safety.</p>
           </div>
           <div style="text-align: center;">
-            <a href="${getFrontendBaseUrl()}/login" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Dashboard</a>
+            <a href="${getFrontendBaseUrl(req)}/login" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Dashboard</a>
           </div>
           <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #F1F5F9; text-align: center; font-size: 11px; color: #94A3B8;">
             &copy; 2026 Quroxa Healthcare Systems. All rights reserved.
@@ -2606,7 +2678,7 @@ router.put('/employees/:id', requireRole(), async (req, res) => {
                 <p style="margin: 4px 0; font-size: 13px; color: #78350F;"><strong>New Password:</strong> ${req.body.password.trim()}</p>
               </div>
               <div style="text-align: center;">
-                <a href="${getFrontendBaseUrl()}/login" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Dashboard</a>
+                <a href="${getFrontendBaseUrl(req)}/login" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Dashboard</a>
               </div>
               <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #F1F5F9; text-align: center; font-size: 11px; color: #94A3B8;">
                 &copy; 2026 Quroxa Healthcare Systems. All rights reserved.

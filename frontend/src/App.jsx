@@ -443,6 +443,16 @@ function App() {
             <SuperAdminDashboard initialTab="hospitals" />
           </ProtectedRoute>
         } />
+        <Route path="/hospitals/:hospitalId" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="hospital-profile" />
+          </ProtectedRoute>
+        } />
+        <Route path="/super-admin/clinics/:hospitalId" element={
+          <ProtectedRoute targetRole="superadmin">
+            <SuperAdminDashboard initialTab="hospital-profile" />
+          </ProtectedRoute>
+        } />
         <Route path="/subscription-management" element={
           <ProtectedRoute targetRole="superadmin">
             <SuperAdminDashboard initialTab="subscription-mgmt" />

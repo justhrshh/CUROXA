@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { X, Download, Printer, Copy, Check, QrCode, Stethoscope } from 'lucide-react';
 import curoxaSidebarLogo from '../assets/quroxa_new_logo.png';
+import { getPublicFrontendUrl } from '../utils/api';
 
 const DoctorQRModal = ({ isOpen, onClose, doctor, hospitalName }) => {
   const [copied, setCopied] = React.useState(false);
@@ -10,8 +11,7 @@ const DoctorQRModal = ({ isOpen, onClose, doctor, hospitalName }) => {
   if (!isOpen || !doctor) return null;
 
   const publicQueueId = doctor.publicQueueId;
-  // Resolve base URL robustly: supports production domains, proxy origins, and localhost dev
-  const baseUrl = import.meta.env.VITE_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  const baseUrl = getPublicFrontendUrl();
   const queueUrl = `${baseUrl}/doctor/queue/${publicQueueId}`;
 
   const handleCopyLink = () => {

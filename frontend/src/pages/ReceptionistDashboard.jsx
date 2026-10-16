@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import api, { clearPortalAuthContext, performLogout } from '../utils/api';
+import api, { clearPortalAuthContext, performLogout, resolveMediaUrl } from '../utils/api';
 import { socket, joinTenantRoom } from '../utils/socket';
 import { useRealTimeSync } from '../hooks/useRealTimeSync';
 import HRPayroll from './HRPayroll';
@@ -923,13 +923,7 @@ const ReceptionistDashboard = () => {
         }
         let letterheadUrl = res.data?.letterheadUrl || "";
         letterheadUrl = letterheadUrl.replace(/\\/g, '/');
-        if (letterheadUrl && !letterheadUrl.startsWith('http://') && !letterheadUrl.startsWith('https://') && !letterheadUrl.startsWith('data:')) {
-          const apiURL = import.meta.env.VITE_API_URL || '';
-          const backendBase = apiURL ? apiURL.replace('/api', '') : 'https://curoxa.onrender.com';
-          const baseClean = backendBase.endsWith('/') ? backendBase.slice(0, -1) : backendBase;
-          const pathClean = letterheadUrl.startsWith('/') ? letterheadUrl : `/${letterheadUrl}`;
-          letterheadUrl = `${baseClean}${pathClean}`;
-        }
+        letterheadUrl = resolveMediaUrl(letterheadUrl);
         if (letterheadUrl) {
           const imgUrl = await convertPdfToImage(letterheadUrl);
           setCustomLetterhead(imgUrl);

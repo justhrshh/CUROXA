@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import api, { clearPortalAuthContext, performLogout, setAccessToken } from '../utils/api';
+import api, { clearPortalAuthContext, performLogout, setAccessToken, resolveMediaUrl } from '../utils/api';
 import { socket, joinTenantRoom } from '../utils/socket';
 import HRPayroll from './HRPayroll';
 import EmployeeProfileView from '../components/hr/EmployeeProfileView';
@@ -173,13 +173,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   }, [letterheadPreviewImage]);
 
   const getAbsoluteUrl = (url) => {
-    if (!url) return '';
-    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
-    const apiURL = import.meta.env.VITE_API_URL || '';
-    const backendBase = apiURL ? apiURL.replace('/api', '') : 'https://curoxa.onrender.com';
-    const baseClean = backendBase.endsWith('/') ? backendBase.slice(0, -1) : backendBase;
-    const pathClean = url.startsWith('/') ? url : `/${url}`;
-    return `${baseClean}${pathClean}`;
+    return resolveMediaUrl(url);
   };
 
   // Fetch current letterhead URL and templates when tab changes to letterhead

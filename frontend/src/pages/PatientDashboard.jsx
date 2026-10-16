@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api, { clearPortalAuthContext } from '../utils/api';
+import api, { clearPortalAuthContext, resolveMediaUrl, getPublicFrontendUrl } from '../utils/api';
 import { joinTenantRoom } from '../utils/socket';
 import { convertPdfToImage } from '../utils/pdfHelper';
 import { isPastSlot, isSlotValidForRegistration } from '../utils/dateSlotHelper';
@@ -1372,11 +1372,7 @@ const PatientDashboard = () => {
     try {
       const res = await api.get('/admin/letterhead');
       let letterheadUrl = res.data?.letterheadUrl || "";
-      if (letterheadUrl && !letterheadUrl.startsWith('http://') && !letterheadUrl.startsWith('https://') && !letterheadUrl.startsWith('data:')) {
-        const apiURL = import.meta.env.VITE_API_URL || '';
-        const backendBase = apiURL ? apiURL.replace('/api', '') : 'https://curoxa.onrender.com';
-        letterheadUrl = `${backendBase}${letterheadUrl}`;
-      }
+      letterheadUrl = resolveMediaUrl(letterheadUrl);
       if (letterheadUrl) {
         letterheadUrl = await convertPdfToImage(letterheadUrl);
       }
@@ -1469,7 +1465,7 @@ const PatientDashboard = () => {
                 <div style="flex-grow: 1; text-align: center; padding-right: 65px;">
                   <h1 style="margin: 0; color: #800020; font-family: 'Outfit', 'Inter', sans-serif; font-size: 20px; font-weight: 900; letter-spacing: 0.5px; line-height: 1.2; text-transform: uppercase;">\${clinicName}</h1>
                   <p style="margin: 3px 0; color: #1E293B; font-size: 9px; font-weight: 700; letter-spacing: 0.2px; text-transform: uppercase;">Official EMR OPD Portal - \${clinicName}</p>
-                  <p style="margin: 0; color: #475569; font-size: 8px; font-weight: 600;">Web: \${window.location.origin} &nbsp;&nbsp;•&nbsp;&nbsp; E-mail: info@\${rx.tenantId || 'city_hospital'}.com</p>
+                  <p style="margin: 0; color: #475569; font-size: 8px; font-weight: 600;">Web: \${getPublicFrontendUrl()} &nbsp;&nbsp;•&nbsp;&nbsp; E-mail: info@\${rx.tenantId || 'city_hospital'}.com</p>
                 </div>
               </div>
             `}

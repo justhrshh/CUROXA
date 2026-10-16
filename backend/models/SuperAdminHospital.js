@@ -13,6 +13,7 @@ const superAdminHospitalSchema = new mongoose.Schema({
   },
   logo: { type: String, default: 'H' },
   letterheadUrl: { type: String, default: '' },
+  customDomain: { type: String, default: '' },
   plan: { type: String, default: 'Standard Basic' },
   subscriptionPlan: { type: String, default: '' },
   subscriptionStatus: {

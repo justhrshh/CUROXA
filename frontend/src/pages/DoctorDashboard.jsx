@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api, { setEmergencyBypass, isEmergencyBypassActive, clearPortalAuthContext, performLogout } from '../utils/api';
+import api, { setEmergencyBypass, isEmergencyBypassActive, clearPortalAuthContext, performLogout, resolveMediaUrl, getPublicFrontendUrl } from '../utils/api';
 import PrescriptionMakerTab from './PrescriptionMakerTab';
 import HRPayroll from './HRPayroll';
 import { convertPdfToImage } from '../utils/pdfHelper';
@@ -1234,13 +1234,7 @@ const DoctorDashboard = () => {
         }
         let letterheadUrl = res.data?.letterheadUrl || "";
         letterheadUrl = letterheadUrl.replace(/\\/g, '/');
-        if (letterheadUrl && !letterheadUrl.startsWith('http://') && !letterheadUrl.startsWith('https://') && !letterheadUrl.startsWith('data:')) {
-          const apiURL = import.meta.env.VITE_API_URL || '';
-          const backendBase = apiURL ? apiURL.replace('/api', '') : 'https://curoxa.onrender.com';
-          const baseClean = backendBase.endsWith('/') ? backendBase.slice(0, -1) : backendBase;
-          const pathClean = letterheadUrl.startsWith('/') ? letterheadUrl : `/${letterheadUrl}`;
-          letterheadUrl = `${baseClean}${pathClean}`;
-        }
+        letterheadUrl = resolveMediaUrl(letterheadUrl);
         if (letterheadUrl) {
           const imgUrl = await convertPdfToImage(letterheadUrl);
           setCustomLetterhead(imgUrl);
@@ -4603,7 +4597,7 @@ const DoctorDashboard = () => {
           <div>
             <h1 class="hosp-name">${clinicName}</h1>
             <p class="hosp-sub">Official EMR OPD Portal • Healthcare Excellence</p>
-            <p class="hosp-meta">Web: ${window.location.origin} &nbsp;•&nbsp; 24x7 Digital Healthcare Records</p>
+            <p class="hosp-meta">Web: ${getPublicFrontendUrl()} &nbsp;•&nbsp; 24x7 Digital Healthcare Records</p>
           </div>
           <div class="date-badge">
             <div style="font-size: 10px; color: #64748B; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Date of Consultation</div>

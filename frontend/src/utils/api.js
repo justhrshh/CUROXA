@@ -21,8 +21,31 @@ export {
   getTabId
 };
 
+import {
+  validateUrlConfig,
+  getRuntimeConfig,
+  getApiBaseUrl,
+  getBackendBaseUrl,
+  getPublicFrontendUrl,
+  getApiUrl,
+  resolveMediaUrl,
+  getSocketUrl
+} from './urlConfig';
+
+// Re-export centralized URL helpers for backwards compatibility across all callers
+export {
+  validateUrlConfig,
+  getRuntimeConfig,
+  getApiBaseUrl,
+  getBackendBaseUrl,
+  getPublicFrontendUrl,
+  getApiUrl,
+  resolveMediaUrl,
+  getSocketUrl
+};
+
 const api = axios.create({
-  baseURL: (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_API_URL : null) || 'https://curoxa.onrender.com/api',
+  baseURL: getApiBaseUrl(),
   withCredentials: true
 });
 axios.defaults.withCredentials = true;
@@ -32,21 +55,6 @@ if (typeof window !== 'undefined') {
   window.__quroxa_getAccessToken = getAccessToken;
   window.__quroxa_setAccessToken = setAccessToken;
 }
-
-export const getApiBaseUrl = () => {
-  return (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_API_URL : null) || 'https://curoxa.onrender.com/api';
-};
-
-export const getApiUrl = (endpoint = '') => {
-  const base = getApiBaseUrl();
-  if (!endpoint) return base;
-  if (typeof endpoint !== 'string') return endpoint;
-  if (endpoint.startsWith('http://') || endpoint.startsWith('https://') || endpoint.startsWith('data:')) return endpoint;
-  const cleanEndpoint = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
-  const baseClean = base.endsWith('/') ? base.slice(0, -1) : base;
-  const pathClean = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
-  return `${baseClean}${pathClean}`;
-};
 
 // ═══════════════════════════════════════════════════════════════════
 // BREAK-GLASS EMERGENCY BYPASS (DPDP Act 2023 Compliant)
