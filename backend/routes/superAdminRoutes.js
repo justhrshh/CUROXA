@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { verifyToken, isSuperAdmin } = require('../middleware/authMiddleware');
 
 
@@ -972,7 +973,6 @@ router.get('/hospitals', requireRole('Onboarding Manager'), async (req, res) => 
 router.get('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { id } = req.params;
-    const mongoose = require('mongoose');
 
     let hospital = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
@@ -1004,7 +1004,18 @@ router.get('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
     hospital.limits.doctorsUsed = doctorsCount;
     hospital.limits.staffUsed = staffCount;
 
-    const adminUser = await User.findOne({ tenantId: hospital.code, role: 'admin' }).lean();
+    const adminUser = await User.findOne({
+      tenantId: {
+        $in: [
+          hospital.code,
+          hospital.code ? hospital.code.toLowerCase() : '',
+          hospital.hospitalId,
+          hospital.hospitalId ? hospital.hospitalId.toLowerCase() : '',
+          hospital.hospitalId ? hospital.hospitalId.toUpperCase() : ''
+        ].filter(Boolean)
+      },
+      role: 'admin'
+    }).lean();
     const { getHospitalEffectiveModules } = require('../utils/subscriptionHelper');
     const effectiveModules = await getHospitalEffectiveModules(hospital);
 
@@ -1279,7 +1290,6 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
 router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { id } = req.params;
-    const mongoose = require('mongoose');
 
     // Protect stable identity fields from accidental or malicious mutation
     delete req.body.hospitalId;
@@ -1352,7 +1362,18 @@ router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
     await createNotification('Hospital Profile Updated', `Hospital profile details for '${hospital.name}' were updated`, 'info', 'system');
     
     const hospObj = hospital.toObject();
-    const adminUser = await User.findOne({ tenantId: hospital.code, role: 'admin' });
+    const adminUser = await User.findOne({
+      tenantId: {
+        $in: [
+          hospital.code,
+          hospital.code ? hospital.code.toLowerCase() : '',
+          hospital.hospitalId,
+          hospital.hospitalId ? hospital.hospitalId.toLowerCase() : '',
+          hospital.hospitalId ? hospital.hospitalId.toUpperCase() : ''
+        ].filter(Boolean)
+      },
+      role: 'admin'
+    });
     if (adminUser) {
       hospObj.adminUsername = adminUser.staff_id;
       hospObj.adminEmail = adminUser.email;
@@ -1395,7 +1416,10 @@ router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
 router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { adminUsername, adminPassword } = req.body;
-    if (!adminUsername && !adminPassword) {
+    const hasUsername = adminUsername !== undefined && adminUsername !== null && String(adminUsername).trim().length > 0;
+    const hasPassword = adminPassword !== undefined && adminPassword !== null && String(adminPassword).trim().length > 0;
+
+    if (!hasUsername && !hasPassword) {
       return res.status(400).json({ error: "Please provide adminUsername or adminPassword to update." });
     }
 
@@ -1416,35 +1440,55 @@ router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req
       return res.status(404).json({ error: "Hospital not found." });
     }
 
-    const adminUser = await User.findOne({ tenantId: hospital.code, role: 'admin' });
+    const adminUser = await User.findOne({
+      tenantId: {
+        $in: [
+          hospital.code,
+          hospital.code ? hospital.code.toLowerCase() : '',
+          hospital.hospitalId,
+          hospital.hospitalId ? hospital.hospitalId.toLowerCase() : '',
+          hospital.hospitalId ? hospital.hospitalId.toUpperCase() : ''
+        ].filter(Boolean)
+      },
+      role: 'admin'
+    }).select('+password_hash');
+
     if (!adminUser) {
       return res.status(404).json({ error: "Hospital admin user not found." });
     }
 
-    if (adminUsername) {
-      const cleanUsername = adminUsername.trim();
-      if (cleanUsername !== adminUser.staff_id) {
-        const usernameExists = await User.findOne({ staff_id: cleanUsername });
+    if (hasUsername) {
+      const cleanUsername = String(adminUsername).trim();
+      if (cleanUsername.toLowerCase() !== (adminUser.staff_id || '').toLowerCase()) {
+        const usernameExists = await User.findOne({
+          staff_id: cleanUsername.toLowerCase(),
+          _id: { $ne: adminUser._id }
+        });
         if (usernameExists) {
           return res.status(400).json({ error: `Username/Staff ID '${cleanUsername}' is already in use by another account.` });
         }
+        const previousStaffId = adminUser.staff_id;
         adminUser.staff_id = cleanUsername;
-        if (adminUser.phone === adminUser.staff_id) {
+        if (adminUser.phone === previousStaffId && /^\+?[0-9]{7,15}$/.test(cleanUsername)) {
           adminUser.phone = cleanUsername;
         }
       }
     }
 
-    if (adminPassword) {
+    if (hasPassword) {
+      const cleanPassword = typeof adminPassword === 'string' ? adminPassword.trim() : '';
+      if (cleanPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters long." });
+      }
       const bcrypt = require('bcrypt');
       const salt = await bcrypt.genSalt(10);
-      adminUser.password_hash = await bcrypt.hash(adminPassword, salt);
+      adminUser.password_hash = await bcrypt.hash(cleanPassword, salt);
       adminUser.password_version = (adminUser.password_version || 0) + 1;
       adminUser.hasSetPassword = true;
     }
     await adminUser.save();
 
-    if (adminPassword) {
+    if (hasPassword) {
       // Broadcast session revocation event via socket
       const io = req.app.get("io");
       if (io) {
@@ -1476,7 +1520,7 @@ router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req
             ${hospital.hospitalId ? `<p style="margin: 4px 0; font-size: 13px; color: #78350F;"><strong>Portal ID:</strong> ${hospital.hospitalId}</p>` : ''}
             <p style="margin: 4px 0; font-size: 13px; color: #78350F;"><strong>Portal Link:</strong> <a href="${portalUrl}" style="color: #B45309; font-weight: 600;">${portalUrl}</a></p>
             <p style="margin: 4px 0; font-size: 13px; color: #78350F;"><strong>Username (Login ID):</strong> ${adminUser.staff_id}</p>
-            ${adminPassword ? `<p style="margin: 4px 0; font-size: 13px; color: #78350F;"><strong>New Password:</strong> ${adminPassword}</p>` : `<p style="margin: 4px 0; font-size: 13px; color: #78350F;"><em>Password was not modified</em></p>`}
+            ${hasPassword ? `<p style="margin: 4px 0; font-size: 13px; color: #78350F;"><strong>New Password:</strong> ${adminPassword}</p>` : `<p style="margin: 4px 0; font-size: 13px; color: #78350F;"><em>Password was not modified</em></p>`}
           </div>
           <div style="text-align: center;">
             <a href="${portalUrl}" style="background: #4F46E5; color: #FFFFFF; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-block;">Log In to Hospital Portal</a>
@@ -1492,7 +1536,7 @@ router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req
       sendEmail({
         to: adminUser.email,
         subject: `Your Quroxa Admin Credentials Have Been Updated`,
-        text: `Your Quroxa Admin login credentials were updated.\nUsername: ${adminUser.staff_id}\nPortal URL: ${portalUrl}\nPassword Status: ${adminPassword ? 'Updated' : 'Unchanged'}`,
+        text: `Your Quroxa Admin login credentials were updated.\nUsername: ${adminUser.staff_id}\nPortal URL: ${portalUrl}\nPassword Status: ${hasPassword ? 'Updated' : 'Unchanged'}`,
         html: credentialsMailHtml,
         senderName: 'Quroxa Security'
       }).catch(err => console.error("Error sending admin update email:", err));
@@ -1509,7 +1553,6 @@ router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req
 router.delete('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res) => {
   try {
     const { id } = req.params;
-    const mongoose = require('mongoose');
 
     let hospital = null;
     if (mongoose.Types.ObjectId.isValid(id)) {

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { verifyToken } = require('../middleware/authMiddleware');
 const { checkDoctorClinicalMode } = require('../middleware/subscriptionMiddleware');
 const { restrictEMRRole, checkPatientConsent, writeAudit } = require('../middleware/complianceMiddleware');
