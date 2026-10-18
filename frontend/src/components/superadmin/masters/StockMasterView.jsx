@@ -222,11 +222,12 @@ export default function StockMasterView({ onSwitchTab }) {
       </div>
 
       {/* Stock Table */}
-      <div style={{
+      <div className="sa-table-scroll-wrapper" style={{
         background: '#FFFFFF',
         borderRadius: '10px',
         border: '1px solid #E2E8F0',
-        overflow: 'hidden',
+        overflowX: 'auto',
+        overflowY: 'hidden',
         boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
       }}>
         {loading ? (
@@ -241,7 +242,7 @@ export default function StockMasterView({ onSwitchTab }) {
             </div>
           </div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+          <table style={{ width: '100%', minWidth: '750px', borderCollapse: 'collapse', fontSize: '12.5px' }}>
             <thead>
               <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0', textAlign: 'left' }}>
                 <th style={{ padding: '10px 14px', color: '#475569', fontWeight: 800 }}>Item Name</th>

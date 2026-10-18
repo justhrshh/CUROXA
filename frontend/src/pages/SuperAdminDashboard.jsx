@@ -12143,9 +12143,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   <p style={styles.cardHeaderSub}>Monitor active tickets, reply to customer queries, and document internal diagnostic progress.</p>
                 </div>
 
-                <div style={{ display: 'flex', gap: '20px', marginTop: '14px' }}>
-                  <div style={{ flex: 1.5, background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px' }}>
-                    <table style={styles.dataTable}>
+                <div className="sa-panel-split" style={{ display: 'flex', gap: '20px', marginTop: '14px', flexWrap: 'wrap' }}>
+                  <div className="sa-table-scroll-wrapper" style={{ flex: '1.5 1 320px', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px', overflowX: 'auto', minWidth: '300px' }}>
+                    <table style={{ ...styles.dataTable, minWidth: '650px' }}>
                       <thead>
                         <tr>
                           <th style={styles.tableTh}>Ticket ID</th>
@@ -13401,8 +13401,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                   {/* Modern Invoices Data Table Card */}
                   <div style={{ background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
-                    <div style={{ overflowX: 'hidden', width: '100%' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'auto' }}>
+                    <div className="sa-table-scroll-wrapper" style={{ overflowX: 'auto', width: '100%' }}>
+                      <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'auto' }}>
                         <thead>
                           <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                             <th style={{ padding: '10px 8px', fontSize: '10.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', width: '42px', whiteSpace: 'nowrap' }}>#</th>
@@ -14648,7 +14648,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   {/* BI OVERVIEW DASHBOARD */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                       {/* KPI Metrics Row */}
-                      <div style={styles.kpiGrid}>
+                      <div className="sa-kpi-grid" style={styles.kpiGrid}>
                         <div style={styles.kpiCard}>
                           <div style={styles.kpiLabel}>TOTAL SAAS REVENUE</div>
                           <div style={{ ...styles.kpiVal, color: '#10B981' }}>₹{totalRevenue.toLocaleString('en-IN')}</div>
@@ -14672,7 +14672,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       </div>
 
                       {/* Charts Grid */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '20px' }}>
+                      <div className="sa-two-col-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '20px' }}>
                         {/* MRR Trend Area Chart */}
                         <div style={styles.glassCard}>
                           <h3 style={styles.cardHeaderTitle}>Monthly Recurring Revenue (MRR) Trend</h3>

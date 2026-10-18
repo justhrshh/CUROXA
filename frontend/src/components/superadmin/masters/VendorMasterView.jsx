@@ -1493,8 +1493,8 @@ export default function VendorMasterView() {
           </div>
 
           {/* Table Element */}
-          <div style={{ overflowX: 'auto', width: '100%' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
+          <div className="sa-table-scroll-wrapper" style={{ overflowX: 'auto', width: '100%' }}>
+            <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
               <thead>
                 <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 700, fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <th style={{ padding: '8px 10px', width: '45px' }}>S.No</th>
@@ -1707,8 +1707,8 @@ export default function VendorMasterView() {
           flexDirection: 'column',
           overflow: 'hidden'
         }}>
-          <div style={{ overflowX: 'auto', width: '100%' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
+          <div className="sa-table-scroll-wrapper" style={{ overflowX: 'auto', width: '100%' }}>
+            <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
               <thead>
                 <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 700, fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <th style={{ padding: '8px 10px', width: '110px' }}>Request No</th>

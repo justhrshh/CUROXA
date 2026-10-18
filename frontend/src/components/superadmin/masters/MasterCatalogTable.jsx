@@ -378,13 +378,13 @@ export default function MasterCatalogTable({
         display: 'flex',
         flexDirection: 'column'
       }}>
-        <div style={{
-          overflowX: 'hidden',
+        <div className="sa-table-scroll-wrapper" style={{
+          overflowX: 'auto',
           overflowY: 'auto',
           maxHeight: 'calc(100vh - 295px)',
           width: '100%'
         }}>
-          <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
+          <table style={{ width: '100%', minWidth: '700px', tableLayout: 'auto', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC' }}>
               <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                 <th style={{ padding: '7px 6px', fontWeight: 700, color: '#475569', width: '78px', whiteSpace: 'nowrap' }}>Item Code</th>
