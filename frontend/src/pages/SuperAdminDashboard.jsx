@@ -15,6 +15,7 @@ import SuperAdminMasterApprovalsView from '../components/superadmin/masters/Supe
 import StaffOnboardingPage from '../components/admin/StaffOnboardingPage';
 import HospitalProfileView from '../components/superadmin/HospitalProfileView';
 import { TopbarContext } from '../context/TopbarContext';
+import '../css/superadmin-responsive.css';
 
 const fetch = (...args) => window.fetch(...args);
 
@@ -825,10 +826,37 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(true);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
     if (routeHospitalId) return 'hospital-profile';
     return initialTab || DEFAULT_TAB_MAP[currentUserPlatformRole] || 'dashboard';
   });
+
+  // Mobile drawer: close on Escape + lock body scroll when open
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isMobileDrawerOpen) {
+        setIsMobileDrawerOpen(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileDrawerOpen]);
+
+  useEffect(() => {
+    if (isMobileDrawerOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isMobileDrawerOpen]);
+
+  // Close mobile drawer on navigation
+  const handleNavItemClick = (callback) => {
+    setIsMobileDrawerOpen(false);
+    if (callback) callback();
+  };
 
   useEffect(() => {
     if (routeHospitalId) {
@@ -6428,10 +6456,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   return (
     <TopbarContext.Provider value={{ topbarContent, setTopbarContent }}>
-      <div style={{
+      <div className="sa-root" style={{
         display: 'flex',
         flexDirection: 'row',
-        height: '100vh',
+        height: '100svh',
         width: '100%',
         minWidth: 0,
         maxWidth: '100%',
@@ -6444,7 +6472,6 @@ const SuperAdminDashboard = ({ initialTab }) => {
           zoom: 1 !important;
           margin: 0 !important;
           padding: 0 !important;
-          overflow: hidden !important;
           height: 100% !important;
           width: 100% !important;
           min-width: 100% !important;
@@ -6456,7 +6483,6 @@ const SuperAdminDashboard = ({ initialTab }) => {
           zoom: 1 !important;
           margin: 0 !important;
           padding: 0 !important;
-          overflow: hidden !important;
           height: 100% !important;
           width: 100% !important;
           min-width: 100% !important;
@@ -6556,22 +6582,34 @@ const SuperAdminDashboard = ({ initialTab }) => {
         }
       `}</style>
 
+      {/* MOBILE DRAWER BACKDROP */}
+      <div
+        className={`sa-drawer-backdrop${isMobileDrawerOpen ? ' sa-drawer-backdrop--visible' : ''}`}
+        onClick={() => setIsMobileDrawerOpen(false)}
+        aria-hidden="true"
+      />
+
       {/* 1. LEFT FULL-HEIGHT SIDEBAR NAVIGATION */}
-      <aside style={{
-        ...styles.sidebar,
-        width: '260px',
-        minWidth: '260px',
-        maxWidth: '260px',
-        height: '100vh',
-        background: '#FFFFFF',
-        borderRight: '1px solid #E2E8F0',
-        display: 'flex',
-        flexDirection: 'column',
-        flexShrink: 0,
-        zIndex: 90
-      }}>
+      <aside
+        className={`sa-sidebar${isMobileDrawerOpen ? ' sa-sidebar--open' : ''}`}
+        style={{
+          ...styles.sidebar,
+          width: '260px',
+          minWidth: '260px',
+          maxWidth: '260px',
+          height: '100svh',
+          background: '#FFFFFF',
+          borderRight: '1px solid #E2E8F0',
+          display: 'flex',
+          flexDirection: 'column',
+          flexShrink: 0,
+          zIndex: 90
+        }}
+        role="navigation"
+        aria-label="Main navigation"
+      >
         {/* Logo Group */}
-        <div style={{ padding: '16px 20px 14px', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid #F1F5F9' }}>
+        <div className="sa-sidebar-logo" style={{ padding: '16px 20px 14px', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid #F1F5F9' }}>
           <img 
             src={quroxaSidebarLogo} 
             alt="QUROXA" 
@@ -6583,7 +6621,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.08))'
             }}
           />
-          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div className="sa-sidebar-logo-text" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <span style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif", fontWeight: 900, fontSize: '17px', color: '#0F172A', letterSpacing: '0.03em', lineHeight: 1.1 }}>
               QUROXA
             </span>
@@ -6594,7 +6632,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
         </div>
 
         {/* Workspace Production status card */}
-        <div style={{
+        <div className="sa-sidebar-workspace-card" style={{
           margin: '12px 14px 16px',
           padding: '12px 14px',
           background: 'linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)',
@@ -6631,7 +6669,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           {filteredMenuGroups.map((group, groupIdx) => (
             <div key={group.group || groupIdx} style={{ marginBottom: '14px' }}>
               {group.group && (
-                <div style={{
+                <div className="sa-sidebar-group-title" style={{
                   fontSize: '9.5px',
                   fontWeight: 800,
                   color: '#94A3B8',
@@ -6654,7 +6692,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   return (
                     <button
                       key={item.id}
-                      onClick={() => { 
+                      className="sa-sidebar-nav-item"
+                      onClick={() => handleNavItemClick(() => { 
                         if (item.id === 'customer-support') {
                           setActiveTab('support-success');
                           setSupportSubTab('support-dashboard');
@@ -6673,7 +6712,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         } else {
                           setActiveTab(item.id); 
                         }
-                      }}
+                      })}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -6695,8 +6734,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       onMouseEnter={e => { if(!isActive) e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
                       onMouseLeave={e => { if(!isActive) e.currentTarget.style.backgroundColor = 'transparent'; }}
                     >
-                      <LucideIcon name={item.icon} style={{ width: '15px', height: '15px', color: isActive ? '#FFFFFF' : '#64748B' }} />
-                      <span>{item.label}</span>
+                      <LucideIcon name={item.icon} className="sa-sidebar-nav-icon" style={{ width: '15px', height: '15px', color: isActive ? '#FFFFFF' : '#64748B' }} />
+                      <span className="sa-sidebar-label">{item.label}</span>
                       {item.id === 'item-requests' && pendingRequestsCount > 0 && !isSidebarCollapsed && (
                         <span style={{
                           marginLeft: 'auto',
@@ -6722,6 +6761,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
         {/* Logout Button */}
         <div style={{ padding: '12px', borderTop: '1px solid #F1F5F9' }}>
           <button
+            className="sa-sidebar-nav-item"
             onClick={() => {
               performLogout(navigate);
             }}
@@ -6734,25 +6774,24 @@ const SuperAdminDashboard = ({ initialTab }) => {
             onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
             onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <LucideIcon name="log-out" style={{ width: '15px', height: '15px', color: '#EF4444' }} />
-            <span>Logout</span>
+            <LucideIcon name="log-out" className="sa-sidebar-nav-icon" style={{ width: '15px', height: '15px', color: '#EF4444' }} />
+            <span className="sa-sidebar-logout-label">Logout</span>
           </button>
         </div>
       </aside>
 
       {/* 2. RIGHT MAIN VIEWPORT (TOPBAR + CONTENT) */}
-      <div style={{
+      <div className="sa-main-viewport" style={{
         display: 'flex',
         flexDirection: 'column',
         flex: 1,
         width: 'calc(100% - 260px)',
         minWidth: 0,
-        height: '100vh',
+        height: '100svh',
         overflow: 'hidden'
       }}>
         {/* TOPBAR */}
-        {/* TOPBAR */}
-        <header style={{
+        <header className="sa-topbar" style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -6768,7 +6807,15 @@ const SuperAdminDashboard = ({ initialTab }) => {
           gap: '16px'
         }}>
           {/* Left: Contextual Page Title & Icon */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '180px', flexShrink: 0 }}>
+          <div className="sa-topbar-left" style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '180px', flexShrink: 0 }}>
+            <button
+              className="sa-menu-trigger sa-touch-target"
+              onClick={() => setIsMobileDrawerOpen(true)}
+              aria-label="Open navigation menu"
+              aria-expanded={isMobileDrawerOpen}
+            >
+              <LucideIcon name="menu" style={{ width: '18px', height: '18px' }} />
+            </button>
             <div style={{
               background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
               color: '#FFFFFF',
@@ -6784,14 +6831,14 @@ const SuperAdminDashboard = ({ initialTab }) => {
               <LucideIcon name={currentTabConfig.icon || 'layers'} style={{ width: '16px', height: '16px', color: '#FFFFFF' }} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <h1 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.2px', whiteSpace: 'nowrap' }}>
+              <h1 className="sa-topbar-title" style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.2px', whiteSpace: 'nowrap' }}>
                 {currentTabConfig.title || 'Platform Overview'}
               </h1>
             </div>
           </div>
 
           {/* Center: Contextual workspace controls or TopbarContext content */}
-          <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0, justifyContent: 'center' }}>
+          <div className="sa-topbar-center" style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0, justifyContent: 'center' }}>
             {topbarContent ? (
               topbarContent
             ) : baseTabId === 'hospitals' ? (
@@ -6838,7 +6885,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           </div>
 
           {/* Right Controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          <div className="sa-topbar-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             <button style={{ ...styles.iconButtonBadge, width: '32px', height: '32px' }} onClick={() => setIsNotificationOpen(true)} title="Notifications">
               <LucideIcon name="bell" style={{ width: '16px', height: '16px', color: '#64748B' }} />
               {notifications.filter(n => !n.isRead).length > 0 && (
@@ -6851,12 +6898,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
               )}
             </button>
             
-            <button style={{ ...styles.iconButtonBadge, width: '32px', height: '32px' }} onClick={() => setActiveTab('support-success')} title="Support & Help">
+            <button className="sa-topbar-hide-mobile" style={{ ...styles.iconButtonBadge, width: '32px', height: '32px' }} onClick={() => setActiveTab('support-success')} title="Support & Help">
               <LucideIcon name="help-circle" style={{ width: '16px', height: '16px', color: '#64748B' }} />
             </button>
 
             {isSuperAdmin && (
-              <button style={{ ...styles.iconButtonBadge, width: '32px', height: '32px' }} onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }} title="Platform Control">
+              <button className="sa-topbar-hide-mobile" style={{ ...styles.iconButtonBadge, width: '32px', height: '32px' }} onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }} title="Platform Control">
                 <LucideIcon name="layout-grid" style={{ width: '16px', height: '16px', color: '#64748B' }} />
               </button>
             )}
@@ -6964,9 +7011,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
         </header>
 
         {/* WORKSPACE CENTRAL CANVAS & RIGHT SIDEBAR PANEL */}
-        <div style={{ display: 'flex', flex: 1, width: '100%', minWidth: 0, minHeight: 0, height: 'calc(100vh - 52px)', overflow: 'hidden' }}>
+        <div className="sa-content-canvas" style={{ display: 'flex', flex: 1, width: '100%', minWidth: 0, minHeight: 0, height: 'calc(100svh - 52px)', overflow: 'hidden' }}>
           {/* CENTRAL APP PORT */}
-          <main style={{ ...styles.mainCanvas, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+          <main className="sa-main-canvas" style={{ ...styles.mainCanvas, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
 
             {/* Restricted Access Fallback */}
             {!isTabAllowed && (
@@ -6996,7 +7043,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             {isTabAllowed && activeTab === 'platform-control' && (
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
                 {/* SUB NAV BAR FOR CONTROL */}
-                <div style={{ ...styles.subNavbar, flexWrap: 'wrap' }}>
+                <div className="sa-sub-navbar" style={{ ...styles.subNavbar, flexWrap: 'wrap' }}>
                   <button style={ctrlSubTab === 'platform-dashboard' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setCtrlSubTab('platform-dashboard')}>Admin Dashboard</button>
                   <button style={ctrlSubTab === 'developer-center' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setCtrlSubTab('developer-center')}>Dev Center Sandbox</button>
                 </div>
@@ -7362,7 +7409,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 </div>
 
                 {/* 2. TOP 4 KPI CARDS (Matching Admin Dashboard Gradient & Sparkline Language) */}
-                <div style={{
+                <div className="sa-kpi-grid" style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
                   gap: '16px',
@@ -8210,7 +8257,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </button>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '20px', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+                <div className="sa-onboarding-grid" style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '20px', flex: 1, overflow: 'hidden', minHeight: 0 }}>
                   {/* LEFT COLUMN: ONBOARDING PIPELINE LIST */}
                   <div style={{ display: 'flex', flexDirection: 'column', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
                     <div style={{ padding: '14px 16px', borderBottom: '1px solid #F1F5F9', background: '#FAF9F6' }}>
@@ -8678,7 +8725,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* KPI Metrics Ribbon (FULL WIDTH 100%) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
+                    <div className="sa-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
                       {/* Card 1: TOTAL CLINICS (Blue Gradient) */}
                       <div
                         style={{
@@ -9037,9 +9084,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     </div>
 
                     {/* Lower Area: 2-Column Split Layout */}
-                    <div style={{ display: 'flex', gap: '24px', width: '100%', alignItems: 'flex-start' }}>
+                    <div className="sa-panel-split" style={{ display: 'flex', gap: '24px', width: '100%', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                       {/* Left Column (Main Area) */}
-                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                      <div style={{ flex: 1, minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
                         {/* Search and Filters Bar */}
                     <div style={{
                       display: 'flex',
@@ -9120,11 +9167,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     </div>
 
                     {/* Clinics Grid / Table */}
-                    <div style={{
+                    <div className="sa-table-scroll-wrapper" style={{
                       background: '#FFFFFF',
                       borderRadius: '18px',
                       border: '1px solid #E2E8F0',
-                      overflow: 'hidden',
+                      overflowX: 'auto',
+                      overflowY: 'hidden',
                       boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(0,0,0,0.02)'
                     }}>
                       <table style={styles.dataTable}>
@@ -9771,7 +9819,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             {/* DEPARTMENTS VIEW */}
             {isTabAllowed && activeTab === 'departments' && (
               <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-                <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                <div className="sa-sub-navbar" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
                   <button style={activeTab === 'hr-mgmt' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('hr-mgmt')}>Team Directory</button>
                   <button style={activeTab === 'departments' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('departments')}>Departments</button>
                   <button style={activeTab === 'platform-roles' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('platform-roles')}>Security Roles</button>
@@ -9935,7 +9983,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             {/* PLATFORM ROLES VIEW */}
             {isTabAllowed && activeTab === 'platform-roles' && (
               <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-                <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                <div className="sa-sub-navbar" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
                   <button style={activeTab === 'hr-mgmt' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('hr-mgmt')}>Team Directory</button>
                   <button style={activeTab === 'departments' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('departments')}>Departments</button>
                   <button style={activeTab === 'platform-roles' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('platform-roles')}>Security Roles</button>
@@ -9945,7 +9993,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   <h2 style={styles.cardHeaderTitle}>Roles & Security Permissions</h2>
                   <p style={styles.cardHeaderSub}>Define global system access levels, check RBAC compliance, and provision tenant staff role coverage schemas.</p>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '16px' }}>
+                <div className="sa-two-col-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '16px' }}>
                   <div style={{ background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '20px' }}>
                     <h3 style={{ fontSize: '14px', fontWeight: 800, marginBottom: '14px' }}>RBAC Role Registry</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -9978,7 +10026,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             {/* AUDIT LOGS VIEW */}
             {isTabAllowed && activeTab === 'platform-audits' && (
               <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-                <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                <div className="sa-sub-navbar" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
                   <button style={activeTab === 'hr-mgmt' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('hr-mgmt')}>Team Directory</button>
                   <button style={activeTab === 'departments' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('departments')}>Departments</button>
                   <button style={activeTab === 'platform-roles' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('platform-roles')}>Security Roles</button>
@@ -12782,7 +12830,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* 4 Financial KPI Cards — Hospital Admin Inspired Gradient Design */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+                  <div className="sa-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                     {/* Card 1: Total Invoiced (Blue Gradient with Sparkline) */}
                     <div 
                       style={{
@@ -13994,7 +14042,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
               return (
               <div style={styles.pageBodyScroll}>
-                <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                <div className="sa-sub-navbar" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
                   <button style={activeTab === 'hr-mgmt' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('hr-mgmt')}>Team Directory</button>
                   <button style={activeTab === 'departments' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('departments')}>Departments</button>
                   <button style={activeTab === 'platform-roles' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('platform-roles')}>Security Roles</button>
@@ -14015,7 +14063,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 </div>
 
                 {/* Stats Row */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginTop: '16px' }}>
+                <div className="sa-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginTop: '16px' }}>
                   {platformRoles.map(role => {
                     const count = employees.filter(e => e.platformRole === role.key).length;
                     return (
@@ -14033,7 +14081,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 </div>
 
                 {/* Employee Table */}
-                <div style={{ overflowX: 'auto', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '16px' }}>
+                <div className="sa-table-scroll-wrapper" style={{ overflowX: 'auto', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '16px' }}>
                   <table style={{ ...styles.dataTable, width: '100%' }}>
                     <thead>
                       <tr>
@@ -15821,7 +15869,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           </main>
 
           {/* COLLAPSIBLE RIGHT PRODUCTIVITY SIDEBAR */}
-          <aside style={{ 
+          <aside className="sa-right-sidebar" style={{ 
             ...styles.rightSidebar, 
             width: isRightSidebarCollapsed ? '0' : '300px', 
             minWidth: isRightSidebarCollapsed ? '0' : '300px',
@@ -17298,8 +17346,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
       {/* SUPERADMIN PROFILE & PASSWORD SETTINGS MODAL */}
       {isProfileModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999 }}>
-          <div style={{ width: '460px', background: '#FFFFFF', borderRadius: '16px', padding: '28px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', border: '1px solid #E2E8F0' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '16px' }}>
+          <div style={{ width: '460px', maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', background: '#FFFFFF', borderRadius: '16px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', border: '1px solid #E2E8F0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -17646,12 +17694,12 @@ const styles = {
   meetingTime: { fontSize: '9.5px', fontWeight: 800, color: '#2563EB' },
   meetingTitle: { fontSize: '11.5px', fontWeight: 750, color: '#334155' },
   drawerOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.3)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', justifyWindow: 'flex-end', justifyContent: 'flex-end' },
-  drawerContainer: { width: '400px', height: '100%', background: '#FFFFFF', display: 'flex', flexDirection: 'column' },
+  drawerContainer: { width: '400px', maxWidth: '95vw', height: '100%', background: '#FFFFFF', display: 'flex', flexDirection: 'column' },
   drawerHeader: { display: 'flex', alignItems: 'center', justifyWindow: 'space-between', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #E2E8F0' },
   drawerTitle: { fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 },
   drawerCloseBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' },
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.3)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyWindow: 'center', justifyContent: 'center' },
-  searchModalContainer: { width: '600px', background: '#FFFFFF', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.3)', backdropFilter: 'blur(4px)', zIndex: 500, display: 'flex', alignItems: 'center', justifyWindow: 'center', justifyContent: 'center' },
+  searchModalContainer: { width: '600px', maxWidth: '95vw', background: '#FFFFFF', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
   searchModalHeader: { display: 'flex', alignItems: 'center', height: '52px', borderBottom: '1px solid #E2E8F0', padding: '0 16px', gap: '12px' },
   searchModalInput: { flex: 1, height: '100%', border: 'none', fontSize: '13px', outline: 'none' },
   chartWrapper: { position: 'relative', marginTop: '10px' },

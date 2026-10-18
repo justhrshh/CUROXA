@@ -1440,7 +1440,7 @@ router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req
       return res.status(404).json({ error: "Hospital not found." });
     }
 
-    const adminUser = await User.findOne({
+    let adminUser = await User.findOne({
       tenantId: {
         $in: [
           hospital.code,
@@ -1453,40 +1453,86 @@ router.put('/hospitals/:id/admin', requireRole('Onboarding Manager'), async (req
       role: 'admin'
     }).select('+password_hash');
 
+    const bcrypt = require('bcrypt');
+
     if (!adminUser) {
-      return res.status(404).json({ error: "Hospital admin user not found." });
-    }
-
-    if (hasUsername) {
-      const cleanUsername = String(adminUsername).trim();
-      if (cleanUsername.toLowerCase() !== (adminUser.staff_id || '').toLowerCase()) {
-        const usernameExists = await User.findOne({
-          staff_id: cleanUsername.toLowerCase(),
-          _id: { $ne: adminUser._id }
+      // If no admin user exists yet for this hospital, provision the initial administrator account
+      if (!hasUsername || !hasPassword) {
+        return res.status(400).json({
+          error: "No admin user exists for this hospital yet. Please provide both an Admin Username and Password to configure admin credentials."
         });
-        if (usernameExists) {
-          return res.status(400).json({ error: `Username/Staff ID '${cleanUsername}' is already in use by another account.` });
-        }
-        const previousStaffId = adminUser.staff_id;
-        adminUser.staff_id = cleanUsername;
-        if (adminUser.phone === previousStaffId && /^\+?[0-9]{7,15}$/.test(cleanUsername)) {
-          adminUser.phone = cleanUsername;
-        }
       }
-    }
 
-    if (hasPassword) {
+      const cleanUsername = String(adminUsername).trim();
       const cleanPassword = typeof adminPassword === 'string' ? adminPassword.trim() : '';
+
       if (cleanPassword.length < 6) {
         return res.status(400).json({ error: "Password must be at least 6 characters long." });
       }
-      const bcrypt = require('bcrypt');
+
+      // Check if username/staff_id or phone is already taken by another account in the system
+      const usernameExists = await User.findOne({
+        $or: [
+          { staff_id: cleanUsername.toLowerCase() },
+          { phone: cleanUsername }
+        ]
+      });
+      if (usernameExists) {
+        return res.status(400).json({
+          error: `Username/Staff ID '${cleanUsername}' is already in use by another account.`
+        });
+      }
+
       const salt = await bcrypt.genSalt(10);
-      adminUser.password_hash = await bcrypt.hash(cleanPassword, salt);
-      adminUser.password_version = (adminUser.password_version || 0) + 1;
-      adminUser.hasSetPassword = true;
+      const password_hash = await bcrypt.hash(cleanPassword, salt);
+
+      adminUser = await User.create({
+        tenantId: hospital.code,
+        staff_id: cleanUsername,
+        password_hash,
+        role: 'admin',
+        name: hospital.signatoryName || `${hospital.name} Administrator`,
+        email: hospital.contactEmail || `admin@${hospital.code}.com`,
+        phone: /^\+?[0-9]{7,15}$/.test(cleanUsername) ? cleanUsername : (hospital.contactPhone || ''),
+        hasSetPassword: true,
+        isSetupComplete: true,
+        password_version: 1
+      });
+    } else {
+      // Existing admin user - update credentials
+      if (hasUsername) {
+        const cleanUsername = String(adminUsername).trim();
+        if (cleanUsername.toLowerCase() !== (adminUser.staff_id || '').toLowerCase()) {
+          const usernameExists = await User.findOne({
+            $or: [
+              { staff_id: cleanUsername.toLowerCase() },
+              { phone: cleanUsername }
+            ],
+            _id: { $ne: adminUser._id }
+          });
+          if (usernameExists) {
+            return res.status(400).json({ error: `Username/Staff ID '${cleanUsername}' is already in use by another account.` });
+          }
+          const previousStaffId = adminUser.staff_id;
+          adminUser.staff_id = cleanUsername;
+          if (adminUser.phone === previousStaffId && /^\+?[0-9]{7,15}$/.test(cleanUsername)) {
+            adminUser.phone = cleanUsername;
+          }
+        }
+      }
+
+      if (hasPassword) {
+        const cleanPassword = typeof adminPassword === 'string' ? adminPassword.trim() : '';
+        if (cleanPassword.length < 6) {
+          return res.status(400).json({ error: "Password must be at least 6 characters long." });
+        }
+        const salt = await bcrypt.genSalt(10);
+        adminUser.password_hash = await bcrypt.hash(cleanPassword, salt);
+        adminUser.password_version = (adminUser.password_version || 0) + 1;
+        adminUser.hasSetPassword = true;
+      }
+      await adminUser.save();
     }
-    await adminUser.save();
 
     if (hasPassword) {
       // Broadcast session revocation event via socket

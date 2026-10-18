@@ -752,7 +752,7 @@ export default function HospitalProfileView({
     <div style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '10px 4px 80px 4px', margin: 0, display: 'flex', flexDirection: 'column' }}>
       {/* Toast Banner */}
       {toast.show && (
-        <div style={{
+        <div className="sa-toast" style={{
           position: 'fixed',
           top: '24px',
           right: '24px',
@@ -776,7 +776,7 @@ export default function HospitalProfileView({
 
       {/* Confirmation Modal */}
       {confirmModal && (
-        <div style={{
+        <div className="sa-modal-overlay" style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(15, 23, 42, 0.65)',
@@ -787,7 +787,7 @@ export default function HospitalProfileView({
           justifyContent: 'center',
           padding: '20px'
         }}>
-          <div style={{
+          <div className="sa-modal-container" style={{
             background: '#FFFFFF',
             borderRadius: '16px',
             padding: '28px',
@@ -855,7 +855,7 @@ export default function HospitalProfileView({
       )}
 
       {/* Top Breadcrumb & Back Action */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+      <div className="sa-profile-breadcrumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
         <button
           type="button"
           onClick={handleBackToClinics}
@@ -908,7 +908,7 @@ export default function HospitalProfileView({
       </div>
 
       {/* Hero Header Card */}
-      <div style={{
+      <div className="sa-profile-header" style={{
         background: '#FFFFFF',
         borderRadius: '16px',
         padding: '24px 28px',
@@ -923,7 +923,7 @@ export default function HospitalProfileView({
         width: '100%',
         boxSizing: 'border-box'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+        <div className="sa-profile-header-identity" style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
           <div style={{
             width: '64px',
             height: '64px',
@@ -977,7 +977,7 @@ export default function HospitalProfileView({
         </div>
 
         {/* Header Action Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div className="sa-profile-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {portalUrl ? (
             <>
               <a
@@ -1066,7 +1066,7 @@ export default function HospitalProfileView({
       </div>
 
       {/* Navigation Tabs / Pills */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '4px', width: '100%', boxSizing: 'border-box' }}>
+      <div className="sa-profile-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '4px', width: '100%', boxSizing: 'border-box' }}>
         {[
           { id: 'overview', label: 'Overview & Branding', icon: 'image' },
           { id: 'modules', label: 'Subscription & Modules', icon: 'sliders' },
@@ -1098,7 +1098,7 @@ export default function HospitalProfileView({
               }}
             >
               <LucideIcon name={tab.icon} style={{ width: '15px', height: '15px' }} />
-              <span>{tab.label}</span>
+              <span className="tab-label">{tab.label}</span>
             </button>
           );
         })}

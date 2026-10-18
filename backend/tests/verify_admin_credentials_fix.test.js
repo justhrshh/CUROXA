@@ -155,6 +155,15 @@ async function runSuite() {
     password_version: 1
   });
 
+  // Setup test tenant C with NO admin user yet (like Hayat Medical Center initially)
+  const tenantCCode = `test_hosp_cred_c_${Date.now()}`;
+  const hospNoAdmin = await SuperAdminHospital.create({
+    name: 'Hospital C No Admin Test',
+    code: tenantCCode,
+    hospitalId: `HSP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+    status: 'Active'
+  });
+
   try {
     // -----------------------------------------------------------------
     // TEST 1: Missing input validation (empty body / neither username nor password)
@@ -314,11 +323,57 @@ async function runSuite() {
     });
     assert(loginWithSecondNewPass.status === 200, `Login with second updated password returns 200 OK (Got ${loginWithSecondNewPass.status})`);
 
+    // -----------------------------------------------------------------
+    // TEST 12: Provision initial admin when hospital has no admin user yet
+    // -----------------------------------------------------------------
+    console.log('\n--- TEST 12: Provision initial admin when hospital has no admin user yet ---');
+    // Attempt with missing fields
+    const missingFieldsRes = await httpRequest(port, 'PUT', `/api/superadmin/hospitals/${hospNoAdmin._id}/admin`, {
+      adminUsername: 'newadmin999'
+    }, {
+      'Authorization': `Bearer ${superAdminToken}`
+    });
+    assert(missingFieldsRes.status === 400, `Provisioning without password rejected with 400 (Got ${missingFieldsRes.status})`);
+
+    // Attempt with collision against another tenant's user (userB.staff_id)
+    const collisionRes = await httpRequest(port, 'PUT', `/api/superadmin/hospitals/${hospNoAdmin._id}/admin`, {
+      adminUsername: userB.staff_id,
+      adminPassword: 'SecurePassword123!'
+    }, {
+      'Authorization': `Bearer ${superAdminToken}`
+    });
+    assert(collisionRes.status === 400, `Collision against another hospital's user rejected with 400 (Got ${collisionRes.status})`);
+    assert(collisionRes.body.error && collisionRes.body.error.includes('already in use'), `Collision error message: "${collisionRes.body.error}"`);
+
+    // Verify other tenant's user (userB) was NOT modified or moved
+    const checkUserB = await User.findById(userB._id);
+    assert(checkUserB.tenantId === hospB.code, `Other tenant's user remains isolated in tenant ${checkUserB.tenantId}`);
+
+    // Successful provisioning with unique credentials
+    const provisionRes = await httpRequest(port, 'PUT', `/api/superadmin/hospitals/${hospNoAdmin._id}/admin`, {
+      adminUsername: 'hosp_c_admin_123',
+      adminPassword: 'InitialPassword@2026'
+    }, {
+      'Authorization': `Bearer ${superAdminToken}`
+    });
+    assert(provisionRes.status === 200, `Initial admin provisioning succeeds with 200 OK (Got ${provisionRes.status})`);
+
+    // Verify newly provisioned admin can log in through the normal hospital login flow
+    const provisionedLoginRes = await httpRequest(port, 'POST', '/api/auth/login', {
+      staff_id: 'hosp_c_admin_123',
+      password: 'InitialPassword@2026',
+      hospitalId: hospNoAdmin.hospitalId
+    });
+    assert(provisionedLoginRes.status === 200, `Newly provisioned admin logs in successfully with 200 OK (Got ${provisionedLoginRes.status})`);
+    assert(provisionedLoginRes.body.user && provisionedLoginRes.body.user.role === 'admin', `Provisioned user role is admin: ${provisionedLoginRes.body.user?.role}`);
+    assert(provisionedLoginRes.body.user && provisionedLoginRes.body.user.tenantId === hospNoAdmin.code, `Provisioned user tenantId matches hospital code: ${provisionedLoginRes.body.user?.tenantId}`);
+
   } finally {
     // Cleanup test records
     console.log('\n[CLEANUP] Cleaning up test records...');
-    await SuperAdminHospital.deleteMany({ _id: { $in: [hospA._id, hospB._id] } });
+    await SuperAdminHospital.deleteMany({ _id: { $in: [hospA._id, hospB._id, hospNoAdmin?._id].filter(Boolean) } });
     await User.deleteMany({ _id: { $in: [userA._id, userB._id] } });
+    await User.deleteMany({ tenantId: hospNoAdmin?.code });
     server.close();
     console.log('[CLEANUP] Cleaned up.');
   }
