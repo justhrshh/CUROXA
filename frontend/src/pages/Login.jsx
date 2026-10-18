@@ -64,6 +64,17 @@ const Login = () => {
   };
 
   useEffect(() => {
+    // Add login-page-active class to html and body to restore natural scrolling on login page
+    document.documentElement.classList.add('login-page-active');
+    document.body.classList.add('login-page-active');
+
+    return () => {
+      document.documentElement.classList.remove('login-page-active');
+      document.body.classList.remove('login-page-active');
+    };
+  }, []);
+
+  useEffect(() => {
     localStorage.removeItem('curoxa_superadmin_session');
     if (!hospital) {
       localStorage.removeItem('curoxa_active_portal_id');
@@ -345,8 +356,8 @@ const Login = () => {
       {/* ── 3. MOBILE ADAPTIVE BACKDROP ── */}
       <div className="lg:hidden absolute inset-0 bg-[#f8fbfe]/88 backdrop-blur-[2px] pointer-events-none z-[1]" />
 
-      {/* ── 6. HEADER (Item 2) ── */}
-      <header className="lg:absolute top-0 left-0 right-0 z-20 w-full max-w-[1600px] mx-auto px-8 sm:px-12 lg:px-16 pt-7 sm:pt-9 flex items-center justify-between pointer-events-none">
+      {/* ── 6. HEADER (Item 2) — Desktop Only (Mobile displays logo directly inside compact card) ── */}
+      <header className="hidden lg:flex lg:absolute top-0 left-0 right-0 z-20 w-full max-w-[1600px] mx-auto px-8 sm:px-12 lg:px-16 pt-7 sm:pt-9 items-center justify-between pointer-events-none">
         {/* Top-Left Logo */}
         <div className="pointer-events-auto">
           {hospital ? (
@@ -372,11 +383,11 @@ const Login = () => {
         </div>
       </header>
 
-      {/* ── 7. MAIN HERO & LOGIN SECTION (Item 1, 3, 4, 7, 9) ── */}
-      <main className="relative z-10 w-full max-w-[1600px] mx-auto flex-1 min-h-screen flex flex-col lg:flex-row items-center justify-between px-8 sm:px-12 lg:px-16 py-6 lg:py-8 gap-8 lg:gap-12">
+      {/* ── 7. MAIN HERO & LOGIN SECTION ── */}
+      <main className="relative z-10 w-full max-w-[1600px] mx-auto flex-1 min-h-[100dvh] lg:min-h-screen flex flex-col lg:flex-row items-center justify-center lg:justify-between px-3.5 sm:px-8 lg:px-16 py-4 sm:py-8 lg:py-8 gap-6 lg:gap-12">
 
-        {/* ── LEFT HERO SECTION (Item 3, 4, 7) ── */}
-        <div className="w-full lg:w-[56%] flex flex-col justify-center pt-2 lg:pt-14 pb-4">
+        {/* ── LEFT HERO SECTION — Desktop & Large Tablet Only (Hidden on Mobile) ── */}
+        <div className="hidden lg:flex w-full lg:w-[56%] flex-col justify-center pt-2 lg:pt-14 pb-4">
           
           {/* ── TEXT & 6 ICONS CONTAINER WITH LOCALIZED SOFT WHITE BLUR ── */}
           <div className="relative max-w-[580px] xl:max-w-[620px]">
@@ -416,7 +427,7 @@ const Login = () => {
               </p>
             </div>
 
-            {/* ── 6 FEATURE ICONS (Item 4: Exact 3 columns × 2 rows) ── */}
+            {/* ── 6 FEATURE ICONS (Exact 3 columns × 2 rows) ── */}
             {!hospital && (
               <div className="mt-9 grid grid-cols-3 gap-x-6 sm:gap-x-8 gap-y-6 max-w-[430px]">
                 
@@ -484,7 +495,7 @@ const Login = () => {
             )}
           </div>
 
-          {/* ── BOTTOM-LEFT TRUST ELEMENT (Item 7: Heart icon + 2 lines) ── */}
+          {/* ── BOTTOM-LEFT TRUST ELEMENT ── */}
           <div className="mt-12 flex items-center gap-2.5 text-slate-600">
             <div className="w-8 h-8 rounded-full bg-white/90 shadow-sm border border-slate-100 flex items-center justify-center text-[#0ea5e9]">
               <Heart className="w-4 h-4" />
@@ -497,17 +508,17 @@ const Login = () => {
 
         </div>
 
-        {/* ── RIGHT LOGIN CARD (Item 9: ~520px wide white rounded card) ── */}
-        <div className="w-full lg:w-[44%] xl:w-[42%] flex flex-col items-center lg:items-end my-auto">
+        {/* ── RIGHT LOGIN CARD — Centered on Mobile, Right-Aligned on Desktop ── */}
+        <div className="w-full lg:w-[44%] xl:w-[42%] flex flex-col items-center lg:items-end my-auto py-2 sm:py-4">
 
-          <div className="w-full max-w-[500px] xl:max-w-[515px] bg-white rounded-3xl shadow-[0_25px_70px_rgba(15,31,61,0.08)] border border-slate-100/90 p-7 sm:p-8 lg:p-9 relative z-10 login-panel">
+          <div className="w-full max-w-[420px] sm:max-w-[480px] xl:max-w-[515px] bg-white rounded-2xl sm:rounded-3xl shadow-[0_15px_40px_rgba(15,31,61,0.06)] lg:shadow-[0_25px_70px_rgba(15,31,61,0.08)] border border-slate-100/90 p-4.5 sm:p-7 lg:p-9 relative z-10 login-panel">
             
             {/* Centered Quroxa Logo */}
-            <div className="flex flex-col items-center mb-5">
+            <div className="flex flex-col items-center mb-4 sm:mb-5">
               {hospital ? (
                 <>
-                  <HospitalBrandLogo hospital={hospital} size={56} borderRadius={16} fontSize={22} className="mb-2 shadow-sm" />
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight text-center">
+                  <HospitalBrandLogo hospital={hospital} size={50} borderRadius={14} fontSize={20} className="mb-2 shadow-sm" />
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight text-center">
                     {hospital.name}
                   </h2>
                   <div className="flex items-center gap-1.5 mt-1">
@@ -521,18 +532,18 @@ const Login = () => {
                 <img 
                   src={curoxaLogo} 
                   alt="Quroxa" 
-                  className="h-14 sm:h-16 lg:h-[66px] w-auto object-contain mx-auto" 
+                  className="h-12 sm:h-16 lg:h-[66px] w-auto object-contain mx-auto" 
                   onError={(e) => { e.target.src = '/quroxa_new_logo.png'; }} 
                 />
               )}
             </div>
 
             {/* Left-Aligned "Sign In" and Subtitle (Exact hierarchy from reference) */}
-            <div className="text-left mb-5">
-              <h2 className="text-[22px] font-bold text-[#0f1f3d] tracking-tight">
+            <div className="text-left mb-4 sm:mb-5">
+              <h2 className="text-xl sm:text-[22px] font-bold text-[#0f1f3d] tracking-tight">
                 {hospital ? 'Staff & Clinical Sign In' : 'Sign In'}
               </h2>
-              <p className="text-[14px] sm:text-[15px] text-slate-500 font-normal mt-1.5">
+              <p className="text-[13px] sm:text-[15px] text-slate-500 font-normal mt-1 sm:mt-1.5">
                 {hospital
                   ? 'Enter your credentials to access this clinic portal'
                   : 'Enter your credentials to access your account'}
@@ -568,7 +579,7 @@ const Login = () => {
                   value={staffId} 
                   onChange={(e) => setStaffId(e.target.value.toLowerCase().slice(0, 10))} 
                   placeholder="Username" 
-                  className="w-full h-12 pl-11 pr-4 bg-slate-50/70 hover:bg-slate-50 focus:bg-white rounded-xl border border-slate-300 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-500 placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition shadow-2xs" 
+                  className="w-full h-11 sm:h-12 pl-11 pr-4 bg-slate-50/70 hover:bg-slate-50 focus:bg-white rounded-xl border border-slate-300 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-500 placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition shadow-2xs" 
                 />
               </div>
 
@@ -583,7 +594,7 @@ const Login = () => {
                   value={password} 
                   onChange={(e) => setPassword(e.target.value)} 
                   placeholder="Password" 
-                  className="w-full h-12 pl-11 pr-11 bg-slate-50/70 hover:bg-slate-50 focus:bg-white rounded-xl border border-slate-300 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-500 placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition shadow-2xs" 
+                  className="w-full h-11 sm:h-12 pl-11 pr-11 bg-slate-50/70 hover:bg-slate-50 focus:bg-white rounded-xl border border-slate-300 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-500 placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition shadow-2xs" 
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
                   <button 
@@ -633,7 +644,7 @@ const Login = () => {
               <button 
                 type="submit" 
                 disabled={loading} 
-                className="w-full h-12 mt-2 rounded-xl bg-gradient-to-r from-[#1a73e8] to-[#0ea5e9] hover:from-[#1558b0] hover:to-[#0284c7] text-white font-bold text-base shadow-md shadow-blue-500/20 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full h-11 sm:h-12 mt-2 rounded-xl bg-gradient-to-r from-[#1a73e8] to-[#0ea5e9] hover:from-[#1558b0] hover:to-[#0284c7] text-white font-bold text-base shadow-md shadow-blue-500/20 active:scale-[0.99] transition duration-150 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <>
@@ -652,14 +663,14 @@ const Login = () => {
               <button 
                 type="button" 
                 onClick={handlePatientPortalNavigation} 
-                className="w-full h-11 mt-3 rounded-xl bg-emerald-50/80 hover:bg-emerald-100/90 border border-emerald-200/90 text-emerald-800 font-semibold text-[13px] flex items-center justify-center gap-2 transition active:scale-[0.98] shadow-sm"
+                className="w-full h-10 sm:h-11 mt-2.5 sm:mt-3 rounded-xl bg-emerald-50/80 hover:bg-emerald-100/90 border border-emerald-200/90 text-emerald-800 font-semibold text-[13px] flex items-center justify-center gap-2 transition active:scale-[0.98] shadow-sm"
               >
                 <User className="w-4 h-4 text-emerald-600" />
                 <span>{hospital ? `${hospital.name} Patient Portal` : 'Patient Portal Login'}</span>
               </button>
 
               {/* ── CARD FOOTER: Copyright & Legal links inside panel ── */}
-              <div className="pt-5 mt-5 text-center">
+              <div className="pt-4 sm:pt-5 mt-4 sm:mt-5 text-center">
                 <p className="text-[12px] sm:text-[13px] text-slate-400 font-normal">
                   © 2025 Quroxa. All rights reserved.
                 </p>
@@ -684,8 +695,8 @@ const Login = () => {
       
       {/* Server Wake-Up Splash Overlay */}
       {showServerSplash && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl border border-slate-100 flex flex-col items-center">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl border border-slate-100 flex flex-col items-center my-auto">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-cyan-500 text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-blue-500/30 mb-4">
               Q
             </div>
@@ -700,8 +711,8 @@ const Login = () => {
 
       {/* Password Changed Notice Modal */}
       {showPasswordChangedModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl border border-slate-100 flex flex-col items-center">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl border border-slate-100 flex flex-col items-center my-auto">
             <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mb-4">
               <Lock className="w-7 h-7" />
             </div>
@@ -721,8 +732,8 @@ const Login = () => {
 
       {/* Forgot Password Modal */}
       {showForgotModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-7 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 my-auto">
             <div className="text-center mb-6">
               <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
                 <KeyRound className="w-6 h-6" />

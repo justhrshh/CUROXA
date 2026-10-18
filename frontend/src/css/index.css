@@ -2097,7 +2097,7 @@ div[style*="textAlign: center"] {
   background: #94A3B8;
 }
 
-/* Lock viewport — only inner main-content areas should scroll */
+/* Lock viewport — only inner main-content areas should scroll (exempt login page) */
 html {
   overflow: hidden !important;
   zoom: 0.9;
@@ -2110,6 +2110,30 @@ body {
   background-color: #F8FAFC !important;
   height: 100% !important;
   margin: 0 !important;
+}
+
+/* Exemption for login page to allow natural full-page vertical scrolling across all screen sizes and mobile keyboards */
+html.login-page-active,
+body.login-page-active {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  height: auto !important;
+  min-height: 100% !important;
+  zoom: 1 !important;
+}
+
+html.login-page-active .min-h-screen,
+html.login-page-active [style*="min-height: 100vh"],
+html.login-page-active [style*="min-height:100vh"] {
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
+}
+
+html.login-page-active .h-screen,
+html.login-page-active [style*="height: 100vh"],
+html.login-page-active [style*="height:100vh"] {
+  height: 100vh !important;
+  height: 100dvh !important;
 }
 
 /* Scale full height containers under zoom 0.9 to occupy exactly 100% physical height (100 / 0.9 = 111.11vh) */
