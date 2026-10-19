@@ -827,6 +827,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(true);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
     if (routeHospitalId) return 'hospital-profile';
     return initialTab || DEFAULT_TAB_MAP[currentUserPlatformRole] || 'dashboard';
@@ -835,27 +836,30 @@ const SuperAdminDashboard = ({ initialTab }) => {
   if (typeof window !== 'undefined') {
     window.__quroxa_setActiveTab = setActiveTab;
     window.__quroxa_activeTab = activeTab;
+    window.__quroxa_openNotifications = () => setIsNotificationOpen(true);
+    window.__quroxa_closeNotifications = () => setIsNotificationOpen(false);
   }
 
-  // Mobile drawer: close on Escape + lock body scroll when open
+  // Mobile drawer & Notification center: close on Escape + lock body scroll when open
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isMobileDrawerOpen) {
-        setIsMobileDrawerOpen(false);
+      if (e.key === 'Escape') {
+        if (isNotificationOpen) setIsNotificationOpen(false);
+        if (isMobileDrawerOpen) setIsMobileDrawerOpen(false);
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isMobileDrawerOpen]);
+  }, [isMobileDrawerOpen, isNotificationOpen]);
 
   useEffect(() => {
-    if (isMobileDrawerOpen) {
+    if (isMobileDrawerOpen || isNotificationOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [isMobileDrawerOpen]);
+  }, [isMobileDrawerOpen, isNotificationOpen]);
 
   // Close mobile drawer on navigation
   const handleNavItemClick = (callback) => {
@@ -1413,7 +1417,6 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [broadcastForm, setBroadcastForm] = useState({ audience: 'All Clinic Administrators', subject: '', message: '' });
 
   // Global overlay drawers / search / action states
-  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
@@ -1518,6 +1521,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [isLogoEditModalOpen, setIsLogoEditModalOpen] = useState(false);
   const [logoEditHosp, setLogoEditHosp] = useState(null);
   const [logoEditDraft, setLogoEditDraft] = useState('');
+  const [isMobilePreviewOpen, setIsMobilePreviewOpen] = useState(false);
 
   if (typeof window !== 'undefined') {
     window.__quroxa_openWizard = (mockHospital) => {
@@ -3052,6 +3056,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
   // Active Clinics Database (Step 4 Core)
   const [hospitals, setHospitals] = useState([]);
+  if (typeof window !== 'undefined') {
+    window.__quroxa_setHospitals = setHospitals;
+  }
   const [isTogglingMap, setIsTogglingMap] = useState({});
   const [billingCycle, setBillingCycle] = useState('monthly');
   const [tempPasswords, setTempPasswords] = useState({});
@@ -4477,7 +4484,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               </div>
 
               {wizardStep === 1 && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: '20px', alignItems: 'start' }}>
+                <div className="sa-wizard-step1-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: '20px', alignItems: 'start' }}>
                   {/* LEFT COLUMN: Hospital Core, Contact & Location Details */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
@@ -4499,7 +4506,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         </span>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '12px' }}>
+                      <div className="sa-form-row" style={{ display: 'flex', gap: '12px' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <FloatingInput
                             compact
@@ -4653,7 +4660,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         </span>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '12px' }}>
+                      <div className="sa-form-row" style={{ display: 'flex', gap: '12px' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <FloatingInput
                             compact
@@ -4674,7 +4681,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           />
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '12px' }}>
+                      <div className="sa-form-row" style={{ display: 'flex', gap: '12px' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <FloatingInput
                             compact
@@ -4721,7 +4728,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         </span>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '12px' }}>
+                      <div className="sa-form-row" style={{ display: 'flex', gap: '12px' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <FloatingInput
                             compact
@@ -4742,7 +4749,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           />
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '12px' }}>
+                      <div className="sa-form-row" style={{ display: 'flex', gap: '12px' }}>
                         <div style={{ flex: 1.2, minWidth: 0 }}>
                           <FloatingInput
                             compact
@@ -5130,7 +5137,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>Choose licensing tiers. Doctors/staff limits and module configurations adapt automatically.</p>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="sa-plans-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     {plans.map(p => {
                       const isSelected = wizardHospital.subscriptionPlan === p.matchKey;
                       return (
@@ -5394,7 +5401,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* Horizontal Metric Counters */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                  <div className="sa-provisioning-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
                     {(() => {
                       const usersCount = wizardHospital.provisionedUsers?.length || 0;
                       const activeUsers = wizardHospital.provisionedUsers?.filter(u => u.status === 'Active').length || 0;
@@ -5680,7 +5687,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* Metrics Cards Row */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+                  <div className="sa-provisioning-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
                     
                     {/* Card 1: Readiness Score */}
                     <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
@@ -6072,23 +6079,50 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
               </aside>
             ) : (
-              <aside className="sa-onboarding-preview-aside" style={{ 
-                width: '310px', 
-                background: 'linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)', 
-                border: '1px solid #DBEAFE', 
-                borderRadius: '16px', 
-                padding: '12px 14px', 
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: '10px', 
-                flexShrink: 0, 
-                boxShadow: '0 20px 45px -10px rgba(37, 99, 235, 0.08), 0 1px 3px rgba(0,0,0,0.02)' 
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB', boxShadow: '0 0 8px rgba(37, 99, 235, 0.5)' }}></div>
-                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
-                    Live Tenant Mockup Preview
-                  </div>
+              <div className="sa-preview-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="sa-preview-toggle-mobile"
+                  onClick={() => setIsMobilePreviewOpen(v => !v)}
+                  style={{
+                    display: 'none',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%',
+                    padding: '10px 14px',
+                    background: '#EFF6FF',
+                    border: '1px solid #BFDBFE',
+                    borderRadius: '12px',
+                    fontSize: '12.5px',
+                    fontWeight: 700,
+                    color: '#2563EB',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                    <LucideIcon name="eye" style={{ width: '15px', height: '15px' }} />
+                    {isMobilePreviewOpen ? 'Hide Live Tenant Preview' : 'Show Live Tenant Mockup Preview'}
+                  </span>
+                  <LucideIcon name={isMobilePreviewOpen ? "chevron-up" : "chevron-down"} style={{ width: '15px', height: '15px' }} />
+                </button>
+
+                <aside className={`sa-onboarding-preview-aside ${!isMobilePreviewOpen ? 'sa-preview-collapsed-mobile' : ''}`} style={{ 
+                  width: '310px', 
+                  background: 'linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)', 
+                  border: '1px solid #DBEAFE', 
+                  borderRadius: '16px', 
+                  padding: '12px 14px', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '10px', 
+                  flexShrink: 0, 
+                  boxShadow: '0 20px 45px -10px rgba(37, 99, 235, 0.08), 0 1px 3px rgba(0,0,0,0.02)' 
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB', boxShadow: '0 0 8px rgba(37, 99, 235, 0.5)' }}></div>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+                      Live Tenant Mockup Preview
+                    </div>
                 </div>
 
                 {/* Tenant Card */}
@@ -6261,12 +6295,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
                 </div>
               </aside>
+            </div>
             )}
           </div>
         </div>
 
         {/* Sticky Bottom Action Bar */}
-        <footer style={{
+        <footer className="sa-onboarding-footer" style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -7231,7 +7266,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             {/* SCREEN LAYOUT CONSISTENCY: MAIN SAAS OVERVIEW (STEP 2) */}
             {isTabAllowed && activeTab === 'dashboard' && (
-              <div style={{ ...styles.pageBodyScroll, gap: '22px', position: 'relative', paddingBottom: '90px' }}>
+              <div style={{ ...styles.pageBodyScroll, gap: '22px', position: 'relative', paddingBottom: '24px' }}>
                 {/* Ambient background atmosphere glows */}
                 <div style={{
                   position: 'absolute',
@@ -8174,87 +8209,6 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       );
                     })()}
                   </div>
-                </div>
-
-                {/* 4. FLOATING PLATFORM OPERATIONS COMMAND DOCK */}
-                <div className="sa-command-dock">
-                  {[
-                    { title: 'Onboard Clinic', desc: 'Register tenant', icon: 'hospital', action: () => setActiveTab('hospital-onboarding'), color: '#2563EB', bg: '#EFF6FF' },
-                    { title: 'Pricing Settings', desc: 'Subscriptions', icon: 'layers', action: () => setActiveTab('subscription-mgmt'), color: '#7C3AED', bg: '#F5F3FF' },
-                    { title: 'Broadcast Alerts', desc: 'Notify tenants', icon: 'megaphone', action: () => setActiveTab('broadcast-center'), color: '#D97706', bg: '#FEF3C7' },
-                    { title: 'Customer Support', desc: 'SLA tickets', icon: 'headset', action: () => { setActiveTab('support-success'); setSupportSubTab('support-dashboard'); }, color: '#DB2777', bg: '#FDF2F8' },
-                    { title: 'Finance & Billing', desc: 'Invoices', icon: 'wallet', action: () => { setActiveTab('finance-mgmt'); setFinSubTab('finance-dashboard'); }, color: '#059669', bg: '#F0FDF4' },
-                    { title: 'Employees & HR', desc: 'Staff directory', icon: 'users-2', action: () => { setActiveTab('hr-mgmt'); setHrSubTab('employees-list'); }, color: '#0D9488', bg: '#F0FDFA' },
-                    { title: 'Analytics Reports', desc: 'BI telemetry', icon: 'bar-chart-3', action: () => { setActiveTab('bi-reports'); setBiSubTab('bi-dashboard'); }, color: '#4F46E5', bg: '#EEF2FF' }
-                  ].map(item => (
-                    <button
-                      key={item.title}
-                      onClick={item.action}
-                      title={`${item.title} — ${item.desc}`}
-                      style={{
-                        width: '38px',
-                        height: '38px',
-                        borderRadius: '12px',
-                        border: '1px solid transparent',
-                        background: 'transparent',
-                        color: item.color,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        transition: 'all 0.18s ease-in-out',
-                        position: 'relative'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = item.bg;
-                        e.currentTarget.style.borderColor = item.color + '40';
-                        e.currentTarget.style.transform = 'translateY(-2px) scale(1.06)';
-                        e.currentTarget.style.boxShadow = `0 4px 10px ${item.color}25`;
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'transparent';
-                        e.currentTarget.style.borderColor = 'transparent';
-                        e.currentTarget.style.transform = 'none';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
-                    >
-                      <LucideIcon name={item.icon} style={{ width: '17px', height: '17px' }} />
-                    </button>
-                  ))}
-
-                  {/* Dock Divider */}
-                  <div style={{ width: '1px', height: '22px', background: '#E2E8F0', margin: '0 4px' }} />
-
-                  {/* Platform Settings Button in Dock */}
-                  <button
-                    onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }}
-                    title="Platform Control — System telemetry & configuration"
-                    style={{
-                      width: '38px',
-                      height: '38px',
-                      borderRadius: '12px',
-                      border: '1px solid transparent',
-                      background: 'transparent',
-                      color: '#475569',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      transition: 'all 0.18s ease-in-out'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#F1F5F9';
-                      e.currentTarget.style.borderColor = '#CBD5E1';
-                      e.currentTarget.style.transform = 'translateY(-2px) scale(1.06)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.borderColor = 'transparent';
-                      e.currentTarget.style.transform = 'none';
-                    }}
-                  >
-                    <LucideIcon name="settings-2" style={{ width: '17px', height: '17px' }} />
-                  </button>
                 </div>
               </div>
             )}
@@ -9333,48 +9287,31 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   </a>
                                 )}
                                 <button
+                                  type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleOpenEditModal(hosp);
+                                    navigate(`/super-admin/clinics/${targetId}`);
                                   }}
                                   style={{
                                     flex: 1,
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    gap: '5px',
-                                    padding: '7px 10px',
+                                    gap: '6px',
+                                    padding: '8px 12px',
                                     borderRadius: '8px',
-                                    fontSize: '11.5px',
-                                    fontWeight: 650,
+                                    fontSize: '12px',
+                                    fontWeight: 700,
                                     background: '#F0FDF4',
                                     color: '#16A34A',
                                     border: '1px solid #BBF7D0',
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease'
                                   }}
+                                  title="Edit Clinic Profile & Settings"
                                 >
                                   <LucideIcon name="pencil" style={{ width: '13px', height: '13px' }} />
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => navigate(`/super-admin/clinics/${targetId}`)}
-                                  style={{
-                                    flex: 1,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '5px',
-                                    padding: '7px 10px',
-                                    borderRadius: '8px',
-                                    fontSize: '11.5px',
-                                    fontWeight: 650,
-                                    background: '#2563EB',
-                                    color: '#FFFFFF',
-                                    border: 'none',
-                                    cursor: 'pointer'
-                                  }}
-                                >
-                                  Manage
+                                  <span>Edit Clinic</span>
                                 </button>
                               </div>
                             </div>
@@ -16177,143 +16114,185 @@ const SuperAdminDashboard = ({ initialTab }) => {
       </div>
 
       {/* NOTIFICATIONS DRAWER */}
-      <div style={{ ...styles.drawerOverlay, background: isNotificationOpen ? 'rgba(15, 23, 42, 0.3)' : 'rgba(15, 23, 42, 0)', backdropFilter: isNotificationOpen ? 'blur(4px)' : 'blur(0)', pointerEvents: isNotificationOpen ? 'auto' : 'none', transition: 'background 0.3s ease, backdrop-filter 0.3s ease' }} onClick={() => setIsNotificationOpen(false)}>
-        <div style={{ ...styles.drawerContainer, display: 'flex', flexDirection: 'column', transform: isNotificationOpen ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }} onClick={e => e.stopPropagation()}>
-            <div style={styles.drawerHeader}>
-              <h3 style={styles.drawerTitle}>Notification Center</h3>
-              <button style={styles.drawerCloseBtn} onClick={() => setIsNotificationOpen(false)}>
-                <LucideIcon name="x" style={{ width: '18px', height: '18px' }} />
-              </button>
+      <div 
+        className="sa-notification-drawer-overlay"
+        style={{ 
+          ...styles.drawerOverlay, 
+          background: isNotificationOpen ? 'rgba(15, 23, 42, 0.45)' : 'rgba(15, 23, 42, 0)', 
+          backdropFilter: isNotificationOpen ? 'blur(4px)' : 'blur(0)', 
+          pointerEvents: isNotificationOpen ? 'auto' : 'none', 
+          transition: 'background 0.3s ease, backdrop-filter 0.3s ease' 
+        }} 
+        onClick={() => setIsNotificationOpen(false)}
+      >
+        <div 
+          className="sa-notification-drawer"
+          style={{ 
+            ...styles.drawerContainer, 
+            display: 'flex', 
+            flexDirection: 'column', 
+            transform: isNotificationOpen ? 'translateX(0)' : 'translateX(100%)', 
+            transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)' 
+          }} 
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="sa-notification-header" style={{ ...styles.drawerHeader, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #E2E8F0', background: '#FFFFFF' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <LucideIcon name="bell" style={{ width: '18px', height: '18px', color: '#2563EB' }} />
+              <h3 style={{ ...styles.drawerTitle, margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Notification Center</h3>
             </div>
+            <button 
+              style={{ ...styles.drawerCloseBtn, width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', cursor: 'pointer', color: '#64748B' }} 
+              onClick={() => setIsNotificationOpen(false)}
+              aria-label="Close Notification Center"
+            >
+              <LucideIcon name="x" style={{ width: '18px', height: '18px' }} />
+            </button>
+          </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>
-                {notifications.filter(n => !n.isRead).length} unread
-              </span>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                {notifications.filter(n => !n.isRead).length > 0 && (
-                  <button onClick={markAllAsRead} style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '12px', fontWeight: 600, cursor: 'pointer', padding: 0 }}>
-                    Mark all read
-                  </button>
-                )}
-                {notifications.length > 0 && (
-                  <button onClick={clearAllNotifications} style={{ background: 'none', border: 'none', color: '#EF4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', padding: 0 }}>
-                    Clear all
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-              {notifications.length === 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '200px', color: '#94A3B8' }}>
-                  <LucideIcon name="bell-off" style={{ width: '40px', height: '40px', marginBottom: '12px' }} />
-                  <span style={{ fontSize: '13.5px', fontWeight: 500 }}>No notifications found</span>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {notifications.map(n => {
-                    let iconName = 'bell';
-                    let iconColor = '#64748B';
-                    let bgColor = '#F1F5F9';
-                    if (n.category === 'onboarding') {
-                      iconName = 'user-plus';
-                      iconColor = '#3B82F6';
-                      bgColor = '#EFF6FF';
-                    } else if (n.category === 'support') {
-                      iconName = 'help-circle';
-                      iconColor = '#EF4444';
-                      bgColor = '#FEF2F2';
-                    } else if (n.category === 'billing') {
-                      iconName = 'credit-card';
-                      iconColor = '#10B981';
-                      bgColor = '#ECFDF5';
-                    } else if (n.category === 'system') {
-                      iconName = 'database';
-                      iconColor = '#F59E0B';
-                      bgColor = '#FFFBEB';
-                    } else if (n.category === 'lead') {
-                      iconName = 'briefcase';
-                      iconColor = '#8B5CF6';
-                      bgColor = '#F5F3FF';
-                    }
-
-                    return (
-                      <div key={n._id} style={{
-                        display: 'flex',
-                        gap: '12px',
-                        padding: '12px',
-                        borderRadius: '8px',
-                        background: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        position: 'relative',
-                        boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                        opacity: n.isRead ? 0.75 : 1
-                      }}>
-                        <div style={{
-                          width: '36px',
-                          height: '36px',
-                          borderRadius: '50%',
-                          background: bgColor,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0
-                        }}>
-                          <LucideIcon name={iconName} style={{ width: '18px', height: '18px', color: iconColor }} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#1E293B', margin: 0 }}>
-                              {n.title}
-                            </h4>
-                            <span style={{ fontSize: '10px', color: '#94A3B8' }}>
-                              {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                          <p style={{ fontSize: '12px', color: '#475569', margin: '4px 0 0 0', lineHeight: 1.4 }}>
-                            {n.message}
-                          </p>
-                          {!n.isRead && (
-                            <button
-                              onClick={() => markAsRead(n._id)}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#3B82F6',
-                                fontSize: '11px',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                padding: '4px 0 0 0',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}
-                            >
-                              <LucideIcon name="check" style={{ width: '12px', height: '12px' }} />
-                              Mark as read
-                            </button>
-                          )}
-                        </div>
-                        {!n.isRead && (
-                          <div style={{
-                            position: 'absolute',
-                            top: '12px',
-                            right: '12px',
-                            width: '6px',
-                            height: '6px',
-                            borderRadius: '50%',
-                            background: '#3B82F6'
-                          }} />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+          <div className="sa-notification-actions-bar" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC', alignItems: 'center' }}>
+            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>
+              {notifications.filter(n => !n.isRead).length} unread notification{notifications.filter(n => !n.isRead).length === 1 ? '' : 's'}
+            </span>
+            <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+              {notifications.filter(n => !n.isRead).length > 0 && (
+                <button 
+                  onClick={markAllAsRead} 
+                  style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: '4px 6px', borderRadius: '4px' }}
+                >
+                  Mark all read
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button 
+                  onClick={clearAllNotifications} 
+                  style={{ background: 'none', border: 'none', color: '#EF4444', fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: '4px 6px', borderRadius: '4px' }}
+                >
+                  Clear all
+                </button>
               )}
             </div>
           </div>
+
+          <div className="sa-notification-list" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {notifications.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '220px', color: '#94A3B8' }}>
+                <LucideIcon name="bell-off" style={{ width: '42px', height: '42px', marginBottom: '12px', opacity: 0.6 }} />
+                <span style={{ fontSize: '14px', fontWeight: 600 }}>No notifications found</span>
+                <span style={{ fontSize: '12px', color: '#CBD5E1', marginTop: '4px' }}>You're all caught up!</span>
+              </div>
+            ) : (
+              notifications.map(n => {
+                let iconName = 'bell';
+                let iconColor = '#64748B';
+                let bgColor = '#F1F5F9';
+                if (n.category === 'onboarding') {
+                  iconName = 'user-plus';
+                  iconColor = '#3B82F6';
+                  bgColor = '#EFF6FF';
+                } else if (n.category === 'support') {
+                  iconName = 'help-circle';
+                  iconColor = '#EF4444';
+                  bgColor = '#FEF2F2';
+                } else if (n.category === 'billing') {
+                  iconName = 'credit-card';
+                  iconColor = '#10B981';
+                  bgColor = '#ECFDF5';
+                } else if (n.category === 'system') {
+                  iconName = 'database';
+                  iconColor = '#F59E0B';
+                  bgColor = '#FFFBEB';
+                } else if (n.category === 'lead') {
+                  iconName = 'briefcase';
+                  iconColor = '#8B5CF6';
+                  bgColor = '#F5F3FF';
+                }
+
+                return (
+                  <div 
+                    key={n._id} 
+                    className="sa-notification-card"
+                    style={{
+                      display: 'flex',
+                      gap: '12px',
+                      padding: '12px 14px',
+                      borderRadius: '10px',
+                      background: n.isRead ? '#F8FAFC' : '#FFFFFF',
+                      border: n.isRead ? '1px solid #E2E8F0' : '1px solid #BFDBFE',
+                      position: 'relative',
+                      boxShadow: n.isRead ? 'none' : '0 2px 8px rgba(37, 99, 235, 0.06)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '10px',
+                      background: bgColor,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <LucideIcon name={iconName} style={{ width: '18px', height: '18px', color: iconColor }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <h4 style={{ fontSize: '13px', fontWeight: 750, color: '#0F172A', margin: 0, flex: 1, minWidth: '120px', wordBreak: 'break-word' }}>
+                          {n.title}
+                        </h4>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                          {!n.isRead && (
+                            <span 
+                              title="Unread" 
+                              style={{ 
+                                width: '7px', 
+                                height: '7px', 
+                                borderRadius: '50%', 
+                                background: '#2563EB', 
+                                display: 'inline-block',
+                                boxShadow: '0 0 6px rgba(37, 99, 235, 0.5)' 
+                              }} 
+                            />
+                          )}
+                          <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                            {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                      <p style={{ fontSize: '12px', color: '#475569', margin: '4px 0 0 0', lineHeight: 1.45, wordBreak: 'break-word' }}>
+                        {n.message}
+                      </p>
+                      {!n.isRead && (
+                        <div style={{ marginTop: '6px' }}>
+                          <button
+                            onClick={() => markAsRead(n._id)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#2563EB',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              padding: '2px 0',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <LucideIcon name="check" style={{ width: '13px', height: '13px' }} />
+                            Mark as read
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
+      </div>
 
       {/* SEARCH MODAL */}
       {isSearchModalOpen && (
