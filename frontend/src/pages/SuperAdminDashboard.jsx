@@ -832,6 +832,11 @@ const SuperAdminDashboard = ({ initialTab }) => {
     return initialTab || DEFAULT_TAB_MAP[currentUserPlatformRole] || 'dashboard';
   });
 
+  if (typeof window !== 'undefined') {
+    window.__quroxa_setActiveTab = setActiveTab;
+    window.__quroxa_activeTab = activeTab;
+  }
+
   // Mobile drawer: close on Escape + lock body scroll when open
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1513,6 +1518,27 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [isLogoEditModalOpen, setIsLogoEditModalOpen] = useState(false);
   const [logoEditHosp, setLogoEditHosp] = useState(null);
   const [logoEditDraft, setLogoEditDraft] = useState('');
+
+  if (typeof window !== 'undefined') {
+    window.__quroxa_openWizard = (mockHospital) => {
+      setWizardHospital(mockHospital || {
+        _id: 'mock-wiz-1',
+        name: 'Apollo Health Supercenter',
+        subscriptionPlan: 'standard',
+        currentStep: 1,
+        stepData: {},
+        adminName: 'Dr. Sarah Connor',
+        adminEmail: 's.connor@quroxa.io',
+        adminPhone: '9876543210'
+      });
+      setWizardStep(1);
+      setIsOnboardingWizardOpen(true);
+    };
+    window.__quroxa_closeWizard = () => {
+      setIsOnboardingWizardOpen(false);
+      setWizardHospital(null);
+    };
+  }
   const [logoEditNameDraft, setLogoEditNameDraft] = useState('');
   const [logoEditError, setLogoEditError] = useState('');
   const [logoEditSaving, setLogoEditSaving] = useState(false);
@@ -4053,12 +4079,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
     };
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%', maxWidth: '100%', background: 'radial-gradient(ellipse at top left, #EEF2FF 0%, #F8FAFC 45%, #F1F5F9 100%)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100%', maxWidth: '100%', background: 'radial-gradient(ellipse at top left, #EEF2FF 0%, #F8FAFC 45%, #F1F5F9 100%)', overflowX: 'hidden' }}>
         {/* Top Header */}
-        <header style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+        <header className="sa-onboarding-header" style={{
           background: 'linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)',
           borderBottom: '1px solid #E2E8F0',
           padding: '14px 28px',
@@ -4125,7 +4148,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           </div>
 
           {/* Top Right Action Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="sa-onboarding-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               type="button"
               onClick={handleCancelWizard}
@@ -4210,8 +4233,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
         {/* Main Scrollable Body */}
         <div style={{ flex: 1, padding: '22px 28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
-          {/* Horizontal Multi-Step Stepper Ribbon */}
-          <div style={{
+          {/* Horizontal Multi-Step Stepper Ribbon (Desktop) */}
+          <div className="sa-stepper-desktop-only" style={{
             background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
             border: '1px solid #DBEAFE',
             borderRadius: '16px',
@@ -4329,6 +4352,21 @@ const SuperAdminDashboard = ({ initialTab }) => {
             })}
           </div>
 
+          {/* Mobile Compact Stepper */}
+          <div className="sa-stepper-mobile-only">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Step {wizardStep} of {steps.length}
+              </span>
+              <span style={{ fontSize: '12.5px', fontWeight: 750, color: '#0F172A' }}>
+                {steps.find(s => s.id === wizardStep)?.title}
+              </span>
+            </div>
+            <div style={{ width: '100%', height: '6px', background: '#EFF6FF', borderRadius: '3px', overflow: 'hidden', border: '1px solid #DBEAFE' }}>
+              <div style={{ width: `${(wizardStep / steps.length) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #2563EB, #4F46E5)', borderRadius: '3px', transition: 'width 0.3s ease' }} />
+            </div>
+          </div>
+
           {/* Legend & Instructions Ribbon */}
           <div style={{
             display: 'flex',
@@ -4336,9 +4374,11 @@ const SuperAdminDashboard = ({ initialTab }) => {
             alignItems: 'center',
             padding: '2px 4px',
             fontSize: '11px',
-            color: '#64748B'
+            color: '#64748B',
+            flexWrap: 'wrap',
+            gap: '8px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#EF4444', boxShadow: '0 0 6px rgba(239, 68, 68, 0.4)' }}></span>
                 <strong style={{ color: '#334155' }}>Required</strong>
@@ -4363,7 +4403,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           </div>
 
           {/* 2-Column Split: Main Form & Preview */}
-          <div style={{ display: 'flex', gap: wizardStep === 1 ? '16px' : '24px', alignItems: 'flex-start' }}>
+          <div className="sa-onboarding-split" style={{ display: 'flex', gap: wizardStep === 1 ? '16px' : '24px', alignItems: 'flex-start' }}>
             {/* Form Main Area (Left) */}
             <div 
               onKeyDown={(e) => {
@@ -5937,7 +5977,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             {/* Right Side: Deployment Readiness (Step 5) OR Live Tenant Mockup Preview */}
             {wizardStep === 5 ? (
-              <aside style={{ width: '320px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '18px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', flexShrink: 0, boxShadow: '0 4px 15px rgba(15, 23, 42, 0.02)' }}>
+              <aside className="sa-onboarding-preview-aside" style={{ width: '320px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '18px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', flexShrink: 0, boxShadow: '0 4px 15px rgba(15, 23, 42, 0.02)' }}>
                 
                 {/* Circular gauge */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '8px', position: 'relative' }}>
@@ -6032,7 +6072,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
               </aside>
             ) : (
-              <aside style={{ 
+              <aside className="sa-onboarding-preview-aside" style={{ 
                 width: '310px', 
                 background: 'linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)', 
                 border: '1px solid #DBEAFE', 
@@ -7215,7 +7255,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 }} />
 
                 {/* 1. HERO / PLATFORM COMMAND SEARCH & ACTIONS BAR */}
-                <div style={{
+                <div className="sa-hero-command-bar" style={{
                   background: 'linear-gradient(135deg, #EEF2FF 0%, #F8FAFC 50%, #FAF5FF 100%)',
                   borderRadius: '18px',
                   padding: '18px 24px',
@@ -7224,11 +7264,6 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   boxSizing: 'border-box',
                   border: '1px solid #C7D2FE',
                   boxShadow: '0 2px 8px rgba(79,70,229,0.05)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '16px',
                   position: 'relative',
                   overflow: 'hidden',
                   zIndex: 1
@@ -7238,7 +7273,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   <div style={{ position: 'absolute', bottom: '-30px', right: '120px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(124,58,237,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
                   {/* Left: Prominent Global Search Bar */}
-                  <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: '280px', maxWidth: '520px', position: 'relative' }}>
+                  <div className="sa-hero-search-wrapper" style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: '240px', maxWidth: '520px', position: 'relative' }}>
                     <LucideIcon name="search" style={{ position: 'absolute', left: '14px', width: '17px', height: '17px', color: '#6366F1', zIndex: 1 }} />
                     <input
                       type="text"
@@ -7278,7 +7313,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* Right: Action Buttons Grouped Together */}
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
+                  <div className="sa-hero-actions-wrapper" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
                     <button
                       onClick={() => { setActiveTab('platform-control'); setCtrlSubTab('platform-dashboard'); }}
                       style={{
@@ -7409,16 +7444,14 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 </div>
 
                 {/* 2. TOP 4 KPI CARDS (Matching Admin Dashboard Gradient & Sparkline Language) */}
-                <div className="sa-kpi-grid" style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                  gap: '16px',
+                <div className="sa-kpi-grid sa-hero-kpi-grid" style={{
                   width: '100%',
                   position: 'relative',
                   zIndex: 1
                 }}>
                   {/* Card 1: TOTAL CLINICS (Electric Blue Gradient with Radial Glow) */}
                   <div 
+                    className="sa-kpi-card sa-kpi-card-compact"
                     onClick={() => setActiveTab('hospitals')}
                     style={{
                       padding: '20px',
@@ -7497,6 +7530,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                   {/* Card 2: ACTIVE CLINICS (Teal / Emerald Gradient with Radial Glow) */}
                   <div 
+                    className="sa-kpi-card sa-kpi-card-compact"
                     onClick={() => setActiveTab('hospitals')}
                     style={{
                       padding: '20px',
@@ -7575,6 +7609,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                   {/* Card 3: OPEN TICKETS (Rose / Red Gradient with Radial Glow) */}
                   <div 
+                    className="sa-kpi-card sa-kpi-card-compact"
                     onClick={() => { setActiveTab('support-success'); setSupportSubTab('support-dashboard'); }}
                     style={{
                       padding: '20px',
@@ -7656,6 +7691,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     const mrrTotal = invoices.reduce((acc, inv) => acc + (inv.status === 'Paid' ? inv.amount : 0), 0);
                     return (
                       <div 
+                        className="sa-kpi-card sa-kpi-card-compact"
                         onClick={() => { setActiveTab('finance-mgmt'); setFinSubTab('finance-dashboard'); }}
                         style={{
                           padding: '20px',
@@ -7737,7 +7773,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
 
                 {/* 3. MAIN CONTENT ASYMMETRIC GRID (LEFT ~66% / RIGHT ~34%) */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.85fr) minmax(0, 1fr)', gap: '22px', alignItems: 'start', position: 'relative', zIndex: 1 }}>
+                <div className="sa-dashboard-main-grid" style={{ alignItems: 'start', position: 'relative', zIndex: 1 }}>
                   {/* LEFT COLUMN: RECENT SYSTEM EVENTS & TELEMETRY TIMELINE */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div style={{
@@ -7747,7 +7783,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       padding: '24px 26px',
                       boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(0,0,0,0.02)'
                     }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#2563EB', display: 'inline-block', boxShadow: '0 0 0 3px rgba(37,99,235,0.2)' }} />
@@ -7864,7 +7900,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   border: index === 0 ? '1px solid #E2E8F0' : '1px solid #F1F5F9',
                                   borderLeft: index === 0 ? `3px solid ${markerColor}` : '1px solid #F1F5F9',
                                   transition: 'all 0.15s ease-in-out',
-                                  gap: '12px'
+                                  gap: '12px',
+                                  flexWrap: 'wrap'
                                 }}
                                 onMouseEnter={(e) => {
                                   e.currentTarget.style.background = '#FFFFFF';
@@ -7877,7 +7914,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                   e.currentTarget.style.borderColor = index === 0 ? '#E2E8F0' : '#F1F5F9';
                                 }}
                                 >
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, flex: 1 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                       <span style={{
                                         fontSize: '9.5px',
@@ -7897,7 +7934,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                                         {log.user || 'superadmin'}
                                       </span>
                                     </div>
-                                    <span style={{ fontSize: '12.5px', color: '#1E293B', fontWeight: 550, lineHeight: '1.4' }}>
+                                    <span style={{ fontSize: '12.5px', color: '#1E293B', fontWeight: 550, lineHeight: '1.4', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                                       {log.details}
                                     </span>
                                   </div>
@@ -7931,9 +7968,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       <span style={{ fontSize: '11.5px', color: '#64748B', display: 'block', marginBottom: '20px' }}>Real-time infrastructure telemetry &amp; resource checks</span>
                       
                       {/* Telemetry Gauge Rings */}
-                      <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', marginBottom: '22px' }}>
+                      <div className="sa-telemetry-gauges" style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', marginBottom: '22px' }}>
                         {/* CPU Load Gauge */}
-                        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div className="sa-telemetry-gauge-item" style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           <div style={{ position: 'relative', width: '82px', height: '82px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <svg width="82" height="82" viewBox="0 0 36 36">
                               <path
@@ -7965,7 +8002,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         </div>
 
                         {/* Memory Gauge */}
-                        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div className="sa-telemetry-gauge-item" style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           <div style={{ position: 'relative', width: '82px', height: '82px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <svg width="82" height="82" viewBox="0 0 36 36">
                               <path
@@ -8003,7 +8040,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           const slaRate = totalTickets > 0 ? Math.round(((totalTickets - breachedTickets) / totalTickets) * 100) : 100;
                           
                           return (
-                            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <div className="sa-telemetry-gauge-item" style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                               <div style={{ position: 'relative', width: '82px', height: '82px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <svg width="82" height="82" viewBox="0 0 36 36">
                                   <path
@@ -8140,23 +8177,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 </div>
 
                 {/* 4. FLOATING PLATFORM OPERATIONS COMMAND DOCK */}
-                <div style={{
-                  position: 'fixed',
-                  bottom: '22px',
-                  left: 'calc(260px + (100vw - 260px) / 2)',
-                  transform: 'translateX(-50%)',
-                  zIndex: 150,
-                  background: 'rgba(255, 255, 255, 0.92)',
-                  backdropFilter: 'blur(20px)',
-                  WebkitBackdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(203, 213, 225, 0.85)',
-                  borderRadius: '24px',
-                  padding: '6px 12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 12px 32px -4px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.04)'
-                }}>
+                <div className="sa-command-dock">
                   {[
                     { title: 'Onboard Clinic', desc: 'Register tenant', icon: 'hospital', action: () => setActiveTab('hospital-onboarding'), color: '#2563EB', bg: '#EFF6FF' },
                     { title: 'Pricing Settings', desc: 'Subscriptions', icon: 'layers', action: () => setActiveTab('subscription-mgmt'), color: '#7C3AED', bg: '#F5F3FF' },
@@ -8725,9 +8746,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* KPI Metrics Ribbon (FULL WIDTH 100%) */}
-                    <div className="sa-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
+                    <div className="sa-kpi-grid sa-hospitals-kpi-grid">
                       {/* Card 1: TOTAL CLINICS (Blue Gradient) */}
                       <div
+                        className="sa-kpi-card sa-kpi-card-compact"
                         style={{
                           padding: '16px 18px',
                           borderRadius: '18px',
@@ -8798,6 +8820,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                       {/* Card 2: ACTIVE TENANTS (Emerald / Teal Gradient) */}
                       <div
+                        className="sa-kpi-card sa-kpi-card-compact"
                         style={{
                           padding: '16px 18px',
                           borderRadius: '18px',
@@ -8868,6 +8891,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                       {/* Card 3: STANDARD PREMIUM (Purple / Violet Gradient) */}
                       <div
+                        className="sa-kpi-card sa-kpi-card-compact"
                         style={{
                           padding: '16px 18px',
                           borderRadius: '18px',
@@ -8938,6 +8962,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                       {/* Card 4: ENTERPRISE ELITE (Amber / Orange Gradient) */}
                       <div
+                        className="sa-kpi-card sa-kpi-card-compact"
                         style={{
                           padding: '16px 18px',
                           borderRadius: '18px',
@@ -9008,6 +9033,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                       {/* Card 5: EXPIRED PLANS (Rose / Red Alert Gradient with Sparkline) */}
                       <div
+                        className="sa-kpi-card sa-kpi-card-compact"
                         onClick={() => {
                           setHospFilterTab(prev => prev === 'Plan Expired' ? 'All' : 'Plan Expired');
                           setHospCurrentPage(1);
@@ -9088,7 +9114,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       {/* Left Column (Main Area) */}
                       <div style={{ flex: 1, minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
                         {/* Search and Filters Bar */}
-                    <div style={{
+                    <div className="sa-search-filter-bar" style={{
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
@@ -9099,7 +9125,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       boxShadow: '0 4px 15px rgba(15, 23, 42, 0.03)'
                     }}>
                       {/* Search bar */}
-                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '340px' }}>
+                      <div className="sa-search-wrapper" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                         <LucideIcon name="search" style={{ position: 'absolute', left: '12px', width: '15px', height: '15px', color: '#64748B' }} />
                         <input 
                           type="text" 
@@ -9136,7 +9162,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       </div>
 
                       {/* Filter Pills */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <div className="sa-filter-pills" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         {['All', 'Active', 'Suspended', 'Plan Expired', 'High Health', 'Needs Attention'].map(tab => {
                           const isActive = hospFilterTab === tab;
                           return (
@@ -9166,8 +9192,199 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       </div>
                     </div>
 
+                    {/* Dedicated Mobile Cards for Clinics */}
+                    <div className="sa-clinic-mobile-cards">
+                      {paginatedHospitals.length === 0 ? (
+                        <div style={{ padding: '24px', textAlign: 'center', color: '#64748B', background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
+                          No clinics match current filters.
+                        </div>
+                      ) : (
+                        paginatedHospitals.map(hosp => {
+                          const initials = hosp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                          const healthColor = hosp.healthScore >= 90 ? '#10B981' : hosp.healthScore >= 80 ? '#F59E0B' : '#EF4444';
+                          const isPlanExpired = isHospPlanExpired(hosp);
+                          const isSuspended = hosp.status === 'Suspended';
+                          const targetId = hosp.hospitalId || hosp._id || hosp.code;
+
+                          return (
+                            <div 
+                              key={`mob-${hosp._id || hosp.id}`} 
+                              className="sa-clinic-card"
+                              onClick={() => navigate(`/super-admin/clinics/${targetId}`)}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <div className="sa-clinic-card-header">
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                                  <div style={{
+                                    width: '36px',
+                                    height: '36px',
+                                    borderRadius: '10px',
+                                    background: '#EFF6FF',
+                                    color: '#2563EB',
+                                    border: '1px solid #DBEAFE',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontWeight: 700,
+                                    fontSize: '13px',
+                                    flexShrink: 0,
+                                    overflow: 'hidden'
+                                  }}>
+                                    {hosp.logo && hosp.logo !== 'H' && (hosp.logo.startsWith('data:') || hosp.logo.startsWith('http://') || hosp.logo.startsWith('https://') || hosp.logo.startsWith('/uploads/')) ? (
+                                      <img src={hosp.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                                    ) : (
+                                      initials
+                                    )}
+                                  </div>
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {hosp.name}
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                                      {hosp.code} • {hosp.limits?.storageUsed || 0} GB used
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                <span style={{
+                                  fontSize: '11px',
+                                  fontWeight: 800,
+                                  color: healthColor,
+                                  background: hosp.healthScore >= 90 ? '#ECFDF5' : hosp.healthScore >= 80 ? '#FFFBEB' : '#FEF2F2',
+                                  padding: '3px 8px',
+                                  borderRadius: '8px',
+                                  border: `1px solid ${healthColor}30`,
+                                  flexShrink: 0
+                                }}>
+                                  {hosp.healthScore || 100}% Health
+                                </span>
+                              </div>
+
+                              <div className="sa-clinic-card-badges">
+                                {hosp.hospitalId && (
+                                  <span style={{
+                                    fontFamily: 'monospace',
+                                    fontWeight: 700,
+                                    fontSize: '10.5px',
+                                    background: '#F1F5F9',
+                                    color: '#0F172A',
+                                    padding: '2px 7px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #CBD5E1'
+                                  }}>
+                                    {hosp.hospitalId}
+                                  </span>
+                                )}
+                                <span style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: 700,
+                                  padding: '2px 7px',
+                                  borderRadius: '6px',
+                                  background: isSuspended ? '#FEE2E2' : '#EFF6FF',
+                                  color: isSuspended ? '#DC2626' : '#2563EB',
+                                  border: isSuspended ? '1px solid #FECACA' : '1px solid #DBEAFE'
+                                }}>
+                                  {isSuspended ? 'Suspended' : (hosp.status || 'Active')}
+                                </span>
+                                {isPlanExpired && (
+                                  <span style={{
+                                    fontSize: '10.5px',
+                                    fontWeight: 750,
+                                    padding: '2px 7px',
+                                    borderRadius: '6px',
+                                    background: '#FEF2F2',
+                                    color: '#DC2626',
+                                    border: '1px solid #FECACA'
+                                  }}>
+                                    Plan Expired
+                                  </span>
+                                )}
+                                {hosp.csm && (
+                                  <span style={{ fontSize: '10.5px', color: '#64748B', background: '#F8FAFC', padding: '2px 7px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                                    CS: {hosp.csm}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="sa-clinic-card-actions" onClick={e => e.stopPropagation()}>
+                                {hosp.hospitalId && (
+                                  <a
+                                    href={`${getPublicFrontendUrl()}/portal/${hosp.hospitalId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{
+                                      flex: 1,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: '5px',
+                                      padding: '7px 10px',
+                                      borderRadius: '8px',
+                                      fontSize: '11.5px',
+                                      fontWeight: 650,
+                                      textDecoration: 'none',
+                                      background: '#EFF6FF',
+                                      color: '#2563EB',
+                                      border: '1px solid #BFDBFE'
+                                    }}
+                                  >
+                                    <LucideIcon name="external-link" style={{ width: '13px', height: '13px' }} />
+                                    Portal
+                                  </a>
+                                )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEditModal(hosp);
+                                  }}
+                                  style={{
+                                    flex: 1,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '5px',
+                                    padding: '7px 10px',
+                                    borderRadius: '8px',
+                                    fontSize: '11.5px',
+                                    fontWeight: 650,
+                                    background: '#F0FDF4',
+                                    color: '#16A34A',
+                                    border: '1px solid #BBF7D0',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <LucideIcon name="pencil" style={{ width: '13px', height: '13px' }} />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => navigate(`/super-admin/clinics/${targetId}`)}
+                                  style={{
+                                    flex: 1,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '5px',
+                                    padding: '7px 10px',
+                                    borderRadius: '8px',
+                                    fontSize: '11.5px',
+                                    fontWeight: 650,
+                                    background: '#2563EB',
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Manage
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
                     {/* Clinics Grid / Table */}
-                    <div className="sa-table-scroll-wrapper" style={{
+                    <div className="sa-table-scroll-wrapper sa-table-desktop-only" style={{
                       background: '#FFFFFF',
                       borderRadius: '18px',
                       border: '1px solid #E2E8F0',
@@ -9538,7 +9755,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* Right Column (Insights Panel) */}
-                  <div style={{ width: '300px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div className="sa-panel-insights" style={{ width: '300px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     {/* Needs Attention */}
                     <div style={{
                       background: 'radial-gradient(circle at 100% 0%, rgba(239, 68, 68, 0.05) 0%, transparent 60%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',

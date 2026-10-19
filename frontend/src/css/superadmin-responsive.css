@@ -275,13 +275,13 @@
 
 @media (max-width: 767px) {
   .sa-main-canvas {
-    padding: 12px 12px 80px 12px !important;
+    padding: 12px 12px 110px 12px !important;
   }
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {
   .sa-main-canvas {
-    padding: 14px 14px !important;
+    padding: 14px 14px 90px 14px !important;
   }
 }
 
@@ -295,9 +295,9 @@
   gap: 14px;
 }
 
-@media (max-width: 479px) {
+@media (max-width: 767px) {
   .sa-kpi-grid {
-    grid-template-columns: 1fr 1fr !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 10px !important;
   }
 }
@@ -305,6 +305,61 @@
 @media (max-width: 359px) {
   .sa-kpi-grid {
     grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+/* Compact KPI Card sizing on mobile */
+.sa-kpi-card-compact {
+  transition: all 0.2s ease-in-out;
+}
+
+@media (max-width: 767px) {
+  .sa-kpi-card-compact {
+    padding: 12px 14px !important;
+    border-radius: 14px !important;
+  }
+  .sa-kpi-card-compact .kpi-header-row,
+  .sa-kpi-card-compact > div:first-child {
+    gap: 6px !important;
+  }
+  .sa-kpi-card-compact .kpi-icon-badge,
+  .sa-kpi-card-compact > div:first-child > div:first-child {
+    width: 26px !important;
+    height: 26px !important;
+    border-radius: 8px !important;
+  }
+  .sa-kpi-card-compact .kpi-icon-badge svg,
+  .sa-kpi-card-compact > div:first-child > div:first-child svg {
+    width: 13px !important;
+    height: 13px !important;
+  }
+  .sa-kpi-card-compact .kpi-label-text,
+  .sa-kpi-card-compact > div:first-child span {
+    font-size: 9px !important;
+    letter-spacing: 0.3px !important;
+  }
+  .sa-kpi-card-compact .kpi-val-row,
+  .sa-kpi-card-compact > div:nth-child(2) {
+    margin-top: 8px !important;
+  }
+  .sa-kpi-card-compact .kpi-number,
+  .sa-kpi-card-compact > div:nth-child(2) > div:first-child > div:first-child {
+    font-size: 20px !important;
+    letter-spacing: -0.5px !important;
+    line-height: 1 !important;
+  }
+  .sa-kpi-card-compact .kpi-subtext,
+  .sa-kpi-card-compact > div:nth-child(2) > div:first-child > div:nth-child(2) {
+    font-size: 9.5px !important;
+    margin-top: 4px !important;
+    white-space: normal !important;
+    line-height: 1.2 !important;
+  }
+  .sa-kpi-card-compact .kpi-sparkline,
+  .sa-kpi-card-compact > div:nth-child(2) > div:last-child {
+    width: 44px !important;
+    height: 22px !important;
   }
 }
 
@@ -674,8 +729,23 @@
   .sa-panel-split {
     grid-template-columns: 1fr !important;
     overflow: visible !important;
+    flex-direction: column !important;
   }
 }
+
+.sa-panel-insights {
+  width: 300px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 1023px) {
+  .sa-panel-insights {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex-shrink: 1 !important;
+  }
+}
+
 
 /* ─────────────────────────────────────────────────────────────────
    16. TOAST — Safe area aware positioning
@@ -926,3 +996,349 @@
     overflow: visible !important;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   29. FLOATING PLATFORM OPERATIONS COMMAND DOCK
+   ───────────────────────────────────────────────────────────────── */
+
+.sa-command-dock {
+  position: fixed;
+  bottom: 22px;
+  left: calc(260px + (100vw - 260px) / 2);
+  transform: translateX(-50%);
+  z-index: 150;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(203, 213, 225, 0.85);
+  border-radius: 24px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+@media (max-width: 767px) {
+  .sa-command-dock {
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    bottom: 12px !important;
+    padding: 5px 8px !important;
+    max-width: calc(100vw - 20px) !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 4px !important;
+    border-radius: 20px !important;
+  }
+  .sa-command-dock::-webkit-scrollbar {
+    display: none !important;
+  }
+  .sa-command-dock button {
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 10px !important;
+    flex-shrink: 0 !important;
+  }
+  .sa-command-dock button svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   30. HERO COMMAND & SEARCH BAR (Dashboard)
+   ───────────────────────────────────────────────────────────────── */
+
+.sa-hero-command-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+@media (max-width: 767px) {
+  .sa-hero-command-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px 16px !important;
+    border-radius: 14px !important;
+  }
+  .sa-hero-search-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  .sa-hero-actions-wrapper {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+  .sa-hero-actions-wrapper > button {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 6px 8px !important;
+    font-size: 11px !important;
+    height: 36px !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   31. DASHBOARD MAIN ASYMMETRIC GRID (Recent Events vs Health)
+   ───────────────────────────────────────────────────────────────── */
+
+.sa-dashboard-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+@media (max-width: 1023px) {
+  .sa-dashboard-main-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+}
+
+/* Platform Health Gauges Container on Mobile */
+@media (max-width: 479px) {
+  .sa-telemetry-gauges {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .sa-telemetry-gauge-item svg {
+    width: 64px !important;
+    height: 64px !important;
+  }
+  .sa-telemetry-gauge-item > div:first-child {
+    width: 64px !important;
+    height: 64px !important;
+  }
+  .sa-telemetry-gauge-item span:first-child {
+    font-size: 13px !important;
+  }
+  .sa-telemetry-gauge-item > span:last-child {
+    font-size: 9px !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   32. HOSPITALS KPI RIBBON & SEARCH/FILTER BAR
+   ───────────────────────────────────────────────────────────────── */
+
+.sa-hospitals-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .sa-hospitals-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .sa-hospitals-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+}
+
+@media (max-width: 359px) {
+  .sa-hospitals-kpi-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+.sa-search-filter-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media (max-width: 767px) {
+  .sa-search-filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding: 12px !important;
+  }
+  .sa-search-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .sa-filter-pills {
+    width: 100% !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  .sa-filter-pills button {
+    flex: 1 1 auto !important;
+    text-align: center !important;
+    padding: 5px 9px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   33. CLINIC MOBILE CARDS (Replaces horizontal table on narrow viewports)
+   ───────────────────────────────────────────────────────────────── */
+
+.sa-clinic-mobile-cards {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .sa-clinic-mobile-cards {
+    display: flex !important;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+  }
+  .sa-clinic-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .sa-clinic-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .sa-clinic-card-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .sa-clinic-card-actions {
+    display: flex;
+    gap: 8px;
+    border-top: 1px solid #F1F5F9;
+    padding-top: 10px;
+    align-items: center;
+  }
+  .sa-clinic-card-actions button {
+    flex: 1;
+    height: 34px;
+    font-size: 11.5px;
+    justify-content: center;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   34. ADD NEW CLINIC / ONBOARDING RESPONSIVE LAYOUT
+   ───────────────────────────────────────────────────────────────── */
+
+.sa-onboarding-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 28px;
+  gap: 12px;
+}
+
+@media (max-width: 767px) {
+  .sa-onboarding-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 12px 14px !important;
+    gap: 10px !important;
+  }
+  .sa-onboarding-header-actions {
+    width: 100% !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .sa-onboarding-header-actions > button:last-child {
+    flex: 1 1 100% !important;
+    order: 1 !important;
+    height: 42px !important;
+    justify-content: center !important;
+    font-size: 13px !important;
+  }
+  .sa-onboarding-header-actions > button:not(:last-child) {
+    flex: 1 1 calc(50% - 4px) !important;
+    order: 2 !important;
+    justify-content: center !important;
+    height: 38px !important;
+    font-size: 12px !important;
+  }
+}
+
+/* Stepper Switcher */
+.sa-stepper-desktop-only {
+  display: flex !important;
+}
+.sa-stepper-mobile-only {
+  display: none !important;
+}
+
+@media (max-width: 767px) {
+  .sa-stepper-desktop-only {
+    display: none !important;
+  }
+  .sa-stepper-mobile-only {
+    display: flex !important;
+    flex-direction: column;
+    gap: 8px;
+    background: #FFFFFF;
+    border: 1px solid #DBEAFE;
+    border-radius: 14px;
+    padding: 12px 14px;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.05);
+  }
+}
+
+/* Onboarding Split & Preview Aside */
+.sa-onboarding-split {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+@media (max-width: 1023px) {
+  .sa-onboarding-split {
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+  .sa-onboarding-preview-aside {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex-shrink: 1 !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   35. SAFE AREA & TEXT CONTAINMENT
+   ───────────────────────────────────────────────────────────────── */
+
+.sa-text-wrap {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.sa-no-shrink {
+  flex-shrink: 0;
+}
+

@@ -356,7 +356,7 @@ export const performLogout = async (navigate) => {
 };
 
 export const handleAutoLogout = (reason = 'session_expired') => {
-  if (typeof window !== 'undefined' && window.location.pathname === '/login') return;
+  if (typeof window !== 'undefined' && (window.location.pathname === '/login' || window.__quroxa_mock_token)) return;
   console.warn('[AUTH] Session invalid or expired. Automatically logging out...');
   if (typeof localStorage !== 'undefined') {
     localStorage.setItem('logout_reason', reason);

@@ -35,6 +35,9 @@ export const getTabId = () => {
  * @returns {string|null}
  */
 export const getAccessToken = () => {
+  if (typeof window !== 'undefined' && window.__quroxa_mock_token) {
+    return window.__quroxa_mock_token;
+  }
   return _accessToken;
 };
 
