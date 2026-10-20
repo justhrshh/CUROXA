@@ -16114,17 +16114,18 @@ const SuperAdminDashboard = ({ initialTab }) => {
       </div>
 
       {/* NOTIFICATIONS DRAWER */}
-      <div 
-        className="sa-notification-drawer-overlay"
-        style={{ 
-          ...styles.drawerOverlay, 
-          background: isNotificationOpen ? 'rgba(15, 23, 42, 0.45)' : 'rgba(15, 23, 42, 0)', 
-          backdropFilter: isNotificationOpen ? 'blur(4px)' : 'blur(0)', 
-          pointerEvents: isNotificationOpen ? 'auto' : 'none', 
-          transition: 'background 0.3s ease, backdrop-filter 0.3s ease' 
-        }} 
-        onClick={() => setIsNotificationOpen(false)}
-      >
+      {isNotificationOpen && (
+        <div 
+          className="sa-notification-drawer-overlay"
+          style={{ 
+            ...styles.drawerOverlay, 
+            background: 'rgba(15, 23, 42, 0.45)', 
+            backdropFilter: 'blur(4px)', 
+            WebkitBackdropFilter: 'blur(4px)', 
+            pointerEvents: 'auto'
+          }} 
+          onClick={() => setIsNotificationOpen(false)}
+        >
         <div 
           className="sa-notification-drawer"
           style={{ 
@@ -16293,6 +16294,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           </div>
         </div>
       </div>
+      )}
 
       {/* SEARCH MODAL */}
       {isSearchModalOpen && (

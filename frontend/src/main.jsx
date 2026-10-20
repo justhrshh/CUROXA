@@ -61,6 +61,24 @@ document.body.appendChild(loadingBar);
 
 let activeRequests = 0;
 let progressInterval = null;
+let barFailsafeTimeout = null;
+
+function forceStopLoading() {
+  activeRequests = 0;
+  if (progressInterval) {
+    clearInterval(progressInterval);
+    progressInterval = null;
+  }
+  if (barFailsafeTimeout) {
+    clearTimeout(barFailsafeTimeout);
+    barFailsafeTimeout = null;
+  }
+  loadingBar.style.width = '100%';
+  setTimeout(() => {
+    loadingBar.className = '';
+    loadingBar.style.width = '0%';
+  }, 280);
+}
 
 function startLoading() {
   activeRequests++;
@@ -76,33 +94,46 @@ function startLoading() {
         loadingBar.style.width = `${currentWidth}%`;
       }
     }, 120);
+
+    // Failsafe: Never allow loading bar to remain active indefinitely (max 4.5s)
+    if (barFailsafeTimeout) clearTimeout(barFailsafeTimeout);
+    barFailsafeTimeout = setTimeout(() => {
+      if (activeRequests > 0) {
+        forceStopLoading();
+      }
+    }, 4500);
   }
 }
 
 function stopLoading() {
   activeRequests = Math.max(0, activeRequests - 1);
   if (activeRequests === 0) {
-    if (progressInterval) {
-      clearInterval(progressInterval);
-      progressInterval = null;
-    }
-    loadingBar.style.width = '100%';
-    setTimeout(() => {
-      if (activeRequests === 0) {
-        loadingBar.className = '';
-        loadingBar.style.width = '0%';
-      }
-    }, 280);
+    forceStopLoading();
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.__quroxa_resetLoadingBar = forceStopLoading;
 }
 
 const originalFetch = window.fetch;
 window.fetch = async function(...args) {
-  startLoading();
-  try {
-    let targetArgs = [...args];
-    const resource = targetArgs[0];
+  let targetArgs = [...args];
+  const resource = targetArgs[0];
+  const urlStr = typeof resource === 'string' ? resource : (resource instanceof Request ? resource.url : '');
+  
+  // Background polling or heartbeat endpoints shouldn't trigger the top visual bar
+  const isBackgroundPoll = urlStr.includes('/notifications') || 
+                           urlStr.includes('/telemetry') || 
+                           urlStr.includes('/health') || 
+                           urlStr.includes('/ping') || 
+                           urlStr.includes('socket.io');
 
+  if (!isBackgroundPoll) {
+    startLoading();
+  }
+
+  try {
     if (typeof resource === 'string') {
       if (resource.startsWith('/api') || resource.startsWith('api/')) {
         targetArgs[0] = getApiUrl(resource);
@@ -119,7 +150,9 @@ window.fetch = async function(...args) {
     const response = await originalFetch.apply(this, targetArgs);
     return response;
   } finally {
-    stopLoading();
+    if (!isBackgroundPoll) {
+      stopLoading();
+    }
   }
 };
 
