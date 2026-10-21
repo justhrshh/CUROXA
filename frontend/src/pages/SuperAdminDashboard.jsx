@@ -2722,7 +2722,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
         {/* Add/Edit Staff Modal */}
         {isAddStaffModalOpen && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.3)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999 }}>
-            <div style={{ width: '440px', background: '#FFFFFF', borderRadius: '12px', padding: '24px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+            <div style={{ width: '440px', maxWidth: '92vw', background: '#FFFFFF', borderRadius: '12px', padding: '24px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
               <h3 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>
                 {selectedStaffToEdit ? 'Edit Staff Credentials' : 'Register New Staff Member'}
               </h3>
@@ -9066,7 +9066,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     {/* Lower Area: 2-Column Split Layout */}
                     <div className="sa-panel-split" style={{ display: 'flex', gap: '24px', width: '100%', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                       {/* Left Column (Main Area) */}
-                      <div style={{ flex: 1, minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                      <div style={{ flex: 1, minWidth: '260px', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: '18px' }}>
                         {/* Search and Filters Bar */}
                     <div className="sa-search-filter-bar" style={{
                       display: 'flex',
@@ -10242,7 +10242,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 >
                   <div 
                     style={{
-                      width: '460px', height: '100vh', background: '#FFFFFF',
+                      width: '460px', maxWidth: '100vw', height: '100vh', background: '#FFFFFF', boxSizing: 'border-box',
                       boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.1)', display: 'flex',
                       flexDirection: 'column',
                       transform: isConfigDrawerOpen ? 'translateX(0)' : 'translateX(100%)',
@@ -12545,7 +12545,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', marginTop: '14px', width: '100%' }}>
                   
                   {/* LEFT PANE: Broadcasting Form */}
-                  <div style={{ ...styles.glassCard, flex: '1.2', minWidth: '350px', padding: '20px', boxSizing: 'border-box' }}>
+                  <div style={{ ...styles.glassCard, flex: '1.2', minWidth: '260px', maxWidth: '100%', padding: '20px', boxSizing: 'border-box' }}>
                     <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#1E293B', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ background: '#EFF6FF', color: '#2563EB', padding: '6px', borderRadius: '6px', display: 'inline-flex' }}>
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m3 11 18-5v12L3 13v-2Z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
@@ -12638,7 +12638,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* RIGHT PANE: Live Preview & Delivery History */}
-                  <div style={{ flex: '1', minWidth: '320px', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
+                  <div style={{ flex: '1', minWidth: '260px', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
                     
                     {/* Live Preview Panel */}
                     <div style={{ ...styles.glassCard, padding: '18px', borderColor: '#F59E0B' }}>
@@ -13296,11 +13296,11 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* Interactive Toolbar & Controls */}
-                  <div style={{ background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                  <div className="sa-finance-toolbar" style={{ background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
                     {/* Left: Search & Filter Pills */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', flex: 1, minWidth: '300px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', flex: 1, minWidth: 0, width: '100%' }}>
                       {/* Search input */}
-                      <div style={{ position: 'relative', minWidth: '260px', flex: '1 1 260px', maxWidth: '380px' }}>
+                      <div style={{ position: 'relative', minWidth: 0, flex: '1 1 200px', maxWidth: '380px', width: '100%' }}>
                         <LucideIcon name="search" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: '15px', height: '15px', color: '#94A3B8' }} />
                         <input
                           type="text"
@@ -13374,7 +13374,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     </div>
 
                     {/* Right: Sort & Export System */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
                       {/* Sort Dropdown */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Sort:</span>
@@ -13554,8 +13554,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* Modern Invoices Data Table Card */}
-                  <div style={{ background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
-                    <div className="sa-table-scroll-wrapper" style={{ overflowX: 'auto', width: '100%' }}>
+                  <div style={{ background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+                    <div className="sa-table-scroll-wrapper" style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
                       <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'auto' }}>
                         <thead>
                           <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
@@ -14346,7 +14346,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 {/* Add/Edit Employee Drawer */}
                 {isAddEmployeeOpen && (
                   <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.4)', zIndex: 9999, display: 'flex', justifyContent: 'flex-end' }} onClick={() => { setIsAddEmployeeOpen(false); setEditingEmployee(null); }}>
-                    <div style={{ width: '480px', height: '100%', background: '#FFFFFF', boxShadow: '-8px 0 30px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', animation: 'slideInRight 0.25s ease' }} onClick={e => e.stopPropagation()}>
+                    <div style={{ width: '480px', maxWidth: '100vw', height: '100%', background: '#FFFFFF', boxShadow: '-8px 0 30px rgba(0,0,0,0.08)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', animation: 'slideInRight 0.25s ease' }} onClick={e => e.stopPropagation()}>
                       
                       {/* Drawer Header */}
                       <div style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -14498,7 +14498,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                 {showPendingDocsModal && (
                   <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.4)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setShowPendingDocsModal(false)}>
-                    <div style={{ width: '560px', maxHeight: '80vh', background: '#FFFFFF', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column', animation: 'scaleUp 0.2s ease', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+                    <div style={{ width: '560px', maxWidth: '92vw', maxHeight: '80vh', background: '#FFFFFF', borderRadius: '16px', boxSizing: 'border-box', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column', animation: 'scaleUp 0.2s ease', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
                       <div style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Pending Compliance Documents</h3>
@@ -15403,7 +15403,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   {/* Create / Edit Modal */}
                   {isItemModalOpen && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', zIndex: 9999, display: 'flex', justifyContent: 'flex-end' }}>
-                      <div style={{ width: '600px', height: '100%', background: '#FFFFFF', display: 'flex', flexDirection: 'column', animation: 'slideInRight 0.25s ease' }}>
+                      <div style={{ width: '600px', maxWidth: '100vw', height: '100%', background: '#FFFFFF', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', animation: 'slideInRight 0.25s ease' }}>
                         <div style={{ padding: '20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800 }}>{editingItem ? 'Edit Global Item' : 'Create Global Item'}</h3>
                           <button onClick={() => setIsItemModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
@@ -15789,7 +15789,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     const p = selectedRequest.proposedItem || selectedRequest.proposedItemDetails || {};
                     return (
                       <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', zIndex: 9999, display: 'flex', justifyContent: 'flex-end' }}>
-                        <div style={{ width: '640px', height: '100%', background: '#FFFFFF', display: 'flex', flexDirection: 'column', animation: 'slideInRight 0.25s ease', boxShadow: '-10px 0 25px rgba(0,0,0,0.1)' }}>
+                        <div style={{ width: '640px', maxWidth: '100vw', height: '100%', background: '#FFFFFF', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', animation: 'slideInRight 0.25s ease', boxShadow: '-10px 0 25px rgba(0,0,0,0.1)' }}>
                           <div style={{ padding: '20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                               <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Review Item Request</h3>
@@ -17829,7 +17829,7 @@ const styles = {
   menuItemLabel: { fontSize: '12.5px', fontWeight: 700 },
   menuDivider: { height: '1px', background: '#F1F5F9', margin: '8px 0' },
   mainCanvas: { flex: 1, width: '100%', minWidth: 0, minHeight: 0, height: '100%', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', padding: '14px 18px', boxSizing: 'border-box' },
-  pageBodyScroll: { flex: 1, width: '100%', minWidth: 0, minHeight: 0, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '24px', boxSizing: 'border-box' },
+  pageBodyScroll: { flex: 1, width: '100%', maxWidth: '100%', minWidth: 0, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '24px', boxSizing: 'border-box' },
   subNavbar: { display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexShrink: 0 },
   subNavbarBtn: { border: 'none', background: 'none', fontSize: '12.5px', fontWeight: 650, color: '#64748B', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' },
   subNavbarBtnActive: { border: 'none', background: '#EFF6FF', fontSize: '12.5px', fontWeight: 800, color: '#2563EB', padding: '6px 12px', borderRadius: '6px', cursor: 'default' },
@@ -17838,7 +17838,7 @@ const styles = {
   kpiLabel: { fontSize: '9.5px', fontWeight: 800, color: '#64748B', letterSpacing: '0.3px' },
   kpiVal: { fontSize: '20px', fontWeight: 850, letterSpacing: '-0.5px' },
   kpiSubText: { fontSize: '10.5px', color: '#64748B', fontWeight: 600 },
-  twoColumnGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' },
+  twoColumnGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' },
   glassCard: { background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 6px 0 rgba(15, 23, 42, 0.015)' },
   cardHeaderTitle: { fontSize: '14px', fontWeight: 800, color: '#0F172A', margin: '0 0 2px 0' },
   cardHeaderSub: { fontSize: '11.5px', color: '#64748B', fontWeight: 500, margin: 0 },
