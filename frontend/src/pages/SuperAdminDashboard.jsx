@@ -312,12 +312,16 @@ const FloatingInput = ({
           zIndex: 2,
           display: 'flex',
           alignItems: 'center',
-          gap: compact ? '3px' : '5px'
+          gap: compact ? '3px' : '5px',
+          maxWidth: rightElement ? 'calc(100% - 38px)' : 'calc(100% - 20px)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
         }}
       >
-        <span>{label}</span>
-        {required && <span style={{ color: '#EF4444', fontWeight: 800, fontSize: isFloating ? (compact ? '10px' : '12px') : (compact ? '12px' : '14px') }}>*</span>}
-        {optional && !isFloating && <span style={{ color: '#94A3B8', fontSize: compact ? '10.5px' : '12px', fontWeight: 400 }}>(Optional)</span>}
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        {required && <span style={{ color: '#EF4444', fontWeight: 800, fontSize: isFloating ? (compact ? '10px' : '12px') : (compact ? '12px' : '14px'), flexShrink: 0 }}>*</span>}
+        {optional && !isFloating && <span style={{ color: '#94A3B8', fontSize: compact ? '10.5px' : '12px', fontWeight: 400, flexShrink: 0 }}>(Optional)</span>}
       </label>
 
       {/* Input or Textarea */}
@@ -4188,7 +4192,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
     };
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100%', maxWidth: '100%', background: 'radial-gradient(ellipse at top left, #EEF2FF 0%, #F8FAFC 45%, #F1F5F9 100%)', overflowX: 'hidden' }}>
+      <div className="sa-onboarding-wizard-root" style={{ display: 'flex', flexDirection: 'column', height: '100dvh', minHeight: '100dvh', maxHeight: '100dvh', width: '100%', maxWidth: '100vw', background: 'radial-gradient(ellipse at top left, #EEF2FF 0%, #F8FAFC 45%, #F1F5F9 100%)', overflow: 'hidden' }}>
         {/* Top Header */}
         <header className="sa-onboarding-header" style={{
           background: 'linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)',
@@ -4346,7 +4350,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
         </header>
 
         {/* Main Scrollable Body */}
-        <div style={{ flex: 1, padding: '22px 28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div className="sa-onboarding-wizard-body" style={{ flex: 1, padding: '22px 28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           {/* Horizontal Multi-Step Stepper Ribbon (Desktop) */}
           <div className="sa-stepper-desktop-only" style={{
@@ -4531,6 +4535,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   }
                 }
               }}
+              className="sa-onboarding-form-card"
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -4598,7 +4603,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                     {/* Section 1: Hospital Core Info */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div style={{
+                      <div className="sa-section-badge" style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
@@ -4752,7 +4757,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                     {/* Section 2: Primary Contact */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div style={{
+                      <div className="sa-section-badge" style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
@@ -4820,7 +4825,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                     {/* Section 3: Facility Location */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div style={{
+                      <div className="sa-section-badge" style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
@@ -5012,7 +5017,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* Row 1: PAN & GSTIN */}
-                  <div style={styles.formRow}>
+                  <div className="sa-form-row" style={styles.formRow}>
                     <div style={styles.formCol}>
                       <FloatingInput
                         compact
@@ -5044,7 +5049,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* Row 2: CIN & Authorized Signatory */}
-                  <div style={styles.formRow}>
+                  <div className="sa-form-row" style={styles.formRow}>
                     <div style={styles.formCol}>
                       <FloatingInput
                         compact
@@ -5074,7 +5079,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   <div style={{ height: '1px', background: '#F1F5F9', margin: '2px 0' }} />
 
                   {/* Row 3: Drug License & Fire Safety Certificate */}
-                  <div style={styles.formRow}>
+                  <div className="sa-form-row" style={styles.formRow}>
                     <div style={styles.formCol}>
                       <FloatingInput
                         compact
@@ -5106,7 +5111,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   </div>
 
                   {/* Row 4: Pollution Control Certificate & Compliance Documents (paired side-by-side) */}
-                  <div style={styles.formRow}>
+                  <div className="sa-form-row" style={styles.formRow}>
                     <div style={styles.formCol}>
                       <FloatingInput
                         compact
@@ -5448,7 +5453,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         </p>
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div className="sa-modules-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         {[
                           { key: 'reception', label: 'Reception Module', desc: 'Front desk, check-in, appointments & token queue' },
                           { key: 'doctor', label: 'Doctor Module', desc: 'Physician portal (clinical or HR according to mode)' },
@@ -5663,7 +5668,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   <div style={{ padding: '16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div>
                       <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>Administrator Credentials</h4>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                      <div className="sa-admin-credentials-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
                         <div style={styles.formCol}>
                           <FloatingInput
                             label="Admin Full Name"
@@ -6413,64 +6418,46 @@ const SuperAdminDashboard = ({ initialTab }) => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          height: '60px',
+          minHeight: '60px',
           background: '#FFFFFF',
           borderTop: '1px solid #E2E8F0',
           padding: '0 28px',
           flexShrink: 0
         }}>
           {/* Draft Autosave Indicator on left */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+          <div className="sa-wizard-footer-autosave" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px rgba(16, 185, 129, 0.4)' }} />
             <span>Draft saved automatically</span>
           </div>
 
-          {/* Navigation buttons on right */}
-          <div className="sa-wizard-footer-actions" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button 
-              type="button"
-              onClick={handleCancelWizard}
-              style={{ 
-                background: '#FFFFFF', 
-                border: '1px solid #E2E8F0', 
-                color: '#475569', 
-                borderRadius: '8px', 
-                padding: '8px 16px', 
-                fontSize: '12.5px', 
-                fontWeight: 700, 
-                cursor: 'pointer'
-              }}
-            >
-              Cancel
-            </button>
-            <button 
-              type="button"
-              onClick={() => saveWizardDraft(false)}
-              style={{ 
-                background: '#FFFFFF', 
-                border: '1px solid #CBD5E1', 
-                color: '#1E293B', 
-                borderRadius: '8px', 
-                padding: '8px 16px', 
-                fontSize: '12.5px', 
-                fontWeight: 700, 
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <LucideIcon name="bookmark" style={{ width: '13px', height: '13px', color: '#64748B' }} />
-              Save as Draft
-            </button>
-            {wizardStep > 1 && (
+          {/* Navigation buttons */}
+          <div className="sa-wizard-footer-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div className="sa-wizard-secondary-actions" style={{ display: 'flex', gap: '10px' }}>
               <button 
                 type="button"
-                onClick={handlePrevStep}
+                className="sa-btn-wizard-cancel"
+                onClick={handleCancelWizard}
+                style={{ 
+                  background: '#FFFFFF', 
+                  border: '1px solid #E2E8F0', 
+                  color: '#475569', 
+                  borderRadius: '8px', 
+                  padding: '8px 16px', 
+                  fontSize: '12.5px', 
+                  fontWeight: 700, 
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                className="sa-btn-wizard-draft"
+                onClick={() => saveWizardDraft(false)}
                 style={{ 
                   background: '#FFFFFF', 
                   border: '1px solid #CBD5E1', 
-                  color: '#334155', 
+                  color: '#1E293B', 
                   borderRadius: '8px', 
                   padding: '8px 16px', 
                   fontSize: '12.5px', 
@@ -6481,13 +6468,37 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   gap: '6px'
                 }}
               >
-                <LucideIcon name="arrow-left" style={{ width: '13px', height: '13px' }} />
-                Previous
+                <LucideIcon name={isDraftSaved ? "check" : "bookmark"} style={{ width: '13px', height: '13px', color: isDraftSaved ? '#10B981' : '#64748B' }} />
+                <span>{isDraftSaved ? 'Saved' : 'Save as Draft'}</span>
               </button>
-            )}
+              {wizardStep > 1 && (
+                <button 
+                  type="button"
+                  className="sa-btn-wizard-prev"
+                  onClick={handlePrevStep}
+                  style={{ 
+                    background: '#FFFFFF', 
+                    border: '1px solid #CBD5E1', 
+                    color: '#334155', 
+                    borderRadius: '8px', 
+                    padding: '8px 16px', 
+                    fontSize: '12.5px', 
+                    fontWeight: 700, 
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <LucideIcon name="arrow-left" style={{ width: '13px', height: '13px' }} />
+                  <span>Previous</span>
+                </button>
+              )}
+            </div>
             {wizardStep < totalSteps ? (
               <button 
                 type="button"
+                className="sa-btn-wizard-primary"
                 onClick={handleNextStep}
                 disabled={isSavingStep || !isCurrentStepValid}
                 style={{ 
@@ -6524,6 +6535,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             ) : (
               <button 
                 type="button"
+                className="sa-btn-wizard-primary"
                 onClick={handleGoLive}
                 disabled={isActivating}
                 style={{ 
