@@ -761,6 +761,8 @@ const HospitalIdentityStep = ({ wizardHospital, updateWizardField }) => {
 };
 // ────────────────────────────────────────────────────────────────────────────
 
+let _quroxaSuperAdminCache = null;
+
 const SuperAdminDashboard = ({ initialTab }) => {
   const navigate = useNavigate();
   const { hospitalId: routeHospitalId } = useParams();
@@ -1007,8 +1009,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
   };
 
   // Real-time notifications and meetings state
-  const [notifications, setNotifications] = useState([]);
-  const [meetings, setMeetings] = useState([]);
+  const [notifications, setNotifications] = useState(() => _quroxaSuperAdminCache?.notifications || []);
+  const [meetings, setMeetings] = useState(() => _quroxaSuperAdminCache?.meetings || []);
   const [newMeetingTitle, setNewMeetingTitle] = useState('');
   const [newMeetingTime, setNewMeetingTime] = useState('10:00 AM');
   const [newMeetingDate, setNewMeetingDate] = useState(new Date().toISOString().split('T')[0]);
@@ -1403,9 +1405,9 @@ const SuperAdminDashboard = ({ initialTab }) => {
     companyName: 'Quroxa SaaS'
   });
 
-  const [backups, setBackups] = useState([]);
+  const [backups, setBackups] = useState(() => _quroxaSuperAdminCache?.backups || []);
 
-  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLogs, setAuditLogs] = useState(() => _quroxaSuperAdminCache?.auditLogs || []);
 
   // Form states for assignments (HR)
   const [tempRoleForm, setTempRoleForm] = useState({ employeeId: 1, roleName: '', validFrom: '', validTill: '', reason: '', approver: '' });
@@ -1499,7 +1501,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
     adminPhone: '', 
     adminPassword: '' 
   });
-  const [plans, setPlans] = useState([]);
+  const [plans, setPlans] = useState(() => _quroxaSuperAdminCache?.plans || []);
   const [isOnboardingWizardOpen, setIsOnboardingWizardOpen] = useState(false);
   const [portalSuccessModal, setPortalSuccessModal] = useState(null);
   const [isActivating, setIsActivating] = useState(false);
@@ -1513,7 +1515,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [wizardLogoError, setWizardLogoError] = useState('');
   const [isEditingPlanModalOpen, setIsEditingPlanModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(() => !_quroxaSuperAdminCache);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [impersonatingHospital, setImpersonatingHospital] = useState(null);
@@ -1522,6 +1524,40 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [logoEditHosp, setLogoEditHosp] = useState(null);
   const [logoEditDraft, setLogoEditDraft] = useState('');
   const [isMobilePreviewOpen, setIsMobilePreviewOpen] = useState(false);
+
+  const wizardStepRef = useRef(wizardStep);
+  useEffect(() => {
+    wizardStepRef.current = wizardStep;
+  }, [wizardStep]);
+
+  const isOnboardingWizardOpenRef = useRef(isOnboardingWizardOpen);
+  useEffect(() => {
+    isOnboardingWizardOpenRef.current = isOnboardingWizardOpen;
+  }, [isOnboardingWizardOpen]);
+
+  // Workflow step navigation via browser history (Back button support without full page reloads)
+  useEffect(() => {
+    if (!isOnboardingWizardOpen) return;
+
+    window.history.pushState({ quroxaSuperAdminWizard: true, step: wizardStepRef.current }, '');
+
+    const handleWizardPopState = (e) => {
+      if (!isOnboardingWizardOpenRef.current) return;
+      if (wizardStepRef.current > 1) {
+        const prev = wizardStepRef.current - 1;
+        setWizardStep(prev);
+        window.history.pushState({ quroxaSuperAdminWizard: true, step: prev }, '');
+      } else {
+        setIsOnboardingWizardOpen(false);
+        setWizardHospital(null);
+      }
+    };
+
+    window.addEventListener('popstate', handleWizardPopState);
+    return () => {
+      window.removeEventListener('popstate', handleWizardPopState);
+    };
+  }, [isOnboardingWizardOpen]);
 
   if (typeof window !== 'undefined') {
     window.__quroxa_openWizard = (mockHospital) => {
@@ -3052,10 +3088,10 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [filteredResults, setFilteredResults] = useState([]);
 
   // Active Onboarding accounts
-  const [onboardingHospitals, setOnboardingHospitals] = useState([]);
+  const [onboardingHospitals, setOnboardingHospitals] = useState(() => _quroxaSuperAdminCache?.onboardingHospitals || []);
 
   // Active Clinics Database (Step 4 Core)
-  const [hospitals, setHospitals] = useState([]);
+  const [hospitals, setHospitals] = useState(() => _quroxaSuperAdminCache?.hospitals || []);
   if (typeof window !== 'undefined') {
     window.__quroxa_setHospitals = setHospitals;
   }
@@ -3065,22 +3101,22 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [credentialsMsg, setCredentialsMsg] = useState({ text: '', type: '' });
 
   // SaaS Invoices Database (Step 8 Core)
-  const [invoices, setInvoices] = useState([]);
+  const [invoices, setInvoices] = useState(() => _quroxaSuperAdminCache?.invoices || []);
 
   // Support Tickets Database (Step 7 Core)
-  const [tickets, setTickets] = useState([]);
+  const [tickets, setTickets] = useState(() => _quroxaSuperAdminCache?.tickets || []);
 
   // Custom Reports State
-  const [customReports, setCustomReports] = useState([]);
+  const [customReports, setCustomReports] = useState(() => _quroxaSuperAdminCache?.customReports || []);
 
   // Scheduled Reports State
-  const [scheduledReports, setScheduledReports] = useState([]);
+  const [scheduledReports, setScheduledReports] = useState(() => _quroxaSuperAdminCache?.scheduledReports || []);
 
   // System Broadcasts State
-  const [pastBroadcasts, setPastBroadcasts] = useState([]);
+  const [pastBroadcasts, setPastBroadcasts] = useState(() => _quroxaSuperAdminCache?.pastBroadcasts || []);
 
   // Company Employees Database — loaded from backend
-  const [employees, setEmployees] = useState([]);
+  const [employees, setEmployees] = useState(() => _quroxaSuperAdminCache?.employees || []);
   const [isAddEmployeeOpen, setIsAddEmployeeOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
   // SuperAdmin Profile & Password Update Modal
@@ -3135,7 +3171,23 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             if (res.ok) {
               const data = await res.json();
-              if (data) setter(data);
+              if (data) {
+                setter(data);
+                if (!_quroxaSuperAdminCache) _quroxaSuperAdminCache = {};
+                if (url.includes('notifications')) _quroxaSuperAdminCache.notifications = data;
+                else if (url.includes('meetings')) _quroxaSuperAdminCache.meetings = data;
+                else if (url.includes('hospitals')) _quroxaSuperAdminCache.hospitals = data;
+                else if (url.includes('plans')) _quroxaSuperAdminCache.plans = data;
+                else if (url.includes('onboarding')) _quroxaSuperAdminCache.onboardingHospitals = data;
+                else if (url.includes('invoices')) _quroxaSuperAdminCache.invoices = data;
+                else if (url.includes('tickets')) _quroxaSuperAdminCache.tickets = data;
+                else if (url.includes('backups')) _quroxaSuperAdminCache.backups = data;
+                else if (url.includes('audits')) _quroxaSuperAdminCache.auditLogs = data;
+                else if (url.includes('reports')) _quroxaSuperAdminCache.customReports = data;
+                else if (url.includes('schedules')) _quroxaSuperAdminCache.scheduledReports = data;
+                else if (url.includes('broadcasts')) _quroxaSuperAdminCache.pastBroadcasts = data;
+                else if (url.includes('employees')) _quroxaSuperAdminCache.employees = data;
+              }
               return true;
             }
             return false;
@@ -3973,6 +4025,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
         setIsSavingStep(true);
         // Instant optimistic transition for 0ms latency
         setWizardStep(nextStep);
+        window.history.pushState({ quroxaSuperAdminWizard: true, step: nextStep }, '');
         try {
           await saveWizardDraft(false, nextStep);
         } catch (err) {
@@ -4098,7 +4151,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             {/* Breadcrumb Back Link */}
             <div 
-              onClick={handleCancelWizard}
+              onClick={() => {
+                if (wizardStep > 1) {
+                  handlePrevStep();
+                } else {
+                  handleCancelWizard();
+                }
+              }}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -4111,7 +4170,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               }}
             >
               <LucideIcon name="arrow-left" style={{ width: '13px', height: '13px' }} />
-              <span>Back to Clinics</span>
+              <span>{wizardStep > 1 ? 'Previous Step' : 'Back to Clinics'}</span>
             </div>
 
             {/* Title Row */}
@@ -4155,7 +4214,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           </div>
 
           {/* Top Right Action Buttons */}
-          <div className="sa-onboarding-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="sa-onboarding-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <button
               type="button"
               onClick={handleCancelWizard}
@@ -6318,7 +6377,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
           </div>
 
           {/* Navigation buttons on right */}
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div className="sa-wizard-footer-actions" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <button 
               type="button"
               onClick={handleCancelWizard}
@@ -8692,7 +8751,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               const paginatedHospitals = filteredHospitals.slice(startIndex, endIndex);
 
               return (
-                <div style={{ ...styles.pageBodyScroll, minHeight: 0, gap: '20px', paddingBottom: '100px' }}>
+                <div style={{ ...styles.pageBodyScroll, minHeight: 0, gap: '20px', paddingBottom: '20px' }}>
                   {/* Top Header */}
                   <div>
                     <h2 style={styles.cardHeaderTitle}>Connected Corporate Clinics Index</h2>
@@ -9972,8 +10031,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             {/* DEPARTMENTS VIEW */}
             {isTabAllowed && activeTab === 'departments' && (
-              <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-                <div className="sa-sub-navbar" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+              <div className="sa-tab-content-container" style={{ flex: 1, padding: '24px', overflowY: 'auto', minWidth: 0, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+                <div className="sa-sub-navbar" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', overflowX: 'auto', flexWrap: 'nowrap' }}>
                   <button style={activeTab === 'hr-mgmt' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('hr-mgmt')}>Team Directory</button>
                   <button style={activeTab === 'departments' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('departments')}>Departments</button>
                   <button style={activeTab === 'platform-roles' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('platform-roles')}>Security Roles</button>
@@ -10027,7 +10086,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             {/* REVENUE VIEW */}
             {isTabAllowed && activeTab === 'finance-revenue' && (
-              <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
+              <div className="sa-tab-content-container" style={{ flex: 1, padding: '24px', overflowY: 'auto', minWidth: 0, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
                 <div>
                   <h2 style={styles.cardHeaderTitle}>SaaS Revenue & Analytics</h2>
                   <p style={styles.cardHeaderSub}>Monitor Monthly Recurring Revenue (MRR), total transaction volume, and subscriptions health.</p>
@@ -10094,7 +10153,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             {/* RENEWALS VIEW */}
             {isTabAllowed && activeTab === 'finance-renewals' && (
-              <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
+              <div className="sa-tab-content-container" style={{ flex: 1, padding: '24px', overflowY: 'auto', minWidth: 0, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
                 <div>
                   <h2 style={styles.cardHeaderTitle}>Upcoming Billing Renewals</h2>
                   <p style={styles.cardHeaderSub}>Review upcoming subscriber collections, renew schedules, or toggle automated invoicing triggers.</p>
@@ -10136,8 +10195,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             {/* PLATFORM ROLES VIEW */}
             {isTabAllowed && activeTab === 'platform-roles' && (
-              <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-                <div className="sa-sub-navbar" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+              <div className="sa-tab-content-container" style={{ flex: 1, padding: '24px', overflowY: 'auto', minWidth: 0, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+                <div className="sa-sub-navbar" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', overflowX: 'auto', flexWrap: 'nowrap' }}>
                   <button style={activeTab === 'hr-mgmt' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('hr-mgmt')}>Team Directory</button>
                   <button style={activeTab === 'departments' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('departments')}>Departments</button>
                   <button style={activeTab === 'platform-roles' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('platform-roles')}>Security Roles</button>
@@ -10179,8 +10238,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             {/* AUDIT LOGS VIEW */}
             {isTabAllowed && activeTab === 'platform-audits' && (
-              <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-                <div className="sa-sub-navbar" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+              <div className="sa-tab-content-container" style={{ flex: 1, padding: '24px', overflowY: 'auto', minWidth: 0, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+                <div className="sa-sub-navbar" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', overflowX: 'auto', flexWrap: 'nowrap' }}>
                   <button style={activeTab === 'hr-mgmt' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('hr-mgmt')}>Team Directory</button>
                   <button style={activeTab === 'departments' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('departments')}>Departments</button>
                   <button style={activeTab === 'platform-roles' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('platform-roles')}>Security Roles</button>
@@ -10190,7 +10249,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   <h2 style={styles.cardHeaderTitle}>Platform System Audit Logs</h2>
                   <p style={styles.cardHeaderSub}>Review immutable platform operational logs, security authorization snapshots, and data mutations records.</p>
                 </div>
-                <div style={{ background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '20px', marginTop: '16px' }}>
+                {/* Desktop Audit Log Table View */}
+                <div className="sa-desktop-table sa-table-scroll-wrapper" style={{ background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '20px', marginTop: '16px', overflowX: 'auto' }}>
                   <table style={styles.dataTable}>
                     <thead>
                       <tr>
@@ -10219,6 +10279,64 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile Responsive Audit Record Cards */}
+                <div className="sa-mobile-cards" style={{ display: 'none', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+                  {auditLogs.length === 0 ? (
+                    <div style={{ padding: '30px', textAlign: 'center', color: '#64748B', fontSize: '13px', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                      No audit log records found.
+                    </div>
+                  ) : (
+                    auditLogs.map((log, idx) => (
+                      <div key={idx} style={{
+                        background: '#FFFFFF',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '12px',
+                        padding: '14px 16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                        boxSizing: 'border-box',
+                        maxWidth: '100%'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                          <span style={{
+                            ...styles.statusBadge,
+                            background: '#EFF6FF',
+                            color: '#2563EB',
+                            fontWeight: 800,
+                            fontSize: '11px',
+                            padding: '4px 8px',
+                            borderRadius: '6px'
+                          }}>
+                            {log.action}
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#64748B', fontFamily: 'monospace' }}>
+                            {new Date(log.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155' }}>
+                          <span style={{ color: '#64748B', fontWeight: 600 }}>Executor:</span>
+                          <strong style={{ color: '#0F172A' }}>{log.user}</strong>
+                        </div>
+                        <div style={{
+                          fontSize: '12px',
+                          color: '#475569',
+                          background: '#F8FAFC',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          border: '1px solid #F1F5F9',
+                          wordBreak: 'break-word',
+                          lineHeight: '1.5'
+                        }}>
+                          <div style={{ fontSize: '10px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: '4px' }}>Details</div>
+                          {log.details}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -12956,7 +13074,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               };
 
               return (
-                <div style={{ width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '80px' }}>
+                <div style={{ width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '20px' }}>
                   {/* Page Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
                     <div>
@@ -14196,13 +14314,13 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
               return (
               <div style={styles.pageBodyScroll}>
-                <div className="sa-sub-navbar" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                <div className="sa-sub-navbar" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', marginBottom: '14px', overflowX: 'auto', flexWrap: 'nowrap' }}>
                   <button style={activeTab === 'hr-mgmt' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('hr-mgmt')}>Team Directory</button>
                   <button style={activeTab === 'departments' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('departments')}>Departments</button>
                   <button style={activeTab === 'platform-roles' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('platform-roles')}>Security Roles</button>
                   <button style={activeTab === 'platform-audits' ? styles.subNavbarBtnActive : styles.subNavbarBtn} onClick={() => setActiveTab('platform-audits')}>Audit Logs</button>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="sa-page-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
                     <h2 style={styles.cardHeaderTitle}>Quroxa SaaS Team Directory</h2>
                     <p style={styles.cardHeaderSub}>Manage team members, assign platform roles, and track workforce distribution across departments.</p>
@@ -14234,8 +14352,8 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   })}
                 </div>
 
-                {/* Employee Table */}
-                <div className="sa-table-scroll-wrapper" style={{ overflowX: 'auto', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '16px' }}>
+                {/* Employee Table - Desktop View */}
+                <div className="sa-desktop-table sa-table-scroll-wrapper" style={{ overflowX: 'auto', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '16px' }}>
                   <table style={{ ...styles.dataTable, width: '100%' }}>
                     <thead>
                       <tr>
@@ -14306,6 +14424,76 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       })}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile Employee Cards View */}
+                <div className="sa-mobile-cards" style={{ display: 'none', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+                  {employees.length === 0 ? (
+                    <div style={{ ...styles.tableTd, textAlign: 'center', padding: '40px 16px', color: '#94A3B8', fontSize: '13px', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                      No team members yet. Click "Add Team Member" to get started.
+                    </div>
+                  ) : employees.map(emp => {
+                    const roleBadge = getRoleBadge(emp.platformRole);
+                    const statusBadge = getStatusBadge(emp.status);
+                    return (
+                      <div key={emp._id} style={{
+                        background: '#FFFFFF',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                        boxSizing: 'border-box'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: roleBadge.bg, color: roleBadge.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800, flexShrink: 0 }}>
+                              {emp.avatar || emp.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>{emp.name}</div>
+                              <div style={{ fontSize: '11px', color: '#64748B' }}>{emp.email}</div>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: '10px', fontWeight: 800, background: statusBadge.bg, color: statusBadge.color, padding: '3px 8px', borderRadius: '6px' }}>
+                            {emp.status}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '8px 12px', background: '#F8FAFC', borderRadius: '8px', fontSize: '11.5px', border: '1px solid #F1F5F9' }}>
+                          <div>
+                            <span style={{ color: '#64748B' }}>Dept: </span>
+                            <strong style={{ color: '#334155' }}>{emp.department}</strong>
+                            {emp.designation && <span style={{ color: '#64748B' }}> ({emp.designation})</span>}
+                          </div>
+                          <code style={{ fontSize: '11px', background: '#FFFFFF', padding: '2px 6px', borderRadius: '4px', color: '#475569', fontWeight: 700, border: '1px solid #E2E8F0' }}>{emp.empId}</code>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '4px' }}>
+                          <span style={{ fontSize: '10.5px', fontWeight: 800, background: roleBadge.bg, color: roleBadge.color, padding: '3px 9px', borderRadius: '6px' }}>
+                            {emp.platformRole}
+                          </span>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={() => openEditEmployee(emp)}
+                              style={{ background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', fontWeight: 700, color: '#475569' }}
+                            >
+                              <LucideIcon name="pencil" style={{ width: '12px', height: '12px' }} />
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEmployee(emp)}
+                              style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 700, color: '#DC2626' }}
+                            >
+                              <LucideIcon name="trash-2" style={{ width: '12px', height: '12px' }} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Role Assignment Overview */}
@@ -15114,7 +15302,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             {/* SUPER ADMIN ITEM MASTER MODULE */}
             {isTabAllowed && (activeTab === 'item-master' || activeTab === 'masters' || activeTab === 'global-item-master') && (
-              <div style={{ width: '100%', minWidth: 0, paddingBottom: '60px' }}>
+              <div style={{ width: '100%', minWidth: 0, paddingBottom: '20px' }}>
                 <MasterManagementView />
               </div>
             )}
@@ -15142,7 +15330,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             {/* LEGACY GLOBAL ITEM MASTER MODULE (DEPRECATED) */}
             {false && isTabAllowed && activeTab === 'global-item-master' && (() => {
               return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, paddingBottom: '60px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, paddingBottom: '20px' }}>
                   {/* Page Header & Module Navigation */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
                     <div>
@@ -15513,7 +15701,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
             {/* LEGACY ITEM REQUESTS MODULE (DEPRECATED - REPLACED BY SuperAdminMasterApprovalsView) */}
             {false && isTabAllowed && activeTab === 'item-requests' && (() => {
               return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, paddingBottom: '60px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, paddingBottom: '20px' }}>
                   {/* Page Header & Module Navigation */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
                     <div>

@@ -749,7 +749,7 @@ export default function HospitalProfileView({
   const isSuspended = hospital.status === 'Suspended';
 
   return (
-    <div style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '10px 4px 80px 4px', margin: 0, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '10px 4px 20px 4px', margin: 0, display: 'flex', flexDirection: 'column' }}>
       {/* Toast Banner */}
       {toast.show && (
         <div className="sa-toast" style={{
@@ -855,7 +855,7 @@ export default function HospitalProfileView({
       )}
 
       {/* Top Breadcrumb & Back Action */}
-      <div className="sa-profile-breadcrumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+      <div className="sa-profile-breadcrumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <button
           type="button"
           onClick={handleBackToClinics}
@@ -984,6 +984,7 @@ export default function HospitalProfileView({
                 href={portalUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                className="sa-btn-header-action"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1003,6 +1004,7 @@ export default function HospitalProfileView({
               </a>
               <button
                 type="button"
+                className="sa-btn-header-action"
                 onClick={() => {
                   navigator.clipboard.writeText(portalUrl).then(() => {
                     showToast(`Copied portal URL: ${portalUrl}`, 'success');
@@ -1032,6 +1034,7 @@ export default function HospitalProfileView({
 
           <button
             type="button"
+            className="sa-btn-impersonate-mobile"
             onClick={() => {
               if (onImpersonate) {
                 onImpersonate(hospital);
@@ -1066,7 +1069,7 @@ export default function HospitalProfileView({
       </div>
 
       {/* Navigation Tabs / Pills */}
-      <div className="sa-profile-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '4px', width: '100%', boxSizing: 'border-box' }}>
+      <div className="sa-profile-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: '6px', width: '100%', boxSizing: 'border-box' }}>
         {[
           { id: 'overview', label: 'Overview & Branding', icon: 'image' },
           { id: 'modules', label: 'Subscription & Modules', icon: 'sliders' },
