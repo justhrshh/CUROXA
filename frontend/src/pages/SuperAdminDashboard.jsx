@@ -1519,11 +1519,18 @@ const SuperAdminDashboard = ({ initialTab }) => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [impersonatingHospital, setImpersonatingHospital] = useState(null);
+  const [isImpersonateDrawerOpen, setIsImpersonateDrawerOpen] = useState(false);
   const [isAddUserDrawerOpen, setIsAddUserDrawerOpen] = useState(false);
   const [isLogoEditModalOpen, setIsLogoEditModalOpen] = useState(false);
   const [logoEditHosp, setLogoEditHosp] = useState(null);
   const [logoEditDraft, setLogoEditDraft] = useState('');
   const [isMobilePreviewOpen, setIsMobilePreviewOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.__quroxa_setImpersonatingHospital = setImpersonatingHospital;
+    }
+  }, []);
 
   const wizardStepRef = useRef(wizardStep);
   useEffect(() => {
@@ -2302,30 +2309,41 @@ const SuperAdminDashboard = ({ initialTab }) => {
     if (!hosp) return null;
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%', maxWidth: '100%', background: '#F8FAFC', overflow: 'hidden', fontFamily: "'Outfit', 'Inter', sans-serif" }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', minHeight: '100dvh', width: '100%', maxWidth: '100vw', background: '#F8FAFC', overflow: 'hidden', fontFamily: "'Outfit', 'Inter', sans-serif", position: 'relative' }}>
         
         {/* Top Impersonation Banner / Header */}
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '60px', background: '#0F172A', padding: '0 24px', flexShrink: 0, color: '#FFFFFF', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <header className="sa-impersonate-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+            <button 
+              className="sa-impersonate-menu-btn"
+              onClick={() => setIsImpersonateDrawerOpen(!isImpersonateDrawerOpen)}
+              title="Toggle Hospital Navigation"
+              aria-label="Toggle Hospital Navigation"
+              type="button"
+            >
+              <LucideIcon name="menu" style={{ width: '18px', height: '18px', color: '#FFFFFF' }} />
+            </button>
+            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <LucideIcon name="shield-alert" style={{ width: '18px', height: '18px', color: '#FFFFFF' }} />
             </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '14.5px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.3px' }}>Quroxa Hospital Admin Portal</span>
-                <span style={{ fontSize: '9px', background: '#EF4444', color: '#FFFFFF', padding: '2px 6px', borderRadius: '4px', fontWeight: 900, letterSpacing: '0.5px' }}>IMPERSONATING ACTIVE SESSION</span>
+            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '14.5px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Quroxa Hospital Admin Portal</span>
+                <span className="sa-impersonate-badge" style={{ fontSize: '9px', background: '#EF4444', color: '#FFFFFF', padding: '2px 6px', borderRadius: '4px', fontWeight: 900, letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>IMPERSONATING ACTIVE SESSION</span>
               </div>
-              <span style={{ fontSize: '11px', color: '#94A3B8' }}>Connected Tenant: <strong>{hosp.name}</strong> (Code: {hosp.code})</span>
+              <div style={{ fontSize: '11px', color: '#94A3B8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Connected Tenant: <strong style={{ color: '#E2E8F0' }}>{hosp.name}</strong> (Code: {hosp.code})
+              </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ display: 'flex', background: '#1E293B', padding: '4px', borderRadius: '8px', border: '1px solid #334155' }}>
+          <div className="sa-impersonate-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+            <div className="sa-impersonate-tabs" style={{ display: 'flex', background: '#1E293B', padding: '4px', borderRadius: '8px', border: '1px solid #334155' }}>
               <button 
                 onClick={() => setImpersonatedTab('overview')}
                 style={{
                   border: 'none', background: impersonatedTab === 'overview' ? '#2563EB' : 'transparent',
-                  color: '#FFFFFF', padding: '6px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s'
+                  color: '#FFFFFF', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
                 }}
               >
                 Overview
@@ -2334,54 +2352,78 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 onClick={() => setImpersonatedTab('staff')}
                 style={{
                   border: 'none', background: impersonatedTab === 'staff' ? '#2563EB' : 'transparent',
-                  color: '#FFFFFF', padding: '6px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s'
+                  color: '#FFFFFF', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
                 }}
               >
-                Staff & Functioning Portal
+                Staff Portal
               </button>
             </div>
 
             <button
+              className="sa-impersonate-emergency-btn"
               onClick={() => {
                 showToast('Simulated Emergency alert dispatched to all ward endpoints.', 'error');
               }}
               style={{
-                border: 'none', background: '#EF4444', color: '#FFFFFF', padding: '8px 16px', borderRadius: '6px', fontSize: '12px', fontWeight: 800, cursor: 'pointer',
-                boxShadow: '0 0 12px rgba(239, 68, 68, 0.4)', display: 'flex', alignItems: 'center', gap: '6px'
+                border: 'none', background: '#EF4444', color: '#FFFFFF', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 800, cursor: 'pointer',
+                boxShadow: '0 0 12px rgba(239, 68, 68, 0.4)', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap'
               }}
             >
               <LucideIcon name="bell" style={{ width: '14px', height: '14px' }} />
-              Emergency Response Alert
+              <span>Emergency</span>
             </button>
 
             <button 
-              onClick={() => setImpersonatingHospital(null)}
+              className="sa-impersonate-exit-btn"
+              onClick={() => {
+                setIsImpersonateDrawerOpen(false);
+                setImpersonatingHospital(null);
+              }}
               style={{
                 border: '1px solid #F59E0B', background: '#F59E0B15', color: '#F59E0B',
-                padding: '8px 16px', borderRadius: '6px', fontSize: '12px', fontWeight: 800, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s'
+                padding: '8px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 800, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s', whiteSpace: 'nowrap'
               }}
             >
               <LucideIcon name="log-out" style={{ width: '14px', height: '14px' }} />
-              Exit Impersonation Portal
+              <span>Exit Portal</span>
             </button>
           </div>
         </header>
 
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Mobile Drawer Backdrop */}
+        {isImpersonateDrawerOpen && (
+          <div 
+            className="sa-impersonate-backdrop"
+            onClick={() => setIsImpersonateDrawerOpen(false)}
+          />
+        )}
+
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
           {/* Left Sidebar Menu */}
-          <aside style={{ width: '240px', background: '#FFFFFF', borderRight: '1px solid #E2E8F0', padding: '24px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flexShrink: 0 }}>
+          <aside className={`sa-impersonate-sidebar ${isImpersonateDrawerOpen ? 'sa-impersonate-sidebar--open' : ''}`}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <div style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.7px', paddingLeft: '12px', marginBottom: '8px' }}>Hospital Console</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', paddingLeft: '12px' }}>
+                <div style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.7px' }}>Hospital Console</div>
+                <button 
+                  className="sa-impersonate-drawer-close"
+                  onClick={() => setIsImpersonateDrawerOpen(false)}
+                  title="Close Navigation"
+                  aria-label="Close Navigation"
+                  type="button"
+                >
+                  <LucideIcon name="x" style={{ width: '18px', height: '18px', color: '#64748B' }} />
+                </button>
+              </div>
               {[
-                { label: 'Dashboard', icon: 'layout-dashboard', active: impersonatedTab === 'overview', onClick: () => setImpersonatedTab('overview') },
-                { label: 'Patients Directory', icon: 'users', active: false, onClick: () => {} },
-                { label: 'Appointments Book', icon: 'calendar', active: false, onClick: () => {} },
-                { label: 'Doctors & Staff', icon: 'activity', active: impersonatedTab === 'staff', onClick: () => setImpersonatedTab('staff') },
-                { label: 'Nursing Wards', icon: 'clipboard-list', active: false, onClick: () => {} },
-                { label: 'Pharmacy Inventory', icon: 'package', active: false, onClick: () => {} },
-                { label: 'Billing & Claims', icon: 'credit-card', active: false, onClick: () => {} },
-                { label: 'System Settings', icon: 'settings', active: false, onClick: () => {} }
+                { label: 'Dashboard', icon: 'layout-dashboard', active: impersonatedTab === 'overview', onClick: () => { setImpersonatedTab('overview'); setIsImpersonateDrawerOpen(false); } },
+                { label: 'Patients Directory', icon: 'users', active: false, onClick: () => setIsImpersonateDrawerOpen(false) },
+                { label: 'Appointments Book', icon: 'calendar', active: false, onClick: () => setIsImpersonateDrawerOpen(false) },
+                { label: 'Doctors & Staff', icon: 'activity', active: impersonatedTab === 'staff', onClick: () => { setImpersonatedTab('staff'); setIsImpersonateDrawerOpen(false); } },
+                { label: 'Nursing Wards', icon: 'clipboard-list', active: false, onClick: () => setIsImpersonateDrawerOpen(false) },
+                { label: 'Pharmacy Inventory', icon: 'package', active: false, onClick: () => setIsImpersonateDrawerOpen(false) },
+                { label: 'Billing & Claims', icon: 'credit-card', active: false, onClick: () => setIsImpersonateDrawerOpen(false) },
+                { label: 'System Settings', icon: 'settings', active: false, onClick: () => setIsImpersonateDrawerOpen(false) }
               ].map(item => (
                 <button
                   key={item.label}
@@ -2399,9 +2441,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
               ))}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
               <button
-                onClick={handleImpersonateLogin}
+                onClick={async () => {
+                  setIsImpersonateDrawerOpen(false);
+                  await handleImpersonateLogin();
+                }}
                 style={{
                   width: '100%',
                   background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
@@ -2437,12 +2482,12 @@ const SuperAdminDashboard = ({ initialTab }) => {
           </aside>
 
           {/* Main Content Area */}
-          <main style={{ flex: 1, padding: '24px', overflowY: 'auto', background: '#F8FAFC', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <main className="sa-impersonate-main">
             
             {impersonatedTab === 'overview' ? (
               <>
                 {/* Status banner */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '20px', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '9px', fontWeight: 850, color: '#10B981', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                       <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981', display: 'inline-block', boxShadow: '0 0 8px #10B981' }}></span>
@@ -2471,7 +2516,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                 )}
 
                 {/* Ribbon Metrics */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+                <div className="sa-impersonate-ribbon" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
                   {[
                     { label: "TODAY'S PATIENTS", val: impersonatedStats?.todayPatients ?? 0, sub: `Total: ${impersonatedStats?.totalPatients ?? 0}`, color: "#2563EB", icon: "users" },
                     { label: "APPOINTMENTS", val: impersonatedStats?.todayAppointments ?? 0, sub: `${impersonatedStats?.pendingAppointments ?? 0} pending confirmation`, color: "#10B981", icon: "calendar" },
@@ -2479,25 +2524,25 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     { label: "REVENUE TODAY", val: `₹${(impersonatedStats?.revenueToday ?? 0).toLocaleString()}`, sub: "Settled invoices", color: "#8B5CF6", icon: "credit-card" }
                   ].map((card, idx) => (
                     <div key={idx} style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
+                      <div style={{ minWidth: 0 }}>
                         <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748B', letterSpacing: '0.5px' }}>{card.label}</span>
-                        <div style={{ fontSize: '24px', fontWeight: 850, color: '#0F172A', margin: '6px 0 2px 0' }}>{card.val}</div>
+                        <div style={{ fontSize: '24px', fontWeight: 850, color: '#0F172A', margin: '6px 0 2px 0', wordBreak: 'break-word' }}>{card.val}</div>
                         <span style={{ fontSize: '10px', color: '#64748B' }}>{card.sub}</span>
                       </div>
-                      <LucideIcon name={card.icon} style={{ width: '22px', height: '22px', color: card.color }} />
+                      <LucideIcon name={card.icon} style={{ width: '22px', height: '22px', color: card.color, flexShrink: 0 }} />
                     </div>
                   ))}
                 </div>
 
                 {/* Dashboard Grid split */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '20px' }}>
+                <div className="sa-impersonate-split" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '20px' }}>
                   
                   {/* Left Column Area */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0 }}>
                     {/* Patient Flow */}
                     <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '20px' }}>
                       <h3 style={{ margin: '0 0 14px 0', fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>Patient Flow Visualizer</h3>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                      <div className="sa-impersonate-flow-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
                         {[
                           { state: 'Consultation', count: impersonatedStats?.flow?.consultation ?? 0, color: '#3B82F6', icon: 'user-check' },
                           { state: 'Laboratory', count: impersonatedStats?.flow?.laboratory ?? 0, color: '#10B981', icon: 'flask-conical' },
@@ -2527,7 +2572,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           </div>
                         </div>
                         <div>
-                          <div style={{ display: 'flex', justify: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
                             <span style={{ fontWeight: 700, color: '#334155' }}>ICU Beds Availability</span>
                             <span style={{ fontWeight: 800, color: '#10B981' }}>{Math.max(0, 20 - (impersonatedStats?.flow?.consultation || 0))}/20 Beds Free</span>
                           </div>
@@ -2543,50 +2588,52 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0' }}>
                         <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>Recent Hospital Activity</h3>
                       </div>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
-                        <thead>
-                          <tr style={{ background: '#FAF9F6', borderBottom: '1px solid #E2E8F0' }}>
-                            <th style={{ padding: '10px 16px', color: '#64748B', fontWeight: 800 }}>EVENT TYPE</th>
-                            <th style={{ padding: '10px 16px', color: '#64748B', fontWeight: 800 }}>PATIENT / ENTITY</th>
-                            <th style={{ padding: '10px 16px', color: '#64748B', fontWeight: 800 }}>DEPARTMENT</th>
-                            <th style={{ padding: '10px 16px', color: '#64748B', fontWeight: 800 }}>TIMESTAMP</th>
-                            <th style={{ padding: '10px 16px', color: '#64748B', fontWeight: 800 }}>STATUS</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(!impersonatedStats?.recentActivities || impersonatedStats.recentActivities.length === 0) ? (
-                            <tr>
-                              <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
-                                No recent activity found for this tenant.
-                              </td>
+                      <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                        <table style={{ width: '100%', minWidth: '480px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ background: '#FAF9F6', borderBottom: '1px solid #E2E8F0' }}>
+                              <th style={{ padding: '10px 16px', color: '#64748B', fontWeight: 800, whiteSpace: 'nowrap' }}>EVENT TYPE</th>
+                              <th style={{ padding: '10px 16px', color: '#64748B', fontWeight: 800, whiteSpace: 'nowrap' }}>PATIENT / ENTITY</th>
+                              <th style={{ padding: '10px 16px', color: '#64748B', fontWeight: 800, whiteSpace: 'nowrap' }}>DEPARTMENT</th>
+                              <th style={{ padding: '10px 16px', color: '#64748B', fontWeight: 800, whiteSpace: 'nowrap' }}>TIMESTAMP</th>
+                              <th style={{ padding: '10px 16px', color: '#64748B', fontWeight: 800, whiteSpace: 'nowrap' }}>STATUS</th>
                             </tr>
-                          ) : (
-                            impersonatedStats.recentActivities.map((act, i) => (
-                              <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                                <td style={{ padding: '12px 16px', fontWeight: 800 }}>{act.event}</td>
-                                <td style={{ padding: '12px 16px', color: '#1E293B' }}>{act.entity}</td>
-                                <td style={{ padding: '12px 16px', color: '#475569' }}>{act.dept}</td>
-                                <td style={{ padding: '12px 16px', color: '#64748B' }}>{act.time}</td>
-                                <td style={{ padding: '12px 16px' }}>
-                                  <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', background: act.color + '15', color: act.color, fontWeight: 700 }}>
-                                    {act.status}
-                                  </span>
+                          </thead>
+                          <tbody>
+                            {(!impersonatedStats?.recentActivities || impersonatedStats.recentActivities.length === 0) ? (
+                              <tr>
+                                <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
+                                  No recent activity found for this tenant.
                                 </td>
                               </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                            ) : (
+                              impersonatedStats.recentActivities.map((act, i) => (
+                                <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                  <td style={{ padding: '12px 16px', fontWeight: 800, whiteSpace: 'nowrap' }}>{act.event}</td>
+                                  <td style={{ padding: '12px 16px', color: '#1E293B', whiteSpace: 'nowrap' }}>{act.entity}</td>
+                                  <td style={{ padding: '12px 16px', color: '#475569', whiteSpace: 'nowrap' }}>{act.dept}</td>
+                                  <td style={{ padding: '12px 16px', color: '#64748B', whiteSpace: 'nowrap' }}>{act.time}</td>
+                                  <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                                    <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', background: act.color + '15', color: act.color, fontWeight: 700 }}>
+                                      {act.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
 
                   {/* Right Column Area */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0 }}>
                     
                     {/* Quick actions console */}
                     <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '20px' }}>
                       <h3 style={{ margin: '0 0 14px 0', fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>Quick Actions Console</h3>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px' }}>
                         {[
                           { label: 'Add Patient', icon: 'user-plus', action: () => setShowImpersonatedPatientModal(true) },
                           { label: 'New Appt.', icon: 'calendar-plus', action: () => setShowImpersonatedApptModal(true) },
@@ -2619,7 +2666,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                         ].map((t, idx) => (
                           <div key={idx} style={{ display: 'flex', gap: '10px' }}>
                             <div style={{ fontSize: '11px', fontWeight: 800, color: '#2563EB', width: '56px', flexShrink: 0 }}>{t.time}</div>
-                            <div>
+                            <div style={{ minWidth: 0 }}>
                               <div style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B' }}>{t.task}</div>
                               <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>{t.sub}</div>
                             </div>
@@ -2637,7 +2684,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                           { name: 'Main Database Connection', label: 'ONLINE', color: '#10B981' },
                           { name: 'SaaS Storage Sync', label: '100% SYNCED', color: '#10B981' }
                         ].map((sys, idx) => (
-                          <div key={idx} style={{ display: 'flex', justify: 'space-between', alignItems: 'center' }}>
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontSize: '11.5px', color: '#475569' }}>{sys.name}</span>
                             <span style={{ fontSize: '10px', fontWeight: 800, color: sys.color }}>{sys.label}</span>
                           </div>
@@ -2650,14 +2697,14 @@ const SuperAdminDashboard = ({ initialTab }) => {
               </>
             ) : (
               /* Staff & Functioning Portal View */
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ display: 'flex', justify: 'space-between', alignItems: 'center' }}>
-                  <div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
+                <div className="sa-page-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: '220px' }}>
                     <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 850, color: '#0F172A' }}>Active Staff & Operations</h2>
                     <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#64748B' }}>Add, edit, or delete hospital staff accounts. Use diagnostics to solve routing issues.</p>
                   </div>
                   
-                  <div style={{ display: 'flex', gap: '10px' }}>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                     <button
                       onClick={async () => {
                         showToast('Running system diagnostics on gateway keys...', 'info');
@@ -2668,7 +2715,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       }}
                       style={{
                         border: 'none', background: '#F59E0B', color: '#FFFFFF', padding: '10px 16px', borderRadius: '6px',
-                        fontSize: '12px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                        fontSize: '12px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap'
                       }}
                     >
                       <LucideIcon name="wrench" style={{ width: '14px', height: '14px' }} />
@@ -2682,7 +2729,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                       }}
                       style={{
                         border: 'none', background: '#2563EB', color: '#FFFFFF', padding: '10px 16px', borderRadius: '6px',
-                        fontSize: '12px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                        fontSize: '12px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap'
                       }}
                     >
                       <LucideIcon name="plus" style={{ width: '14px', height: '14px' }} />
@@ -2693,62 +2740,64 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
                 {/* Staff List Table */}
                 <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ background: '#FAF9F6', borderBottom: '1px solid #E2E8F0' }}>
-                        <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800 }}>STAFF ID</th>
-                        <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800 }}>NAME</th>
-                        <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800 }}>ROLE</th>
-                        <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800 }}>DEPARTMENT</th>
-                        <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800 }}>EMAIL</th>
-                        <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800 }}>STATUS</th>
-                        <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800, textAlign: 'right' }}>ACTIONS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {impersonatedStaff.length === 0 ? (
-                        <tr>
-                          <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#64748B' }}>
-                            No staff users registered under this tenant.
-                          </td>
+                  <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ background: '#FAF9F6', borderBottom: '1px solid #E2E8F0' }}>
+                          <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800, whiteSpace: 'nowrap' }}>STAFF ID</th>
+                          <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800, whiteSpace: 'nowrap' }}>NAME</th>
+                          <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800, whiteSpace: 'nowrap' }}>ROLE</th>
+                          <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800, whiteSpace: 'nowrap' }}>DEPARTMENT</th>
+                          <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800, whiteSpace: 'nowrap' }}>EMAIL</th>
+                          <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800, whiteSpace: 'nowrap' }}>STATUS</th>
+                          <th style={{ padding: '12px 16px', color: '#64748B', fontWeight: 800, textAlign: 'right', whiteSpace: 'nowrap' }}>ACTIONS</th>
                         </tr>
-                      ) : (
-                        impersonatedStaff.map(staff => (
-                          <tr key={staff._id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <td style={{ padding: '12px 16px', fontWeight: 800, color: '#2563EB' }}>{staff.staff_id}</td>
-                            <td style={{ padding: '12px 16px', color: '#0F172A', fontWeight: 700 }}>{staff.name}</td>
-                            <td style={{ padding: '12px 16px', textTransform: 'capitalize', color: '#475569' }}>{staff.role}</td>
-                            <td style={{ padding: '12px 16px', color: '#475569' }}>{staff.department || 'General'}</td>
-                            <td style={{ padding: '12px 16px', color: '#64748B' }}>{staff.email}</td>
-                            <td style={{ padding: '12px 16px' }}>
-                              <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', background: '#D1FAE5', color: '#065F46', fontWeight: 700 }}>
-                                Active
-                              </span>
-                            </td>
-                            <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                              <div style={{ display: 'flex', justify: 'flex-end', gap: '8px' }}>
-                                <button
-                                  onClick={() => {
-                                    setSelectedStaffToEdit(staff);
-                                    setIsAddStaffModalOpen(true);
-                                  }}
-                                  style={{ border: '1px solid #CBD5E1', background: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteImpersonatedStaff(staff._id)}
-                                  style={{ border: '1px solid #FCA5A5', background: '#FFF5F5', color: '#EF4444', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}
-                                >
-                                  Delete
-                                </button>
-                              </div>
+                      </thead>
+                      <tbody>
+                        {impersonatedStaff.length === 0 ? (
+                          <tr>
+                            <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#64748B' }}>
+                              No staff users registered under this tenant.
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                        ) : (
+                          impersonatedStaff.map(staff => (
+                            <tr key={staff._id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                              <td style={{ padding: '12px 16px', fontWeight: 800, color: '#2563EB', whiteSpace: 'nowrap' }}>{staff.staff_id}</td>
+                              <td style={{ padding: '12px 16px', color: '#0F172A', fontWeight: 700, whiteSpace: 'nowrap' }}>{staff.name}</td>
+                              <td style={{ padding: '12px 16px', textTransform: 'capitalize', color: '#475569', whiteSpace: 'nowrap' }}>{staff.role}</td>
+                              <td style={{ padding: '12px 16px', color: '#475569', whiteSpace: 'nowrap' }}>{staff.department || 'General'}</td>
+                              <td style={{ padding: '12px 16px', color: '#64748B', whiteSpace: 'nowrap' }}>{staff.email}</td>
+                              <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                                <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', background: '#D1FAE5', color: '#065F46', fontWeight: 700 }}>
+                                  Active
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedStaffToEdit(staff);
+                                      setIsAddStaffModalOpen(true);
+                                    }}
+                                    style={{ border: '1px solid #CBD5E1', background: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteImpersonatedStaff(staff._id)}
+                                    style={{ border: '1px solid #FCA5A5', background: '#FFF5F5', color: '#EF4444', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
@@ -8276,18 +8325,18 @@ const SuperAdminDashboard = ({ initialTab }) => {
 
             {/* HOSPITAL ONBOARDING TAB */}
             {isTabAllowed && activeTab === 'hospital-onboarding' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: 'calc(100vh - 104px)', padding: '24px', overflow: 'hidden' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                  <div>
+              <div className="sa-onboarding-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, minHeight: 0 }}>
+                <div className="sa-page-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <h2 style={{ ...styles.cardHeaderTitle, margin: 0 }}>Clinic Onboarding Engine</h2>
                     <p style={{ ...styles.cardHeaderSub, margin: '2px 0 0 0' }}>Manage verification checklists, document validation, and administrator provisioning.</p>
                   </div>
                   <button 
-                    style={{ ...styles.btnPrimary, padding: '10px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }} 
+                    style={{ ...styles.btnPrimary, padding: '10px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap', flexShrink: 0 }} 
                     onClick={handleAutoCreateOnboarding}
                   >
                     <LucideIcon name="plus" style={{ width: '16px', height: '16px' }} />
-                    Add Clinic for Onboarding
+                    <span>Add Clinic for Onboarding</span>
                   </button>
                 </div>
 
