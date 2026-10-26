@@ -39,7 +39,7 @@
       window.addEventListener("DOMContentLoaded", () => {
         // Automatically check if we are on a dashboard route
         const isDashboardRoute = () => {
-          return /receptionist|patient|doctor|admin|pharmacy|lab|procure|hr|payroll/i.test(window.location.pathname);
+          return /receptionist|reception|patient|doctor|admin|pharmacy|lab|procure|hr|payroll/i.test(window.location.pathname);
         };
 
         if (typeof Lenis !== "undefined" && !isDashboardRoute()) {

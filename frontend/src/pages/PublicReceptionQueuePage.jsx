@@ -120,6 +120,19 @@ const PublicReceptionQueuePage = () => {
     };
   }, [clinicCode]);
 
+  // 1b. Disable Lenis Smooth Scroll on intake page so native mobile/desktop scrolling works effortlessly
+  useEffect(() => {
+    if (window.lenis) {
+      try {
+        window.lenis.destroy();
+        window.lenis = null;
+      } catch (err) {
+        console.warn('Error destroying Lenis on intake page:', err);
+      }
+    }
+    document.documentElement.classList.remove('lenis', 'lenis-smooth');
+  }, []);
+
   // 2. Real-Time Socket Connection & Periodic Polling
   useEffect(() => {
     if (!clinicCode) return;
@@ -336,21 +349,40 @@ const PublicReceptionQueuePage = () => {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#F8FAFC',
-      color: '#0F172A',
-      fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'flex-start',
-      padding: '16px',
-      boxSizing: 'border-box',
-      overflowX: 'hidden',
-      width: '100%',
-      maxWidth: '100%'
-    }}>
+    <div 
+      data-lenis-prevent="true"
+      style={{
+        minHeight: '100vh',
+        height: 'auto',
+        background: '#F8FAFC',
+        color: '#0F172A',
+        fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        padding: '16px 16px 80px 16px',
+        boxSizing: 'border-box',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        WebkitOverflowScrolling: 'touch',
+        width: '100%',
+        maxWidth: '100%'
+      }}
+    >
+      <style>{`
+        html, body {
+          overflow-y: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+          height: auto !important;
+          min-height: 100% !important;
+        }
+        #root {
+          min-height: 100% !important;
+          height: auto !important;
+          overflow-y: visible !important;
+        }
+      `}</style>
       {/* ── TOP HEADER / BRAND BAR ── */}
       <header style={{
         width: '100%',
