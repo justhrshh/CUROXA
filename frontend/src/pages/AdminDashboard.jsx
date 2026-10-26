@@ -16,7 +16,7 @@ import {
   UserPlus, X, User, Phone, ShieldCheck, Lock, Sparkles, Eye, KeyRound, 
   Check, Briefcase, Mail, Shield, ChevronDown, Stethoscope, Clock, Plus, 
   AlertCircle, FileText, ChevronUp, Users, Droplet, CreditCard, MapPin, HeartPulse, Calendar,
-  QrCode, Printer, Download, Copy, AlertTriangle, Tv, ExternalLink
+  QrCode, Printer, Download, Copy, AlertTriangle, Tv, ExternalLink, CheckCircle2
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { getPublicFrontendUrl } from '../utils/urlConfig';
@@ -2684,7 +2684,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           {/* User/Clinic Icon */}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           <span style={{ color: '#475569', fontWeight: 700 }}>{clinicName}</span>
-          {sub && <span style={{ color: '#94A3B8', fontSize: '11.5px', marginLeft: '2px', fontWeight: 500 }}>· {sub}</span>}
+
         </div>
       </div>
     );
@@ -22919,7 +22919,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           </div>
         )}
 
-        {/* Reception Queue QR Management Tab (Phase 2 Preview) */}
+        {/* Reception Queue QR Management Tab */}
         {!isSubscriptionRestricted && activeTab === 'reception-qr' && (() => {
           const clinicCode = subscription?.hospitalCode || currentUser?.tenantId || localStorage.getItem('tenantId') || 'CLINIC';
           const clinicDisplayName = currentUser?.tenantName || subscription?.name || 'Clinic';
@@ -22945,6 +22945,89 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
           const handleOpenDisplay = () => {
             window.open(publicDisplayUrl, '_blank');
+          };
+
+          const handlePrintPoster = () => {
+            const printWindow = window.open('', '_blank', 'width=800,height=900');
+            if (!printWindow) return;
+            const svgElement = document.querySelector('#reception-qr-container svg');
+            const svgHtml = svgElement ? svgElement.outerHTML : '';
+            printWindow.document.write(`
+              <!DOCTYPE html>
+              <html>
+                <head>
+                  <title>Reception QR Signage - ${clinicDisplayName}</title>
+                  <style>
+                    body {
+                      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                      display: flex;
+                      flex-direction: column;
+                      align-items: center;
+                      justify-content: center;
+                      min-height: 100vh;
+                      margin: 0;
+                      padding: 40px;
+                      box-sizing: border-box;
+                      text-align: center;
+                      color: #0F172A;
+                    }
+                    .poster-card {
+                      border: 2px solid #0F172A;
+                      border-radius: 24px;
+                      padding: 48px;
+                      max-width: 500px;
+                      width: 100%;
+                      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+                    }
+                    h1 { margin: 0 0 8px 0; font-size: 28px; font-weight: 800; }
+                    p.subtitle { margin: 0 0 24px 0; color: #475569; font-size: 16px; }
+                    .qr-box { padding: 20px; background: #F8FAFC; border: 2px dashed #CBD5E1; border-radius: 16px; display: inline-block; margin-bottom: 24px; }
+                    .instructions { font-size: 15px; color: #334155; line-height: 1.6; font-weight: 600; margin-bottom: 16px; }
+                    .clinic-tag { font-family: monospace; font-size: 14px; background: #E2E8F0; padding: 6px 14px; border-radius: 8px; display: inline-block; }
+                    @media print {
+                      body { padding: 0; }
+                      .poster-card { border: 2px solid #000; box-shadow: none; max-width: 100%; }
+                    }
+                  </style>
+                </head>
+                <body>
+                  <div class="poster-card">
+                    <h1>${clinicDisplayName}</h1>
+                    <p class="subtitle">Welcome! Check In Here</p>
+                    <div class="qr-box">
+                      ${svgHtml}
+                    </div>
+                    <div class="instructions">
+                      Scan this QR code with your phone camera<br/>
+                      to enter the reception arrival queue.
+                    </div>
+                    <div class="clinic-tag">Clinic Code: ${clinicCode}</div>
+                  </div>
+                  <script>
+                    window.onload = function() {
+                      window.print();
+                    };
+                  </script>
+                </body>
+              </html>
+            `);
+            printWindow.document.close();
+          };
+
+          const handleDownloadSvg = () => {
+            const svgElement = document.querySelector('#reception-qr-container svg');
+            if (!svgElement) return;
+            const serializer = new XMLSerializer();
+            const svgString = serializer.serializeToString(svgElement);
+            const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const downloadLink = document.createElement('a');
+            downloadLink.href = url;
+            downloadLink.download = `reception-qr-${clinicCode}.svg`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            URL.revokeObjectURL(url);
           };
 
           return (
@@ -22998,32 +23081,36 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 </div>
               </div>
 
-              {/* Safeguard Alert Banner */}
+              {/* Module Operational Status Banner */}
               <div style={{
-                background: '#FFFBEB',
-                border: '1px solid #FDE68A',
+                background: isModuleActive ? '#F0FDF4' : '#FFFBEB',
+                border: isModuleActive ? '1px solid #BBF7D0' : '1px solid #FDE68A',
                 borderRadius: '10px',
                 padding: '16px 20px',
                 display: 'flex',
                 alignItems: 'flex-start',
                 gap: '14px'
               }}>
-                <AlertTriangle size={20} color="#D97706" style={{ flexShrink: 0, marginTop: '2px' }} />
-                <div style={{ fontSize: '13px', color: '#92400E', lineHeight: '1.5' }}>
+                {isModuleActive ? (
+                  <CheckCircle2 size={20} color="#16A34A" style={{ flexShrink: 0, marginTop: '2px' }} />
+                ) : (
+                  <AlertTriangle size={20} color="#D97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                )}
+                <div style={{ fontSize: '13px', color: isModuleActive ? '#166534' : '#92400E', lineHeight: '1.5' }}>
                   <strong style={{ display: 'block', fontSize: '13.5px', marginBottom: '3px' }}>
-                    Phase 2 Activation Safeguard Notice
+                    {isModuleActive ? 'Reception Queue Active' : 'Reception Queue Disabled'}
                   </strong>
-                  Reception Queue Module is {isModuleActive ? 'currently enabled' : 'currently disabled'} by Super Admin for this clinic. Patient self-registration endpoints will be deployed in Phase 3. QR code distribution is locked until Phase 3 deployment to prevent patients from accessing nonfunctional entry points.
+                  {isModuleActive
+                    ? 'Reception Queue is enabled for this clinic. Patients can scan the QR code to enter the reception queue.'
+                    : 'Reception Queue is disabled for this clinic. New reception queue entries are unavailable.'}
                 </div>
               </div>
 
-              {/* Grid: QR Preview + Configuration Details */}
+              {/* QR Preview + Action Buttons */}
               <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))',
-                gap: '20px',
+                display: 'flex',
+                flexDirection: 'column',
                 width: '100%',
-                alignItems: 'start',
                 boxSizing: 'border-box'
               }}>
                 {/* QR Preview Card */}
@@ -23036,7 +23123,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   flexDirection: 'column',
                   alignItems: 'center',
                   textAlign: 'center',
-                  gap: '20px'
+                  gap: '20px',
+                  maxWidth: '520px'
                 }}>
                   <div style={{ width: '100%', textAlign: 'left' }}>
                     <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', margin: '0 0 4px 0' }}>
@@ -23047,21 +23135,24 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     </p>
                   </div>
 
-                  <div style={{
-                    padding: '20px',
-                    borderRadius: '12px',
-                    background: '#F8FAFC',
-                    border: '1.5px dashed #CBD5E1',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '12px',
-                    width: '100%',
-                    maxWidth: '280px',
-                    margin: '0 auto',
-                    boxSizing: 'border-box'
-                  }}>
+                  <div
+                    id="reception-qr-container"
+                    style={{
+                      padding: '20px',
+                      borderRadius: '12px',
+                      background: '#F8FAFC',
+                      border: '1.5px dashed #CBD5E1',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '12px',
+                      width: '100%',
+                      maxWidth: '280px',
+                      margin: '0 auto',
+                      boxSizing: 'border-box'
+                    }}
+                  >
                     <div style={{ background: '#FFFFFF', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
                       <QRCodeSVG
                         value={publicQrUrl}
@@ -23123,208 +23214,71 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     </button>
                   </div>
 
-                  {/* Locked Action Buttons with Tooltip/Notice */}
+                  {/* Action Buttons: Print Poster and Download SVG */}
                   <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
                       <button
                         type="button"
-                        disabled={true}
+                        onClick={handlePrintPoster}
+                        disabled={!isModuleActive}
                         style={{
                           flex: 1,
                           padding: '10px 14px',
                           borderRadius: '8px',
-                          border: '1px solid #E2E8F0',
-                          background: '#F1F5F9',
-                          color: '#94A3B8',
+                          border: isModuleActive ? '1px solid #CBD5E1' : '1px solid #E2E8F0',
+                          background: isModuleActive ? '#FFFFFF' : '#F1F5F9',
+                          color: isModuleActive ? '#0F172A' : '#94A3B8',
                           fontSize: '13px',
                           fontWeight: 600,
-                          cursor: 'not-allowed',
+                          cursor: isModuleActive ? 'pointer' : 'not-allowed',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: '6px'
+                          gap: '6px',
+                          transition: 'all 0.15s ease'
                         }}
-                        title="Distribution locked until Phase 3 deployment"
+                        title={isModuleActive ? "Print signage poster" : "Reception Queue must be enabled to print signage"}
                       >
                         <Printer size={15} />
-                        Print Poster (Locked)
+                        Print Poster
                       </button>
                       <button
                         type="button"
-                        disabled={true}
+                        onClick={handleDownloadSvg}
+                        disabled={!isModuleActive}
                         style={{
                           flex: 1,
                           padding: '10px 14px',
                           borderRadius: '8px',
-                          border: '1px solid #E2E8F0',
-                          background: '#F1F5F9',
-                          color: '#94A3B8',
+                          border: isModuleActive ? '1px solid #CBD5E1' : '1px solid #E2E8F0',
+                          background: isModuleActive ? '#FFFFFF' : '#F1F5F9',
+                          color: isModuleActive ? '#0F172A' : '#94A3B8',
                           fontSize: '13px',
                           fontWeight: 600,
-                          cursor: 'not-allowed',
+                          cursor: isModuleActive ? 'pointer' : 'not-allowed',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: '6px'
+                          gap: '6px',
+                          transition: 'all 0.15s ease'
                         }}
-                        title="Distribution locked until Phase 3 deployment"
+                        title={isModuleActive ? "Download SVG graphic" : "Reception Queue must be enabled to download QR graphic"}
                       >
                         <Download size={15} />
-                        Download SVG (Locked)
+                        Download SVG
                       </button>
                     </div>
-                    <span style={{ fontSize: '11px', color: '#94A3B8', textAlign: 'center' }}>
-                      Distribution is safely locked until patient registration endpoints are deployed in Phase 3.
+                    <span style={{ fontSize: '11px', color: isModuleActive ? '#64748B' : '#94A3B8', textAlign: 'center' }}>
+                      {isModuleActive
+                        ? 'Print poster for front desk placement or download vector graphics for signage.'
+                        : 'Signage distribution is inactive while Reception Queue module is disabled.'}
                     </span>
                   </div>
                 </div>
 
-                {/* Configuration & Readiness Status Card */}
-                <div style={{
-                  background: '#FFFFFF',
-                  borderRadius: '12px',
-                  border: '1px solid #E2E8F0',
-                  padding: '24px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '16px'
-                }}>
-                  <div>
-                    <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', margin: '0 0 4px 0' }}>
-                      Module Integration & Readiness
-                    </h3>
-                    <p style={{ margin: 0, fontSize: '12px', color: '#64748B' }}>
-                      Status of reception queue module infrastructure for {clinicDisplayName}.
-                    </p>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {/* Status item 1 */}
-                    <div style={{
-                      padding: '12px 14px',
-                      borderRadius: '8px',
-                      background: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Super Admin Authorization</div>
-                        <div style={{ fontSize: '11.5px', color: '#64748B' }}>Clinic-level entitlement flag</div>
-                      </div>
-                      <span style={{
-                        fontSize: '11.5px',
-                        fontWeight: 700,
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        background: isModuleActive ? '#DCFCE7' : '#FEE2E2',
-                        color: isModuleActive ? '#15803D' : '#B91C1C'
-                      }}>
-                        {isModuleActive ? 'Enabled' : 'Disabled'}
-                      </span>
-                    </div>
-
-                    {/* Status item 2 */}
-                    <div style={{
-                      padding: '12px 14px',
-                      borderRadius: '8px',
-                      background: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Frontend Target Routing</div>
-                        <div style={{ fontSize: '11.5px', color: '#64748B' }}>Dynamic URL generator</div>
-                      </div>
-                      <span style={{
-                        fontSize: '11.5px',
-                        fontWeight: 700,
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        background: '#EFF6FF',
-                        color: '#1D4ED8'
-                      }}>
-                        getPublicFrontendUrl()
-                      </span>
-                    </div>
-
-                    {/* Status item 3 */}
-                    <div style={{
-                      padding: '12px 14px',
-                      borderRadius: '8px',
-                      background: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Patient Self-Registration</div>
-                        <div style={{ fontSize: '11.5px', color: '#64748B' }}>Public entry and OTP verification</div>
-                      </div>
-                      <span style={{
-                        fontSize: '11.5px',
-                        fontWeight: 700,
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        background: '#FEF3C7',
-                        color: '#B45309'
-                      }}>
-                        Phase 3 Deployment
-                      </span>
-                    </div>
-
-                    {/* Status item 4 */}
-                    <div style={{
-                      padding: '12px 14px',
-                      borderRadius: '8px',
-                      background: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Queue Scoping & Safety</div>
-                        <div style={{ fontSize: '11.5px', color: '#64748B' }}>Multi-tenant partition identifier</div>
-                      </div>
-                      <span style={{
-                        fontSize: '11.5px',
-                        fontWeight: 700,
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        background: '#F1F5F9',
-                        color: '#334155',
-                        fontFamily: 'monospace'
-                      }}>
-                        {clinicCode}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Operational Notes */}
-                  <div style={{
-                    marginTop: 'auto',
-                    padding: '14px',
-                    borderRadius: '8px',
-                    background: '#F8FAFC',
-                    border: '1px solid #E2E8F0',
-                    fontSize: '12px',
-                    color: '#475569',
-                    lineHeight: '1.5'
-                  }}>
-                    <strong style={{ color: '#0F172A', display: 'block', marginBottom: '4px' }}>
-                      Operational Workflow Note:
-                    </strong>
-                    When this module is activated by Super Admin and Phase 3 is deployed, patients scanning this QR code will register in a dedicated Reception Arrival Queue. Existing doctor consultation queues, appointment bookings, and receptionist operations remain completely independent.
-                  </div>
-                </div>
               </div>
 
-              {/* Waiting Room Reception Display Card (Phase 5) */}
+              {/* Waiting Room Reception Display Card */}
               <div style={{
                 background: '#FFFFFF',
                 borderRadius: '12px',
