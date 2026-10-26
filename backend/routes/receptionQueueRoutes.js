@@ -486,7 +486,21 @@ router.post('/verify-otp', async (req, res) => {
 // ----------------------------------------------------
 router.post('/register-new', async (req, res) => {
   try {
-    const { sessionToken, clinicCode, name, contact, gender, age, dob, idempotencyKey } = req.body;
+    const { 
+      sessionToken, 
+      clinicCode, 
+      title, 
+      name, 
+      contact, 
+      gender, 
+      age, 
+      dob, 
+      email: customEmail, 
+      bloodGroup, 
+      address, 
+      allergies, 
+      idempotencyKey 
+    } = req.body;
 
     const resolved = await resolveClinicAndModule(clinicCode);
     if (resolved.error) {
@@ -546,12 +560,16 @@ router.post('/register-new', async (req, res) => {
       queueDate: todayStr,
       patientType: 'New',
       preliminaryDetails: {
+        title: typeof title === 'string' ? title.trim() : '',
         name: name.trim(),
         contact: cleanContact,
         gender,
         age: numAge,
         dob: dob || '',
-        email: verifiedEmail
+        email: (customEmail && typeof customEmail === 'string' && customEmail.trim()) ? customEmail.trim() : verifiedEmail,
+        bloodGroup: typeof bloodGroup === 'string' ? bloodGroup.trim() : '',
+        address: typeof address === 'string' ? address.trim() : '',
+        allergies: typeof allergies === 'string' ? allergies.trim() : ''
       },
       idempotencyKey: idempotencyKey ? String(idempotencyKey).trim() : null
     });

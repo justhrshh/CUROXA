@@ -5,7 +5,8 @@ import api, { getSocketUrl } from '../utils/api';
 import { 
   CheckCircle, AlertCircle, Clock, Users, ArrowRight, RefreshCw, 
   ChevronRight, Calendar, User, Phone, Shield, Building2, MapPin, 
-  HelpCircle, AlertTriangle, ArrowLeft, HeartPulse, Check
+  HelpCircle, AlertTriangle, ArrowLeft, HeartPulse, Check, Sparkles,
+  Droplet, Mail, Plus, Minus, ChevronDown
 } from 'lucide-react';
 import curoxaLogo from '../assets/quroxa_new_logo.png';
 
@@ -35,12 +36,18 @@ const PublicReceptionQueuePage = () => {
 
   // New patient registration form states
   const [formData, setFormData] = useState({
+    title: 'Mr.',
     name: '',
     contact: '',
     gender: 'Male',
     age: '',
-    dob: ''
+    dob: '',
+    email: '',
+    bloodGroup: '',
+    address: '',
+    allergies: ''
   });
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
 
   // Flow context states
   const [sessionToken, setSessionToken] = useState(null);
@@ -286,11 +293,16 @@ const PublicReceptionQueuePage = () => {
       const res = await api.post('/reception-queue/register-new', {
         sessionToken,
         clinicCode,
+        title: formData.title,
         name: formData.name.trim(),
         contact: cleanPhone,
         gender: formData.gender,
         age: formData.age ? parseInt(formData.age, 10) : undefined,
         dob: formData.dob || undefined,
+        email: formData.email?.trim() || undefined,
+        bloodGroup: formData.bloodGroup || undefined,
+        address: formData.address?.trim() || undefined,
+        allergies: formData.allergies?.trim() || undefined,
         idempotencyKey
       });
 
@@ -842,62 +854,114 @@ const PublicReceptionQueuePage = () => {
         {/* ── STATE 8: NEW PATIENT BASIC DETAILS FORM ── */}
         {step === 'new_patient_form' && (
           <div>
-            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: '0 0 4px 0' }}>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 12px',
+              borderRadius: '999px',
+              background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(79,70,229,0.12) 100%)',
+              border: '1px solid rgba(37,99,235,0.15)',
+              color: '#2563EB',
+              fontSize: '11px',
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              marginBottom: '8px'
+            }}>
+              <Sparkles size={12} color="#2563EB" /> Fast Reception Intake
+            </div>
+
+            <h2 style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', margin: '0 0 4px 0', letterSpacing: '-0.02em' }}>
               Patient Information
             </h2>
-            <p style={{ margin: '0 0 18px 0', fontSize: '13px', color: '#64748B', lineHeight: 1.4 }}>
-              Enter your basic details to receive your reception queue ticket.
+            <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#64748B', lineHeight: 1.45 }}>
+              Enter your details to receive your digital reception queue ticket.
             </p>
 
             <form onSubmit={handleRegisterNewPatient} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
                   Full Name *
                 </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. John Doe"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '11px 13px',
-                    borderRadius: '8px',
-                    border: '1.5px solid #CBD5E1',
-                    fontSize: '14px',
-                    boxSizing: 'border-box',
-                    outline: 'none'
-                  }}
-                />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <select
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    style={{
+                      width: '90px',
+                      padding: '11px 10px',
+                      borderRadius: '10px',
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: '13.5px',
+                      fontWeight: 700,
+                      background: '#F8FAFC',
+                      color: '#1E293B',
+                      boxSizing: 'border-box',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="Mr.">Mr.</option>
+                    <option value="Mrs.">Mrs.</option>
+                    <option value="Ms.">Ms.</option>
+                    <option value="Master">Master</option>
+                    <option value="Dr.">Dr.</option>
+                    <option value="Prof.">Prof.</option>
+                  </select>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. John Doe"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '11px 13px 11px 36px',
+                        borderRadius: '10px',
+                        border: '1.5px solid #CBD5E1',
+                        fontSize: '14px',
+                        background: '#FFFFFF',
+                        boxSizing: 'border-box',
+                        outline: 'none'
+                      }}
+                    />
+                    <User size={16} color="#94A3B8" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                  </div>
+                </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
                   Mobile Number *
                 </label>
-                <input
-                  type="tel"
-                  required
-                  maxLength={10}
-                  placeholder="10-digit phone number"
-                  value={formData.contact}
-                  onChange={(e) => setFormData({ ...formData, contact: e.target.value.replace(/\D/g, '') })}
-                  style={{
-                    width: '100%',
-                    padding: '11px 13px',
-                    borderRadius: '8px',
-                    border: '1.5px solid #CBD5E1',
-                    fontSize: '14px',
-                    boxSizing: 'border-box',
-                    outline: 'none'
-                  }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    placeholder="10-digit phone number"
+                    value={formData.contact}
+                    onChange={(e) => setFormData({ ...formData, contact: e.target.value.replace(/\D/g, '') })}
+                    style={{
+                      width: '100%',
+                      padding: '11px 13px 11px 36px',
+                      borderRadius: '10px',
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: '14px',
+                      background: '#FFFFFF',
+                      boxSizing: 'border-box',
+                      outline: 'none'
+                    }}
+                  />
+                  <Phone size={16} color="#94A3B8" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
                     Gender *
                   </label>
                   <select
@@ -906,12 +970,14 @@ const PublicReceptionQueuePage = () => {
                     style={{
                       width: '100%',
                       padding: '11px 13px',
-                      borderRadius: '8px',
+                      borderRadius: '10px',
                       border: '1.5px solid #CBD5E1',
                       fontSize: '14px',
                       background: '#FFFFFF',
+                      color: '#1E293B',
                       boxSizing: 'border-box',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: 'pointer'
                     }}
                   >
                     <option value="Male">Male</option>
@@ -921,7 +987,7 @@ const PublicReceptionQueuePage = () => {
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
                     Age (Years)
                   </label>
                   <input
@@ -934,9 +1000,10 @@ const PublicReceptionQueuePage = () => {
                     style={{
                       width: '100%',
                       padding: '11px 13px',
-                      borderRadius: '8px',
+                      borderRadius: '10px',
                       border: '1.5px solid #CBD5E1',
                       fontSize: '14px',
+                      background: '#FFFFFF',
                       boxSizing: 'border-box',
                       outline: 'none'
                     }}
@@ -944,8 +1011,213 @@ const PublicReceptionQueuePage = () => {
                 </div>
               </div>
 
-              <div style={{ fontSize: '11.5px', color: '#64748B', lineHeight: 1.4 }}>
-                Verified Email: <strong style={{ color: '#0F172A' }}>{email}</strong>
+              {/* Optional Details Expandable Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setShowMoreOptions(!showMoreOptions)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  padding: '11px 14px',
+                  borderRadius: '10px',
+                  background: showMoreOptions
+                    ? 'linear-gradient(135deg, #EFF6FF 0%, #EEF2FF 100%)'
+                    : 'linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)',
+                  border: showMoreOptions ? '1.5px solid #BFDBFE' : '1.5px dashed #CBD5E1',
+                  color: showMoreOptions ? '#1D4ED8' : '#475569',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  marginTop: '2px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '22px',
+                    height: '22px',
+                    borderRadius: '6px',
+                    background: showMoreOptions
+                      ? 'linear-gradient(135deg, #2563EB 0%, #4F46E5 100%)'
+                      : 'linear-gradient(135deg, #64748B 0%, #475569 100%)',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '14px',
+                    fontWeight: 800,
+                    lineHeight: 1
+                  }}>
+                    {showMoreOptions ? '−' : '+'}
+                  </div>
+                  <span>{showMoreOptions ? 'Hide Optional Details' : 'Add Optional Details'}</span>
+                </div>
+                <span style={{ fontSize: '11px', color: showMoreOptions ? '#2563EB' : '#94A3B8', fontWeight: 600 }}>
+                  {showMoreOptions ? 'Collapse' : 'Blood Group, Address...'}
+                </span>
+              </button>
+
+              {/* Expanded Optional Fields Container */}
+              {showMoreOptions && (
+                <div style={{
+                  background: 'linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%)',
+                  border: '1.5px solid #E2E8F0',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                        <Droplet size={13} color="#EF4444" /> Blood Group
+                      </label>
+                      <select
+                        value={formData.bloodGroup}
+                        onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          border: '1.5px solid #CBD5E1',
+                          fontSize: '13.5px',
+                          background: '#FFFFFF',
+                          color: '#1E293B',
+                          boxSizing: 'border-box',
+                          outline: 'none',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="">Select</option>
+                        <option value="A+">A+</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B-">B-</option>
+                        <option value="AB+">AB+</option>
+                        <option value="AB-">AB-</option>
+                        <option value="O+">O+</option>
+                        <option value="O-">O-</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                        <Calendar size={13} color="#2563EB" /> Date of Birth
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.dob}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          let computedAge = formData.age;
+                          if (val) {
+                            const birthYear = new Date(val).getFullYear();
+                            const nowYear = new Date().getFullYear();
+                            if (birthYear > 1900 && birthYear <= nowYear) {
+                              computedAge = String(nowYear - birthYear);
+                            }
+                          }
+                          setFormData({ ...formData, dob: val, age: computedAge });
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '9px 12px',
+                          borderRadius: '8px',
+                          border: '1.5px solid #CBD5E1',
+                          fontSize: '13.5px',
+                          background: '#FFFFFF',
+                          boxSizing: 'border-box',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                      <Mail size={13} color="#2563EB" /> Contact Email (Optional)
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="patient@example.com (for receipts & reports)"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: '1.5px solid #CBD5E1',
+                        fontSize: '13.5px',
+                        background: '#FFFFFF',
+                        boxSizing: 'border-box',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                      <MapPin size={13} color="#0D9488" /> Address / Locality
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Flat 302, Green Park, City"
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: '1.5px solid #CBD5E1',
+                        fontSize: '13.5px',
+                        background: '#FFFFFF',
+                        boxSizing: 'border-box',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                      <HeartPulse size={13} color="#DC2626" /> Known Allergies / Medical Notes
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Penicillin, Pollen or None"
+                      value={formData.allergies}
+                      onChange={(e) => setFormData({ ...formData, allergies: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: '1.5px solid #CBD5E1',
+                        fontSize: '13.5px',
+                        background: '#FFFFFF',
+                        boxSizing: 'border-box',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Verified Arrival Email Badge */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 14px',
+                background: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                borderRadius: '10px',
+                fontSize: '12px',
+                color: '#166534'
+              }}>
+                <CheckCircle size={15} color="#16A34A" style={{ flexShrink: 0 }} />
+                <span>Verified Arrival Email: <strong style={{ color: '#0F172A' }}>{email}</strong></span>
               </div>
 
               <button
@@ -953,19 +1225,23 @@ const PublicReceptionQueuePage = () => {
                 disabled={actionLoading}
                 style={{
                   width: '100%',
-                  marginTop: '8px',
-                  padding: '13px',
-                  borderRadius: '8px',
-                  background: actionLoading ? '#94A3B8' : '#2563EB',
+                  marginTop: '4px',
+                  padding: '13px 18px',
+                  borderRadius: '10px',
+                  background: actionLoading 
+                    ? '#94A3B8' 
+                    : 'linear-gradient(135deg, #2563EB 0%, #4F46E5 100%)',
                   color: '#FFFFFF',
                   fontSize: '14.5px',
-                  fontWeight: 700,
+                  fontWeight: 800,
                   border: 'none',
                   cursor: actionLoading ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '8px'
+                  gap: '8px',
+                  boxShadow: actionLoading ? 'none' : '0 4px 14px rgba(37, 99, 235, 0.35)',
+                  transition: 'all 0.2s ease'
                 }}
               >
                 {actionLoading ? (

@@ -56,12 +56,16 @@ const receptionQueueSchema = new mongoose.Schema({
   },
   // Preliminary staging details for New patients (does NOT create permanent Patient records in Phase 3)
   preliminaryDetails: {
+    title: { type: String, default: '' },
     name: { type: String },
     contact: { type: String },
     gender: { type: String, enum: ['Male', 'Female', 'Other'] },
     age: { type: Number },
     dob: { type: String },
-    email: { type: String }
+    email: { type: String },
+    bloodGroup: { type: String, default: '' },
+    address: { type: String, default: '' },
+    allergies: { type: String, default: '' }
   },
   source: {
     type: String,

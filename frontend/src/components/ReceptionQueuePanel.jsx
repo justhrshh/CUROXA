@@ -172,12 +172,16 @@ const ReceptionQueuePanel = ({
     const authoritativeToday = queueData.queueDate || new Date().toISOString().split('T')[0];
 
     setIntakeFormData({
+      title: patientObj?.title || '',
       name: patientObj?.name || '',
       contact: patientObj?.contact || (ticket.patientId && typeof ticket.patientId === 'object' ? ticket.patientId.contact : ''),
       gender: patientObj?.gender || 'Male',
       age: patientObj?.age ? String(patientObj.age) : '',
       dob: patientObj?.dob || '',
       email: patientObj?.email || '',
+      bloodGroup: patientObj?.bloodGroup || '',
+      address: patientObj?.address || '',
+      allergies: patientObj?.allergies || 'None',
       doctorId: defaultDocId,
       date: authoritativeToday,
       time: '10:00 AM',
@@ -205,12 +209,16 @@ const ReceptionQueuePanel = ({
         }
 
         const patientPayload = {
+          title: intakeFormData.title || undefined,
           name: intakeFormData.name.trim(),
           contact: cleanContact,
           gender: intakeFormData.gender,
           age: intakeFormData.age ? parseInt(intakeFormData.age, 10) : undefined,
           dob: intakeFormData.dob || undefined,
-          email: intakeFormData.email?.trim() || undefined
+          email: intakeFormData.email?.trim() || undefined,
+          bloodGroup: intakeFormData.bloodGroup || undefined,
+          address: intakeFormData.address?.trim() || undefined,
+          allergies: intakeFormData.allergies || undefined
         };
 
         const patientRes = await api.post('/patients', patientPayload);

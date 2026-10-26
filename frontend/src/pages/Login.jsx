@@ -575,10 +575,10 @@ const Login = () => {
                 <input 
                   type="text" 
                   required 
-                  maxLength={10}
+                  maxLength={80}
                   value={staffId} 
-                  onChange={(e) => setStaffId(e.target.value.toLowerCase().slice(0, 10))} 
-                  placeholder="Username" 
+                  onChange={(e) => setStaffId(e.target.value.toLowerCase().slice(0, 80))} 
+                  placeholder="Username, Phone, or Email" 
                   className="w-full h-11 sm:h-12 pl-11 pr-4 bg-slate-50/70 hover:bg-slate-50 focus:bg-white rounded-xl border border-slate-300 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-500 placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition shadow-2xs" 
                 />
               </div>
