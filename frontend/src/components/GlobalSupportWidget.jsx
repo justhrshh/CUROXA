@@ -222,68 +222,52 @@ export default function GlobalSupportWidget() {
       {/* FLOATING ACTION BUTTON */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: isOpen ? '424px' : '24px',
-          width: '56px',
-          height: '56px',
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #2563EB, #1D4ED8)',
-          boxShadow: '0 8px 30px rgba(37, 99, 235, 0.4)',
-          border: 'none',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'white',
-          zIndex: 9999,
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          transform: isOpen ? 'rotate(90deg) scale(0.95)' : 'rotate(0) scale(1)'
-        }}
+        className={`global-support-btn ${isOpen ? "open" : ""}`}
         title="Contact Platform Support"
+        aria-label="Contact Platform Support"
       >
         {isOpen ? (
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
         ) : (
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v5"/><path d="M12 16h.01"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v5"/><path d="M12 16h.01"/></svg>
         )}
       </button>
 
-      {/* SUPPORT DRAWER PANEL */}
+      {/* MOBILE BACKDROP FOR SUPPORT DRAWER */}
       {isOpen && (
         <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            right: 0,
-            bottom: 0,
-            width: '400px',
-            background: 'rgba(255, 255, 255, 0.95)',
-            backdropFilter: 'blur(16px)',
-            boxShadow: '-10px 0 40px rgba(0, 0, 0, 0.12)',
-            zIndex: 9998,
-            display: 'flex',
-            flexDirection: 'column',
-            borderLeft: '1px solid rgba(226, 232, 240, 0.8)',
-            fontFamily: 'system-ui, -apple-system, sans-serif',
-            animation: 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
-          }}
-        >
+          className="global-support-backdrop"
+          onClick={() => setIsOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* SUPPORT DRAWER PANEL */}
+      {isOpen && (
+        <div className="global-support-drawer">
           {/* Header */}
-          <div style={{ padding: '20px', borderBottom: '1px solid #E2E8F0', background: 'linear-gradient(to right, #F8FAFC, #FFFFFF)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ background: '#EFF6FF', color: '#2563EB', padding: '8px', borderRadius: '8px' }}>
+          <div className="global-support-drawer-header">
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ background: "#EFF6FF", color: "#2563EB", padding: "8px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               </div>
               <div>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>Platform Help Center</h3>
-                <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ width: '6px', height: '6px', background: '#10B981', borderRadius: '50%', display: 'inline-block' }}></span>
+                <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 800, color: "#0F172A" }}>Platform Help Center</h3>
+                <span style={{ fontSize: "11px", color: "#10B981", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
+                  <span style={{ width: "6px", height: "6px", background: "#10B981", borderRadius: "50%", display: "inline-block" }}></span>
                   Quroxa Support Desk Live
                 </span>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="global-support-close-btn"
+              title="Close Support Desk"
+              aria-label="Close Support Desk"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+            </button>
           </div>
 
           {/* Body Content */}

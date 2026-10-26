@@ -1249,9 +1249,52 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       showToast('Subscription expired. All operational modules are locked until plan renewal.', 'error');
       return;
     }
+    setMobileSidebarOpen(false);
     if (callback) callback();
     setActiveTab(targetTab);
   };
+
+  const getHeaderMainTitle = () => {
+    if (activeTab === 'dashboard') return 'Dashboard';
+    if (activeTab === 'supply') return 'Alerts & Tasks';
+    if (activeTab === 'approvals') return 'Approvals';
+    if (activeTab === 'po-approvals') return 'PO Approvals';
+    if (activeTab === 'appointments') return 'Appointments';
+    if (['patients', 'patient-details'].includes(activeTab)) return 'Patients';
+    if (activeTab === 'workforce') return selectedStaffProfile ? 'Employee Profile' : 'Workforce';
+    if (activeTab === 'financials') return 'Revenue';
+    if (activeTab === 'audit') return 'Audit Logs';
+    if (activeTab === 'services-catalog') return 'Pricing Catalog';
+    if (activeTab === 'lab-catalog') return 'Hospital Test Catalog';
+    if (activeTab === 'subscription') return 'Subscription';
+    if (activeTab === 'maintenance') return 'Maintenance';
+    if (activeTab === 'letterhead') return 'Letterhead Settings';
+    if (activeTab === 'reception-qr') return 'Reception QR';
+    if (activeTab === 'updates') return 'Updates';
+    if (activeTab === 'permissions') return 'Role Coverage';
+    if (activeTab === 'dpdp') return 'DPO & DPDP Compliance';
+    return 'Admin Console';
+  };
+
+  // Mobile drawer: close on Escape and manage body scroll lock
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && mobileSidebarOpen) {
+        setMobileSidebarOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mobileSidebarOpen]);
+
+  useEffect(() => {
+    if (mobileSidebarOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileSidebarOpen]);
 
   useEffect(() => {
     if (!newStaff.staff_id) {
@@ -10321,19 +10364,26 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             display: flex !important;
           }
           .admin-sidebar {
-            left: -256px !important;
-            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            z-index: 2000 !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            bottom: 0 !important;
+            width: 280px !important;
+            max-width: 82vw !important;
+            transform: translateX(-100%) !important;
+            transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            z-index: 2500 !important;
+            box-shadow: none !important;
           }
           .admin-sidebar.mobile-open {
-            left: 0 !important;
-            z-index: 2000 !important;
+            transform: translateX(0) !important;
+            box-shadow: 8px 0 32px rgba(15, 23, 42, 0.16) !important;
           }
           .admin-main-canvas {
             margin-left: 0 !important;
           }
           .admin-top-header {
-            padding: 0 20px !important;
+            padding: 8px 12px !important;
           }
           .mobile-backdrop {
             position: fixed;
@@ -10341,10 +10391,25 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             left: 0;
             right: 0;
             bottom: 0;
-            background-color: rgba(15, 23, 42, 0.4);
-            backdrop-filter: blur(4px);
-            z-index: 999;
+            background-color: rgba(15, 23, 42, 0.5);
+            backdrop-filter: blur(1.5px);
+            -webkit-backdrop-filter: blur(1.5px);
+            z-index: 2490;
             animation: fadeIn 0.2s ease-out;
+          }
+          .mobile-sidebar-close-btn {
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: #F1F5F9;
+            border: 1px solid #E2E8F0;
+            color: #475569;
+            cursor: pointer;
+            margin-left: auto;
+            flex-shrink: 0;
           }
           .dashboard-layout-cols {
             grid-template-columns: 1fr !important;
@@ -11247,10 +11312,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           .admin-kpi-row {
             grid-template-columns: 1fr !important;
           }
-          .admin-top-header {
-            flex-direction: row !important;
-            justify-content: space-between !important;
-          }
+          /* admin-top-header uses deliberate desktop / mobile components */
         }
 
         /* ----- MODERNIZED DASHBOARD STAT CARDS (REFERENCE AURORA GRADIENT MESH) ----- */
@@ -11734,9 +11796,9 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         {/* 1. Light Theme Sidebar Navigation: Pixel-Perfect Reference Match */}
         {activeTab !== 'hr-payroll' && (
           <div 
-            className={`admin-sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${mobileSidebarOpen ? 'mobile-open' : ''}`} 
+            className={`admin-sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${mobileSidebarOpen ? 'mobile-open' : ''}`}
             ref={sidebarRef}
-            onClick={() => setMobileSidebarOpen(false)}
+            onClick={(e) => e.stopPropagation()}
             data-lenis-prevent
           >
             {/* Top Branding & Decorative Waves */}
@@ -11802,6 +11864,18 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     {getActivePortalBranding() ? `${getActivePortalBranding()?.hospitalId} • EMR` : 'Health Management'}
                   </span>
                 </div>
+                {/* Mobile Close Button */}
+                <button 
+                  type="button"
+                  className="mobile-sidebar-close-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMobileSidebarOpen(false);
+                  }}
+                  aria-label="Close navigation"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+                </button>
                 <button 
                   className="sidebar-collapse-toggle desktop-only-flex"
                   onClick={(e) => {
@@ -12615,6 +12689,9 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         {/* 3. Top Navigation Header */}
         {activeTab !== 'hr-payroll' && (
           <div className="admin-top-header">
+            {/* Desktop Header */}
+            <div className="admin-header-desktop desktop-only-flex" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {/* Hamburger Mobile Menu Toggle Button */}
               <button 
@@ -12969,6 +13046,172 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 <line x1="38" y1="8" x2="46" y2="0" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" />
               </svg>
               <div className="header-bottom-accent-line-right" />
+            </div>            </div>
+
+            {/* Deliberate 2-Row Mobile Header (<= 768px) */}
+            <div className="admin-header-mobile mobile-only-flex" style={{ display: 'none', flexDirection: 'column', width: '100%', gap: '6px' }}>
+              {/* Row 1: Hamburger | Brand Logo & Title | Plan Pill, Sync, Notifications */}
+              <div className="admin-mobile-row1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button 
+                    type="button"
+                    className="mobile-menu-toggle"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMobileSidebarOpen(!mobileSidebarOpen);
+                    }}
+                    aria-label="Open menu"
+                    style={{
+                      display: 'flex',
+                      background: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      cursor: 'pointer',
+                      color: '#334155',
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+                  </button>
+
+                  <div className="admin-mobile-brand" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {getActivePortalBranding() ? (
+                      <HospitalBrandLogo 
+                        hospital={getActivePortalBranding()} 
+                        size={28} 
+                        borderRadius={7} 
+                        fontSize={12} 
+                      />
+                    ) : (
+                      <img 
+                        src={curoxaSidebarLogo} 
+                        alt="QUROXA" 
+                        style={{ width: '28px', height: '28px', objectFit: 'contain' }}
+                      />
+                    )}
+                    <span style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.2px', whiteSpace: 'nowrap' }}>
+                      {getActivePortalBranding()?.name || 'QUROXA'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="admin-mobile-actions" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {/* Compact Plan Pill */}
+                  <div 
+                    onClick={() => handleNavTabClick('subscription')}
+                    title="View Subscription"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 8px',
+                      borderRadius: '12px',
+                      background: isSubscriptionRestricted ? '#FEF2F2' : '#F0FDF4',
+                      border: `1px solid ${isSubscriptionRestricted ? '#FECACA' : '#BBF7D0'}`,
+                      cursor: 'pointer',
+                      flexShrink: 0
+                    }}
+                  >
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isSubscriptionRestricted ? '#EF4444' : '#22C55E' }} />
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: isSubscriptionRestricted ? '#DC2626' : '#16A34A', textTransform: 'capitalize' }}>
+                      {isSubscriptionRestricted ? 'Expired' : (subscription?.plan ? subscription.plan.split(' (')[0].replace(' Plan', '') : 'Trial')}
+                    </span>
+                  </div>
+
+                  {/* Sync Button */}
+                  <button 
+                    type="button"
+                    onClick={isSubscriptionRestricted ? () => showToast('Subscription expired.', 'error') : handleManualSyncAll}
+                    disabled={isGlobalSyncing || isSubscriptionRestricted}
+                    title="Sync"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '9px',
+                      background: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      color: '#475569',
+                      flexShrink: 0
+                    }}
+                  >
+                    <svg 
+                      width="15" 
+                      height="15" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2.4" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                      style={{
+                        animation: isGlobalSyncing ? 'spin 1s linear infinite' : 'none',
+                        color: isGlobalSyncing ? '#2563EB' : '#475569'
+                      }}
+                    >
+                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                    </svg>
+                  </button>
+
+                  {/* Notification Bell */}
+                  <div 
+                    ref={notificationRef}
+                    onClick={() => {
+                      setShowNotifications(!showNotifications);
+                      if (!showNotifications) {
+                        const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
+                        localStorage.setItem(`curoxa_notifications_last_seen_${userKey}`, String(Date.now()));
+                        setUnreadCount(0);
+                      }
+                    }}
+                    title="Notifications"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '9px',
+                      background: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      position: 'relative',
+                      flexShrink: 0
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                    {unreadCount > 0 && (
+                      <span style={{ position: 'absolute', top: '-3px', right: '-3px', background: '#EF4444', color: 'white', borderRadius: '50%', width: '15px', height: '15px', fontSize: '9px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid white' }}>
+                        {unreadCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Page Title (Left) | Clinic Identity (Right) */}
+              <div className="admin-mobile-row2" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingTop: '6px', borderTop: '1px solid rgba(226, 232, 240, 0.7)' }}>
+                <span style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.2px', lineHeight: 1.2 }}>
+                  {getHeaderMainTitle()}
+                </span>
+
+                <div 
+                  style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#475569', fontWeight: 700, maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  title={currentUser?.tenantName || subscription?.name || 'Seghal Neo'}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {currentUser?.tenantName || subscription?.name || 'Seghal Neo'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -13070,10 +13313,10 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             {/* ============================================================== */}
             {/* SECTION 1: TOP 4 KPI CARDS (Matching HR Module Visual Language)*/}
             {/* ============================================================== */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
+            <div className="admin-dashboard-kpi-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 w-full">
               {/* Card 1: Today's Registrations (Electric Blue Gradient with Bottom-Right Radial Glow) */}
               <div 
-                className="p-5 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
                 style={{
                   background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)'
                 }}
@@ -13091,16 +13334,16 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
                 
-                <div className="mt-4 flex items-end justify-between">
+                <div className="mt-3 sm:mt-4 flex items-end justify-between">
                   <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{todayPatientsCount}</div>
+                    <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{todayPatientsCount}</div>
                     <div className="text-xs text-blue-700 font-bold mt-2 truncate">
                       {todayPatientsCount > 0 ? `+${todayPatientsCount} registered today` : (patients.length > 0 ? `${patients.length} in registry` : 'No registrations')}
                     </div>
                   </div>
 
                   {/* Blue Mini Sparkline */}
-                  <div className="w-16 h-8 shrink-0 relative">
+                  <div className="w-14 h-7 sm:w-16 sm:h-8 shrink-0 relative">
                     <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                       <defs>
                         <linearGradient id="kpiBlueGradAdmin" x1="0" y1="0" x2="0" y2="1">
@@ -13125,7 +13368,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
               {/* Card 2: Appointments Today (Purple/Violet Gradient with Top-Left Radial Glow) */}
               <div 
-                className="p-5 rounded-2xl border border-purple-200/90 shadow-[0_12px_28px_rgba(139,92,246,0.08)] hover:shadow-[0_16px_36px_rgba(139,92,246,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-purple-200/90 shadow-[0_12px_28px_rgba(139,92,246,0.08)] hover:shadow-[0_16px_36px_rgba(139,92,246,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
                 style={{
                   background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)'
                 }}
@@ -13143,16 +13386,16 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
                 
-                <div className="mt-4 flex items-end justify-between">
+                <div className="mt-3 sm:mt-4 flex items-end justify-between">
                   <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{todayAppts.length}</div>
+                    <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{todayAppts.length}</div>
                     <div className="text-xs text-purple-700 font-bold mt-2 truncate">
                       {todayAppts.length > 0 ? `${completedToday} done · ${pendingToday} pending` : 'No appointments scheduled'}
                     </div>
                   </div>
 
                   {/* Purple Mini Sparkline */}
-                  <div className="w-16 h-8 shrink-0 relative">
+                  <div className="w-14 h-7 sm:w-16 sm:h-8 shrink-0 relative">
                     <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                       <defs>
                         <linearGradient id="kpiPurpleGradAdmin" x1="0" y1="0" x2="0" y2="1">
@@ -13177,7 +13420,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
               {/* Card 3: Today's Revenue (Emerald Gradient with Top-Right Radial Glow) */}
               <div 
-                className="p-5 rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
                 style={{
                   background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)'
                 }}
@@ -13195,9 +13438,9 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
                 
-                <div className="mt-4 flex items-end justify-between">
+                <div className="mt-3 sm:mt-4 flex items-end justify-between">
                   <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
+                    <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
                       ₹{todayRevenue >= 1000 ? (todayRevenue / 1000).toFixed(1) + 'K' : todayRevenue.toLocaleString('en-IN')}
                     </div>
                     <div className="text-xs text-emerald-700 font-bold mt-2 truncate">
@@ -13206,7 +13449,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
 
                   {/* Green Mini Sparkline */}
-                  <div className="w-16 h-8 shrink-0 relative">
+                  <div className="w-14 h-7 sm:w-16 sm:h-8 shrink-0 relative">
                     <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                       <defs>
                         <linearGradient id="kpiGreenGradAdmin" x1="0" y1="0" x2="0" y2="1">
@@ -13231,7 +13474,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
               {/* Card 4: Staff Present Today (Amber / Orange Gradient with Bottom-Left Radial Glow) */}
               <div 
-                className="p-5 rounded-2xl border border-amber-200/90 shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-amber-200/90 shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
                 style={{
                   background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)'
                 }}
@@ -13249,9 +13492,9 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
                 
-                <div className="mt-4 flex items-end justify-between">
+                <div className="mt-3 sm:mt-4 flex items-end justify-between">
                   <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
+                    <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
                       {staffPresentCount} <span className="text-lg font-bold text-slate-500">/ {staff.length}</span>
                     </div>
                     <div className="text-xs text-amber-700 font-bold mt-2 truncate flex items-center gap-1.5 flex-wrap">
@@ -13265,7 +13508,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
 
                   {/* Amber Mini Sparkline */}
-                  <div className="w-16 h-8 shrink-0 relative">
+                  <div className="w-14 h-7 sm:w-16 sm:h-8 shrink-0 relative">
                     <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                       <defs>
                         <linearGradient id="kpiAmberGradAdmin" x1="0" y1="0" x2="0" y2="1">
@@ -13290,7 +13533,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
               {/* Card 5: Pending Patient Payments (Rose / Red Gradient with Top-Right Radial Glow) */}
               <div 
-                className="p-5 rounded-2xl border border-rose-200/90 shadow-[0_12px_28px_rgba(244,63,94,0.08)] hover:shadow-[0_16px_36px_rgba(244,63,94,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-rose-200/90 shadow-[0_12px_28px_rgba(244,63,94,0.08)] hover:shadow-[0_16px_36px_rgba(244,63,94,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
                 style={{
                   background: 'radial-gradient(circle at 100% 0%, rgba(244, 63, 94, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFF1F2 50%, #FFE4E6 100%)'
                 }}
@@ -13309,9 +13552,9 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
                 
-                <div className="mt-4 flex items-end justify-between">
+                <div className="mt-3 sm:mt-4 flex items-end justify-between">
                   <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
+                    <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
                       ₹{totalPendingPaymentsAmount >= 1000 ? (totalPendingPaymentsAmount / 1000).toFixed(1) + 'K' : totalPendingPaymentsAmount.toLocaleString('en-IN')}
                     </div>
                     <div className="text-xs text-rose-700 font-bold mt-2 truncate flex items-center gap-1.5">
@@ -13322,7 +13565,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
 
                   {/* Rose Mini Sparkline */}
-                  <div className="w-16 h-8 shrink-0 relative">
+                  <div className="w-14 h-7 sm:w-16 sm:h-8 shrink-0 relative">
                     <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                       <defs>
                         <linearGradient id="kpiRoseGradAdmin" x1="0" y1="0" x2="0" y2="1">
