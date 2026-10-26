@@ -9184,7 +9184,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                     </div>
 
                     {/* Lower Area: 2-Column Split Layout */}
-                    <div className="sa-panel-split" style={{ display: 'flex', gap: '24px', width: '100%', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                    <div className="sa-panel-split" style={{ display: 'flex', gap: '24px', width: '100%', alignItems: 'flex-start', flexWrap: 'wrap', overflow: 'visible', flex: 'none' }}>
                       {/* Left Column (Main Area) */}
                       <div style={{ flex: 1, minWidth: '260px', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: '18px' }}>
                         {/* Search and Filters Bar */}
@@ -12476,7 +12476,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
                   <p style={styles.cardHeaderSub}>Monitor active tickets, reply to customer queries, and document internal diagnostic progress.</p>
                 </div>
 
-                <div className="sa-panel-split" style={{ display: 'flex', gap: '20px', marginTop: '14px', flexWrap: 'wrap' }}>
+                <div className="sa-panel-split" style={{ display: 'flex', gap: '20px', marginTop: '14px', flexWrap: 'wrap', overflow: 'visible', flex: 'none' }}>
                   <div className="sa-table-scroll-wrapper" style={{ flex: '1.5 1 320px', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px', overflowX: 'auto', minWidth: '300px' }}>
                     <table style={{ ...styles.dataTable, minWidth: '650px' }}>
                       <thead>

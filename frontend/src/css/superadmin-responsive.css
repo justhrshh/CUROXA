@@ -769,19 +769,21 @@ html, body {
    ───────────────────────────────────────────────────────────────── */
 
 .sa-panel-split {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 20px;
-  flex: 1;
-  overflow: hidden;
-  min-height: 0;
+  display: flex;
+  gap: 24px;
+  width: 100%;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  overflow: visible !important;
+  flex: none;
+  min-height: auto;
 }
 
 @media (max-width: 1023px) {
   .sa-panel-split {
-    grid-template-columns: 1fr !important;
-    overflow: visible !important;
     flex-direction: column !important;
+    overflow: visible !important;
+    gap: 20px !important;
   }
 }
 
