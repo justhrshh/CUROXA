@@ -22958,50 +22958,139 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 <head>
                   <title>Reception QR Signage - ${clinicDisplayName}</title>
                   <style>
-                    body {
-                      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    @page {
+                      size: A4 portrait;
+                      margin: 10mm;
+                    }
+                    * {
+                      box-sizing: border-box;
+                    }
+                    html, body {
+                      margin: 0;
+                      padding: 0;
+                      background: #FFFFFF;
+                      color: #0F172A;
+                      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      min-height: 100vh;
+                      width: 100%;
+                    }
+                    .poster-container {
+                      width: 100%;
+                      max-width: 680px;
+                      border: 4px solid #0F172A;
+                      border-radius: 28px;
+                      padding: 36px 32px;
+                      text-align: center;
                       display: flex;
                       flex-direction: column;
                       align-items: center;
                       justify-content: center;
-                      min-height: 100vh;
+                      margin: 0 auto;
+                    }
+                    .clinic-name {
                       margin: 0;
-                      padding: 40px;
-                      box-sizing: border-box;
-                      text-align: center;
+                      font-size: 34px;
+                      font-weight: 900;
+                      letter-spacing: -0.02em;
                       color: #0F172A;
+                      line-height: 1.15;
                     }
-                    .poster-card {
-                      border: 2px solid #0F172A;
+                    .poster-subtitle {
+                      margin: 8px 0 16px 0;
+                      font-size: 20px;
+                      font-weight: 700;
+                      color: #0D9488;
+                      letter-spacing: -0.01em;
+                    }
+                    .qr-box {
+                      background: #FFFFFF;
+                      border: 4px dashed #0F172A;
                       border-radius: 24px;
-                      padding: 48px;
-                      max-width: 500px;
-                      width: 100%;
-                      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+                      padding: 24px;
+                      display: inline-flex;
+                      align-items: center;
+                      justify-content: center;
+                      margin: 10px auto 20px auto;
                     }
-                    h1 { margin: 0 0 8px 0; font-size: 28px; font-weight: 800; }
-                    p.subtitle { margin: 0 0 24px 0; color: #475569; font-size: 16px; }
-                    .qr-box { padding: 20px; background: #F8FAFC; border: 2px dashed #CBD5E1; border-radius: 16px; display: inline-block; margin-bottom: 24px; }
-                    .instructions { font-size: 15px; color: #334155; line-height: 1.6; font-weight: 600; margin-bottom: 16px; }
-                    .clinic-tag { font-family: monospace; font-size: 14px; background: #E2E8F0; padding: 6px 14px; border-radius: 8px; display: inline-block; }
+                    .qr-box svg {
+                      width: 380px !important;
+                      height: 380px !important;
+                      display: block !important;
+                    }
+                    .instruction-main {
+                      font-size: 23px;
+                      font-weight: 800;
+                      color: #0F172A;
+                      margin: 0 0 8px 0;
+                      line-height: 1.3;
+                    }
+                    .instruction-sub {
+                      font-size: 15px;
+                      color: #64748B;
+                      font-weight: 600;
+                      margin: 0 0 20px 0;
+                    }
+                    .clinic-code-badge {
+                      font-family: monospace;
+                      font-size: 18px;
+                      font-weight: 800;
+                      background: #0F172A;
+                      color: #FFFFFF;
+                      padding: 10px 28px;
+                      border-radius: 999px;
+                      display: inline-block;
+                      letter-spacing: 0.05em;
+                    }
                     @media print {
-                      body { padding: 0; }
-                      .poster-card { border: 2px solid #000; box-shadow: none; max-width: 100%; }
+                      html, body {
+                        min-height: auto;
+                        height: 100%;
+                        padding: 0;
+                      }
+                      .poster-container {
+                        border: 4px solid #000000;
+                        max-width: 100%;
+                        page-break-inside: avoid;
+                      }
+                      .clinic-code-badge {
+                        background: #000000 !important;
+                        color: #FFFFFF !important;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                      }
+                      .qr-box {
+                        border-color: #000000 !important;
+                      }
+                      .qr-box svg {
+                        width: 420px !important;
+                        height: 420px !important;
+                      }
                     }
                   </style>
                 </head>
                 <body>
-                  <div class="poster-card">
-                    <h1>${clinicDisplayName}</h1>
-                    <p class="subtitle">Welcome! Check In Here</p>
+                  <div class="poster-container">
+                    <h1 class="clinic-name">${clinicDisplayName}</h1>
+                    <p class="poster-subtitle">Patient Check-In • Reception Desk</p>
+                    
                     <div class="qr-box">
                       ${svgHtml}
                     </div>
-                    <div class="instructions">
-                      Scan this QR code with your phone camera<br/>
-                      to enter the reception arrival queue.
+
+                    <div class="instruction-main">
+                      Scan this QR code with your smartphone camera<br/>
+                      to enter the reception arrival queue
                     </div>
-                    <div class="clinic-tag">Clinic Code: ${clinicCode}</div>
+                    <p class="instruction-sub">
+                      Verify your email to get your live queue ticket & arrival number
+                    </p>
+
+                    <div class="clinic-code-badge">
+                      Clinic Code: ${clinicCode}
+                    </div>
                   </div>
                   <script>
                     window.onload = function() {
@@ -23079,31 +23168,6 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     <span style={{ color: '#64748B', marginRight: '6px' }}>Clinic Identifier:</span>
                     <strong style={{ fontFamily: 'monospace', color: '#0F172A' }}>{clinicCode}</strong>
                   </div>
-                </div>
-              </div>
-
-              {/* Module Operational Status Banner */}
-              <div style={{
-                background: isModuleActive ? '#F0FDF4' : '#FFFBEB',
-                border: isModuleActive ? '1px solid #BBF7D0' : '1px solid #FDE68A',
-                borderRadius: '10px',
-                padding: '14px 20px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px'
-              }}>
-                {isModuleActive ? (
-                  <CheckCircle2 size={18} color="#16A34A" style={{ flexShrink: 0 }} />
-                ) : (
-                  <AlertTriangle size={18} color="#D97706" style={{ flexShrink: 0 }} />
-                )}
-                <div style={{ fontSize: '13px', color: isModuleActive ? '#166534' : '#92400E', lineHeight: '1.5' }}>
-                  <strong style={{ display: 'inline', fontSize: '13.5px', marginRight: '6px' }}>
-                    {isModuleActive ? 'Reception Queue Active:' : 'Reception Queue Disabled:'}
-                  </strong>
-                  {isModuleActive
-                    ? 'Reception Queue is enabled for this clinic. Patients can scan the QR code to enter the reception queue, and the waiting room display updates in real time.'
-                    : 'Reception Queue is disabled for this clinic. New reception queue entries are unavailable.'}
                 </div>
               </div>
 
@@ -23318,47 +23382,47 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     </p>
                   </div>
 
-                  {/* Stylized Waiting Room Screen Frame */}
+                  {/* Stylized Waiting Room Screen Frame (Light Theme) */}
                   <div style={{
                     borderRadius: '12px',
-                    background: 'linear-gradient(145deg, #0F172A 0%, #1E293B 100%)',
-                    border: '2px solid #334155',
+                    background: 'linear-gradient(145deg, #FFFFFF 0%, #F8FAFC 100%)',
+                    border: '2px solid #CBD5E1',
                     padding: '18px 20px',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '12px',
-                    color: '#FFFFFF',
-                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.18)',
+                    color: '#0F172A',
+                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.04)',
                     margin: '0 auto',
                     width: '100%',
                     maxWidth: '380px',
                     boxSizing: 'border-box'
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         {clinicDisplayName}
                       </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10.5px', fontWeight: 700, color: '#4ADE80' }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ADE80', display: 'inline-block' }}></span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10.5px', fontWeight: 700, color: '#16A34A' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A', display: 'inline-block' }}></span>
                         LIVE SCREEN
                       </span>
                     </div>
                     <div style={{ textAlign: 'center', padding: '10px 0' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#2DD4BF', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#0D9488', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                         NOW SERVING
                       </div>
-                      <div style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '1px', color: '#FFFFFF', margin: '4px 0' }}>
+                      <div style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '1px', color: '#0F172A', margin: '4px 0' }}>
                         RECEPTION DESK
                       </div>
-                      <div style={{ fontSize: '11.5px', color: '#94A3B8' }}>
+                      <div style={{ fontSize: '11.5px', color: '#64748B' }}>
                         Displays current active ticket & queue length
                       </div>
                     </div>
-                    <div style={{ width: '100%', background: 'rgba(255,255,255,0.06)', borderRadius: '6px', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#CBD5E1' }}>
+                    <div style={{ width: '100%', background: '#F1F5F9', borderRadius: '6px', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#475569' }}>
                       <span>WebSocket Auto-Sync</span>
-                      <span style={{ color: '#2DD4BF', fontWeight: 700 }}>Single-Counter Display</span>
+                      <span style={{ color: '#0D9488', fontWeight: 700 }}>Single-Counter Display</span>
                     </div>
                   </div>
 

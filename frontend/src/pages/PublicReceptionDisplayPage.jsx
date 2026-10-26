@@ -43,6 +43,18 @@ const PublicReceptionDisplayPage = () => {
     return () => clearInterval(clockTimer);
   }, []);
 
+  // 1b. Zoom Normalization Hook (overrides global 0.9 zoom so full 100% width is used without side gaps)
+  useEffect(() => {
+    const origHtmlZoom = document.documentElement.style.zoom;
+    const origBodyZoom = document.body.style.zoom;
+    document.documentElement.style.zoom = '1';
+    document.body.style.zoom = '1';
+    return () => {
+      document.documentElement.style.zoom = origHtmlZoom;
+      document.body.style.zoom = origBodyZoom;
+    };
+  }, []);
+
   // 2. Fetch Authoritative Display Data
   const fetchDisplayData = useCallback(async (isSilent = false) => {
     if (!clinicCode) return;
@@ -170,24 +182,24 @@ const PublicReceptionDisplayPage = () => {
     return (
       <div style={{
         minHeight: '100vh',
-        width: '100vw',
-        background: '#0B132B',
+        width: '100%',
+        background: '#F8FAFC',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        color: '#FFFFFF',
+        color: '#0F172A',
         fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
       }}>
         <div style={{
           width: '56px',
           height: '56px',
-          border: '4px solid #1E293B',
+          border: '4px solid #E2E8F0',
           borderTopColor: '#0D9488',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite'
         }} />
-        <h2 style={{ marginTop: '24px', fontSize: '18px', fontWeight: 600, color: '#94A3B8', letterSpacing: '0.05em' }}>
+        <h2 style={{ marginTop: '24px', fontSize: '18px', fontWeight: 700, color: '#475569', letterSpacing: '0.05em' }}>
           CONNECTING TO RECEPTION DISPLAY...
         </h2>
         <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
@@ -200,30 +212,31 @@ const PublicReceptionDisplayPage = () => {
     return (
       <div style={{
         minHeight: '100vh',
-        width: '100vw',
-        background: '#0B132B',
+        width: '100%',
+        background: '#F8FAFC',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         padding: '24px',
-        color: '#FFFFFF',
+        color: '#0F172A',
         fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
         textAlign: 'center'
       }}>
         <div style={{
-          background: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid rgba(239, 68, 68, 0.3)',
+          background: '#FFFFFF',
+          border: '1px solid #FECACA',
           borderRadius: '24px',
           padding: '40px 32px',
           maxWidth: '480px',
-          width: '100%'
+          width: '100%',
+          boxShadow: '0 10px 25px rgba(239, 68, 68, 0.08)'
         }}>
           <AlertCircle size={48} color="#EF4444" style={{ margin: '0 auto 16px auto' }} />
-          <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#F87171', marginBottom: '8px' }}>
+          <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#DC2626', marginBottom: '8px' }}>
             Display Unavailable
           </h2>
-          <p style={{ fontSize: '14px', color: '#CBD5E1', lineHeight: '1.6', marginBottom: '24px' }}>
+          <p style={{ fontSize: '14px', color: '#64748B', lineHeight: '1.6', marginBottom: '24px' }}>
             {errorMessage || 'Unable to load reception display for the specified clinic identifier.'}
           </p>
           <button
@@ -240,7 +253,8 @@ const PublicReceptionDisplayPage = () => {
               cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '8px'
+              gap: '8px',
+              boxShadow: '0 4px 12px rgba(13, 148, 136, 0.25)'
             }}
           >
             <RefreshCw size={16} /> Retry Connection
@@ -255,35 +269,36 @@ const PublicReceptionDisplayPage = () => {
     return (
       <div style={{
         minHeight: '100vh',
-        width: '100vw',
-        background: '#0B132B',
+        width: '100%',
+        background: '#F8FAFC',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         padding: '24px',
-        color: '#FFFFFF',
+        color: '#0F172A',
         fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
         textAlign: 'center'
       }}>
         <div style={{
-          background: 'rgba(30, 41, 59, 0.6)',
-          border: '1px solid rgba(148, 163, 184, 0.2)',
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
           borderRadius: '24px',
           padding: '48px 36px',
           maxWidth: '520px',
-          width: '100%'
+          width: '100%',
+          boxShadow: '0 10px 30px rgba(0, 0, 0, 0.04)'
         }}>
-          <Building2 size={44} color="#94A3B8" style={{ margin: '0 auto 16px auto' }} />
-          <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#F1F5F9', marginBottom: '8px' }}>
+          <Building2 size={44} color="#64748B" style={{ margin: '0 auto 16px auto' }} />
+          <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>
             {displayData.clinic?.name || 'Clinic Reception'}
           </h2>
           <div style={{
             display: 'inline-block',
-            padding: '4px 12px',
+            padding: '4px 14px',
             borderRadius: '20px',
-            background: 'rgba(148, 163, 184, 0.15)',
-            color: '#94A3B8',
+            background: '#F1F5F9',
+            color: '#64748B',
             fontSize: '12px',
             fontWeight: 700,
             letterSpacing: '0.05em',
@@ -291,7 +306,7 @@ const PublicReceptionDisplayPage = () => {
           }}>
             RECEPTION QUEUE OFFLINE
           </div>
-          <p style={{ fontSize: '15px', color: '#94A3B8', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '15px', color: '#64748B', lineHeight: '1.6' }}>
             The digital reception queue is currently inactive for this clinic. Please consult the physical reception desk upon arrival.
           </p>
         </div>
@@ -305,9 +320,9 @@ const PublicReceptionDisplayPage = () => {
   return (
     <div style={{
       minHeight: '100vh',
-      width: '100vw',
-      background: 'radial-gradient(ellipse at top, #111E38 0%, #060B18 100%)',
-      color: '#FFFFFF',
+      width: '100%',
+      background: 'linear-gradient(180deg, #F0FDFA 0%, #F8FAFC 100%)',
+      color: '#0F172A',
       fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
       display: 'flex',
       flexDirection: 'column',
@@ -317,15 +332,15 @@ const PublicReceptionDisplayPage = () => {
     }}>
       {/* ── TOP HEADER BAR ── */}
       <header style={{
-        padding: 'clamp(12px, 2.5vw, 28px) clamp(14px, 4vw, 56px)',
+        padding: 'clamp(14px, 2.5vw, 24px) clamp(16px, 4vw, 48px)',
         display: 'flex',
         flexWrap: 'wrap',
         justifyContent: 'space-between',
         alignItems: 'center',
         gap: '14px',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-        background: 'rgba(6, 11, 24, 0.4)',
-        backdropFilter: 'blur(10px)',
+        borderBottom: '1px solid #E2E8F0',
+        background: '#FFFFFF',
+        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.04)',
         width: '100%',
         boxSizing: 'border-box'
       }}>
@@ -336,7 +351,7 @@ const PublicReceptionDisplayPage = () => {
               src={displayData.clinic.logo}
               alt="Clinic Logo"
               style={{
-                height: 'clamp(36px, 5vw, 52px)',
+                height: 'clamp(38px, 5vw, 54px)',
                 width: 'auto',
                 borderRadius: '8px',
                 objectFit: 'contain'
@@ -351,7 +366,7 @@ const PublicReceptionDisplayPage = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 14px rgba(13, 148, 136, 0.3)'
+              boxShadow: '0 4px 14px rgba(13, 148, 136, 0.2)'
             }}>
               <Building2 size={26} color="#FFFFFF" />
             </div>
@@ -361,7 +376,7 @@ const PublicReceptionDisplayPage = () => {
             <h1 style={{
               fontSize: 'clamp(18px, 2.5vw, 26px)',
               fontWeight: 800,
-              color: '#F8FAFC',
+              color: '#0F172A',
               letterSpacing: '-0.02em',
               margin: 0
             }}>
@@ -369,15 +384,16 @@ const PublicReceptionDisplayPage = () => {
             </h1>
             <div style={{
               fontSize: 'clamp(11px, 1.4vw, 13.5px)',
-              color: '#94A3B8',
+              color: '#64748B',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              marginTop: '2px'
+              marginTop: '2px',
+              fontWeight: 500
             }}>
               <span>Arrival & Reception Desk</span>
               <span>•</span>
-              <span style={{ fontFamily: 'monospace', color: '#CBD5E1' }}>{clinicCode?.toUpperCase()}</span>
+              <span style={{ fontFamily: 'monospace', color: '#0F172A', fontWeight: 700 }}>{clinicCode?.toUpperCase()}</span>
             </div>
           </div>
         </div>
@@ -391,21 +407,21 @@ const PublicReceptionDisplayPage = () => {
             gap: '8px',
             padding: '6px 14px',
             borderRadius: '20px',
-            background: socketConnected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-            border: socketConnected ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)'
+            background: socketConnected ? '#DCFCE7' : '#FEF3C7',
+            border: socketConnected ? '1px solid #86EFAC' : '1px solid #FDE68A'
           }}>
             <span style={{
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              background: socketConnected ? '#10B981' : '#F59E0B',
-              boxShadow: socketConnected ? '0 0 10px #10B981' : '0 0 10px #F59E0B',
+              background: socketConnected ? '#16A34A' : '#D97706',
+              boxShadow: socketConnected ? '0 0 10px #16A34A' : '0 0 10px #D97706',
               display: 'inline-block'
             }} />
             <span style={{
               fontSize: '12px',
               fontWeight: 700,
-              color: socketConnected ? '#34D399' : '#FBBF24',
+              color: socketConnected ? '#15803D' : '#B45309',
               letterSpacing: '0.04em'
             }}>
               {socketConnected ? 'LIVE SYNC' : 'REFRESHING'}
@@ -417,7 +433,7 @@ const PublicReceptionDisplayPage = () => {
             <div style={{
               fontSize: 'clamp(18px, 2.4vw, 24px)',
               fontWeight: 800,
-              color: '#F8FAFC',
+              color: '#0F172A',
               fontVariantNumeric: 'tabular-nums',
               letterSpacing: '-0.02em',
               lineHeight: 1
@@ -427,7 +443,7 @@ const PublicReceptionDisplayPage = () => {
             <div style={{
               fontSize: 'clamp(11px, 1.3vw, 13px)',
               color: '#64748B',
-              fontWeight: 500,
+              fontWeight: 600,
               marginTop: '4px'
             }}>
               {formattedDate}
@@ -441,9 +457,9 @@ const PublicReceptionDisplayPage = () => {
             style={{
               padding: '10px',
               borderRadius: '10px',
-              background: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              color: '#CBD5E1',
+              background: '#F1F5F9',
+              border: '1px solid #E2E8F0',
+              color: '#334155',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -460,19 +476,19 @@ const PublicReceptionDisplayPage = () => {
       {/* ── QUEUE DRAINING BANNER (If module is disabled while tickets remain) ── */}
       {displayData.isDrainingMode && (
         <div style={{
-          background: 'rgba(217, 119, 6, 0.15)',
-          borderBottom: '1px solid rgba(217, 119, 6, 0.4)',
+          background: '#FEF3C7',
+          borderBottom: '1px solid #FDE68A',
           padding: '10px 24px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           gap: '10px',
-          color: '#FDE68A',
+          color: '#92400E',
           fontSize: 'clamp(12px, 1.4vw, 14px)',
           fontWeight: 600,
           textAlign: 'center'
         }}>
-          <AlertTriangle size={16} color="#F59E0B" />
+          <AlertTriangle size={16} color="#D97706" />
           <span>Queue Draining Mode Active: Reception desk is currently serving remaining in-flight tickets.</span>
         </div>
       )}
@@ -504,23 +520,23 @@ const PublicReceptionDisplayPage = () => {
               gap: '10px',
               padding: 'clamp(8px, 1.5vw, 14px) clamp(24px, 3vw, 38px)',
               borderRadius: '999px',
-              background: 'linear-gradient(135deg, rgba(13, 148, 136, 0.25) 0%, rgba(20, 184, 166, 0.15) 100%)',
-              border: '1.5px solid rgba(45, 212, 191, 0.4)',
-              boxShadow: '0 0 30px rgba(13, 148, 136, 0.25)',
+              background: '#F0FDFA',
+              border: '2px solid #5EEAD4',
+              boxShadow: '0 4px 20px rgba(13, 148, 136, 0.12)',
               marginBottom: 'clamp(16px, 3vw, 32px)'
             }}>
               <span style={{
                 width: '12px',
                 height: '12px',
                 borderRadius: '50%',
-                background: '#2DD4BF',
-                boxShadow: '0 0 12px #2DD4BF',
+                background: '#0D9488',
+                boxShadow: '0 0 10px #0D9488',
                 display: 'inline-block'
               }} />
               <span style={{
                 fontSize: 'clamp(14px, 2.2vw, 22px)',
                 fontWeight: 900,
-                color: '#2DD4BF',
+                color: '#0F766E',
                 letterSpacing: '0.14em',
                 textTransform: 'uppercase'
               }}>
@@ -530,14 +546,12 @@ const PublicReceptionDisplayPage = () => {
 
             {/* MASSIVE TICKET NUMBER DISPLAY */}
             <div style={{
-              background: 'linear-gradient(180deg, #FFFFFF 0%, #E2E8F0 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              fontSize: 'clamp(3.5rem, 14vw, 14rem)',
+              color: '#0F172A',
+              fontSize: 'clamp(4rem, 16vw, 15rem)',
               fontWeight: 950,
               letterSpacing: '-0.04em',
               lineHeight: 0.95,
-              textShadow: '0 10px 40px rgba(0, 0, 0, 0.6)',
+              textShadow: '0 4px 24px rgba(15, 23, 42, 0.08)',
               margin: 'clamp(8px, 2vw, 20px) 0',
               fontFamily: 'system-ui, -apple-system, sans-serif',
               maxWidth: '100%',
@@ -555,19 +569,19 @@ const PublicReceptionDisplayPage = () => {
               gap: '12px',
               padding: 'clamp(12px, 2vw, 18px) clamp(24px, 4vw, 42px)',
               borderRadius: '16px',
-              background: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.14)',
-              backdropFilter: 'blur(12px)'
+              background: '#FFFFFF',
+              border: '2px solid #0D9488',
+              boxShadow: '0 8px 24px rgba(13, 148, 136, 0.12)'
             }}>
               <span style={{
                 fontSize: 'clamp(15px, 2.5vw, 24px)',
-                fontWeight: 700,
-                color: '#F1F5F9',
+                fontWeight: 800,
+                color: '#0F766E',
                 letterSpacing: '-0.01em'
               }}>
-                Please Proceed to the Reception Desk
+                Please Proceed to the Reception Counter
               </span>
-              <ArrowRight size={22} color="#2DD4BF" />
+              <ArrowRight size={24} color="#0D9488" />
             </div>
           </div>
         ) : (
@@ -579,30 +593,30 @@ const PublicReceptionDisplayPage = () => {
             justifyContent: 'center',
             maxWidth: '720px',
             width: '100%',
-            padding: 'clamp(24px, 4vw, 48px) clamp(16px, 3vw, 32px)',
-            background: 'rgba(15, 23, 42, 0.5)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            padding: 'clamp(28px, 5vw, 56px) clamp(20px, 4vw, 40px)',
+            background: '#FFFFFF',
+            border: '1px solid #E2E8F0',
             borderRadius: '28px',
-            backdropFilter: 'blur(12px)'
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.04)'
           }}>
             <div style={{
               width: 'clamp(64px, 9vw, 92px)',
               height: 'clamp(64px, 9vw, 92px)',
               borderRadius: '50%',
-              background: 'rgba(148, 163, 184, 0.1)',
-              border: '1px solid rgba(148, 163, 184, 0.2)',
+              background: '#F0FDFA',
+              border: '1px solid #CCFBF1',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               marginBottom: '20px'
             }}>
-              <Clock size={40} color="#94A3B8" />
+              <Clock size={40} color="#0D9488" />
             </div>
 
             <h2 style={{
               fontSize: 'clamp(22px, 3.8vw, 36px)',
               fontWeight: 800,
-              color: '#F8FAFC',
+              color: '#0F172A',
               letterSpacing: '-0.02em',
               marginBottom: '10px'
             }}>
@@ -611,10 +625,11 @@ const PublicReceptionDisplayPage = () => {
 
             <p style={{
               fontSize: 'clamp(14px, 2vw, 18px)',
-              color: '#94A3B8',
+              color: '#64748B',
               lineHeight: '1.6',
               maxWidth: '520px',
-              margin: '0 auto'
+              margin: '0 auto',
+              fontWeight: 500
             }}>
               The front desk is ready. The next arriving patient will be called shortly.
             </p>
@@ -624,10 +639,10 @@ const PublicReceptionDisplayPage = () => {
 
       {/* ── BOTTOM METRICS & STATUS DOCK ── */}
       <footer style={{
-        padding: 'clamp(14px, 2.5vw, 28px) clamp(14px, 4vw, 56px)',
-        borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-        background: 'rgba(6, 11, 24, 0.6)',
-        backdropFilter: 'blur(10px)',
+        padding: 'clamp(14px, 2.5vw, 24px) clamp(16px, 4vw, 48px)',
+        borderTop: '1px solid #E2E8F0',
+        background: '#FFFFFF',
+        boxShadow: '0 -1px 4px rgba(0, 0, 0, 0.03)',
         display: 'flex',
         flexWrap: 'wrap',
         justifyContent: 'space-between',
@@ -641,8 +656,8 @@ const PublicReceptionDisplayPage = () => {
           display: 'flex',
           alignItems: 'center',
           gap: '14px',
-          background: 'rgba(255, 255, 255, 0.05)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          background: '#F0FDFA',
+          border: '1px solid #CCFBF1',
           padding: 'clamp(10px, 1.8vw, 16px) clamp(14px, 2.5vw, 24px)',
           borderRadius: '16px',
           maxWidth: '100%',
@@ -652,19 +667,19 @@ const PublicReceptionDisplayPage = () => {
             width: 'clamp(38px, 4vw, 48px)',
             height: 'clamp(38px, 4vw, 48px)',
             borderRadius: '12px',
-            background: 'rgba(13, 148, 136, 0.2)',
+            background: '#CCFBF1',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <Users size={22} color="#2DD4BF" />
+            <Users size={22} color="#0D9488" />
           </div>
 
           <div>
             <div style={{
               fontSize: 'clamp(11px, 1.3vw, 13px)',
               fontWeight: 700,
-              color: '#94A3B8',
+              color: '#0F766E',
               letterSpacing: '0.05em',
               textTransform: 'uppercase'
             }}>
@@ -673,7 +688,7 @@ const PublicReceptionDisplayPage = () => {
             <div style={{
               fontSize: 'clamp(20px, 3vw, 30px)',
               fontWeight: 900,
-              color: '#F8FAFC',
+              color: '#0F172A',
               lineHeight: 1,
               marginTop: '4px'
             }}>
@@ -691,7 +706,7 @@ const PublicReceptionDisplayPage = () => {
           lineHeight: '1.5'
         }}>
           <div>Please have your registered ticket or mobile phone ready when your ticket is summoned.</div>
-          <div style={{ marginTop: '2px', color: '#475569' }}>
+          <div style={{ marginTop: '2px', color: '#94A3B8' }}>
             Doctor consultation tokens are allocated independently upon receptionist desk intake.
           </div>
         </div>
