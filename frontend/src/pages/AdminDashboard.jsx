@@ -1254,6 +1254,53 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     setActiveTab(targetTab);
   };
 
+  const renderTabHeaderIcon = (tab) => {
+    switch (tab) {
+      case 'dashboard':
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        );
+      case 'supply':
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        );
+      case 'approvals':
+      case 'po-approvals':
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        );
+      case 'appointments':
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        );
+      case 'patients':
+      case 'patient-details':
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        );
+      case 'workforce':
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        );
+      case 'financials':
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        );
+      case 'subscription':
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+        );
+      case 'reception-qr':
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3z"/><path d="M20 14v3"/><path d="M14 20h3"/><path d="M20 20h.01"/></svg>
+        );
+      default:
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        );
+    }
+  };
+
   const getHeaderMainTitle = () => {
     if (activeTab === 'dashboard') return 'Dashboard';
     if (activeTab === 'supply') return 'Alerts & Tasks';
@@ -1277,6 +1324,11 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   };
 
   // Mobile drawer: close on Escape and manage body scroll lock
+  // Auto-close mobile drawer on tab or route change
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [activeTab, location.pathname]);
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape' && mobileSidebarOpen) {
@@ -4889,9 +4941,6 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       <div className="admin-dashboard-container" style={localStorage.getItem('curoxa_superadmin_session') ? { marginTop: '40px', height: 'calc(100vh - 40px)' } : {}}>
         {/* 100% Mockup Consistent Styling (LIGHT THEME SIDEBAR + APPROVALS BOARD) */}
         <style>{`
-          html, body {
-            overflow: hidden !important;
-          }
 
           ${localStorage.getItem('curoxa_superadmin_session') ? `
             .admin-sidebar {
@@ -10372,30 +10421,34 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             max-width: 82vw !important;
             transform: translateX(-100%) !important;
             transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            z-index: 2500 !important;
+            z-index: 2000 !important;
             box-shadow: none !important;
           }
           .admin-sidebar.mobile-open {
             transform: translateX(0) !important;
+            z-index: 2000 !important;
             box-shadow: 8px 0 32px rgba(15, 23, 42, 0.16) !important;
+            pointer-events: auto !important;
           }
           .admin-main-canvas {
             margin-left: 0 !important;
           }
           .admin-top-header {
-            padding: 8px 12px !important;
+            padding: 0 12px !important;
           }
           .mobile-backdrop {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(15, 23, 42, 0.5);
-            backdrop-filter: blur(1.5px);
-            -webkit-backdrop-filter: blur(1.5px);
-            z-index: 2490;
-            animation: fadeIn 0.2s ease-out;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            background-color: rgba(15, 23, 42, 0.45) !important;
+            backdrop-filter: blur(1.5px) !important;
+            -webkit-backdrop-filter: blur(1.5px) !important;
+            z-index: 1999 !important;
+            cursor: pointer !important;
+            pointer-events: auto !important;
+            animation: fadeIn 0.2s ease-out !important;
           }
           .mobile-sidebar-close-btn {
             display: flex !important;
@@ -10440,10 +10493,9 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           }
           .admin-top-header {
             padding: 0 12px !important;
-            height: auto !important;
-            min-height: 72px !important;
-            padding-top: 10px !important;
-            padding-bottom: 10px !important;
+            height: 52px !important;
+            min-height: 52px !important;
+            max-height: 52px !important;
           }
           .header-title-container {
             max-width: 140px !important;
@@ -11789,6 +11841,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       {mobileSidebarOpen && (
         <div 
           className="mobile-backdrop" 
+          style={{ zIndex: 1999 }}
           onClick={() => setMobileSidebarOpen(false)}
         />
       )}
@@ -13048,168 +13101,155 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
               <div className="header-bottom-accent-line-right" />
             </div>            </div>
 
-            {/* Deliberate 2-Row Mobile Header (<= 768px) */}
-            <div className="admin-header-mobile mobile-only-flex" style={{ display: 'none', flexDirection: 'column', width: '100%', gap: '6px' }}>
-              {/* Row 1: Hamburger | Brand Logo & Title | Plan Pill, Sync, Notifications */}
-              <div className="admin-mobile-row1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button 
-                    type="button"
-                    className="mobile-menu-toggle"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMobileSidebarOpen(!mobileSidebarOpen);
-                    }}
-                    aria-label="Open menu"
-                    style={{
-                      display: 'flex',
-                      background: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      cursor: 'pointer',
-                      color: '#334155',
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '10px',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0
-                    }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
-                  </button>
+            {/* Super Admin-Aligned Compact Mobile Header Bar (<= 768px) */}
+            <div className="admin-header-mobile mobile-only-flex" style={{ display: 'none', alignItems: 'center', justifyContent: 'space-between', width: '100%', height: '100%', gap: '8px' }}>
+              {/* Left: Hamburger + Context Tab Icon + Title/Clinic Subtitle */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                <button 
+                  type="button"
+                  className="mobile-menu-toggle sa-touch-target"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMobileSidebarOpen(!mobileSidebarOpen);
+                  }}
+                  aria-label="Open navigation menu"
+                  aria-expanded={mobileSidebarOpen}
+                  style={{
+                    display: 'flex',
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    cursor: 'pointer',
+                    color: '#334155',
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+                </button>
 
-                  <div className="admin-mobile-brand" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {getActivePortalBranding() ? (
-                      <HospitalBrandLogo 
-                        hospital={getActivePortalBranding()} 
-                        size={28} 
-                        borderRadius={7} 
-                        fontSize={12} 
-                      />
-                    ) : (
-                      <img 
-                        src={curoxaSidebarLogo} 
-                        alt="QUROXA" 
-                        style={{ width: '28px', height: '28px', objectFit: 'contain' }}
-                      />
-                    )}
-                    <span style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.2px', whiteSpace: 'nowrap' }}>
-                      {getActivePortalBranding()?.name || 'QUROXA'}
-                    </span>
-                  </div>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  background: '#EFF6FF',
+                  color: '#2563EB',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  {renderTabHeaderIcon(activeTab)}
                 </div>
 
-                <div className="admin-mobile-actions" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {/* Compact Plan Pill */}
-                  <div 
-                    onClick={() => handleNavTabClick('subscription')}
-                    title="View Subscription"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '4px 8px',
-                      borderRadius: '12px',
-                      background: isSubscriptionRestricted ? '#FEF2F2' : '#F0FDF4',
-                      border: `1px solid ${isSubscriptionRestricted ? '#FECACA' : '#BBF7D0'}`,
-                      cursor: 'pointer',
-                      flexShrink: 0
-                    }}
-                  >
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isSubscriptionRestricted ? '#EF4444' : '#22C55E' }} />
-                    <span style={{ fontSize: '11px', fontWeight: 800, color: isSubscriptionRestricted ? '#DC2626' : '#16A34A', textTransform: 'capitalize' }}>
-                      {isSubscriptionRestricted ? 'Expired' : (subscription?.plan ? subscription.plan.split(' (')[0].replace(' Plan', '') : 'Trial')}
-                    </span>
-                  </div>
-
-                  {/* Sync Button */}
-                  <button 
-                    type="button"
-                    onClick={isSubscriptionRestricted ? () => showToast('Subscription expired.', 'error') : handleManualSyncAll}
-                    disabled={isGlobalSyncing || isSubscriptionRestricted}
-                    title="Sync"
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '9px',
-                      background: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      color: '#475569',
-                      flexShrink: 0
-                    }}
-                  >
-                    <svg 
-                      width="15" 
-                      height="15" 
-                      viewBox="0 0 24 24" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      strokeWidth="2.4" 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round"
-                      style={{
-                        animation: isGlobalSyncing ? 'spin 1s linear infinite' : 'none',
-                        color: isGlobalSyncing ? '#2563EB' : '#475569'
-                      }}
-                    >
-                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-                    </svg>
-                  </button>
-
-                  {/* Notification Bell */}
-                  <div 
-                    ref={notificationRef}
-                    onClick={() => {
-                      setShowNotifications(!showNotifications);
-                      if (!showNotifications) {
-                        const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
-                        localStorage.setItem(`curoxa_notifications_last_seen_${userKey}`, String(Date.now()));
-                        setUnreadCount(0);
-                      }
-                    }}
-                    title="Notifications"
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '9px',
-                      background: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      position: 'relative',
-                      flexShrink: 0
-                    }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-                    {unreadCount > 0 && (
-                      <span style={{ position: 'absolute', top: '-3px', right: '-3px', background: '#EF4444', color: 'white', borderRadius: '50%', width: '15px', height: '15px', fontSize: '9px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid white' }}>
-                        {unreadCount}
-                      </span>
-                    )}
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+                  <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.2px', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {getHeaderMainTitle()}
+                  </span>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {getActivePortalBranding()?.name || currentUser?.tenantName || subscription?.name || 'Seghal Neo Hospital'}
+                  </span>
                 </div>
               </div>
 
-              {/* Row 2: Page Title (Left) | Clinic Identity (Right) */}
-              <div className="admin-mobile-row2" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingTop: '6px', borderTop: '1px solid rgba(226, 232, 240, 0.7)' }}>
-                <span style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.2px', lineHeight: 1.2 }}>
-                  {getHeaderMainTitle()}
-                </span>
-
+              {/* Right: Plan Pill + Sync + Notification Bell */}
+              <div className="admin-mobile-actions" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                {/* Compact Plan Pill */}
                 <div 
-                  style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#475569', fontWeight: 700, maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                  title={currentUser?.tenantName || subscription?.name || 'Seghal Neo'}
+                  className="admin-mobile-plan-pill"
+                  onClick={() => handleNavTabClick('subscription')}
+                  title="View Subscription"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 8px',
+                    borderRadius: '12px',
+                    background: isSubscriptionRestricted ? '#FEF2F2' : '#F0FDF4',
+                    border: `1px solid ${isSubscriptionRestricted ? '#FECACA' : '#BBF7D0'}`,
+                    cursor: 'pointer',
+                    flexShrink: 0
+                  }}
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {currentUser?.tenantName || subscription?.name || 'Seghal Neo'}
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isSubscriptionRestricted ? '#EF4444' : '#22C55E' }} />
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: isSubscriptionRestricted ? '#DC2626' : '#16A34A', textTransform: 'capitalize' }}>
+                    {isSubscriptionRestricted ? 'Expired' : (subscription?.plan ? subscription.plan.split(' (')[0].replace(' Plan', '') : 'Trial')}
                   </span>
+                </div>
+
+                {/* Sync Button */}
+                <button 
+                  type="button"
+                  onClick={isSubscriptionRestricted ? () => showToast('Subscription expired.', 'error') : handleManualSyncAll}
+                  disabled={isGlobalSyncing || isSubscriptionRestricted}
+                  title="Sync"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#475569',
+                    flexShrink: 0
+                  }}
+                >
+                  <svg 
+                    width="15" 
+                    height="15" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="2.4" 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round"
+                    style={{
+                      animation: isGlobalSyncing ? 'spin 1s linear infinite' : 'none',
+                      color: isGlobalSyncing ? '#2563EB' : '#475569'
+                    }}
+                  >
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                  </svg>
+                </button>
+
+                {/* Notification Bell */}
+                <div 
+                  ref={notificationRef}
+                  onClick={() => {
+                    setShowNotifications(!showNotifications);
+                    if (!showNotifications) {
+                      const userKey = currentUser.staff_id || currentUser.id || currentUser.name || 'default';
+                      localStorage.setItem(`curoxa_notifications_last_seen_${userKey}`, String(Date.now()));
+                      setUnreadCount(0);
+                    }
+                  }}
+                  title="Notifications"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    flexShrink: 0
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                  {unreadCount > 0 && (
+                    <span style={{ position: 'absolute', top: '-3px', right: '-3px', background: '#EF4444', color: 'white', borderRadius: '50%', width: '15px', height: '15px', fontSize: '9px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid white' }}>
+                      {unreadCount}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
