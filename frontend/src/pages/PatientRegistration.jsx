@@ -34,6 +34,15 @@ const DEFAULT_SLOTS = [
 ];
 
 const PatientRegistration = () => {
+  useEffect(() => {
+    document.documentElement.classList.add('login-page-active');
+    document.body.classList.add('login-page-active');
+    return () => {
+      document.documentElement.classList.remove('login-page-active');
+      document.body.classList.remove('login-page-active');
+    };
+  }, []);
+
   const navigate = useNavigate();
   const location = useLocation();
   let savedEmailOrPhone = '';

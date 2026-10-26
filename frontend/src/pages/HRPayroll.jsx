@@ -109,11 +109,12 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
   const [openAddStaffModal, setOpenAddStaffModal] = useState(initialIsAdding);
 
   useEffect(() => {
-    if (initialTab) setActiveTab(initialTab);
+    if (initialTab) setActiveTab(initialTab); setMobileSidebarOpen(false);
     if (initialIsAdding !== undefined) setOpenAddStaffModal(initialIsAdding);
   }, [initialTab, initialIsAdding]);
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     return localStorage.getItem('curoxa_sidebar_collapsed') === 'true';
   });
@@ -734,7 +735,7 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
 
   const handleSelectEmployee = (id) => {
     setSelectedEmployeeId(id);
-    setActiveTab('Directory'); // focus directory context when selected
+    setActiveTab('Directory'); setMobileSidebarOpen(false); // focus directory context when selected
   };
 
   const handleGoBack = () => {
@@ -781,18 +782,19 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
       color: '#1E293B',
       height: 'calc(100vh / 0.9)'
     }}>
-      <style>{`
-        html, body {
-          overflow: hidden !important;
-          height: calc(100vh / 0.9) !important;
-        }
-      `}</style>
+      
+
+      {/* SIDEBAR NAVIGATION - True Collapsible & Expandable System */}
+      {/* Mobile Backdrop */}
+      {mobileSidebarOpen && (
+        <div className="mobile-backdrop" onClick={() => setMobileSidebarOpen(false)} />
+      )}
 
       {/* SIDEBAR NAVIGATION - True Collapsible & Expandable System */}
       <aside 
-        className={`sidebar flex flex-col justify-between z-40 shrink-0 fixed top-0 left-0 ${
+        className={`sidebar hr-sidebar flex flex-col justify-between z-40 shrink-0 fixed top-0 left-0 ${
           isSidebarCollapsed ? 'collapsed' : ''
-        }`}
+        } ${mobileSidebarOpen ? 'mobile-open' : ''}`}
         style={{ 
           width: isSidebarCollapsed ? '78px' : '250px', 
           background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFCFF 50%, #F3F7FD 100%)', 
@@ -849,7 +851,7 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
                   <button
                     onClick={() => {
                       setSelectedEmployeeId(null);
-                      setActiveTab(item.id);
+                      setActiveTab(item.id); setMobileSidebarOpen(false);
                       setOpenAddStaffModal(false);
                     }}
                     className={`flex items-center rounded-2xl text-xs transition-all ${
@@ -1000,14 +1002,13 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
 
       {/* MAIN WORKING CANVAS */}
       <main 
-        className="flex-1 flex flex-col min-w-0 relative z-10 overflow-x-hidden"
+        className="flex-1 flex flex-col min-w-0 relative z-10 hr-main-canvas overflow-x-hidden"
         style={{ 
-          marginLeft: isSidebarCollapsed ? '78px' : '250px', 
-          width: isSidebarCollapsed ? 'calc(100% - 78px)' : 'calc(100% - 250px)',
-          maxWidth: isSidebarCollapsed ? 'calc(100% - 78px)' : 'calc(100% - 250px)',
-          transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          height: 'calc(100vh / 0.9)',
-          overflow: 'hidden'
+          marginLeft: (typeof window !== 'undefined' && window.innerWidth <= 1024) ? 0 : (isSidebarCollapsed ? '78px' : '250px'), 
+          width: (typeof window !== 'undefined' && window.innerWidth <= 1024) ? '100%' : (isSidebarCollapsed ? 'calc(100% - 78px)' : 'calc(100% - 250px)'),
+          maxWidth: '100%',
+          transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          minHeight: '100vh'
         }}
       >
         
@@ -1025,11 +1026,16 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
           <div className="flex items-center gap-3">
             <button 
               onClick={() => {
-                const nextVal = !isSidebarCollapsed;
-                setIsSidebarCollapsed(nextVal);
-                localStorage.setItem('curoxa_sidebar_collapsed', String(nextVal));
+                if (window.innerWidth <= 1024) {
+                  setMobileSidebarOpen(prev => !prev);
+                } else {
+                  const nextVal = !isSidebarCollapsed;
+                  setIsSidebarCollapsed(nextVal);
+                  localStorage.setItem('curoxa_sidebar_collapsed', String(nextVal));
+                }
               }}
-              className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-colors"
+              className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-colors cursor-pointer"
+              title="Toggle Navigation Menu"
             >
               <Menu className="w-4 h-4" />
             </button>
@@ -1116,7 +1122,7 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
                       onSelectEmployee={handleSelectEmployee}
                       onNavigate={(tab, openModal = false) => {
                         setSelectedEmployeeId(null);
-                        setActiveTab(tab);
+                        setActiveTab(tab); setMobileSidebarOpen(false);
                         setOpenAddStaffModal(openModal);
                       }}
                       jobs={jobs}

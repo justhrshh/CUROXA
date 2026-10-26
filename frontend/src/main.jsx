@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import axios from 'axios'
 import App from './App.jsx'
 import './css/index.css'
+import './css/quroxa-responsive.css'
 import { getApiUrl } from './utils/api'
 
 // Global interceptor to suppress standard browser success alert popups

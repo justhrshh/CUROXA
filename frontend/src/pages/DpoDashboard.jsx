@@ -222,6 +222,7 @@ const DpoDashboard = () => {
     <div style={{ minHeight: '100vh', background: '#F8FAFC', color: '#0F172A', fontFamily: "'Outfit', sans-serif" }}>
       {/* Top Header */}
       <header
+        className="dpo-header"
         style={{
           background: '#FFFFFF',
           borderBottom: '1px solid #E2E8F0',
@@ -304,7 +305,7 @@ const DpoDashboard = () => {
       {/* Main Content */}
       <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '28px 24px' }}>
         {/* KPI Stat Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '28px' }}>
+        <div className="dpo-stat-grid kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '28px' }}>
           <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
             <div style={{ fontSize: '12px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>Total Requests</div>
             <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', marginTop: '6px' }}>{stats.total}</div>
@@ -383,7 +384,7 @@ const DpoDashboard = () => {
                   border: '1.5px solid #CBD5E1',
                   fontSize: '12.5px',
                   fontWeight: 600,
-                  width: '280px',
+                  width: '100%', maxWidth: '280px',
                   color: '#0F172A',
                   outline: 'none'
                 }}
@@ -407,7 +408,7 @@ const DpoDashboard = () => {
           </div>
 
           {/* Table */}
-          <div style={{ overflowX: 'auto' }}>
+          <div className="table-responsive" style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
               <thead>
                 <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 800, fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>

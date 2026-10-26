@@ -14,6 +14,15 @@ const OTP_LENGTH = 6;
 const OTP_SLOT_KEYS = Array.from({ length: OTP_LENGTH }, (_, i) => `otp-slot-${i}`);
 
 const PatientPortalLogin = () => {
+  useEffect(() => {
+    document.documentElement.classList.add('login-page-active');
+    document.body.classList.add('login-page-active');
+    return () => {
+      document.documentElement.classList.remove('login-page-active');
+      document.body.classList.remove('login-page-active');
+    };
+  }, []);
+
   const portalBranding = usePortalBranding();
   const hospital = portalBranding?.hospital;
   const [emailOrPhone, setEmailOrPhone] = useState('');
@@ -128,7 +137,7 @@ const PatientPortalLogin = () => {
       <div className="lg:hidden absolute inset-0 bg-[#f8fbfe]/88 backdrop-blur-[2px] pointer-events-none z-[1]" />
 
       {/* ── 3. HEADER ── */}
-      <header className="lg:absolute top-0 left-0 right-0 z-20 w-full max-w-[1600px] mx-auto px-8 sm:px-12 lg:px-16 pt-7 sm:pt-9 flex items-center justify-between pointer-events-none">
+      <header className="lg:absolute top-0 left-0 right-0 z-20 w-full max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-12 lg:px-16 pt-7 sm:pt-9 flex items-center justify-between pointer-events-none">
         {/* Top-Left Logo */}
         <div className="pointer-events-auto flex items-center gap-3.5 cursor-pointer" onClick={() => navigate('/')}>
           {hospital ? (
@@ -160,7 +169,7 @@ const PatientPortalLogin = () => {
       </header>
 
       {/* ── 4. MAIN HERO & LOGIN SECTION ── */}
-      <main className="relative z-10 w-full max-w-[1600px] mx-auto flex-1 min-h-screen flex flex-col lg:flex-row items-center justify-between px-8 sm:px-12 lg:px-16 py-6 lg:py-8 gap-8 lg:gap-12">
+      <main className="relative z-10 w-full max-w-[1600px] mx-auto flex-1 min-h-screen flex flex-col lg:flex-row items-center justify-between px-4 sm:px-8 lg:px-12 lg:px-16 py-6 lg:py-8 gap-8 lg:gap-12">
 
         {/* ── LEFT HERO SECTION ── */}
         <div className="w-full lg:w-[56%] flex flex-col justify-center pt-2 lg:pt-14 pb-4">
@@ -281,7 +290,7 @@ const PatientPortalLogin = () => {
         {/* ── RIGHT LOGIN CARD ── */}
         <div className="w-full lg:w-[44%] xl:w-[42%] flex flex-col items-center lg:items-end my-auto">
 
-          <div className="w-full max-w-[500px] xl:max-w-[515px] bg-white rounded-3xl shadow-[0_25px_70px_rgba(15,31,61,0.08)] border border-slate-100/90 p-7 sm:p-8 lg:p-9 relative z-10 login-panel">
+          <div className="w-full max-w-[500px] xl:max-w-[515px] bg-white rounded-3xl shadow-[0_25px_70px_rgba(15,31,61,0.08)] border border-slate-100/90 p-4 sm:p-8 lg:p-9 relative z-10 login-panel">
             
             {/* Top Bar: Back to Staff Login Navigation */}
             <div className="flex items-center justify-between mb-4 -mt-1">

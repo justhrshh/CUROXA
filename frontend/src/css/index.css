@@ -2097,19 +2097,33 @@ div[style*="textAlign: center"] {
   background: #94A3B8;
 }
 
-/* Lock viewport — only inner main-content areas should scroll (exempt login page) */
-html {
-  overflow: hidden !important;
-  zoom: 0.9;
-  background-color: #F8FAFC !important;
-  height: 100% !important;
+/* Lock viewport on desktop displays (>= 1280px) — mobile/tablet uses native responsive 100% zoom */
+@media (min-width: 1280px) {
+  html {
+    overflow: hidden !important;
+    zoom: 0.9;
+    background-color: #F8FAFC !important;
+    height: 100% !important;
+  }
+  body {
+    overflow: hidden !important;
+    background-color: #F8FAFC !important;
+    height: 100% !important;
+    margin: 0 !important;
+  }
 }
 
-body {
-  overflow: hidden !important;
-  background-color: #F8FAFC !important;
-  height: 100% !important;
-  margin: 0 !important;
+@media (max-width: 1279px) {
+  html, body {
+    zoom: 1 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    background-color: #F8FAFC !important;
+    height: auto !important;
+    min-height: 100% !important;
+    margin: 0 !important;
+  }
 }
 
 /* Exemption for login page to allow natural full-page vertical scrolling across all screen sizes and mobile keyboards */

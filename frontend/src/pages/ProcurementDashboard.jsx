@@ -3372,6 +3372,31 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
           <header className="proc-header">
             {/* Left command pill & dynamic tab title */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', position: 'relative', zIndex: 2 }}>
+              {/* Hamburger Mobile Menu Toggle Button */}
+              <button 
+                type="button"
+                className="mobile-menu-toggle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMobileSidebarOpen(!mobileSidebarOpen);
+                }}
+                style={{
+                  display: 'none',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#475569',
+                  padding: '8px',
+                  borderRadius: '8px',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'background-color 0.2s',
+                  flexShrink: 0
+                }}
+                title="Toggle Navigation Menu"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+              </button>
               <div style={{ 
                 width: '44px', 
                 height: '44px', 

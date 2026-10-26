@@ -1,0 +1,704 @@
+/* ==========================================================================
+   QUROXA CLINICAL MANAGEMENT SYSTEM — MASTER RESPONSIVE SYSTEM
+   Fluid responsive engineering across all viewports (320px to 2560px+)
+   Covers: Super Admin, Clinic Admin, Receptionist, Doctor, Pharmacy,
+   Procurement, Lab, HR & Staff, DPO, Patient Portal, and Public Interfaces.
+   ========================================================================== */
+
+/* ──────────────────────────────────────────────────────────────────────────
+   0. UNIVERSAL RESET, FLUID BOX MODEL & SCROLL INTEGRITY
+   ────────────────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  max-width: 100vw;
+  margin: 0;
+  padding: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  width: 100%;
+  max-width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+#root {
+  width: 100%;
+  max-width: 100vw;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+/* Fluid media safety */
+img, svg, canvas {
+  max-width: 100%;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   1. MASTER TOP BARS & HEADER NAVIGATION (PHASE 2)
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Base top bar styles across all portals */
+.top-nav,
+.admin-top-header,
+.proc-header,
+.hr-top-header,
+.dpo-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid #E2E8F0;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+}
+
+/* Desktop default alignment */
+@media (min-width: 1025px) {
+  .top-nav,
+  .admin-top-header,
+  .proc-header,
+  .hr-top-header {
+    height: 60px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+/* Tablet & Mobile Header Adaptations (<= 1024px) */
+@media (max-width: 1024px) {
+  .top-nav,
+  .admin-top-header,
+  .proc-header,
+  .hr-top-header,
+  .dpo-header {
+    margin-left: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-height: 56px !important;
+    height: auto !important;
+    padding: 10px 14px !important;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px)) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+  }
+
+  /* Reveal hamburger menu buttons */
+  .mobile-menu-toggle {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 38px !important;
+    min-height: 38px !important;
+    padding: 7px !important;
+    border-radius: 10px !important;
+    background: #F8FAFC !important;
+    border: 1px solid #E2E8F0 !important;
+    color: #334155 !important;
+    cursor: pointer !important;
+    flex-shrink: 0 !important;
+    transition: all 0.15s ease !important;
+  }
+  .mobile-menu-toggle:active {
+    background: #E2E8F0 !important;
+    transform: scale(0.96) !important;
+  }
+
+  /* Main content margins reset on mobile */
+  .main-content,
+  .admin-main-canvas,
+  .proc-main,
+  .hr-main-canvas {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    padding: 14px 12px 90px 12px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Ensure decorative accent strips don't overflow */
+  .header-bottom-accent-strip {
+    display: none !important;
+  }
+}
+
+/* Mobile Header Layout (<= 768px) */
+@media (max-width: 768px) {
+  .header-title-container {
+    min-width: 0 !important;
+    flex: 1 !important;
+    overflow: hidden !important;
+  }
+
+  .header-title,
+  .top-nav-page-title {
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    line-height: 1.25 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .header-title-sub,
+  .top-nav-greeting,
+  .proc-header-sub {
+    display: none !important;
+  }
+
+  /* Admin Dashboard Header Actions on Tablet/Mobile */
+  .header-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Plan widget: Compact icon + status badge */
+  .header-plan-widget {
+    min-width: unset !important;
+    padding: 6px 10px !important;
+    border-radius: 10px !important;
+  }
+  .header-plan-widget > svg:not(:first-child),
+  .header-plan-widget > div:has(svg) {
+    display: none !important;
+  }
+  .header-plan-widget span:last-child {
+    display: none !important;
+  }
+
+  /* Alerts widget: Compact icon badge */
+  .header-alerts-widget {
+    min-width: unset !important;
+    padding: 6px 10px !important;
+    border-radius: 10px !important;
+  }
+  .header-alerts-widget span:last-child {
+    display: none !important;
+  }
+  .header-alerts-widget span:first-child {
+    font-size: 11px !important;
+    font-weight: 800 !important;
+  }
+
+  /* Sync button: Icon-only on mobile */
+  .header-sync-btn {
+    height: 36px !important;
+    width: 36px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+    border-radius: 10px !important;
+  }
+  .header-sync-btn span {
+    display: none !important;
+  }
+
+  /* Add Staff button: Icon-only on mobile */
+  .header-add-staff-btn {
+    height: 36px !important;
+    width: 36px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+    border-radius: 10px !important;
+  }
+  .header-add-staff-btn span,
+  .header-add-staff-btn svg:last-child {
+    display: none !important;
+  }
+
+  /* Notification Bell */
+  .header-bell-widget,
+  .bell-icon-btn {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 10px !important;
+  }
+
+  /* Doctor & Pharmacy Search Bars on Mobile */
+  .search-bar-container,
+  .search-wrapper,
+  .pharmacy-search-wrapper,
+  div[style*="width: 320px"][ref*="search"],
+  div[style*="width: 280px"][ref*="search"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Compact Mobile Header (<= 480px / 320px–390px) */
+@media (max-width: 480px) {
+  .top-nav,
+  .admin-top-header,
+  .proc-header,
+  .hr-top-header,
+  .dpo-header {
+    padding: 8px 10px !important;
+    gap: 6px !important;
+  }
+
+  /* On ultra-compact screens, hide plan widget from top bar to make room for Title & Actions */
+  .header-plan-widget {
+    display: none !important;
+  }
+
+  .header-title-container {
+    max-width: calc(100vw - 170px) !important;
+  }
+
+  .header-title {
+    font-size: 14px !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   2. MASTER SIDEBARS & NAVIGATION DRAWERS (PHASE 3)
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Desktop sidebar behavior */
+@media (min-width: 1025px) {
+  .sidebar,
+  .admin-sidebar,
+  .proc-sidebar,
+  .hr-sidebar {
+    width: 256px;
+    height: 100vh;
+    height: 100dvh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 100;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar.collapsed,
+  .admin-sidebar.collapsed,
+  .hr-sidebar.collapsed {
+    width: 78px !important;
+  }
+}
+
+/* Mobile Drawer Behavior (<= 1024px) */
+@media (max-width: 1024px) {
+  .sidebar,
+  .admin-sidebar,
+  .proc-sidebar,
+  .hr-sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    height: 100% !important;
+    height: 100dvh !important;
+    width: 270px !important;
+    max-width: 82vw !important;
+    background: #FFFFFF !important;
+    z-index: 2050 !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    box-shadow: 12px 0 36px rgba(15, 23, 42, 0.18) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .sidebar.mobile-open,
+  .admin-sidebar.mobile-open,
+  .proc-sidebar.mobile-open,
+  .hr-sidebar.mobile-open {
+    transform: translateX(0) !important;
+  }
+
+  /* Backdrop Overlay */
+  .mobile-backdrop {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(15, 23, 42, 0.45) !important;
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+    z-index: 2040 !important;
+    animation: fadeIn 0.2s ease-out forwards !important;
+  }
+
+  /* Mobile Touch Targets */
+  .sidebar .nav-link,
+  .sidebar-link,
+  .proc-menu-item,
+  .hr-menu-item {
+    min-height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    padding: 12px 18px !important;
+    font-size: 13.5px !important;
+    font-weight: 700 !important;
+    border-radius: 10px !important;
+    margin: 3px 8px !important;
+    cursor: pointer !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   3. DASHBOARD ARRANGEMENT, METRIC CARDS & CHARTS (PHASE 4)
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Universal Fluid KPI Grids */
+.admin-kpi-row,
+.ph-kpi-grid,
+.doctor-grid-pro,
+.kpi-grid,
+.dashboard-kpi-grid,
+.modern-kpi-grid,
+.sa-stat-grid,
+.dpo-stat-grid {
+  display: grid !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* 320px–480px: Single Column */
+@media (max-width: 480px) {
+  .admin-kpi-row,
+  .ph-kpi-grid,
+  .doctor-grid-pro,
+  .kpi-grid,
+  .dashboard-kpi-grid,
+  .modern-kpi-grid,
+  .sa-stat-grid,
+  .dpo-stat-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Card padding reduction */
+  .glass-card,
+  .modern-kpi-card,
+  .dashboard-widget-card {
+    padding: 14px 16px !important;
+    border-radius: 14px !important;
+  }
+}
+
+/* 481px–768px: 2 Columns */
+@media (min-width: 481px) and (max-width: 768px) {
+  .admin-kpi-row,
+  .ph-kpi-grid,
+  .doctor-grid-pro,
+  .kpi-grid,
+  .dashboard-kpi-grid,
+  .modern-kpi-grid,
+  .sa-stat-grid,
+  .dpo-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 14px !important;
+  }
+}
+
+/* 769px–1024px: 2 to 3 Columns */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .admin-kpi-row,
+  .ph-kpi-grid,
+  .doctor-grid-pro,
+  .kpi-grid,
+  .dashboard-kpi-grid,
+  .modern-kpi-grid,
+  .sa-stat-grid,
+  .dpo-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 16px !important;
+  }
+}
+
+/* 1025px+: 4 Columns (Desktop) */
+@media (min-width: 1025px) {
+  .admin-kpi-row,
+  .ph-kpi-grid,
+  .doctor-grid-pro,
+  .kpi-grid,
+  .dashboard-kpi-grid,
+  .modern-kpi-grid,
+  .sa-stat-grid,
+  .dpo-stat-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 18px !important;
+  }
+}
+
+/* Charts & Analytics Panels Safe Sizing */
+.recharts-responsive-container,
+div:has(> .recharts-surface) {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+@media (max-width: 768px) {
+  .recharts-responsive-container {
+    min-height: 220px !important;
+  }
+}
+
+/* Split content layouts collapse on mobile */
+@media (max-width: 1024px) {
+  .split-layout-2col,
+  div[style*="gridTemplateColumns: 2fr 1fr"],
+  div[style*="gridTemplateColumns: 1.8fr 1fr"],
+  div[style*="gridTemplateColumns: 1.5fr 1fr"],
+  div[style*="gridTemplateColumns: 1.2fr 0.8fr"],
+  div[style*="gridTemplateColumns: 280px 1fr"],
+  div[style*="gridTemplateColumns: 320px 1fr"],
+  div[style*="grid-template-columns: 2fr 1fr"],
+  div[style*="grid-template-columns: 1.8fr 1fr"],
+  div[style*="grid-template-columns: 1.5fr 1fr"],
+  div[style*="grid-template-columns: 1.2fr 0.8fr"],
+  div[style*="grid-template-columns: 280px 1fr"],
+  div[style*="grid-template-columns: 320px 1fr"] {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   4. DATA TABLES, REGISTERS & LISTS (PHASE 5)
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Container for all responsive data tables */
+.table-wrapper,
+.table-responsive,
+.data-table-container,
+.pm-staff-list,
+div:has(> table) {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  border-radius: 12px !important;
+  box-sizing: border-box !important;
+}
+
+/* Thin modern scrollbar for table containers */
+.table-wrapper::-webkit-scrollbar,
+.table-responsive::-webkit-scrollbar,
+.data-table-container::-webkit-scrollbar,
+div:has(> table)::-webkit-scrollbar {
+  height: 6px;
+}
+.table-wrapper::-webkit-scrollbar-thumb,
+.table-responsive::-webkit-scrollbar-thumb,
+.data-table-container::-webkit-scrollbar-thumb,
+div:has(> table)::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 10px;
+}
+
+/* Filter and search toolbar responsiveness */
+@media (max-width: 768px) {
+  .filter-row,
+  .table-toolbar,
+  .search-filter-bar,
+  .controls-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .filter-row > div,
+  .table-toolbar > div,
+  .search-filter-bar > div {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .filter-row input,
+  .filter-row select,
+  .search-filter-bar input,
+  .search-filter-bar select {
+    width: 100% !important;
+    min-height: 40px !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   5. FORMS, MODALS & DETAIL VIEWS (PHASE 6)
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Centered modal overlay backdrop */
+.modal-overlay,
+.admin-modal-overlay,
+.details-modal-overlay,
+.proc-modal-overlay,
+.hr-modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(15, 23, 42, 0.55) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 99999 !important;
+  padding: 12px !important;
+  box-sizing: border-box !important;
+}
+
+/* Modal box constraints */
+.modal-box,
+.modal-content,
+.admin-modal-box,
+.details-modal-box,
+.proc-modal-box,
+.hr-modal-box {
+  width: 100% !important;
+  max-width: 580px !important;
+  max-height: 90vh !important;
+  max-height: 90dvh !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  background: #FFFFFF !important;
+  border-radius: 18px !important;
+  border: 1px solid #E2E8F0 !important;
+  box-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.25) !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 640px) {
+  .modal-box,
+  .modal-content,
+  .admin-modal-box,
+  .details-modal-box,
+  .proc-modal-box,
+  .hr-modal-box {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    padding: 16px 14px !important;
+    border-radius: 14px !important;
+  }
+
+  /* Multi-column form collapse */
+  .modal-grid-2,
+  div[style*="gridTemplateColumns: 1fr 1fr"],
+  div[style*="gridTemplateColumns: repeat(2, 1fr)"],
+  div[style*="grid-template-columns: 1fr 1fr"],
+  div[style*="grid-template-columns: repeat(2, 1fr)"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Modal action buttons stack */
+  .modal-footer,
+  .modal-actions {
+    flex-direction: column-reverse !important;
+    width: 100% !important;
+    gap: 8px !important;
+  }
+  .modal-footer button,
+  .modal-actions button {
+    width: 100% !important;
+    min-height: 42px !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   6. RECEPTIONIST PORTAL SPECIAL REFINEMENTS (PHASE 7)
+   ────────────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  /* Front Desk Command Top Strip */
+  .reception-header-title {
+    font-size: 15px !important;
+  }
+
+  /* Desk status & serving ticket card */
+  .serving-ticket-card {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    padding: 16px !important;
+  }
+
+  .serving-ticket-card .action-buttons-group {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .serving-ticket-card .action-buttons-group button {
+    width: 100% !important;
+    min-height: 42px !important;
+  }
+
+  /* Queue tab buttons wrap cleanly */
+  .reception-tabs-bar {
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    padding-bottom: 4px !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   7. SUPER ADMIN, CLINIC ADMIN & DPO REFINEMENTS (PHASE 8)
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Admin Reception QR Preview Card */
+@media (max-width: 1024px) {
+  .reception-qr-grid {
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
+}
+
+/* DPO Portal Header & Metrics */
+@media (max-width: 768px) {
+  .dpo-header {
+    padding: 12px 14px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  .dpo-header > div:last-child {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+}
+
+/* Large Displays (1920px, 2560px, 3840px / 4K) */
+@media (min-width: 1920px) {
+  .main-content,
+  .admin-main-canvas,
+  .proc-main,
+  .hr-main-canvas {
+    max-width: 2400px;
+    margin-right: auto;
+  }
+
+  .admin-kpi-row,
+  .kpi-grid,
+  .dashboard-kpi-grid {
+    gap: 24px !important;
+  }
+}
