@@ -23031,23 +23031,24 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           };
 
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+            <div className="admin-dashboard-content" style={{ maxWidth: '1440px', width: '100%', boxSizing: 'border-box' }}>
               {/* Header Card */}
               <div style={{
                 background: '#FFFFFF',
                 borderRadius: '12px',
                 border: '1px solid #E2E8F0',
-                padding: '24px',
+                padding: '20px 24px',
                 display: 'flex',
                 flexWrap: 'wrap',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                gap: '16px'
+                gap: '16px',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)'
               }}>
                 <div style={{ maxWidth: '640px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
                     <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                      Front Desk Reception QR Signage
+                      Front Desk Reception QR & Display Management
                     </h2>
                     <span style={{
                       fontSize: '11px',
@@ -23062,7 +23063,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     </span>
                   </div>
                   <p style={{ margin: 0, fontSize: '13.5px', color: '#64748B', lineHeight: '1.5' }}>
-                    Manage walk-in patient arrival signage and digital queue entry point for {clinicDisplayName}.
+                    Manage walk-in patient arrival signage and digital waiting room display screens for {clinicDisplayName}.
                   </p>
                 </div>
 
@@ -23086,34 +23087,36 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 background: isModuleActive ? '#F0FDF4' : '#FFFBEB',
                 border: isModuleActive ? '1px solid #BBF7D0' : '1px solid #FDE68A',
                 borderRadius: '10px',
-                padding: '16px 20px',
+                padding: '14px 20px',
                 display: 'flex',
-                alignItems: 'flex-start',
-                gap: '14px'
+                alignItems: 'center',
+                gap: '12px'
               }}>
                 {isModuleActive ? (
-                  <CheckCircle2 size={20} color="#16A34A" style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <CheckCircle2 size={18} color="#16A34A" style={{ flexShrink: 0 }} />
                 ) : (
-                  <AlertTriangle size={20} color="#D97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <AlertTriangle size={18} color="#D97706" style={{ flexShrink: 0 }} />
                 )}
                 <div style={{ fontSize: '13px', color: isModuleActive ? '#166534' : '#92400E', lineHeight: '1.5' }}>
-                  <strong style={{ display: 'block', fontSize: '13.5px', marginBottom: '3px' }}>
-                    {isModuleActive ? 'Reception Queue Active' : 'Reception Queue Disabled'}
+                  <strong style={{ display: 'inline', fontSize: '13.5px', marginRight: '6px' }}>
+                    {isModuleActive ? 'Reception Queue Active:' : 'Reception Queue Disabled:'}
                   </strong>
                   {isModuleActive
-                    ? 'Reception Queue is enabled for this clinic. Patients can scan the QR code to enter the reception queue.'
+                    ? 'Reception Queue is enabled for this clinic. Patients can scan the QR code to enter the reception queue, and the waiting room display updates in real time.'
                     : 'Reception Queue is disabled for this clinic. New reception queue entries are unavailable.'}
                 </div>
               </div>
 
-              {/* QR Preview + Action Buttons */}
+              {/* 2-Column Balanced Grid for Desktop / Big Screens */}
               <div style={{
-                display: 'flex',
-                flexDirection: 'column',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 460px), 1fr))',
+                gap: '20px',
                 width: '100%',
+                alignItems: 'stretch',
                 boxSizing: 'border-box'
               }}>
-                {/* QR Preview Card */}
+                {/* Column 1: Patient Self-Check-in QR Signage Card */}
                 <div style={{
                   background: '#FFFFFF',
                   borderRadius: '12px',
@@ -23121,16 +23124,18 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   padding: '24px',
                   display: 'flex',
                   flexDirection: 'column',
-                  alignItems: 'center',
-                  textAlign: 'center',
+                  justifyContent: 'space-between',
                   gap: '20px',
-                  maxWidth: '520px'
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)'
                 }}>
                   <div style={{ width: '100%', textAlign: 'left' }}>
-                    <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', margin: '0 0 4px 0' }}>
-                      Signage QR Code Preview
-                    </h3>
-                    <p style={{ margin: 0, fontSize: '12px', color: '#64748B' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <QrCode size={18} color="#2563EB" />
+                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                        Front Desk Signage QR Code
+                      </h3>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '12.5px', color: '#64748B' }}>
                       Scannable target for patient mobile devices arriving at reception.
                     </p>
                   </div>
@@ -23194,11 +23199,11 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       type="button"
                       onClick={handleCopyLink}
                       style={{
-                        padding: '6px 10px',
+                        padding: '6px 12px',
                         background: receptionQrCopied ? '#DCFCE7' : '#FFFFFF',
                         border: receptionQrCopied ? '1px solid #86EFAC' : '1px solid #CBD5E1',
                         borderRadius: '6px',
-                        fontSize: '11px',
+                        fontSize: '11.5px',
                         fontWeight: 700,
                         color: receptionQrCopied ? '#15803D' : '#334155',
                         cursor: 'pointer',
@@ -23276,119 +23281,166 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
 
-              </div>
-
-              {/* Waiting Room Reception Display Card */}
-              <div style={{
-                background: '#FFFFFF',
-                borderRadius: '12px',
-                border: '1px solid #E2E8F0',
-                padding: '24px',
-                display: 'flex',
-                flexWrap: 'wrap',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: '16px',
-                width: '100%',
-                boxSizing: 'border-box'
-              }}>
-                <div style={{ maxWidth: '640px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                    <div style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '8px',
-                      background: '#F0FDFA',
-                      border: '1px solid #CCFBF1',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}>
-                      <Tv size={18} color="#0D9488" />
+                {/* Column 2: Waiting Room Reception Display Card */}
+                <div style={{
+                  background: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  padding: '24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '20px',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)'
+                }}>
+                  <div style={{ width: '100%', textAlign: 'left' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Tv size={18} color="#0D9488" />
+                        <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                          Waiting Room TV & Display
+                        </h3>
+                      </div>
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '3px 8px',
+                        borderRadius: '12px',
+                        background: '#EFF6FF',
+                        color: '#1D4ED8',
+                        border: '1px solid #BFDBFE'
+                      }}>
+                        PUBLIC SCREEN
+                      </span>
                     </div>
-                    <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                      Waiting Room Reception Display (TV & Monitor)
-                    </h3>
-                    <span style={{
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      padding: '3px 8px',
-                      borderRadius: '12px',
-                      background: '#EFF6FF',
-                      color: '#1D4ED8',
-                      border: '1px solid #BFDBFE'
-                    }}>
-                      PUBLIC DISPLAY
-                    </span>
+                    <p style={{ margin: 0, fontSize: '12.5px', color: '#64748B' }}>
+                      Dedicated read-only screen for waiting-room TVs, monitors, and tablets.
+                    </p>
                   </div>
-                  <p style={{ margin: 0, fontSize: '13px', color: '#64748B', lineHeight: '1.5' }}>
-                    Dedicated read-only display for waiting-room TVs and monitors. Shows the current active reception ticket (NOW SERVING) and waiting count in real time.
-                  </p>
+
+                  {/* Stylized Waiting Room Screen Frame */}
                   <div style={{
-                    marginTop: '10px',
-                    fontSize: '12px',
-                    color: '#475569',
-                    fontFamily: 'monospace',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(145deg, #0F172A 0%, #1E293B 100%)',
+                    border: '2px solid #334155',
+                    padding: '18px 20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    color: '#FFFFFF',
+                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.18)',
+                    margin: '0 auto',
+                    width: '100%',
+                    maxWidth: '380px',
+                    boxSizing: 'border-box'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {clinicDisplayName}
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10.5px', fontWeight: 700, color: '#4ADE80' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ADE80', display: 'inline-block' }}></span>
+                        LIVE SCREEN
+                      </span>
+                    </div>
+                    <div style={{ textAlign: 'center', padding: '10px 0' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#2DD4BF', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                        NOW SERVING
+                      </div>
+                      <div style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '1px', color: '#FFFFFF', margin: '4px 0' }}>
+                        RECEPTION DESK
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#94A3B8' }}>
+                        Displays current active ticket & queue length
+                      </div>
+                    </div>
+                    <div style={{ width: '100%', background: 'rgba(255,255,255,0.06)', borderRadius: '6px', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#CBD5E1' }}>
+                      <span>WebSocket Auto-Sync</span>
+                      <span style={{ color: '#2DD4BF', fontWeight: 700 }}>Single-Counter Display</span>
+                    </div>
+                  </div>
+
+                  {/* Public Display Link Box */}
+                  <div style={{
+                    width: '100%',
                     background: '#F8FAFC',
                     border: '1px solid #E2E8F0',
-                    borderRadius: '6px',
-                    padding: '6px 12px',
-                    display: 'inline-block',
-                    maxWidth: '100%',
-                    boxSizing: 'border-box',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px',
+                    boxSizing: 'border-box'
                   }}>
-                    {publicDisplayUrl}
+                    <div style={{
+                      fontSize: '12px',
+                      color: '#334155',
+                      fontFamily: 'monospace',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      textAlign: 'left'
+                    }}>
+                      {publicDisplayUrl}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyDisplayLink}
+                      style={{
+                        padding: '6px 12px',
+                        background: receptionDisplayCopied ? '#DCFCE7' : '#FFFFFF',
+                        border: receptionDisplayCopied ? '1px solid #86EFAC' : '1px solid #CBD5E1',
+                        borderRadius: '6px',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        color: receptionDisplayCopied ? '#15803D' : '#334155',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        flexShrink: 0
+                      }}
+                      title="Copy public display link to clipboard"
+                    >
+                      <Copy size={13} />
+                      {receptionDisplayCopied ? 'Copied' : 'Copy'}
+                    </button>
                   </div>
-                </div>
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={handleCopyDisplayLink}
-                    style={{
-                      padding: '9px 15px',
-                      borderRadius: '8px',
-                      border: receptionDisplayCopied ? '1px solid #86EFAC' : '1px solid #CBD5E1',
-                      background: receptionDisplayCopied ? '#DCFCE7' : '#FFFFFF',
-                      color: receptionDisplayCopied ? '#15803D' : '#334155',
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                    title="Copy public display link to clipboard"
-                  >
-                    <Copy size={15} />
-                    {receptionDisplayCopied ? 'Link Copied!' : 'Copy Display Link'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleOpenDisplay}
-                    style={{
-                      padding: '9px 18px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: '#0D9488',
-                      color: '#FFFFFF',
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      boxShadow: '0 2px 6px rgba(13, 148, 136, 0.25)'
-                    }}
-                    title="Open waiting room display in a new tab"
-                  >
-                    <ExternalLink size={15} />
-                    Open Reception Display
-                  </button>
+                  {/* Action Button: Open Display */}
+                  <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={handleOpenDisplay}
+                      style={{
+                        width: '100%',
+                        padding: '10px 18px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: '#0D9488',
+                        color: '#FFFFFF',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        boxShadow: '0 2px 6px rgba(13, 148, 136, 0.25)',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="Open waiting room display in a new tab"
+                    >
+                      <ExternalLink size={15} />
+                      Open Reception Display
+                    </button>
+                    <span style={{ fontSize: '11px', color: '#64748B', textAlign: 'center' }}>
+                      Open on any Smart TV or monitor browser. Press F11 for full-screen mode.
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
