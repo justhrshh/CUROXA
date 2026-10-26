@@ -192,7 +192,16 @@ export default function HospitalProfileView({
         logo: data.logo && data.logo !== 'H' ? data.logo : ''
       });
 
-      setModuleDraft(data.modules || {});
+      const ALL_MODS = ['reception', 'doctor', 'pharmacy', 'laboratory', 'inventory', 'dpdp', 'receptionQueue'];
+      const resolvedModules = {};
+      ALL_MODS.forEach(m => {
+        const existing = data.modules?.[m];
+        resolvedModules[m] = {
+          enabled: existing?.enabled !== undefined ? Boolean(existing.enabled) : (m === 'receptionQueue' ? false : true),
+          lastMod: existing?.lastMod || null
+        };
+      });
+      setModuleDraft(resolvedModules);
       setModuleDirty(false);
 
       setLimitsDraft({
@@ -342,6 +351,16 @@ export default function HospitalProfileView({
         setModuleSavedSuccess(true);
         showToast('Module configuration saved successfully!', 'success');
         setTimeout(() => setModuleSavedSuccess(false), 3500);
+
+        const effective = updated.effectiveModules || updated.modules || moduleDraft;
+        try {
+          localStorage.setItem('tenantModules', JSON.stringify(effective));
+          sessionStorage.setItem('tenantModules', JSON.stringify(effective));
+          localStorage.setItem('curoxa_modules_updated_at', Date.now().toString());
+        } catch (_) {}
+        window.dispatchEvent(new CustomEvent('curoxa_modules_updated', { detail: effective }));
+        window.dispatchEvent(new CustomEvent('curoxa_sync', { detail: { type: 'subscription', modules: effective } }));
+
         if (onHospitalUpdated) onHospitalUpdated(updated);
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -1372,45 +1391,66 @@ export default function HospitalProfileView({
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: '16px' }}>
-                {['reception', 'doctor', 'pharmacy', 'laboratory', 'inventory', 'dpdp'].map(mod => {
+                {['reception', 'doctor', 'pharmacy', 'laboratory', 'inventory', 'dpdp', 'receptionQueue'].map(mod => {
                   const isEnabled = moduleDraft?.[mod]?.enabled !== undefined
                     ? Boolean(moduleDraft[mod].enabled)
-                    : (hospital.modules?.[mod]?.enabled !== undefined ? Boolean(hospital.modules[mod].enabled) : true);
+                    : (hospital.modules?.[mod]?.enabled !== undefined 
+                        ? Boolean(hospital.modules[mod].enabled) 
+                        : (mod === 'receptionQueue' ? false : true));
 
                   const planStr = String(hospital.plan || '').toLowerCase();
                   const isBasic = planStr.includes('basic') || planStr.includes('standard');
-                  const planAllows = isBasic ? (mod === 'reception' || mod === 'doctor') : true;
-                  const isCustomOverride = isEnabled && !planAllows;
+                  const isIndependent = mod === 'receptionQueue';
+                  const planAllows = isIndependent ? false : (isBasic ? (mod === 'reception' || mod === 'doctor') : true);
+                  const isCustomOverride = isIndependent ? isEnabled : (isEnabled && !planAllows);
+
+                  const displayName = mod === 'receptionQueue' 
+                    ? 'Reception Queue' 
+                    : (mod === 'dpdp' ? 'DPDP Compliance' : `${mod.charAt(0).toUpperCase() + mod.slice(1)} Module`);
+
+                  const descriptionText = isIndependent
+                    ? (isEnabled ? 'Clinic-level independent add-on enabled' : 'Independent add-on (disabled by default)')
+                    : (isCustomOverride
+                        ? 'Authoritative override active'
+                        : !planAllows
+                          ? 'Excluded by subscription plan tier'
+                          : 'Included in base subscription tier');
 
                   return (
                     <div key={mod} style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ textTransform: 'capitalize', fontWeight: 700, fontSize: '13px', color: '#0F172A' }}>
-                            {mod} Module
+                          <span style={{ fontWeight: 700, fontSize: '13px', color: '#0F172A' }}>
+                            {displayName}
                           </span>
-                          {isCustomOverride && (
+                          {isIndependent && isEnabled && (
+                            <span style={{ fontSize: '9.5px', fontWeight: 750, padding: '1px 6px', borderRadius: '4px', background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
+                              Add-on Active
+                            </span>
+                          )}
+                          {isIndependent && !isEnabled && (
+                            <span style={{ fontSize: '9.5px', fontWeight: 750, padding: '1px 6px', borderRadius: '4px', background: '#F1F5F9', color: '#64748B', border: '1px solid #E2E8F0' }}>
+                              Add-on Inactive
+                            </span>
+                          )}
+                          {!isIndependent && isCustomOverride && (
                             <span style={{ fontSize: '9.5px', fontWeight: 750, padding: '1px 6px', borderRadius: '4px', background: '#F3E8FF', color: '#7E22CE', border: '1px solid #E9D5FF' }}>
                               Custom Override
                             </span>
                           )}
-                          {!planAllows && !isEnabled && (
+                          {!isIndependent && !planAllows && !isEnabled && (
                             <span style={{ fontSize: '9.5px', fontWeight: 750, padding: '1px 6px', borderRadius: '4px', background: '#F1F5F9', color: '#64748B', border: '1px solid #E2E8F0' }}>
                               Plan Excluded
                             </span>
                           )}
-                          {planAllows && (
+                          {!isIndependent && planAllows && (
                             <span style={{ fontSize: '9.5px', fontWeight: 750, padding: '1px 6px', borderRadius: '4px', background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0' }}>
                               Plan Default
                             </span>
                           )}
                         </div>
                         <span style={{ fontSize: '11px', color: '#64748B' }}>
-                          {isCustomOverride
-                            ? 'Authoritative override active'
-                            : !planAllows
-                              ? 'Excluded by subscription plan tier'
-                              : 'Included in base subscription tier'}
+                          {descriptionText}
                         </span>
                       </div>
 

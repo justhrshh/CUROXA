@@ -46,6 +46,12 @@ const checkModule = (moduleName) => {
       }
       if (!hospital) {
         // Backwards compatibility for dev/seeding or if no hospital profile exists yet
+        if (moduleName === 'receptionQueue' || (Array.isArray(moduleName) && moduleName.includes('receptionQueue'))) {
+          return res.status(403).json({
+            error: "MODULE_UNAVAILABLE",
+            message: "The Reception Queue module is disabled by default for this hospital."
+          });
+        }
         return next();
       }
 

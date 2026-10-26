@@ -5,6 +5,7 @@ import { socket, joinTenantRoom } from '../utils/socket';
 import { useRealTimeSync } from '../hooks/useRealTimeSync';
 import HRPayroll from './HRPayroll';
 import WaitingQueuePanel from '../components/WaitingQueuePanel';
+import ReceptionQueuePanel from '../components/ReceptionQueuePanel';
 import DoctorQRModal from '../components/DoctorQRModal';
 import quroxaSidebarLogo from '../assets/quroxa_new_logo.png';
 import { HospitalBrandLogo, getActivePortalBranding, restoreActivePortalDocumentMetadata } from '../context/PortalBrandingContext';
@@ -5470,6 +5471,27 @@ const ReceptionistDashboard = () => {
                   </div>
                   <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'waiting-queue' ? 700 : 600, color: activeTab === 'waiting-queue' ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
                     Waiting Queue
+                  </span>
+                </div>
+              )}
+
+              {(currentUser?.role === 'receptionist' || currentUser?.role === 'admin' || coverageState['rc-queue']?.on || coverageState['rc-appt']?.on) && (
+                <div 
+                  className={`sidebar-link ${activeTab === 'reception-queue' ? 'active' : ''}`}
+                  onClick={() => switchTab('reception-queue')}
+                >
+                  {activeTab === 'reception-queue' && (
+                    <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#0D9488' }} />
+                  )}
+                  <div className="sidebar-link-icon" style={{
+                    background: activeTab === 'reception-queue' ? 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)' : '#CCFBF1',
+                    color: activeTab === 'reception-queue' ? '#FFFFFF' : '#0D9488',
+                    boxShadow: activeTab === 'reception-queue' ? '0 3px 10px rgba(13, 148, 136, 0.25)' : 'none'
+                  }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
+                  </div>
+                  <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'reception-queue' ? 700 : 600, color: activeTab === 'reception-queue' ? '#0D9488' : '#0F172A', letterSpacing: '-0.01em' }}>
+                    Reception Queue
                   </span>
                 </div>
               )}
@@ -14830,6 +14852,19 @@ const ReceptionistDashboard = () => {
           </div>
           );
         })()}
+        {/* RECEPTION QUEUE TAB */}
+        {activeTab === 'reception-queue' && (
+          <div className="tab-content active" style={{ animation: 'slideUp 0.3s ease-out' }}>
+            <ReceptionQueuePanel
+              doctors={doctors}
+              appointments={appointments}
+              setAppointments={setAppointments}
+              showToast={showToast}
+              fetchData={fetchData}
+            />
+          </div>
+        )}
+
         {/* WAITING QUEUE TAB */}
         {activeTab === 'waiting-queue' && (
           <WaitingQueuePanel

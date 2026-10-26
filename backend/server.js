@@ -255,6 +255,9 @@ app.use("/api/public/portal", portalRoutes);
 const publicQueueRoutes = require("./routes/publicQueueRoutes");
 app.use("/api/public-queue", publicQueueRoutes);
 
+const receptionQueueRoutes = require("./routes/receptionQueueRoutes");
+app.use("/api/reception-queue", receptionQueueRoutes);
+
 // Create HTTP server and initialize socket.io
 const http = require("http").createServer(app);
 const io = require("socket.io")(http, {

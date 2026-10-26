@@ -1094,6 +1094,17 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
       hospitalData.trialUsed = true;
     }
 
+    // Default-off enforcement for receptionQueue on hospital creation
+    if (!hospitalData.modules) {
+      hospitalData.modules = {};
+    }
+    if (!hospitalData.modules.receptionQueue || typeof hospitalData.modules.receptionQueue !== 'object') {
+      hospitalData.modules.receptionQueue = { enabled: false };
+    } else {
+      const rawVal = hospitalData.modules.receptionQueue.enabled;
+      hospitalData.modules.receptionQueue.enabled = (rawVal === true || String(rawVal).trim().toLowerCase() === 'true');
+    }
+
     const hospital = await SuperAdminHospital.create(hospitalData);
     
     const bcrypt = require('bcrypt');
@@ -1342,6 +1353,27 @@ router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
       req.body.signatoryName = String(req.body.signatoryName).trim().slice(0, 70);
     }
 
+    // Default-off & explicit-preservation enforcement for receptionQueue on update
+    if (req.body.modules && typeof req.body.modules === 'object') {
+      const existingHosp = await SuperAdminHospital.findOne({
+        $or: [
+          ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []),
+          { code: id },
+          { code: String(id).toLowerCase().trim() },
+          { hospitalId: String(id).toUpperCase().trim() }
+        ]
+      });
+      if (existingHosp) {
+        if (req.body.modules.receptionQueue === undefined) {
+          // Preserve existing receptionQueue configuration if omitted
+          req.body.modules.receptionQueue = existingHosp.modules?.receptionQueue || { enabled: false };
+        } else if (req.body.modules.receptionQueue && typeof req.body.modules.receptionQueue === 'object') {
+          const rawVal = req.body.modules.receptionQueue.enabled;
+          req.body.modules.receptionQueue.enabled = (rawVal === true || String(rawVal).trim().toLowerCase() === 'true');
+        }
+      }
+    }
+
     let hospital = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
       hospital = await SuperAdminHospital.findByIdAndUpdate(id, req.body, { returnDocument: 'after', runValidators: true });
@@ -1391,17 +1423,22 @@ router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
     hospObj.effectiveModules = effectiveModules;
 
     const io = req.app.get("io");
-    if (io && hospital.code) {
-      io.to(hospital.code).emit("data_changed", { type: "subscription", modules: effectiveModules });
+    if (io && (hospital.code || hospital.hospitalId)) {
+      if (hospital.code) io.to(hospital.code).emit("data_changed", { type: "subscription", modules: effectiveModules });
+      if (hospital.hospitalId) {
+        io.to(hospital.hospitalId).emit("data_changed", { type: "subscription", modules: effectiveModules });
+        io.to(hospital.hospitalId.toLowerCase()).emit("data_changed", { type: "subscription", modules: effectiveModules });
+      }
       io.emit("hospital_subscription_updated", {
         hospitalCode: hospital.code,
+        hospitalId: hospital.hospitalId,
         plan: hospital.plan,
         status: hospital.status,
         subscriptionStatus: hospital.subscriptionStatus,
         subscriptionExpiryDate: hospital.subscriptionExpiryDate,
         revenue: hospital.revenue,
         trialUsed: hospital.trialUsed,
-        modules: hospital.modules,
+        modules: effectiveModules,
         effectiveModules: effectiveModules
       });
     }
@@ -1812,12 +1849,21 @@ router.get('/hospitals/:code/dashboard-stats', requireRole('Onboarding Manager')
 
 router.post('/hospitals/:code/impersonate-login', requireRole('Onboarding Manager'), async (req, res) => {
   try {
-    const tenantId = req.params.code.toLowerCase().trim();
-    let adminUser = await User.findOne({ tenantId, role: 'admin' });
+    const rawCode = req.params.code;
+    const hospital = await SuperAdminHospital.findOne({
+      $or: [
+        { code: String(rawCode).toLowerCase().trim() },
+        { hospitalId: String(rawCode).toUpperCase().trim() }
+      ]
+    });
+    const tenantId = hospital ? hospital.code : String(rawCode).toLowerCase().trim();
+    const candidateTenants = [tenantId, hospital?.hospitalId, hospital?.code].filter(Boolean);
+
+    let adminUser = await User.findOne({ tenantId: { $in: candidateTenants }, role: 'admin' });
     
     if (!adminUser) {
       // Fallback: pick any user or create a temporary admin for impersonation
-      adminUser = await User.findOne({ tenantId });
+      adminUser = await User.findOne({ tenantId: { $in: candidateTenants } });
       if (!adminUser) {
         // Create a default administrator user if the tenant is completely empty
         const bcrypt = require('bcrypt');
@@ -1828,8 +1874,8 @@ router.post('/hospitals/:code/impersonate-login', requireRole('Onboarding Manage
           staff_id: 'admin',
           password_hash,
           role: 'admin',
-          name: 'Hospital Administrator',
-          email: `admin@${tenantId}.com`,
+          name: hospital?.signatoryName || 'Hospital Administrator',
+          email: hospital?.contactEmail || `admin@${tenantId}.com`,
           hasSetPassword: true,
           isSetupComplete: true
         });
@@ -1852,8 +1898,8 @@ router.post('/hospitals/:code/impersonate-login', requireRole('Onboarding Manage
       { expiresIn: '24h' }
     );
 
-    const hospital = await SuperAdminHospital.findOne({ code: tenantId });
-    const tenantModules = hospital ? hospital.modules : { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } };
+    const { getHospitalEffectiveModules } = require('../utils/subscriptionHelper');
+    const tenantModules = hospital ? await getHospitalEffectiveModules(hospital) : { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true }, receptionQueue: { enabled: false } };
 
     await writeAudit(req, 'impersonate_login', `Super Admin impersonated login for tenant: ${tenantId}`);
 

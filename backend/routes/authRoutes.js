@@ -2072,9 +2072,11 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
     }).catch(() => {});
 
     // Get tenant modules
+    const { getHospitalEffectiveModules } = require('../utils/subscriptionHelper');
+    const effectiveModules = hospital ? await getHospitalEffectiveModules(hospital) : { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true }, receptionQueue: { enabled: false } };
     const tenantModules = (user.role === 'superadmin' || user.role === 'super_admin')
       ? { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } }
-      : (hospital ? hospital.modules : { reception: { enabled: true }, doctor: { enabled: true }, pharmacy: { enabled: true }, laboratory: { enabled: true }, inventory: { enabled: true }, dpdp: { enabled: true } });
+      : effectiveModules;
 
     res.json({
       message: "Login successful",

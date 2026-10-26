@@ -15,8 +15,11 @@ import { staffExportColumns, appointmentExportColumns } from '../utils/exportEng
 import { 
   UserPlus, X, User, Phone, ShieldCheck, Lock, Sparkles, Eye, KeyRound, 
   Check, Briefcase, Mail, Shield, ChevronDown, Stethoscope, Clock, Plus, 
-  AlertCircle, FileText, ChevronUp, Users, Droplet, CreditCard, MapPin, HeartPulse, Calendar
+  AlertCircle, FileText, ChevronUp, Users, Droplet, CreditCard, MapPin, HeartPulse, Calendar,
+  QrCode, Printer, Download, Copy, AlertTriangle, Tv, ExternalLink
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { getPublicFrontendUrl } from '../utils/urlConfig';
 
 const DOCTOR_SPECIALIZATIONS = [
   'General Medicine', 'Cardiology', 'Dermatology', 'Orthopedics', 'Pediatrics',
@@ -130,6 +133,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   const [letterheadUploading, setLetterheadUploading] = useState(false);
   const [letterheadPreviewImage, setLetterheadPreviewImage] = useState(null);
   const [letterheadBlobUrl, setLetterheadBlobUrl] = useState(null);
+  const [receptionQrCopied, setReceptionQrCopied] = useState(false);
+  const [receptionDisplayCopied, setReceptionDisplayCopied] = useState(false);
 
   // Prescription template layout states
   const [prescriptionTemplates, setPrescriptionTemplates] = useState([]);
@@ -339,16 +344,35 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
 
 
-  const tenantModules = (() => {
+  const [tenantModules, setTenantModules] = useState(() => {
     try {
-      if (subscription?.modules && typeof subscription.modules === 'object' && Object.keys(subscription.modules).length > 0) {
-        return subscription.modules;
-      }
       return JSON.parse(localStorage.getItem('tenantModules') || '{}');
     } catch (e) {
       return {};
     }
-  })();
+  });
+
+  useEffect(() => {
+    const handleModulesUpdated = (e) => {
+      if (e.detail && typeof e.detail === 'object') {
+        console.log('[AdminDashboard] Live reactive update of tenantModules:', e.detail);
+        setTenantModules(e.detail);
+      }
+    };
+    const handleStorageChange = (e) => {
+      if (e.key === 'tenantModules' && e.newValue) {
+        try {
+          setTenantModules(JSON.parse(e.newValue));
+        } catch (_) {}
+      }
+    };
+    window.addEventListener('curoxa_modules_updated', handleModulesUpdated);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('curoxa_modules_updated', handleModulesUpdated);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
 
 
   const getAvailableRoles = () => {
@@ -1144,6 +1168,12 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   // Subscription live states
   const [subscription, setSubscription] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+
+  useEffect(() => {
+    if (subscription?.modules && typeof subscription.modules === 'object' && Object.keys(subscription.modules).length > 0) {
+      setTenantModules(subscription.modules);
+    }
+  }, [subscription?.modules]);
   const [superAdminPlans, setSuperAdminPlans] = useState([]);
   const [billingCycle, setBillingCycle] = useState('monthly');
   const [renewingSubscription, setRenewingSubscription] = useState(false);
@@ -1521,7 +1551,14 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     // Direct Socket.IO data_changed listener for instant live notifications
     const onDirectSocketData = (event) => {
       console.log('[SOCKET] AdminDashboard direct socket data_changed:', event);
-      if (event && (event.type === 'leaves' || event.type === 'leave')) {
+      if (event && (event.type === 'subscription' || event.type === 'modules')) {
+        if (event.modules) {
+          setTenantModules(event.modules);
+          setSubscription(prev => prev ? { ...prev, modules: event.modules } : prev);
+          try { localStorage.setItem('tenantModules', JSON.stringify(event.modules)); } catch (_) {}
+        }
+        fetchSubscription();
+      } else if (event && (event.type === 'leaves' || event.type === 'leave')) {
         fetchApprovals();
         fetchNotifications();
         fetchStaff();
@@ -1560,6 +1597,25 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       socket.off('ticket_message', onTicketSocketEvent);
       socket.off('ticket_status_changed', onTicketSocketEvent);
       window.removeEventListener('focus', onAdminWindowFocus);
+    };
+  }, []);
+
+  // Redirect away from reception-qr tab if the module gets disabled
+  useEffect(() => {
+    if (!tenantModules.receptionQueue?.enabled && activeTab === 'reception-qr') {
+      setActiveTab('dashboard');
+    }
+  }, [tenantModules.receptionQueue?.enabled]);
+
+  // Ensure Admin Dashboard application shell takes full 100% viewport width without 0.9 zoom shrinkage
+  useEffect(() => {
+    const originalHtmlZoom = document.documentElement.style.zoom;
+    const originalBodyZoom = document.body.style.zoom;
+    document.documentElement.style.zoom = '1';
+    document.body.style.zoom = '1';
+    return () => {
+      document.documentElement.style.zoom = originalHtmlZoom;
+      document.body.style.zoom = originalBodyZoom;
     };
   }, []);
 
@@ -2609,6 +2665,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     else if (activeTab === 'subscription') { main = "Subscription"; sub = subscription ? `${subscription.plan.split(' (')[0]} — ${subscription.status.toLowerCase()}` : "Enterprise plan & license management"; }
     else if (activeTab === 'maintenance') { main = "Maintenance"; sub = "System diagnostic services & database health"; }
     else if (activeTab === 'letterhead') { main = "Letterhead Settings"; sub = "Upload and manage clinic letterhead for doctor prescriptions"; }
+    else if (activeTab === 'reception-qr') { main = "Reception QR Management"; sub = "Configure clinic arrival & front-desk queue signage"; }
     else if (activeTab === 'updates') { main = "Updates"; sub = "Platform updates, patches & release hotfixes"; }
     else if (activeTab === 'permissions') { main = "Role Coverage"; sub = "Temporary role delegation & access control matrix"; }
     else if (activeTab === 'dpdp') { main = "DPO & DPDP Compliance"; sub = "Data privacy officer portal & compliance audits"; }
@@ -4801,7 +4858,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
           .admin-dashboard-container {
             display: flex;
-            height: calc(100vh / 0.9);
+            height: 100vh;
+            min-height: 100vh;
             background-color: #F8FAFC;
             background-image: 
               radial-gradient(at 0% 0%, rgba(219, 234, 254, 0.75) 0px, transparent 50%),
@@ -5341,26 +5399,25 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
         /* 2. Main content area */
         .admin-main-canvas {
-          margin-left: 256px;
-          flex: 1;
+          margin-left: 260px;
+          flex: 1 1 0%;
           display: flex;
           flex-direction: column;
           min-width: 0;
-          width: calc(100% - 256px);
-          max-width: calc(100% - 256px);
+          width: auto;
           box-sizing: border-box;
           padding-bottom: 10px;
           overflow-y: auto;
           overflow-x: hidden;
           background: transparent;
+          transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .admin-main-canvas:has(.pm-container) {
           padding-bottom: 0;
         }
         .admin-main-canvas.collapsed {
-          margin-left: 70px;
-          width: calc(100% - 70px);
-          max-width: calc(100% - 70px);
+          margin-left: 76px;
+          width: auto;
         }
 
         /* 3. Top Navigation Header (Futuristic Tech Card matching reference) */
@@ -10465,7 +10522,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           gap: 28px;
           padding: 24px 40px;
           animation: adminFadeIn 0.3s ease-out;
-          height: calc(100vh / 0.9 - 56px);
+          height: calc(100vh - 56px);
           min-height: 500px;
           box-sizing: border-box;
         }
@@ -12269,6 +12326,26 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     </svg>
                   )}
                     </div>
+                    {Boolean(tenantModules.receptionQueue?.enabled) && (
+                    <div 
+                      className={`sidebar-link ${activeTab === 'reception-qr' ? 'active' : ''}`}
+                      onClick={() => handleNavTabClick('reception-qr')}
+                      style={isSubscriptionRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                    >
+                      {!isSubscriptionRestricted && activeTab === 'reception-qr' && (
+                        <div style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)', width: '3.5px', height: '20px', borderRadius: '4px', background: '#64748B' }} />
+                      )}
+                      <div className="sidebar-link-icon" style={{
+                        background: activeTab === 'reception-qr' ? '#0F172A' : '#F1F5F9',
+                        color: activeTab === 'reception-qr' ? '#FFFFFF' : '#64748B'
+                      }}>
+                        <QrCode size={18} strokeWidth={2.2} />
+                      </div>
+                      <span className="sidebar-link-text" style={{ fontSize: '13.5px', fontWeight: activeTab === 'reception-qr' ? 700 : 600, color: activeTab === 'reception-qr' ? '#0F172A' : '#0F172A', letterSpacing: '-0.01em' }}>
+                        Reception QR
+                      </span>
+                    </div>
+                    )}
                     <div 
                       className={`sidebar-link ${activeTab === 'updates' ? 'active' : ''}`}
                       onClick={() => handleNavTabClick('updates')}
@@ -22841,6 +22918,528 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             </div>
           </div>
         )}
+
+        {/* Reception Queue QR Management Tab (Phase 2 Preview) */}
+        {!isSubscriptionRestricted && activeTab === 'reception-qr' && (() => {
+          const clinicCode = subscription?.hospitalCode || currentUser?.tenantId || localStorage.getItem('tenantId') || 'CLINIC';
+          const clinicDisplayName = currentUser?.tenantName || subscription?.name || 'Clinic';
+          const isModuleActive = Boolean(tenantModules.receptionQueue?.enabled);
+          const publicQrUrl = `${getPublicFrontendUrl()}/reception-queue/${encodeURIComponent(clinicCode)}`;
+          const publicDisplayUrl = `${getPublicFrontendUrl()}/reception-display/${encodeURIComponent(clinicCode)}`;
+
+          const handleCopyLink = () => {
+            if (navigator?.clipboard?.writeText) {
+              navigator.clipboard.writeText(publicQrUrl);
+            }
+            setReceptionQrCopied(true);
+            setTimeout(() => setReceptionQrCopied(false), 2500);
+          };
+
+          const handleCopyDisplayLink = () => {
+            if (navigator?.clipboard?.writeText) {
+              navigator.clipboard.writeText(publicDisplayUrl);
+            }
+            setReceptionDisplayCopied(true);
+            setTimeout(() => setReceptionDisplayCopied(false), 2500);
+          };
+
+          const handleOpenDisplay = () => {
+            window.open(publicDisplayUrl, '_blank');
+          };
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+              {/* Header Card */}
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '12px',
+                border: '1px solid #E2E8F0',
+                padding: '24px',
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '16px'
+              }}>
+                <div style={{ maxWidth: '640px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                    <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                      Front Desk Reception QR Signage
+                    </h2>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      padding: '3px 8px',
+                      borderRadius: '12px',
+                      background: isModuleActive ? '#DCFCE7' : '#F1F5F9',
+                      color: isModuleActive ? '#15803D' : '#64748B',
+                      border: isModuleActive ? '1px solid #86EFAC' : '1px solid #CBD5E1'
+                    }}>
+                      {isModuleActive ? '● MODULE ACTIVATED' : '○ MODULE DISABLED'}
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '13.5px', color: '#64748B', lineHeight: '1.5' }}>
+                    Manage walk-in patient arrival signage and digital queue entry point for {clinicDisplayName}.
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    fontSize: '12.5px',
+                    color: '#334155'
+                  }}>
+                    <span style={{ color: '#64748B', marginRight: '6px' }}>Clinic Identifier:</span>
+                    <strong style={{ fontFamily: 'monospace', color: '#0F172A' }}>{clinicCode}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Safeguard Alert Banner */}
+              <div style={{
+                background: '#FFFBEB',
+                border: '1px solid #FDE68A',
+                borderRadius: '10px',
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '14px'
+              }}>
+                <AlertTriangle size={20} color="#D97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div style={{ fontSize: '13px', color: '#92400E', lineHeight: '1.5' }}>
+                  <strong style={{ display: 'block', fontSize: '13.5px', marginBottom: '3px' }}>
+                    Phase 2 Activation Safeguard Notice
+                  </strong>
+                  Reception Queue Module is {isModuleActive ? 'currently enabled' : 'currently disabled'} by Super Admin for this clinic. Patient self-registration endpoints will be deployed in Phase 3. QR code distribution is locked until Phase 3 deployment to prevent patients from accessing nonfunctional entry points.
+                </div>
+              </div>
+
+              {/* Grid: QR Preview + Configuration Details */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))',
+                gap: '20px',
+                width: '100%',
+                alignItems: 'start',
+                boxSizing: 'border-box'
+              }}>
+                {/* QR Preview Card */}
+                <div style={{
+                  background: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  padding: '24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  textAlign: 'center',
+                  gap: '20px'
+                }}>
+                  <div style={{ width: '100%', textAlign: 'left' }}>
+                    <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', margin: '0 0 4px 0' }}>
+                      Signage QR Code Preview
+                    </h3>
+                    <p style={{ margin: 0, fontSize: '12px', color: '#64748B' }}>
+                      Scannable target for patient mobile devices arriving at reception.
+                    </p>
+                  </div>
+
+                  <div style={{
+                    padding: '20px',
+                    borderRadius: '12px',
+                    background: '#F8FAFC',
+                    border: '1.5px dashed #CBD5E1',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    width: '100%',
+                    maxWidth: '280px',
+                    margin: '0 auto',
+                    boxSizing: 'border-box'
+                  }}>
+                    <div style={{ background: '#FFFFFF', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+                      <QRCodeSVG
+                        value={publicQrUrl}
+                        size={190}
+                        level="M"
+                        includeMargin={false}
+                      />
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#475569', fontWeight: 600 }}>
+                      Clinic Code: <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{clinicCode}</span>
+                    </div>
+                  </div>
+
+                  {/* Public Link Box */}
+                  <div style={{
+                    width: '100%',
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px',
+                    boxSizing: 'border-box'
+                  }}>
+                    <div style={{
+                      fontSize: '12px',
+                      color: '#334155',
+                      fontFamily: 'monospace',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      textAlign: 'left'
+                    }}>
+                      {publicQrUrl}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyLink}
+                      style={{
+                        padding: '6px 10px',
+                        background: receptionQrCopied ? '#DCFCE7' : '#FFFFFF',
+                        border: receptionQrCopied ? '1px solid #86EFAC' : '1px solid #CBD5E1',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: receptionQrCopied ? '#15803D' : '#334155',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        flexShrink: 0
+                      }}
+                      title="Copy QR target link"
+                    >
+                      <Copy size={13} />
+                      {receptionQrCopied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+
+                  {/* Locked Action Buttons with Tooltip/Notice */}
+                  <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                      <button
+                        type="button"
+                        disabled={true}
+                        style={{
+                          flex: 1,
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          border: '1px solid #E2E8F0',
+                          background: '#F1F5F9',
+                          color: '#94A3B8',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          cursor: 'not-allowed',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px'
+                        }}
+                        title="Distribution locked until Phase 3 deployment"
+                      >
+                        <Printer size={15} />
+                        Print Poster (Locked)
+                      </button>
+                      <button
+                        type="button"
+                        disabled={true}
+                        style={{
+                          flex: 1,
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          border: '1px solid #E2E8F0',
+                          background: '#F1F5F9',
+                          color: '#94A3B8',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          cursor: 'not-allowed',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px'
+                        }}
+                        title="Distribution locked until Phase 3 deployment"
+                      >
+                        <Download size={15} />
+                        Download SVG (Locked)
+                      </button>
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#94A3B8', textAlign: 'center' }}>
+                      Distribution is safely locked until patient registration endpoints are deployed in Phase 3.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Configuration & Readiness Status Card */}
+                <div style={{
+                  background: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  padding: '24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px'
+                }}>
+                  <div>
+                    <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', margin: '0 0 4px 0' }}>
+                      Module Integration & Readiness
+                    </h3>
+                    <p style={{ margin: 0, fontSize: '12px', color: '#64748B' }}>
+                      Status of reception queue module infrastructure for {clinicDisplayName}.
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {/* Status item 1 */}
+                    <div style={{
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      background: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Super Admin Authorization</div>
+                        <div style={{ fontSize: '11.5px', color: '#64748B' }}>Clinic-level entitlement flag</div>
+                      </div>
+                      <span style={{
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        background: isModuleActive ? '#DCFCE7' : '#FEE2E2',
+                        color: isModuleActive ? '#15803D' : '#B91C1C'
+                      }}>
+                        {isModuleActive ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+
+                    {/* Status item 2 */}
+                    <div style={{
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      background: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Frontend Target Routing</div>
+                        <div style={{ fontSize: '11.5px', color: '#64748B' }}>Dynamic URL generator</div>
+                      </div>
+                      <span style={{
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        background: '#EFF6FF',
+                        color: '#1D4ED8'
+                      }}>
+                        getPublicFrontendUrl()
+                      </span>
+                    </div>
+
+                    {/* Status item 3 */}
+                    <div style={{
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      background: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Patient Self-Registration</div>
+                        <div style={{ fontSize: '11.5px', color: '#64748B' }}>Public entry and OTP verification</div>
+                      </div>
+                      <span style={{
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        background: '#FEF3C7',
+                        color: '#B45309'
+                      }}>
+                        Phase 3 Deployment
+                      </span>
+                    </div>
+
+                    {/* Status item 4 */}
+                    <div style={{
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      background: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Queue Scoping & Safety</div>
+                        <div style={{ fontSize: '11.5px', color: '#64748B' }}>Multi-tenant partition identifier</div>
+                      </div>
+                      <span style={{
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        background: '#F1F5F9',
+                        color: '#334155',
+                        fontFamily: 'monospace'
+                      }}>
+                        {clinicCode}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Operational Notes */}
+                  <div style={{
+                    marginTop: 'auto',
+                    padding: '14px',
+                    borderRadius: '8px',
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    fontSize: '12px',
+                    color: '#475569',
+                    lineHeight: '1.5'
+                  }}>
+                    <strong style={{ color: '#0F172A', display: 'block', marginBottom: '4px' }}>
+                      Operational Workflow Note:
+                    </strong>
+                    When this module is activated by Super Admin and Phase 3 is deployed, patients scanning this QR code will register in a dedicated Reception Arrival Queue. Existing doctor consultation queues, appointment bookings, and receptionist operations remain completely independent.
+                  </div>
+                </div>
+              </div>
+
+              {/* Waiting Room Reception Display Card (Phase 5) */}
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '12px',
+                border: '1px solid #E2E8F0',
+                padding: '24px',
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '16px',
+                width: '100%',
+                boxSizing: 'border-box'
+              }}>
+                <div style={{ maxWidth: '640px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background: '#F0FDFA',
+                      border: '1px solid #CCFBF1',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <Tv size={18} color="#0D9488" />
+                    </div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                      Waiting Room Reception Display (TV & Monitor)
+                    </h3>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      padding: '3px 8px',
+                      borderRadius: '12px',
+                      background: '#EFF6FF',
+                      color: '#1D4ED8',
+                      border: '1px solid #BFDBFE'
+                    }}>
+                      PUBLIC DISPLAY
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#64748B', lineHeight: '1.5' }}>
+                    Dedicated read-only display for waiting-room TVs and monitors. Shows the current active reception ticket (NOW SERVING) and waiting count in real time.
+                  </p>
+                  <div style={{
+                    marginTop: '10px',
+                    fontSize: '12px',
+                    color: '#475569',
+                    fontFamily: 'monospace',
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    display: 'inline-block',
+                    maxWidth: '100%',
+                    boxSizing: 'border-box',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {publicDisplayUrl}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={handleCopyDisplayLink}
+                    style={{
+                      padding: '9px 15px',
+                      borderRadius: '8px',
+                      border: receptionDisplayCopied ? '1px solid #86EFAC' : '1px solid #CBD5E1',
+                      background: receptionDisplayCopied ? '#DCFCE7' : '#FFFFFF',
+                      color: receptionDisplayCopied ? '#15803D' : '#334155',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                    title="Copy public display link to clipboard"
+                  >
+                    <Copy size={15} />
+                    {receptionDisplayCopied ? 'Link Copied!' : 'Copy Display Link'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleOpenDisplay}
+                    style={{
+                      padding: '9px 18px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: '#0D9488',
+                      color: '#FFFFFF',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 6px rgba(13, 148, 136, 0.25)'
+                    }}
+                    title="Open waiting room display in a new tab"
+                  >
+                    <ExternalLink size={15} />
+                    Open Reception Display
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 11. Role Coverage / Permissions Management */}
         {!isSubscriptionRestricted && activeTab === 'permissions' && (() => {

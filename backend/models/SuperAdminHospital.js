@@ -72,7 +72,8 @@ const superAdminHospitalSchema = new mongoose.Schema({
     pharmacy: { enabled: { type: Boolean, default: true }, lastMod: { type: String } },
     laboratory: { enabled: { type: Boolean, default: true }, lastMod: { type: String } },
     inventory: { enabled: { type: Boolean, default: true }, lastMod: { type: String } },
-    dpdp: { enabled: { type: Boolean, default: true }, lastMod: { type: String } }
+    dpdp: { enabled: { type: Boolean, default: true }, lastMod: { type: String } },
+    receptionQueue: { enabled: { type: Boolean, default: false }, lastMod: { type: String } }
   },
   doctorClinicalMode: {
     type: String,
@@ -102,6 +103,49 @@ superAdminHospitalSchema.pre('validate', async function() {
   if (!this.hospitalId) {
     const { generateUniqueHospitalId } = require('../utils/generateHospitalId');
     this.hospitalId = await generateUniqueHospitalId(this.constructor);
+  }
+
+  // Reception Queue module default-off enforcement:
+  // Must default to disabled ({ enabled: false }) unless explicitly set to true.
+  // Explicitly enabled clinics (true) are strictly preserved.
+  if (!this.modules) {
+    this.modules = {};
+  }
+  if (!this.modules.receptionQueue || typeof this.modules.receptionQueue !== 'object') {
+    this.modules.receptionQueue = { enabled: false };
+  } else {
+    const rawVal = this.modules.receptionQueue.enabled;
+    const isExplicitlyTrue = rawVal === true || String(rawVal).trim().toLowerCase() === 'true';
+    this.modules.receptionQueue.enabled = isExplicitlyTrue;
+  }
+});
+
+superAdminHospitalSchema.pre('findOneAndUpdate', function() {
+  const update = this.getUpdate();
+  if (!update) return;
+
+  if (update.modules && typeof update.modules === 'object') {
+    if (update.modules.receptionQueue && typeof update.modules.receptionQueue === 'object' && update.modules.receptionQueue.enabled !== undefined) {
+      const rawVal = update.modules.receptionQueue.enabled;
+      update.modules.receptionQueue.enabled = (rawVal === true || String(rawVal).trim().toLowerCase() === 'true');
+    }
+  }
+
+  if (update.$set) {
+    if (update.$set.modules && typeof update.$set.modules === 'object') {
+      if (update.$set.modules.receptionQueue && typeof update.$set.modules.receptionQueue === 'object' && update.$set.modules.receptionQueue.enabled !== undefined) {
+        const rawVal = update.$set.modules.receptionQueue.enabled;
+        update.$set.modules.receptionQueue.enabled = (rawVal === true || String(rawVal).trim().toLowerCase() === 'true');
+      }
+    }
+    if (update.$set['modules.receptionQueue'] && typeof update.$set['modules.receptionQueue'] === 'object' && update.$set['modules.receptionQueue'].enabled !== undefined) {
+      const rawVal = update.$set['modules.receptionQueue'].enabled;
+      update.$set['modules.receptionQueue'].enabled = (rawVal === true || String(rawVal).trim().toLowerCase() === 'true');
+    }
+    if (update.$set['modules.receptionQueue.enabled'] !== undefined) {
+      const rawVal = update.$set['modules.receptionQueue.enabled'];
+      update.$set['modules.receptionQueue.enabled'] = (rawVal === true || String(rawVal).trim().toLowerCase() === 'true');
+    }
   }
 });
 

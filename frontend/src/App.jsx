@@ -15,6 +15,8 @@ import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import DpoDashboard from './pages/DpoDashboard';
 import HospitalPortal from './pages/HospitalPortal';
 import DoctorQueuePage from './pages/DoctorQueuePage';
+import PublicReceptionQueuePage from './pages/PublicReceptionQueuePage';
+import PublicReceptionDisplayPage from './pages/PublicReceptionDisplayPage';
 import { PortalBrandingProvider } from './context/PortalBrandingContext';
 import WakeUpOverlay from './components/WakeUpOverlay';
 import GlobalSupportWidget from './components/GlobalSupportWidget';
@@ -238,17 +240,32 @@ function App() {
         const storedUser = localStorage.getItem('user');
         const currentUser = storedUser ? JSON.parse(storedUser) : null;
         const currentTenant = localStorage.getItem('tenantId') || currentUser?.tenantId;
-        if (data && data.hospitalCode && currentTenant && String(data.hospitalCode).toLowerCase() === String(currentTenant).toLowerCase()) {
-          if (data.modules) {
-            console.log('[SOCKET] Updating tenantModules from hospital_subscription_updated event:', data.modules);
-            localStorage.setItem('tenantModules', JSON.stringify(data.modules));
-            window.dispatchEvent(new CustomEvent('curoxa_modules_updated', { detail: data.modules }));
+        const matches = data && currentTenant && (
+          (data.hospitalCode && String(data.hospitalCode).toLowerCase() === String(currentTenant).toLowerCase()) ||
+          (data.hospitalId && String(data.hospitalId).toUpperCase() === String(currentTenant).toUpperCase())
+        );
+        if (matches) {
+          const mods = data.effectiveModules || data.modules;
+          if (mods) {
+            console.log('[SOCKET] Updating tenantModules from hospital_subscription_updated event:', mods);
+            localStorage.setItem('tenantModules', JSON.stringify(mods));
+            window.dispatchEvent(new CustomEvent('curoxa_modules_updated', { detail: mods }));
           }
         }
       } catch (err) {
         console.error('Error handling hospital_subscription_updated in App:', err);
       }
     };
+
+    const onCrossTabStorage = (e) => {
+      if (e.key === 'tenantModules' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          window.dispatchEvent(new CustomEvent('curoxa_modules_updated', { detail: parsed }));
+        } catch (_) {}
+      }
+    };
+    window.addEventListener('storage', onCrossTabStorage);
 
     const onSessionRevoked = (data) => {
       try {
@@ -311,6 +328,7 @@ function App() {
       socket.off('data_changed', onDataChanged);
       socket.off('hospital_subscription_updated', onHospitalSubUpdated);
       socket.off('session_revoked', onSessionRevoked);
+      window.removeEventListener('storage', onCrossTabStorage);
       socket.off('system_broadcast', onSystemBroadcast);
     };
 
@@ -500,6 +518,10 @@ function App() {
             <HospitalPortal />
           </PortalBrandingProvider>
         } />
+
+        {/* Public Reception Queue & Waiting Room Display Routes */}
+        <Route path="/reception-queue/:clinicCode" element={<PublicReceptionQueuePage />} />
+        <Route path="/reception-display/:clinicCode" element={<PublicReceptionDisplayPage />} />
 
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />

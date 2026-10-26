@@ -367,7 +367,8 @@ async function getHospitalEffectiveModules(hospital) {
       reception: { enabled: true, planIncluded: true, hospitalConfigured: true },
       doctor: { enabled: true, planIncluded: true, hospitalConfigured: true },
       pharmacy: { enabled: true, planIncluded: true, hospitalConfigured: true },
-      laboratory: { enabled: true, planIncluded: true, hospitalConfigured: true }
+      laboratory: { enabled: true, planIncluded: true, hospitalConfigured: true },
+      receptionQueue: { enabled: false, planIncluded: false, hospitalConfigured: false }
     };
   }
 
@@ -411,6 +412,17 @@ async function getHospitalEffectiveModules(hospital) {
       hospitalConfigured: true
     };
   }
+
+  // Independent Reception Queue module: strictly disabled by default unless explicitly enabled by Super Admin
+  const rawReceptionQueue = hospital.modules?.receptionQueue;
+  const hasExplicitReceptionQueue = Boolean(rawReceptionQueue && rawReceptionQueue.enabled !== undefined && rawReceptionQueue.enabled !== null);
+  const isExplicitlyTrue = hasExplicitReceptionQueue && (rawReceptionQueue.enabled === true || String(rawReceptionQueue.enabled).trim().toLowerCase() === 'true');
+  effective.receptionQueue = {
+    enabled: Boolean(isExplicitlyTrue),
+    planIncluded: false,
+    hospitalConfigured: hasExplicitReceptionQueue ? Boolean(isExplicitlyTrue) : false,
+    lastMod: hospital.modules?.receptionQueue?.lastMod || null
+  };
 
   return effective;
 }

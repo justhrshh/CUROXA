@@ -118,6 +118,33 @@ const socketAuthMiddleware = async (socket, next) => {
       }
     }
 
+    // ── PATH 2B: PUBLIC RECEPTION QUEUE VIEWER (UNAUTHENTICATED QR LANDING) ──
+    const receptionClinicCode = authPayload.receptionClinicCode || socket.handshake.query?.receptionClinicCode;
+    if (receptionClinicCode && typeof receptionClinicCode === "string") {
+      const cleanClinic = String(receptionClinicCode).trim().toLowerCase();
+      try {
+        const SuperAdminHospital = require("../models/SuperAdminHospital");
+        const hospital = await SuperAdminHospital.findOne({
+          $or: [{ code: cleanClinic }, { hospitalId: cleanClinic.toUpperCase() }]
+        }).select("_id code hospitalId status").lean();
+
+        if (!hospital || (hospital.status && hospital.status.toLowerCase() !== "active")) {
+          console.warn(`[SOCKET_AUTH_REJECT] Nonexistent/inactive reception clinic rejected: ${cleanClinic}`);
+          return next(new Error("Authentication error: Reception clinic not found or inactive"));
+        }
+
+        socket.authenticated = false;
+        socket.isPublic = true;
+        socket.receptionClinicCode = cleanClinic;
+        socket.receptionTenantId = hospital.code;
+        socket.user = null;
+        return next();
+      } catch (dbErr) {
+        console.error("[SOCKET_AUTH_ERROR] Database error during reception clinic lookup:", dbErr.message);
+        return next(new Error("Authentication error: Reception clinic validation failure"));
+      }
+    }
+
     // ── PATH 3: FAIL CLOSED ──
     return next(new Error("Authentication error: No token provided"));
   } catch (err) {
@@ -211,6 +238,22 @@ const configureSocketTenantIsolation = (io, socket) => {
     // Public sockets are STRICTLY FORBIDDEN from joining any tenant rooms
     socket.on("join_tenant", (requestedTenantId) => {
       console.warn(`[SOCKET_SECURITY_ALERT] Unauthenticated public socket ${socket.id} attempted to join tenant room: ${requestedTenantId}. BLOCKED.`);
+      socket.emit("error", { message: "Authentication required to join tenant rooms" });
+    });
+
+    socket.on("change_global_theme", () => {
+      console.warn(`[SOCKET_SECURITY_ALERT] Unauthenticated socket ${socket.id} attempted change_global_theme. BLOCKED.`);
+    });
+  }
+
+  // 3. Public Reception Queue socket room membership
+  if (socket.isPublic && socket.receptionClinicCode) {
+    const receptionRoom = `public_reception:${socket.receptionClinicCode}`;
+    socket.join(receptionRoom);
+    console.log(`[SOCKET_PUBLIC_RECEPTION] Public socket ${socket.id} joined reception room: ${receptionRoom}`);
+
+    socket.on("join_tenant", (requestedTenantId) => {
+      console.warn(`[SOCKET_SECURITY_ALERT] Unauthenticated public reception socket ${socket.id} attempted to join tenant room: ${requestedTenantId}. BLOCKED.`);
       socket.emit("error", { message: "Authentication required to join tenant rooms" });
     });
 

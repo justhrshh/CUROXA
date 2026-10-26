@@ -1892,7 +1892,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
         
         showToast(`Impersonating as Administrator of ${impersonatingHospital.name}. Redirecting...`, 'success');
         setTimeout(() => {
-          window.location.href = '/dashboard';
+          window.location.href = '/admin';
         }, 1500);
       } else {
         const errData = await res.json();

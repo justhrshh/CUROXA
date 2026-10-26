@@ -210,6 +210,8 @@ const initializeDatabase = async (conn) => {
   const Visit = require('../models/Visit');
   const PatientIdentity = require('../models/PatientIdentity');
   const Counter = require('../models/Counter');
+  const ReceptionQueue = require('../models/ReceptionQueue');
+  const ReceptionOtp = require('../models/ReceptionOtp');
 
   const syncIndexPromises = [
     User.syncIndexes(),
@@ -222,7 +224,9 @@ const initializeDatabase = async (conn) => {
     Patient.syncIndexes(),
     Visit.syncIndexes(),
     PatientIdentity.syncIndexes(),
-    Counter.syncIndexes()
+    Counter.syncIndexes(),
+    ReceptionQueue.syncIndexes(),
+    ReceptionOtp.syncIndexes()
   ];
   await Promise.all(syncIndexPromises.map(p => p.catch(err => console.warn('Index sync warning:', err.message))));
   console.log('Multi-tenant compound indexes synced in background.');

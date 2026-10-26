@@ -76,7 +76,7 @@ export const HospitalBrandLogo = ({
           width: `${size}px`,
           height: `${size}px`,
           borderRadius: `${borderRadius}px`,
-          objectFit: 'cover',
+          objectFit: 'contain',
           border: '1px solid rgba(226, 232, 240, 0.9)',
           boxShadow: '0 2px 8px rgba(15, 23, 42, 0.06)',
           flexShrink: 0,
