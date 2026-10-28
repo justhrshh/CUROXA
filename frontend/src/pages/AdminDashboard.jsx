@@ -5513,21 +5513,27 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
         /* 3. Top Navigation Header (Futuristic Tech Card matching reference) */
         .admin-top-header {
-          min-height: 78px;
-          background: rgba(255, 255, 255, 0.92);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border: 1px solid rgba(226, 232, 240, 0.9);
-          border-radius: 20px;
-          margin: 14px 20px 6px 20px;
-          padding: 12px 24px 14px 24px;
+          min-height: 64px;
+          height: 64px;
+          background: #FFFFFF;
+          border-bottom: 1px solid #E2E8F0;
+          border-radius: 0 !important;
+          margin: 0 !important;
+          padding: 0 24px;
           display: flex;
           align-items: center;
           justify-content: space-between;
           position: sticky;
-          top: 14px;
+          top: 0 !important;
+          left: 0;
+          right: 0;
+          width: 100%;
           z-index: 1000;
-          box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+          box-shadow: 0 1px 3px rgba(15, 23, 42, 0.02);
+          box-sizing: border-box;
+        }
+        .header-bottom-accent-strip {
+          display: none !important;
         }
 
         .header-title-container {
@@ -14842,7 +14848,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
               return (
                 <>
                   {/* 1. COMPACT 4 KPI CARDS ROW MATCHING DASHBOARD VISUAL LANGUAGE */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full mb-5">
+                  <div className="admin-kpi-row grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-5">
                     {/* Card 1: Total Staff (Electric Blue Gradient with Bottom-Right Radial Glow) */}
                     <div
                       className="p-4 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
@@ -15536,7 +15542,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
               const resolvedTotal = resolvedCount + approvedTodayCount;
 
               return (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full mb-5">
+                <div className="admin-kpi-row grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-5">
                   {/* Card 1: Active (Electric Blue Gradient with Bottom-Right Radial Glow) */}
                   <div
                     className={`p-4 rounded-2xl border ${alertViewType === 'all' && alertStatusDropdown !== 'resolved' ? 'border-blue-400 ring-2 ring-blue-500/20' : 'border-blue-200/90'} shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer`}
@@ -16226,7 +16232,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             {(() => {
               const pendingCount = pendingApprovals.filter(x => x.status === 'Pending').length;
               return (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full mb-5">
+                <div className="admin-kpi-row grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-5">
                   {/* Card 1: Pending Approvals (Electric Blue Gradient with Bottom-Right Radial Glow) */}
                   <div
                     className={`p-4 rounded-2xl border ${approvalStatusFilter === 'pending' ? 'border-blue-400 ring-2 ring-blue-500/20' : 'border-blue-200/90'} shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer`}
@@ -17605,7 +17611,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             <div className="admin-dashboard-content active" style={{ animation: 'slideUp 0.35s ease-out' }}>
 
               {/* 1. TOP DEPARTMENT-WISE COLLECTION KPI CARDS ROW */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full mb-4">
+              <div className="admin-kpi-row grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-4 w-full mb-4">
                 {/* Card 1: OPD / Consultation Collection */}
                 <div
                   className={`p-4 rounded-2xl border transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer ${
@@ -18952,7 +18958,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
               return (
                 <>
                   {/* Top Summary — 4 KPI Cards Matching Dashboard Visual Language */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full mb-5">
+                  <div className="admin-kpi-row grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-5">
                     {/* Card 1: Booked Today (Electric Blue Gradient with Bottom-Right Radial Glow) */}
                     <div 
                       className="p-4 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
@@ -20681,7 +20687,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
 
                   {/* 2. Compact 4 KPI Cards Row Matching Dashboard Visual Language */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full mb-5">
+                  <div className="admin-kpi-row grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-5">
                     {/* Card 1: Total Patients (Electric Blue Gradient with Bottom-Right Radial Glow) */}
                     <div
                       className="p-4 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
@@ -21560,7 +21566,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   `}</style>
 
                   {/* 3 KPI CARDS ROW MATCHING DASHBOARD VISUAL LANGUAGE */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full mb-6">
+                  <div className="admin-kpi-row grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-6">
                     {/* Card 1: Current Plan (Electric Blue Gradient with Bottom-Right Radial Glow) */}
                     <div
                       className="p-4 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
@@ -22112,7 +22118,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           return (
             <div className="admin-dashboard-content">
               {/* 3 KPI CARDS ROW MATCHING DASHBOARD VISUAL LANGUAGE */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full mb-6">
+              <div className="admin-kpi-row grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-6">
                 {/* Card 1: Pending Updates (Electric Blue Gradient with Bottom-Right Radial Glow) */}
                 <div
                   className="p-4 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
@@ -24287,7 +24293,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             <div className="admin-dashboard-content" style={{ animation: 'slideUp 0.4s ease-out' }}>
               
               {/* KPI CARDS ROW MATCHING DASHBOARD VISUAL LANGUAGE */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full mb-5">
+              <div className="admin-kpi-row grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-5">
                 {/* Card 1: Events Last 7 Days (Electric Blue Gradient with Bottom-Right Radial Glow) */}
                 <div
                   className="p-4 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
@@ -24775,7 +24781,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
               </div>
 
               {/* 4 KPI CARDS ROW MATCHING DASHBOARD VISUAL LANGUAGE */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full mb-5">
+              <div className="admin-kpi-row grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-5">
                 {/* Card 1: Total DPDP Requests (Electric Blue Gradient with Bottom-Right Radial Glow) */}
                 <div
                   className="p-4 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
@@ -25178,7 +25184,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             <div className="admin-dashboard-content" style={{ animation: 'slideUp 0.4s ease-out' }}>
               
               {/* TOP 4 KPI CARDS ROW MATCHING DASHBOARD VISUAL LANGUAGE */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full mb-5">
+              <div className="admin-kpi-row grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-5">
                 {/* Card 1: Active Procedures (Emerald Gradient with Bottom-Right Radial Glow) */}
                 <div
                   className="p-4 rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"

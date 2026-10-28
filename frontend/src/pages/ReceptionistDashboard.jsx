@@ -15088,7 +15088,7 @@ const ReceptionistDashboard = () => {
             </div>
 
             {/* Top KPI Demographic & Overview Cards (Exact Dashboard Style) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="rec-kpi-grid grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-4 sm:mb-6">
               
               {/* Card 1: Total Revenue (Emerald Green Gradient) */}
               <div 

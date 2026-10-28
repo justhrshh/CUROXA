@@ -1,3 +1,41 @@
+
+/* ──────────────────────────────────────────────────────────────────────────
+   UNIVERSAL FIXED FLUSH TOP BARS (EDGE-TO-EDGE, NON-FLOATING)
+   ────────────────────────────────────────────────────────────────────────── */
+.admin-top-header,
+.top-nav,
+.sa-topbar,
+.hr-top-header {
+  position: sticky !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.02) !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  z-index: 1000 !important;
+}
+
+.header-bottom-accent-strip {
+  display: none !important;
+}
+
+@media (min-width: 769px) {
+  .admin-top-header {
+    height: 64px !important;
+    min-height: 64px !important;
+    max-height: 64px !important;
+    padding: 0 24px !important;
+    background: #FFFFFF !important;
+  }
+}
+
 /* ==========================================================================
    QUROXA CLINICAL MANAGEMENT SYSTEM — MASTER RESPONSIVE SYSTEM
    Fluid responsive engineering across all viewports (320px to 2560px+)
@@ -366,72 +404,231 @@ img, svg, canvas {
 
 /* Universal Fluid KPI Grids */
 .admin-kpi-row,
+.admin-dashboard-kpi-grid,
+.rec-kpi-grid,
+.admin-kpi-grid-4,
+.appt-kpi-grid,
+.pat-kpi-grid,
+.rev-kpi-grid,
 .ph-kpi-grid,
 .doctor-grid-pro,
 .kpi-grid,
 .dashboard-kpi-grid,
 .modern-kpi-grid,
 .sa-stat-grid,
-.dpo-stat-grid {
+.sa-kpi-grid,
+.sa-hero-kpi-grid,
+.sa-hospitals-kpi-grid,
+.dpo-stat-grid,
+.kpi-container-custom,
+.hr-attendance-kpis,
+.doctor-kpi-grid {
   display: grid !important;
   width: 100% !important;
   box-sizing: border-box !important;
 }
 
-/* 320px–480px: Compact 2-Column Grid */
-@media (max-width: 480px) {
+/* 320px–768px: Universal Compact 2-Column Micro-Cards (All Portals & Tabs) */
+@media (max-width: 768px) {
   .admin-kpi-row,
+  .admin-dashboard-kpi-grid,
+  .rec-kpi-grid,
+  .admin-kpi-grid-4,
+  .appt-kpi-grid,
+  .pat-kpi-grid,
+  .rev-kpi-grid,
   .ph-kpi-grid,
   .doctor-grid-pro,
   .kpi-grid,
   .dashboard-kpi-grid,
   .modern-kpi-grid,
   .sa-stat-grid,
-  .dpo-stat-grid {
+  .sa-kpi-grid,
+  .sa-hero-kpi-grid,
+  .sa-hospitals-kpi-grid,
+  .dpo-stat-grid,
+  .kpi-container-custom,
+  .hr-attendance-kpis,
+  .doctor-kpi-grid {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 8px !important;
+    margin-bottom: 12px !important;
   }
 
-  /* Card padding reduction */
+  /* Universal Card Box compact styling */
+  .admin-kpi-row > div,
+  .admin-dashboard-kpi-grid > div,
+  .rec-kpi-grid > div,
+  .admin-kpi-grid-4 > div,
+  .appt-kpi-grid > div,
+  .pat-kpi-grid > div,
+  .rev-kpi-grid > div,
+  .ph-kpi-grid > div,
+  .doctor-grid-pro > div,
+  .kpi-grid > div,
+  .dashboard-kpi-grid > div,
+  .modern-kpi-grid > div,
+  .sa-stat-grid > div,
+  .sa-kpi-grid > div,
+  .sa-kpi-card,
+  .dpo-stat-grid > div,
+  .kpi-container-custom > div,
+  .hr-attendance-kpi-card,
   .glass-card,
   .modern-kpi-card,
-  .dashboard-widget-card {
-    padding: 14px 16px !important;
-    border-radius: 14px !important;
+  .admin-kpi-card-new,
+  .kpi-card-custom {
+    padding: 8px 10px !important;
+    border-radius: 12px !important;
+    min-height: 72px !important;
+    box-shadow: 0 3px 12px rgba(15, 23, 42, 0.04) !important;
   }
-}
 
-/* 481px–768px: 2 Columns */
-@media (min-width: 481px) and (max-width: 768px) {
-  .admin-kpi-row,
-  .ph-kpi-grid,
-  .doctor-grid-pro,
-  .kpi-grid,
-  .dashboard-kpi-grid,
-  .modern-kpi-grid,
-  .sa-stat-grid,
-  .dpo-stat-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 14px !important;
+  /* Odd/5th Card in 5-card grids spans 2 columns */
+  .admin-dashboard-kpi-grid > div:nth-child(5),
+  .admin-kpi-row > div:nth-child(5),
+  .kpi-grid > div:nth-child(5),
+  .sa-kpi-grid > div:nth-child(5),
+  .hr-attendance-kpis > div:nth-child(5) {
+    grid-column: span 2 !important;
+  }
+
+  /* 3rd Card in 3-card grids spans 2 columns */
+  .admin-kpi-row > div:nth-child(3):last-child,
+  .kpi-grid > div:nth-child(3):last-child,
+  .sa-kpi-grid > div:nth-child(3):last-child {
+    grid-column: span 2 !important;
+  }
+
+  /* Universal Micro Typography for Numbers across ALL KPI cards */
+  .admin-dashboard-kpi-grid > div .text-2xl,
+  .admin-dashboard-kpi-grid > div .text-3xl,
+  .admin-dashboard-kpi-grid > div .sm\:text-3xl,
+  .rec-kpi-grid > div .text-2xl,
+  .rec-kpi-grid > div .text-3xl,
+  .admin-kpi-row > div .text-2xl,
+  .admin-kpi-row > div .text-3xl,
+  .kpi-grid > div .text-2xl,
+  .kpi-grid > div .text-3xl,
+  .kpi-grid > div .kpi-value,
+  .kpi-grid > div .stat-value,
+  .sa-kpi-grid > div .text-2xl,
+  .sa-kpi-grid > div .text-3xl,
+  .sa-kpi-value,
+  .kpi-val,
+  .hr-att-kpi-val,
+  .kpi-inner-content .text-2xl,
+  .kpi-inner-content .text-3xl,
+  .kpi-card-custom .kpi-value-custom,
+  .kpi-card-interactive .kpi-value,
+  .stat-card-val {
+    font-size: 19px !important;
+    line-height: 1.15 !important;
+    font-weight: 900 !important;
+  }
+
+  /* Micro Icon Containers */
+  .admin-dashboard-kpi-grid > div .w-8,
+  .rec-kpi-grid > div .w-8,
+  .admin-kpi-row > div .w-8,
+  .kpi-grid > div .w-8,
+  .sa-kpi-grid > div .w-8,
+  .kpi-icon-box,
+  .kpi-icon-box-custom,
+  .stat-icon-wrapper,
+  .hr-att-kpi-icon {
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 7px !important;
+    min-width: 24px !important;
+  }
+
+  .admin-dashboard-kpi-grid > div .w-8 svg,
+  .rec-kpi-grid > div .w-8 svg,
+  .admin-kpi-row > div .w-8 svg,
+  .kpi-grid > div .w-8 svg,
+  .sa-kpi-grid > div .w-8 svg,
+  .kpi-icon-box svg,
+  .kpi-icon-box-custom svg,
+  .stat-icon-wrapper svg,
+  .hr-att-kpi-icon svg {
+    width: 13px !important;
+    height: 13px !important;
+  }
+
+  /* Micro Labels */
+  .admin-dashboard-kpi-grid > div .text-\[10px\],
+  .rec-kpi-grid > div .text-\[10px\],
+  .admin-kpi-row > div .text-\[10px\],
+  .kpi-grid > div .text-\[10px\],
+  .sa-kpi-grid > div .text-\[10px\],
+  .kpi-label,
+  .stat-label,
+  .kpi-title-custom,
+  .hr-att-kpi-lbl,
+  .sa-kpi-label {
+    font-size: 9.5px !important;
+    letter-spacing: 0.02em !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  /* Micro Subtitles & Margins */
+  .admin-dashboard-kpi-grid > div .text-xs,
+  .rec-kpi-grid > div .text-xs,
+  .admin-kpi-row > div .text-xs,
+  .kpi-grid > div .text-xs,
+  .sa-kpi-grid > div .text-xs,
+  .kpi-sub,
+  .stat-sub,
+  .hr-att-kpi-sub {
+    font-size: 10px !important;
+    margin-top: 2px !important;
+    line-height: 1.2 !important;
+  }
+
+  .admin-dashboard-kpi-grid > div .mt-3,
+  .admin-dashboard-kpi-grid > div .mt-4,
+  .rec-kpi-grid > div .mt-4,
+  .admin-kpi-row > div .mt-3,
+  .admin-kpi-row > div .mt-4,
+  .kpi-grid > div .mt-3,
+  .kpi-grid > div .mt-4 {
+    margin-top: 4px !important;
+  }
+
+  /* Micro Sparklines */
+  .admin-dashboard-kpi-grid > div .w-14,
+  .admin-dashboard-kpi-grid > div .w-16,
+  .admin-dashboard-kpi-grid > div .sm\:w-16,
+  .rec-kpi-grid > div .w-16,
+  .kpi-grid > div .w-16,
+  .admin-kpi-row > div .w-16 {
+    width: 36px !important;
+    height: 18px !important;
   }
 }
 
 /* 769px–1024px: 2 to 3 Columns */
 @media (min-width: 769px) and (max-width: 1024px) {
   .admin-kpi-row,
+  .admin-dashboard-kpi-grid,
+  .rec-kpi-grid,
   .ph-kpi-grid,
   .doctor-grid-pro,
   .kpi-grid,
   .dashboard-kpi-grid,
   .modern-kpi-grid,
   .sa-stat-grid,
+  .sa-kpi-grid,
   .dpo-stat-grid {
     grid-template-columns: repeat(2, 1fr) !important;
-    gap: 16px !important;
+    gap: 14px !important;
   }
 }
 
-/* 1025px+: 4 Columns (Desktop) */
+/* 1025px+: Desktop Natural Columns */
 @media (min-width: 1025px) {
   .admin-kpi-row,
   .ph-kpi-grid,
@@ -442,7 +639,13 @@ img, svg, canvas {
   .sa-stat-grid,
   .dpo-stat-grid {
     grid-template-columns: repeat(4, 1fr) !important;
-    gap: 18px !important;
+    gap: 16px !important;
+  }
+  .doctor-grid-pro {
+    grid-template-columns: repeat(5, 1fr) !important;
+  }
+  .admin-dashboard-kpi-grid {
+    grid-template-columns: repeat(5, 1fr) !important;
   }
 }
 
