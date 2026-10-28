@@ -356,7 +356,9 @@ img, svg, canvas {
     transform: translateX(-100%) !important;
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
     box-shadow: 12px 0 36px rgba(15, 23, 42, 0.18) !important;
-    overflow-y: auto !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
     -webkit-overflow-scrolling: touch !important;
   }
 
@@ -387,21 +389,57 @@ img, svg, canvas {
     animation: fadeIn 0.2s ease-out forwards !important;
   }
 
-  /* Mobile Touch Targets */
+  /* Mobile Sidebar Links - sleek, compact touch targets */
   .sidebar .nav-link,
   .sidebar-link,
   .proc-menu-item,
   .hr-menu-item {
-    min-height: 44px !important;
+    min-height: 36px !important;
     display: flex !important;
     align-items: center !important;
-    gap: 12px !important;
-    padding: 12px 18px !important;
-    font-size: 13.5px !important;
-    font-weight: 700 !important;
-    border-radius: 10px !important;
-    margin: 3px 8px !important;
+    gap: 8px !important;
+    padding: 5px 8px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    border-radius: 9px !important;
+    margin: 2px 2px !important;
     cursor: pointer !important;
+  }
+
+  .sidebar-link-icon {
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 7px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .sidebar-link-icon svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
+  .sidebar-group {
+    margin-bottom: 6px !important;
+  }
+
+  .sidebar-group-title {
+    font-size: 11px !important;
+    margin-bottom: 3px !important;
+    padding: 2px 6px !important;
+  }
+
+  .sidebar-zone,
+  .sidebar-zone-clinic,
+  .sidebar-zone-finance {
+    margin-top: 6px !important;
+    margin-bottom: 6px !important;
+    padding: 5px 4px !important;
+    border-radius: 12px !important;
+  }
+
+  .sidebar-brand {
+    padding: 16px 14px 12px 14px !important;
+    gap: 10px !important;
   }
 }
 
