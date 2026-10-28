@@ -4583,7 +4583,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       const yyyy = d.getFullYear();
       const mm = String(d.getMonth() + 1).padStart(2, '0');
       const value = `${yyyy}-${mm}`;
-      const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const label = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
       months.push({ value, label });
     }
     return months;
@@ -4610,9 +4610,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
     const isCurrentMonth = targetYear === currentYear && targetMonth === currentMonth;
     const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
-    // For the current calendar month (August 2026), plot days 1 to today's date (e.g. 27 Aug).
-    // For previous months, plot the full month (1 to 30/31).
-    const endDay = isCurrentMonth ? Math.min(todayDate, daysInMonth) : daysInMonth;
+    // Plot all days of month (1 to 28/30/31) so axis cleanly spans full calendar month
+    const endDay = daysInMonth;
 
     // Filter paid bills for selected month
     const monthBills = bills.filter(b => {
@@ -5872,117 +5871,193 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           gap: 8px;
         }
 
-        /* Financial Overview Specifics (Redesigned Monthly Revenue vs Expense) */
+        /* Financial Overview (Image 1 Clean Minimal Design) */
         .fin-overview-panel {
-          display: flex;
-          flex-direction: column;
+          background: #FFFFFF !important;
+          border: 1px solid #E2E8F0 !important;
+          border-radius: 24px !important;
+          padding: 20px 22px 18px !important;
+          box-shadow: 0 4px 20px rgba(15, 23, 42, 0.03) !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 16px !important;
         }
-        .fin-overview-body {
-          display: grid;
-          grid-template-columns: 165px 1fr;
-          gap: 16px;
-          align-items: stretch;
-          margin-top: 4px;
-          flex: 1;
+        @media (max-width: 640px) {
+          .fin-overview-panel {
+            padding: 16px 14px 14px !important;
+            border-radius: 18px !important;
+            gap: 14px !important;
+          }
         }
-        .fin-summary-col {
+        .fin-header-row {
           display: flex;
-          flex-direction: column;
-          gap: 10px;
+          align-items: center;
           justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 12px;
         }
-        .fin-summary-box {
+        .fin-title-group {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .fin-icon-box {
+          width: 32px;
+          height: 32px;
+          border-radius: 9px;
           background: #F8FAFC;
           border: 1px solid #E2E8F0;
-          border-radius: 12px;
-          padding: 10px 12px;
           display: flex;
-          flex-direction: column;
-          gap: 2px;
-          transition: all 0.15s ease;
-        }
-        .fin-summary-box:hover {
-          background: #FFFFFF;
-          border-color: #CBD5E1;
-          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-        }
-        .fin-summary-box.rev {
-          border-left: 3.5px solid #10B981;
-        }
-        .fin-summary-box.exp {
-          border-left: 3.5px solid #EF4444;
-        }
-        .fin-summary-box.net {
-          border-left: 3.5px solid #3B82F6;
-        }
-        .fin-summary-lbl {
-          font-size: 10.5px;
-          font-weight: 800;
-          color: #64748B;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-        .fin-summary-val {
-          font-size: 18px;
+          align-items: center;
+          justify-content: center;
+          color: #334155;
+          font-size: 15px;
           font-weight: 900;
           font-family: 'Outfit', sans-serif;
-          letter-spacing: -0.02em;
-          line-height: 1.2;
+          flex-shrink: 0;
+        }
+        .fin-title-text {
+          font-size: 16px;
+          font-weight: 800;
           color: #0F172A;
+          font-family: 'Outfit', sans-serif;
+          letter-spacing: -0.01em;
+          margin: 0;
         }
-        .fin-summary-sub {
-          font-size: 10px;
-          font-weight: 700;
-        }
-        .fin-summary-sub.green { color: #059669; }
-        .fin-summary-sub.red { color: #DC2626; }
-        .fin-summary-sub.blue { color: #2563EB; }
-
-        .fin-chart-col {
+        .fin-controls-group {
           display: flex;
-          flex-direction: column;
-          min-width: 0;
+          align-items: center;
+          gap: 10px;
+        }
+        @media (max-width: 640px) {
+          .fin-header-row {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+          }
+          .fin-controls-group {
+            width: 100%;
+            justify-content: flex-start;
+            gap: 8px;
+          }
+          .fin-record-btn {
+            flex: 1 !important;
+            text-align: center;
+            justify-content: center;
+          }
+          .fin-select-box {
+            flex: 1 !important;
+          }
+        }
+        .fin-record-btn {
+          background: #2563EB !important;
+          color: #FFFFFF !important;
+          border: none !important;
+          font-size: 12.5px !important;
+          font-weight: 700 !important;
+          padding: 7px 16px !important;
+          border-radius: 10px !important;
+          cursor: pointer !important;
+          transition: all 0.15s ease !important;
+          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.22) !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          white-space: nowrap !important;
+        }
+        .fin-record-btn:hover {
+          background: #1D4ED8 !important;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28) !important;
+        }
+        .fin-record-btn:active {
+          transform: scale(0.98);
+        }
+        .fin-select-box {
           position: relative;
-        }
-        .fin-chart-legend {
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          justify-content: flex-end;
-          gap: 16px;
-          margin-bottom: 6px;
-          font-size: 11.5px;
-          font-weight: 750;
         }
-        .fin-legend-item {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-        .fin-legend-item.rev { color: #059669; }
-        .fin-legend-item.exp { color: #DC2626; }
-        .fin-legend-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-        }
-        .fin-legend-dot.green { background: #10B981; }
-        .fin-legend-dot.red { background: #EF4444; }
-
-        .fin-month-select {
-          padding: 5px 12px;
-          border-radius: 8px;
+        .fin-select-input {
+          appearance: none;
+          -webkit-appearance: none;
+          background: #FFFFFF;
           border: 1px solid #E2E8F0;
-          font-size: 12px;
-          font-weight: 750;
-          color: #334155;
-          background: #F8FAFC;
+          border-radius: 10px;
+          padding: 6.5px 28px 6.5px 12px;
+          font-size: 12.5px;
+          font-weight: 700;
+          color: #1E293B;
           cursor: pointer;
           outline: none;
           transition: all 0.15s ease;
+          width: 100%;
         }
-        .fin-month-select:hover {
-          border-color: #93C5FD;
-          background: #FFFFFF;
+        .fin-select-input:hover {
+          border-color: #CBD5E1;
+        }
+        .fin-select-arrow {
+          position: absolute;
+          right: 10px;
+          pointer-events: none;
+          color: #64748B;
+        }
+        .fin-metric-legend-row {
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .fin-rev-display {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+        .fin-rev-val {
+          font-size: 26px;
+          font-weight: 900;
+          color: #0F172A;
+          font-family: 'Outfit', sans-serif;
+          letter-spacing: -0.03em;
+          line-height: 1;
+        }
+        .fin-rev-sub {
+          font-size: 11px;
+          font-weight: 700;
+          color: #64748B;
+        }
+        .fin-legend-container {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          margin-bottom: 2px;
+        }
+        .fin-legend-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          font-weight: 700;
+          color: #334155;
+        }
+        .fin-legend-dot-inc {
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: #10B981;
+          flex-shrink: 0;
+        }
+        .fin-legend-dot-exp {
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: #2563EB;
+          flex-shrink: 0;
+        }
+        .fin-daily-chart-wrap {
+          position: relative;
+          width: 100%;
+          min-height: 140px;
         }
 
         /* Attention Center Specifics */
@@ -13636,129 +13711,59 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             <div className="dashboard-sec2-grid">
               {/* Left Column: Financial Overview */}
               <div className="dash-card-shell fin-overview-panel">
-                <div className="dash-card-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <h3 className="dash-card-title">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                      Financial Overview
-                    </h3>
+                {/* Header Row */}
+                <div className="fin-header-row">
+                  <div className="fin-title-group">
+                    <div className="fin-icon-box">
+                      <span>₹</span>
+                    </div>
+                    <h3 className="fin-title-text">Financial Overview</h3>
                     {domainSyncing.finance && (
                       <span style={{ fontSize: '10.5px', color: '#2563EB', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#EFF6FF', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
                         <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>↻</span> Syncing
                       </span>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+                  <div className="fin-controls-group">
                     <button
                       type="button"
                       onClick={() => setShowExpenseModal(true)}
-                      style={{
-                        padding: '5px 11px',
-                        borderRadius: '8px',
-                        background: '#EFF6FF',
-                        border: '1px solid #BFDBFE',
-                        color: '#1D4ED8',
-                        fontSize: '11.5px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '5px',
-                        transition: 'all 0.15s ease'
-                      }}
+                      className="fin-record-btn"
                       title="Manage and record hospital operational expenses"
                     >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                      <span>Record Expense</span>
+                      Record Expense
                     </button>
-                    <select
-                      value={finSelectedMonth}
-                      onChange={(e) => setFinSelectedMonth(e.target.value)}
-                      className="fin-month-select"
-                    >
-                      {getAvailableMonths().map(m => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                      ))}
-                    </select>
+
+                    <div className="fin-select-box">
+                      <select
+                        value={finSelectedMonth}
+                        onChange={(e) => setFinSelectedMonth(e.target.value)}
+                        className="fin-select-input"
+                      >
+                        {getAvailableMonths().map(m => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                      <svg className="fin-select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </div>
                   </div>
                 </div>
 
-                {/* Main Body: Summary Column on Left + Diverging Cashflow Bar Chart on Right */}
+                {/* Main Body with Revenue, Legend & Daily Bar Chart */}
                 {(() => {
                   const finData = getFinancialOverviewData(finSelectedMonth);
-                  
-                  // Compute 12-Month Annual Cashflow Dataset matching reference image
-                  const targetYear = finSelectedMonth ? parseInt(finSelectedMonth.split('-')[0], 10) || 2026 : 2026;
-                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                  
-                  const yearBills = bills.filter(b => {
-                    if (b.status !== 'Paid') return false;
-                    const d = new Date(b.createdAt);
-                    return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
-                  });
+                  const { dailyData, totalRevenue, endDay } = finData;
 
-                  const yearPharmacy = (pharmacySales || []).filter(s => {
-                    if (s.status === 'CANCELLED') return false;
-                    const d = new Date(s.saleDate || s.createdAt);
-                    return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
-                  });
-
-                  const inactivePoStatuses = ['Draft', 'Cancelled', 'Rejected'];
-                  const yearPOs = purchaseOrders.filter(po => {
-                    if (inactivePoStatuses.includes(po.status)) return false;
-                    const hasChildren = purchaseOrders.some(c => (c.parentPOId === po.poId || c.parentPOId === po._id) && (c.poId !== po.poId && c._id !== po._id));
-                    if (po.isParent && hasChildren) return false;
-
-                    const d = new Date(po.createdAt || po.orderDate || po.date || po.updatedAt || Date.now());
-                    return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
-                  });
-
-                  const yearOpExpenses = (expenses || []).filter(e => {
-                    const d = new Date(e.date || e.createdAt);
-                    return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
-                  });
-
-                  let rawMax = 1000;
-                  const monthlyCashflow = monthNames.map((mName, mIdx) => {
-                    const monthBillsSum = yearBills
-                      .filter(b => new Date(b.createdAt).getMonth() === mIdx)
-                      .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-
-                    const monthPharmacySum = yearPharmacy
-                      .filter(s => new Date(s.saleDate || s.createdAt).getMonth() === mIdx)
-                      .reduce((sum, s) => sum + (Number(s.grandTotal) || 0), 0);
-
-                    const totalMonthIncome = monthBillsSum + monthPharmacySum;
-
-                    const monthPOsSum = yearPOs
-                      .filter(po => new Date(po.createdAt || po.orderDate || po.date || po.updatedAt || Date.now()).getMonth() === mIdx)
-                      .reduce((sum, p) => sum + (p.totalAmount || 0), 0);
-
-                    const monthOpExpensesSum = yearOpExpenses
-                      .filter(e => new Date(e.date || e.createdAt).getMonth() === mIdx)
-                      .reduce((sum, e) => sum + (e.amount || 0), 0);
-
-                    const totalMonthExpense = monthPOsSum + monthOpExpensesSum;
-
-                    if (totalMonthIncome > rawMax) rawMax = totalMonthIncome;
-                    if (totalMonthExpense > rawMax) rawMax = totalMonthExpense;
-
-                    return {
-                      month: mName,
-                      index: mIdx,
-                      label: `${mName} ${targetYear}`,
-                      income: totalMonthIncome,
-                      expense: totalMonthExpense,
-                      net: totalMonthIncome - totalMonthExpense
-                    };
-                  });
-
-                  // Calculate clean yMax (4K, 8K, 15K, 25K, 50K, 100K, 200K, etc.)
+                  // Dynamic scale matching Image 1: Y-axis has max tick (e.g. 30K) and 0 at baseline
+                  const rawMax = Math.max(1000, ...dailyData.map(d => Math.max(d.revenue || 0, d.expenses || 0)));
                   let yMax = 5000;
-                  if (rawMax <= 4000) yMax = 4000;
-                  else if (rawMax <= 8000) yMax = 8000;
-                  else if (rawMax <= 15000) yMax = 15000;
-                  else if (rawMax <= 25000) yMax = 25000;
+                  if (rawMax <= 5000) yMax = 5000;
+                  else if (rawMax <= 10000) yMax = 10000;
+                  else if (rawMax <= 20000) yMax = 20000;
+                  else if (rawMax <= 30000) yMax = 30000;
                   else if (rawMax <= 50000) yMax = 50000;
                   else if (rawMax <= 100000) yMax = 100000;
                   else if (rawMax <= 200000) yMax = 200000;
@@ -13769,259 +13774,228 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     const abs = Math.abs(val);
                     if (abs >= 100000) {
                       const l = (abs / 100000).toFixed(1).replace('.0', '');
-                      return `${val < 0 ? '-' : ''}${l}L`;
+                      return `${l}L`;
                     }
                     if (abs >= 1000) {
-                      return `${val < 0 ? '-' : ''}${Math.round(abs / 1000)}K`;
+                      return `${Math.round(abs / 1000)}K`;
                     }
-                    return `${val}`;
+                    return `${abs}`;
                   };
 
-                  // SVG Geometry
-                  const pLeft = 46;
-                  const pRight = 514;
+                  // Chart Geometry (Calibrated for crisp mobile & desktop rendering)
+                  const pLeft = 28;
+                  const pRight = 428;
                   const pWidth = pRight - pLeft;
-                  const yZero = 90;
-                  const maxBarH = 68;
-                  const colStep = pWidth / 12;
-                  const barWidth = 18;
+                  const pTop = 14;
+                  const yZero = 112;
+                  const chartH = yZero - pTop;
+                  const totalDays = dailyData.length;
+                  const colStep = pWidth / Math.max(1, totalDays);
+                  const barW = Math.max(2.6, Math.min(4.2, (colStep - 2.2) / 2));
+                  const barGap = 1.0;
 
-                  const yGridLines = [
-                    { y: yZero - maxBarH, label: formatTick(yMax) },
-                    { y: yZero - maxBarH / 2, label: formatTick(yMax / 2) },
-                    { y: yZero, label: '0' },
-                    { y: yZero + maxBarH / 2, label: formatTick(-yMax / 2) },
-                    { y: yZero + maxBarH, label: formatTick(-yMax) }
-                  ];
+                  // X-Axis Key Days matching Image 1: 1, 5, 10, 15, 20, 25, and endDay
+                  const xKeyDays = new Set([1]);
+                  for (let d = 5; d < endDay; d += 5) {
+                    if (endDay - d >= 2) xKeyDays.add(d);
+                  }
+                  xKeyDays.add(endDay);
 
                   return (
-                    <div className="fin-overview-body">
-                      {/* Left Summary Area */}
-                      <div className="fin-summary-col">
-                        {/* Revenue */}
-                        <div className="fin-summary-box rev">
-                          <span className="fin-summary-lbl">Revenue</span>
-                          <span className="fin-summary-val" style={{ color: '#0F172A' }}>
-                            ₹{finData.totalRevenue >= 100000 ? (finData.totalRevenue / 100000).toFixed(2) + 'L' : finData.totalRevenue.toLocaleString('en-IN')}
-                          </span>
-                          <span className="fin-summary-sub green">
-                            {finData.totalRevenue > 0 ? 'Total collections' : 'No collections'}
-                          </span>
-                        </div>
-
-                        {/* Expenses */}
-                        <div 
-                          className="fin-summary-box exp"
-                          onClick={() => setShowExpenseModal(true)}
-                          style={{ cursor: 'pointer' }}
-                          title="Click to view & record operational expenses"
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span className="fin-summary-lbl">Expenses</span>
-                            <span style={{ fontSize: '9.5px', color: '#DC2626', fontWeight: 800, background: '#FEE2E2', padding: '1px 5px', borderRadius: '4px' }}>
-                              + Record
-                            </span>
+                    <>
+                      {/* Row 2: Total Revenue & Legend */}
+                      <div className="fin-metric-legend-row">
+                        <div className="fin-rev-display">
+                          <div className="fin-rev-val">
+                            ₹{totalRevenue.toLocaleString('en-IN')}
                           </div>
-                          <span className="fin-summary-val" style={{ color: '#0F172A' }}>
-                            ₹{finData.totalExpenses >= 100000 ? (finData.totalExpenses / 100000).toFixed(2) + 'L' : finData.totalExpenses.toLocaleString('en-IN')}
-                          </span>
-                          <span className="fin-summary-sub red">
-                            {finData.totalExpenses > 0 
-                              ? (finData.totalPoExpenses > 0 && finData.totalOpExpenses > 0
-                                  ? `₹${finData.totalPoExpenses.toLocaleString('en-IN')} POs • ₹${finData.totalOpExpenses.toLocaleString('en-IN')} Ops`
-                                  : (finData.totalPoExpenses > 0 ? `${finData.poCount} PO purchase${finData.poCount > 1 ? 's' : ''}` : `${finData.opCount} operational item${finData.opCount > 1 ? 's' : ''}`))
-                              : '₹0 expenses'}
-                          </span>
+                          <div className="fin-rev-sub">
+                            Total Revenue
+                          </div>
                         </div>
 
-                        {/* Net Income */}
-                        <div className="fin-summary-box net">
-                          <span className="fin-summary-lbl">Net Income</span>
-                          <span className="fin-summary-val" style={{ color: finData.netIncome >= 0 ? '#059669' : '#DC2626' }}>
-                            {finData.netIncome < 0 ? '-₹' : '₹'}
-                            {Math.abs(finData.netIncome) >= 100000 ? (Math.abs(finData.netIncome) / 100000).toFixed(2) + 'L' : Math.abs(finData.netIncome).toLocaleString('en-IN')}
-                          </span>
-                          <span className="fin-summary-sub blue">
-                            Net operating balance
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Right Chart Area: Diverging Bi-directional Cashflow Bars */}
-                      <div className="fin-chart-col">
-                        {/* Chart Legend */}
-                        <div className="fin-chart-legend" style={{ justifyContent: 'flex-end', gap: '16px', marginBottom: '8px' }}>
-                          <span className="fin-legend-item" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#0F172A' }}>
-                            <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#0D382B', display: 'inline-block' }}></span>
+                        <div className="fin-legend-container">
+                          <span className="fin-legend-pill">
+                            <span className="fin-legend-dot-inc" />
                             Income
                           </span>
-                          <span className="fin-legend-item" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#0F172A' }}>
-                            <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#4ADE80', display: 'inline-block' }}></span>
+                          <span className="fin-legend-pill">
+                            <span className="fin-legend-dot-exp" />
                             Expense
                           </span>
                         </div>
+                      </div>
 
-                        {/* SVG Diverging Bar Chart */}
-                        <div style={{ position: 'relative', width: '100%', flex: 1, minHeight: '185px' }}>
-                          <svg viewBox="0 0 530 185" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-                            {/* Horizontal Grid Lines & Y-Axis Scale */}
-                            {yGridLines.map((grid, idx) => (
-                              <g key={idx}>
-                                <line 
-                                  x1={pLeft} 
-                                  y1={grid.y} 
-                                  x2={pRight} 
-                                  y2={grid.y} 
-                                  stroke={grid.y === yZero ? "#E2E8F0" : "#F1F5F9"} 
-                                  strokeWidth={grid.y === yZero ? "1.5" : "1"} 
-                                  strokeDasharray={grid.y === yZero ? "none" : "3 3"} 
-                                />
-                                <text 
-                                  x={pLeft - 8} 
-                                  y={grid.y + 3.5} 
-                                  textAnchor="end" 
-                                  fill="#94A3B8" 
-                                  fontSize="9.5" 
-                                  fontWeight="750" 
-                                  fontFamily="'Outfit', sans-serif"
-                                >
-                                  {grid.label}
-                                </text>
-                              </g>
-                            ))}
+                      {/* Row 3: Daily Bar Chart */}
+                      <div className="fin-daily-chart-wrap">
+                        <svg viewBox="0 0 440 145" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                          {/* Y-Axis Label: Top Max */}
+                          <text
+                            x={pLeft - 6}
+                            y={pTop + 5}
+                            textAnchor="end"
+                            fill="#94A3B8"
+                            fontSize="11"
+                            fontWeight="700"
+                            fontFamily="'Outfit', sans-serif"
+                          >
+                            {formatTick(yMax)}
+                          </text>
 
-                            {/* 12 Monthly Diverging Bars */}
-                            {monthlyCashflow.map((m, i) => {
-                              const xCenter = pLeft + (i * colStep) + (colStep / 2);
-                              const xBar = xCenter - (barWidth / 2);
-                              
-                              // Height calculations
-                              const hInc = m.income > 0 ? Math.max(5, (m.income / yMax) * maxBarH) : 0;
-                              const hExp = m.expense > 0 ? Math.max(5, (m.expense / yMax) * maxBarH) : 0;
-                              
-                              const yInc = yZero - hInc;
-                              const yExp = yZero;
-                              const isHovered = finChartHoverIdx === i;
+                          {/* Y-Axis Label: Zero */}
+                          <text
+                            x={pLeft - 6}
+                            y={yZero}
+                            textAnchor="end"
+                            fill="#94A3B8"
+                            fontSize="11"
+                            fontWeight="700"
+                            fontFamily="'Outfit', sans-serif"
+                          >
+                            0
+                          </text>
 
-                              return (
-                                <g key={m.month}>
-                                  {/* Hover Pill Aura */}
-                                  {isHovered && (
-                                    <rect 
-                                      x={xCenter - 14} 
-                                      y={Math.min(yInc - 4, yZero - 8)} 
-                                      width={barWidth + 10} 
-                                      height={Math.max(20, hInc + hExp + 8)} 
-                                      rx="7" 
-                                      fill="rgba(134, 239, 172, 0.22)" 
-                                      stroke="#86EFAC" 
-                                      strokeWidth="1.5" 
-                                      pointerEvents="none" 
-                                    />
-                                  )}
+                          {/* Baseline */}
+                          <line
+                            x1={pLeft}
+                            y1={yZero}
+                            x2={pRight}
+                            y2={yZero}
+                            stroke="#F1F5F9"
+                            strokeWidth="1.5"
+                          />
 
-                                  {/* Top Income Bar (Pointing UP with rounded top corners) */}
-                                  {hInc > 0 && (
-                                    <rect 
-                                      x={xBar} 
-                                      y={yInc} 
-                                      width={barWidth} 
-                                      height={hInc} 
-                                      rx="4" 
-                                      fill="#0D382B" 
-                                      style={{ transition: 'all 0.2s ease' }}
-                                    />
-                                  )}
+                          {/* Daily Paired Bars */}
+                          {dailyData.map((d, i) => {
+                            const cx = pLeft + (i * colStep) + (colStep / 2);
+                            const xInc = cx - barW - (barGap / 2);
+                            const xExp = cx + (barGap / 2);
 
-                                  {/* Bottom Expense Bar (Pointing DOWN with rounded bottom corners) */}
-                                  {hExp > 0 && (
-                                    <rect 
-                                      x={xBar} 
-                                      y={yExp} 
-                                      width={barWidth} 
-                                      height={hExp} 
-                                      rx="4" 
-                                      fill="#4ADE80" 
-                                      style={{ transition: 'all 0.2s ease' }}
-                                    />
-                                  )}
+                            const hInc = d.revenue > 0 ? Math.max(3.5, (d.revenue / yMax) * chartH) : 0;
+                            const hExp = d.expenses > 0 ? Math.max(3.5, (d.expenses / yMax) * chartH) : 0;
 
-                                  {/* X-Axis Month Label */}
-                                  <text 
-                                    x={xCenter} 
-                                    y={yZero + maxBarH + 16} 
-                                    textAnchor="middle" 
-                                    fill={isHovered ? "#0F172A" : "#64748B"} 
-                                    fontSize="10" 
-                                    fontWeight={isHovered ? "850" : "700"}
-                                  >
-                                    {m.month}
-                                  </text>
+                            const yInc = yZero - hInc;
+                            const yExp = yZero - hExp;
 
-                                  {/* Invisible Full Column Hit Area */}
-                                  <rect 
-                                    x={xCenter - (colStep / 2)} 
-                                    y={yZero - maxBarH - 10} 
-                                    width={colStep} 
-                                    height={(maxBarH * 2) + 20} 
-                                    fill="transparent" 
-                                    style={{ cursor: 'pointer' }}
-                                    onMouseEnter={() => setFinChartHoverIdx(i)}
-                                    onMouseLeave={() => setFinChartHoverIdx(null)}
-                                  />
-                                </g>
-                              );
-                            })}
-                          </svg>
-
-                          {/* Interactive Hover Tooltip Card (Matching Reference Design) */}
-                          {finChartHoverIdx !== null && monthlyCashflow[finChartHoverIdx] && (() => {
-                            const item = monthlyCashflow[finChartHoverIdx];
-                            const xCenter = pLeft + (finChartHoverIdx * colStep) + (colStep / 2);
-                            const leftPct = (xCenter / 530) * 100;
-                            const boundLeft = Math.max(18, Math.min(82, leftPct));
+                            const isHovered = finChartHoverIdx === i;
 
                             return (
-                              <div 
-                                style={{
-                                  position: 'absolute',
-                                  top: '-4px',
-                                  left: `${boundLeft}%`,
-                                  background: '#FFFFFF',
-                                  border: '1px solid #E2E8F0',
-                                  borderRadius: '12px',
-                                  padding: '10px 14px',
-                                  boxShadow: '0 12px 28px -4px rgba(15, 23, 42, 0.12), 0 4px 10px rgba(0, 0, 0, 0.04)',
-                                  zIndex: 50,
-                                  pointerEvents: 'none',
-                                  transform: 'translateX(-50%)',
-                                  minWidth: '145px',
-                                  animation: 'popIn 0.15s ease-out'
-                                }}
-                              >
-                                <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '6px' }}>
-                                  {item.label}
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: 700, color: '#0F172A', marginBottom: '3px' }}>
-                                  <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#0D382B', display: 'inline-block' }} />
-                                    Income
-                                  </span>
-                                  <span style={{ fontWeight: 800, color: '#0D382B' }}>₹{item.income.toLocaleString('en-IN')}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: 700, color: '#0F172A' }}>
-                                  <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#4ADE80', display: 'inline-block' }} />
-                                    Expense
-                                  </span>
-                                  <span style={{ fontWeight: 800, color: '#16A34A' }}>₹{item.expense.toLocaleString('en-IN')}</span>
-                                </div>
-                              </div>
+                              <g key={d.day}>
+                                {/* Hover Column Background */}
+                                {isHovered && (
+                                  <rect
+                                    x={cx - (colStep / 2) + 0.5}
+                                    y={pTop}
+                                    width={colStep - 1}
+                                    height={chartH}
+                                    rx="3"
+                                    fill="rgba(241, 245, 249, 0.7)"
+                                    pointerEvents="none"
+                                  />
+                                )}
+
+                                {/* Income Bar (Green) */}
+                                {hInc > 0 && (
+                                  <rect
+                                    x={xInc}
+                                    y={yInc}
+                                    width={barW}
+                                    height={hInc}
+                                    rx="1.5"
+                                    fill="#10B981"
+                                  />
+                                )}
+
+                                {/* Expense Bar (Blue) */}
+                                {hExp > 0 && (
+                                  <rect
+                                    x={xExp}
+                                    y={yExp}
+                                    width={barW}
+                                    height={hExp}
+                                    rx="1.5"
+                                    fill="#2563EB"
+                                  />
+                                )}
+
+                                {/* X-Axis Day Number */}
+                                {xKeyDays.has(d.day) && (
+                                  <text
+                                    x={cx}
+                                    y={yZero + 18}
+                                    textAnchor="middle"
+                                    fill={isHovered ? "#0F172A" : "#94A3B8"}
+                                    fontSize="10.5"
+                                    fontWeight={isHovered ? "850" : "700"}
+                                    fontFamily="'Outfit', sans-serif"
+                                  >
+                                    {d.day}
+                                  </text>
+                                )}
+
+                                {/* Column Hit Area */}
+                                <rect
+                                  x={cx - (colStep / 2)}
+                                  y={pTop - 5}
+                                  width={colStep}
+                                  height={chartH + 28}
+                                  fill="transparent"
+                                  style={{ cursor: 'pointer' }}
+                                  onMouseEnter={() => setFinChartHoverIdx(i)}
+                                  onMouseLeave={() => setFinChartHoverIdx(null)}
+                                />
+                              </g>
                             );
-                          })()}
-                        </div>
+                          })}
+                        </svg>
+
+                        {/* Interactive Floating Tooltip */}
+                        {finChartHoverIdx !== null && dailyData[finChartHoverIdx] && (() => {
+                          const item = dailyData[finChartHoverIdx];
+                          const cx = pLeft + (finChartHoverIdx * colStep) + (colStep / 2);
+                          const leftPct = (cx / 440) * 100;
+                          const boundLeft = Math.max(16, Math.min(84, leftPct));
+
+                          return (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: '-10px',
+                                left: `${boundLeft}%`,
+                                transform: 'translateX(-50%)',
+                                background: '#FFFFFF',
+                                border: '1px solid #E2E8F0',
+                                borderRadius: '12px',
+                                padding: '8px 12px',
+                                boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.12), 0 4px 10px rgba(0, 0, 0, 0.04)',
+                                zIndex: 50,
+                                pointerEvents: 'none',
+                                minWidth: '135px',
+                                animation: 'popIn 0.15s ease-out'
+                              }}
+                            >
+                              <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '4px' }}>
+                                {item.fullDate}
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
+                                <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
+                                  Income
+                                </span>
+                                <span style={{ fontWeight: 800, color: '#059669' }}>₹{item.revenue.toLocaleString('en-IN')}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', fontWeight: 700, color: '#0F172A' }}>
+                                <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }} />
+                                  Expense
+                                </span>
+                                <span style={{ fontWeight: 800, color: '#2563EB' }}>₹{item.expenses.toLocaleString('en-IN')}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
-                    </div>
+                    </>
                   );
                 })()}
               </div>
