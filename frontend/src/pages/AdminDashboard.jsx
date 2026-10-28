@@ -10513,9 +10513,15 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           }
           .admin-main-canvas {
             margin-left: 0 !important;
+            padding: 0 !important;
           }
           .admin-top-header {
             padding: 0 12px !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
           }
           .mobile-backdrop {
             position: fixed !important;
@@ -10577,6 +10583,11 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             height: 52px !important;
             min-height: 52px !important;
             max-height: 52px !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
           }
           .header-title-container {
             max-width: 140px !important;
@@ -11436,6 +11447,11 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           }
           .admin-top-header {
             padding: 0 16px !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
           }
           .admin-sidebar {
             width: 260px !important;
