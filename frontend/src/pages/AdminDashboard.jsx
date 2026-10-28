@@ -11362,7 +11362,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         }
         @media (max-width: 768px) {
           .admin-kpi-row {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 8px !important;
           }
           /* admin-top-header uses deliberate desktop / mobile components */
         }
@@ -13353,7 +13354,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             {/* ============================================================== */}
             {/* SECTION 1: TOP 4 KPI CARDS (Matching HR Module Visual Language)*/}
             {/* ============================================================== */}
-            <div className="admin-dashboard-kpi-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 w-full">
+            <div className="admin-dashboard-kpi-grid grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-4 w-full">
               {/* Card 1: Today's Registrations (Electric Blue Gradient with Bottom-Right Radial Glow) */}
               <div 
                 className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"

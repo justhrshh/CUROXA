@@ -378,7 +378,7 @@ img, svg, canvas {
   box-sizing: border-box !important;
 }
 
-/* 320px–480px: Single Column */
+/* 320px–480px: Compact 2-Column Grid */
 @media (max-width: 480px) {
   .admin-kpi-row,
   .ph-kpi-grid,
@@ -388,8 +388,8 @@ img, svg, canvas {
   .modern-kpi-grid,
   .sa-stat-grid,
   .dpo-stat-grid {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
   }
 
   /* Card padding reduction */
@@ -708,7 +708,7 @@ div:has(> table)::-webkit-scrollbar-thumb {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   8. CLINIC ADMIN TOP BAR & NAVIGATION REFINEMENTS
+   8. CLINIC ADMIN & RECEPTIONIST TOP BAR & SMART RESPONSIVE KPI CARDS
    ────────────────────────────────────────────────────────────────────────── */
 
 /* Desktop view: full horizontal bar */
@@ -724,16 +724,22 @@ div:has(> table)::-webkit-scrollbar-thumb {
   }
 }
 
-/* Mobile view: deliberate, compact 2-row layout */
+/* Mobile view (<= 768px): Sleek, Flush Single-Row Top Bar & Smart KPI Cards */
 @media (max-width: 768px) {
+  /* Admin Header */
   .admin-header-desktop {
     display: none !important;
   }
   .admin-header-mobile {
     display: flex !important;
-    flex-direction: column !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
     width: 100% !important;
-    gap: 6px !important;
+    height: 100% !important;
+    flex-wrap: nowrap !important;
+    overflow: hidden !important;
+    gap: 8px !important;
   }
   .admin-top-header {
     height: 52px !important;
@@ -752,49 +758,61 @@ div:has(> table)::-webkit-scrollbar-thumb {
     display: flex !important;
     align-items: center !important;
     box-sizing: border-box !important;
+    overflow: hidden !important;
   }
   .header-bottom-accent-strip {
     display: none !important;
   }
-  .admin-header-desktop {
-    display: none !important;
-  }
-  .admin-header-mobile {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    width: 100% !important;
-    height: 100% !important;
-  }
-  @media (max-width: 380px) {
+  @media (max-width: 400px) {
     .admin-mobile-plan-pill {
       display: none !important;
     }
   }
 
-  .admin-mobile-row1 {
+  /* Receptionist Header */
+  .top-nav {
+    height: 52px !important;
+    min-height: 52px !important;
+    max-height: 52px !important;
+    padding: 0 12px !important;
+    background: #FFFFFF !important;
+    border-bottom: 1px solid #E2E8F0 !important;
+    margin-left: 0 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 100 !important;
   }
-  .admin-mobile-brand {
-    display: flex !important;
-    align-items: center !important;
-    gap: 8px !important;
+  .main-content {
+    margin-top: 52px !important;
+    margin-left: 0 !important;
+    padding: 12px 10px calc(80px + env(safe-area-inset-bottom, 16px)) !important;
   }
-  .admin-mobile-actions {
-    display: flex !important;
-    align-items: center !important;
-    gap: 6px !important;
+  .rec-top-title {
+    font-size: 13.5px !important;
+    font-weight: 800 !important;
+    color: #0F172A !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 150px !important;
   }
-  .admin-mobile-row2 {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    width: 100% !important;
-    padding-top: 6px !important;
-    border-top: 1px solid rgba(226, 232, 240, 0.7) !important;
+  .rec-top-subtitle,
+  .rec-status-badge {
+    display: none !important;
+  }
+  .rec-shield-icon {
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 8px !important;
+  }
+  .rec-shield-icon svg {
+    width: 15px !important;
+    height: 15px !important;
   }
 
   /* Controlled width navigation drawer on mobile */
@@ -807,7 +825,7 @@ div:has(> table)::-webkit-scrollbar-thumb {
     max-width: 82vw !important;
     height: 100% !important;
     height: 100dvh !important;
-    z-index: 2500 !important;
+    z-index: 2000 !important;
     transform: translateX(-100%) !important;
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
     box-shadow: none !important;
@@ -837,13 +855,94 @@ div:has(> table)::-webkit-scrollbar-thumb {
     background: #E2E8F0 !important;
   }
 
-  /* KPI cards responsive padding & typography */
-  .admin-dashboard-kpi-grid {
-    grid-template-columns: 1fr !important;
-    gap: 10px !important;
+  /* ==========================================================================
+     SMART RESPONSIVE KPI CARDS (ADMIN & RECEPTIONIST):
+     2-COLUMN COMPACT MICRO-CARDS (SAVES 70% VERTICAL SPACE)
+     ========================================================================== */
+  .admin-dashboard-kpi-grid,
+  .rec-kpi-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    margin-bottom: 14px !important;
+    width: 100% !important;
   }
+
+  .admin-dashboard-kpi-grid > div,
+  .rec-kpi-grid > div {
+    padding: 8px 10px !important;
+    border-radius: 12px !important;
+    min-height: 72px !important;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04) !important;
+  }
+
+  /* Admin Card 5 (Pending Patient Payments): Full-width horizontal strip */
+  .admin-dashboard-kpi-grid > div:nth-child(5) {
+    grid-column: span 2 !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    min-height: 48px !important;
+    padding: 8px 12px !important;
+  }
+  .admin-dashboard-kpi-grid > div:nth-child(5) .mt-3,
+  .admin-dashboard-kpi-grid > div:nth-child(5) .sm\:mt-4 {
+    margin-top: 0 !important;
+  }
+
+  /* Micro typography for cards */
+  .admin-dashboard-kpi-grid > div .text-2xl,
+  .admin-dashboard-kpi-grid > div .sm\:text-3xl,
+  .rec-kpi-grid > div .text-3xl {
+    font-size: 19px !important;
+    line-height: 1.15 !important;
+    font-weight: 900 !important;
+  }
+
+  .admin-dashboard-kpi-grid > div .w-8,
+  .rec-kpi-grid > div .w-8 {
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 7px !important;
+  }
+
+  .admin-dashboard-kpi-grid > div .w-8 svg,
+  .rec-kpi-grid > div .w-8 svg {
+    width: 13px !important;
+    height: 13px !important;
+  }
+
+  .admin-dashboard-kpi-grid > div .text-\[10px\],
+  .rec-kpi-grid > div .text-\[10px\] {
+    font-size: 9.5px !important;
+    letter-spacing: 0.02em !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .admin-dashboard-kpi-grid > div .text-xs,
+  .rec-kpi-grid > div .text-xs {
+    font-size: 10px !important;
+    margin-top: 2px !important;
+    line-height: 1.2 !important;
+  }
+
+  .admin-dashboard-kpi-grid > div .w-14,
+  .admin-dashboard-kpi-grid > div .sm\:w-16,
+  .rec-kpi-grid > div .w-16 {
+    width: 36px !important;
+    height: 18px !important;
+  }
+
   .admin-dashboard-content {
-    padding: 12px 10px calc(80px + env(safe-area-inset-bottom, 16px)) !important;
+    padding: 10px 10px calc(80px + env(safe-area-inset-bottom, 16px)) !important;
+  }
+
+  /* Receptionist Main Grid collapses to 1fr */
+  .rec-dashboard-main-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
   }
 }
 

@@ -4326,6 +4326,20 @@ const ReceptionistDashboard = () => {
   return (
     <>
       <style>{`
+        .rec-dashboard-main-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+          gap: 24px;
+          align-items: start;
+          margin-bottom: 24px;
+        }
+        @media (max-width: 1024px) {
+          .rec-dashboard-main-grid {
+            grid-template-columns: 1fr !important;
+            gap: 16px !important;
+          }
+        }
+
         /* Strict Box sizing safeguard */
         *, *::before, *::after {
           box-sizing: border-box !important;
@@ -5809,7 +5823,7 @@ const ReceptionistDashboard = () => {
             </button>
 
             {/* Purple/Blue Command Shield Icon */}
-            <div style={{
+            <div className="rec-shield-icon" style={{
               width: '42px',
               height: '42px',
               borderRadius: '12px',
@@ -5827,10 +5841,10 @@ const ReceptionistDashboard = () => {
             {/* Title & Status */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '17px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.3px', lineHeight: 1.2 }}>
+                <span className="rec-top-title" style={{ fontSize: '17px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.3px', lineHeight: 1.2 }}>
                   Front Desk Command Center
                 </span>
-                <span style={{
+                <span className="rec-status-badge desktop-only-flex" style={{
                   fontSize: '9.5px',
                   fontWeight: 850,
                   color: '#059669',
@@ -5847,7 +5861,7 @@ const ReceptionistDashboard = () => {
                   SYSTEM ACTIVE
                 </span>
               </div>
-              <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550, marginTop: '2px', letterSpacing: '-0.01em' }}>
+              <div className="rec-top-subtitle desktop-only-flex" style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550, marginTop: '2px', letterSpacing: '-0.01em' }}>
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {currentUser.name || 'receptionist-1'}
               </div>
             </div>
@@ -6470,7 +6484,7 @@ const ReceptionistDashboard = () => {
               const completionPercent = filteredAppointments.length > 0 ? Math.round((completedAppts.length / filteredAppointments.length) * 100) : 0;
 
               return (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full mb-6">
+                <div className="rec-kpi-grid grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-6">
                   {/* Card 1: Today's Appointments (Electric Blue Gradient) */}
                   <div 
                     className="p-5 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
@@ -6675,7 +6689,7 @@ const ReceptionistDashboard = () => {
             })()}
 
             {/* 3. MAIN ASYMMETRIC DASHBOARD GRID */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '24px', alignItems: 'start', marginBottom: '24px' }}>
+            <div className="rec-dashboard-main-grid">
               
               {/* LEFT COLUMN: TODAY'S SCHEDULE & WAITING QUEUE */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minWidth: 0 }}>
