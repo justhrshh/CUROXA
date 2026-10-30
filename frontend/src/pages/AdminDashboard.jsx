@@ -5878,18 +5878,167 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           gap: 8px;
         }
 
-        /* Financial Overview (Image 1 Clean Minimal Design) */
-        .fin-overview-panel {
-          background: #FFFFFF !important;
-          border: 1px solid #E2E8F0 !important;
-          border-radius: 24px !important;
-          padding: 20px 22px 18px !important;
-          box-shadow: 0 4px 20px rgba(15, 23, 42, 0.03) !important;
-          display: flex !important;
-          flex-direction: column !important;
-          gap: 16px !important;
+        /* 2. SECTION 2: 2-COLUMN ROW (FINANCIAL OVERVIEW + ATTENTION CENTER) */
+        .dashboard-sec2-grid {
+          display: grid;
+          grid-template-columns: 1.55fr 1fr;
+          gap: 18px;
+          width: 100%;
+          align-items: stretch;
+          box-sizing: border-box;
         }
-        @media (max-width: 640px) {
+
+        .dash-card-shell {
+          background: #FFFFFF;
+          border: 1px solid rgba(226, 232, 240, 0.9);
+          border-radius: 18px;
+          box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 10px 28px -4px rgba(15, 23, 42, 0.08), 0 1px 3px 0 rgba(0, 0, 0, 0.03);
+          padding: 20px 22px;
+          display: flex;
+          flex-direction: column;
+          position: relative;
+          box-sizing: border-box;
+          min-width: 0;
+          transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        .dash-card-shell:hover {
+          box-shadow: 0 8px 16px -2px rgba(15, 23, 42, 0.06), 0 16px 36px -6px rgba(15, 23, 42, 0.11);
+          border-color: #CBD5E1;
+        }
+
+        .dash-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 14px;
+        }
+        .dash-card-title {
+          font-size: 16.5px;
+          font-weight: 800;
+          color: #0F172A;
+          font-family: 'Outfit', sans-serif;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        /* Desktop Financial Overview (Diverging 12-Month Cashflow) */
+        .fin-overview-panel {
+          display: flex;
+          flex-direction: column;
+        }
+        .fin-overview-body {
+          display: grid;
+          grid-template-columns: 165px 1fr;
+          gap: 16px;
+          align-items: stretch;
+          margin-top: 4px;
+          flex: 1;
+        }
+        .fin-summary-col {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          justify-content: space-between;
+        }
+        .fin-summary-box {
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          border-radius: 12px;
+          padding: 10px 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          transition: all 0.15s ease;
+        }
+        .fin-summary-box:hover {
+          background: #FFFFFF;
+          border-color: #CBD5E1;
+          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+        }
+        .fin-summary-box.rev {
+          border-left: 3.5px solid #10B981;
+        }
+        .fin-summary-box.exp {
+          border-left: 3.5px solid #EF4444;
+        }
+        .fin-summary-box.net {
+          border-left: 3.5px solid #3B82F6;
+        }
+        .fin-summary-lbl {
+          font-size: 10.5px;
+          font-weight: 800;
+          color: #64748B;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .fin-summary-val {
+          font-size: 18px;
+          font-weight: 900;
+          font-family: 'Outfit', sans-serif;
+          letter-spacing: -0.02em;
+          line-height: 1.2;
+          color: #0F172A;
+        }
+        .fin-summary-sub {
+          font-size: 10px;
+          font-weight: 700;
+        }
+        .fin-summary-sub.green { color: #059669; }
+        .fin-summary-sub.red { color: #DC2626; }
+        .fin-summary-sub.blue { color: #2563EB; }
+
+        .fin-chart-col {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+          position: relative;
+        }
+        .fin-chart-legend {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 16px;
+          margin-bottom: 6px;
+          font-size: 11.5px;
+          font-weight: 750;
+        }
+        .fin-legend-item {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .fin-legend-item.rev { color: #059669; }
+        .fin-legend-item.exp { color: #DC2626; }
+        .fin-legend-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+        }
+        .fin-legend-dot.green { background: #10B981; }
+        .fin-legend-dot.red { background: #EF4444; }
+
+        .fin-month-select {
+          padding: 5px 12px;
+          border-radius: 8px;
+          border: 1px solid #E2E8F0;
+          font-size: 12px;
+          font-weight: 750;
+          color: #334155;
+          background: #F8FAFC;
+          cursor: pointer;
+          outline: none;
+          transition: all 0.15s ease;
+        }
+        .fin-month-select:hover {
+          border-color: #93C5FD;
+          background: #FFFFFF;
+        }
+
+        /* Mobile Financial Overview Specifics (Clean Daily Cashflow) */
+        @media (max-width: 1023px) {
           .fin-overview-panel {
             padding: 16px 14px 14px !important;
             border-radius: 18px !important;
@@ -13456,20 +13605,20 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         {activeTab === 'dashboard' && (
           <div className="admin-dashboard-content">
             {/* ============================================================== */}
-            {/* SECTION 1: TOP 4 KPI CARDS (Matching HR Module Visual Language)*/}
+            {/* SECTION 1: TOP 5 KPI CARDS (Proportional, Compact Desktop Height) */}
             {/* ============================================================== */}
-            <div className="admin-dashboard-kpi-grid grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-4 w-full">
+            <div className="admin-dashboard-kpi-grid grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3.5 w-full">
               {/* Card 1: Today's Registrations (Electric Blue Gradient with Bottom-Right Radial Glow) */}
               <div 
-                className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                className="p-3 sm:py-3.5 sm:px-4 rounded-xl border border-blue-200/90 shadow-[0_8px_20px_rgba(37,99,235,0.06)] hover:shadow-[0_14px_30px_rgba(37,99,235,0.14)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
                 style={{
                   background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)'
                 }}
                 onClick={() => { setSelectedPatientDateFilter('Today'); setActiveTab('patients'); }}
               >
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                  <div className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-sm shadow-blue-500/25">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
                   </div>
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">Today's Registrations</span>
@@ -13479,16 +13628,16 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
                 
-                <div className="mt-3 sm:mt-4 flex items-end justify-between">
+                <div className="mt-2 sm:mt-2.5 flex items-end justify-between">
                   <div>
-                    <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{todayPatientsCount}</div>
-                    <div className="text-xs text-blue-700 font-bold mt-2 truncate">
+                    <div className="text-2xl sm:text-[25px] font-black text-slate-900 tracking-tight leading-none">{todayPatientsCount}</div>
+                    <div className="text-xs text-blue-700 font-bold mt-1 truncate">
                       {todayPatientsCount > 0 ? `+${todayPatientsCount} registered today` : (patients.length > 0 ? `${patients.length} in registry` : 'No registrations')}
                     </div>
                   </div>
 
                   {/* Blue Mini Sparkline */}
-                  <div className="w-14 h-7 sm:w-16 sm:h-8 shrink-0 relative">
+                  <div className="w-12 h-6 sm:w-13 sm:h-6.5 shrink-0 relative">
                     <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                       <defs>
                         <linearGradient id="kpiBlueGradAdmin" x1="0" y1="0" x2="0" y2="1">
@@ -13504,7 +13653,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
                 {/* Half Gradient Accent Line Beneath Card */}
                 <div 
-                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                  className="h-[3px] rounded-br-xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
                   style={{
                     background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)'
                   }}
@@ -13513,15 +13662,15 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
               {/* Card 2: Appointments Today (Purple/Violet Gradient with Top-Left Radial Glow) */}
               <div 
-                className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-purple-200/90 shadow-[0_12px_28px_rgba(139,92,246,0.08)] hover:shadow-[0_16px_36px_rgba(139,92,246,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                className="p-3 sm:py-3.5 sm:px-4 rounded-xl border border-purple-200/90 shadow-[0_8px_20px_rgba(139,92,246,0.06)] hover:shadow-[0_14px_30px_rgba(139,92,246,0.14)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
                 style={{
                   background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)'
                 }}
                 onClick={() => { setSelectedDateFilter('Today'); setActiveTab('appointments'); }}
               >
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/25">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  <div className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-purple-500/25">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                   </div>
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider">Appointments Today</span>
@@ -13531,16 +13680,16 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
                 
-                <div className="mt-3 sm:mt-4 flex items-end justify-between">
+                <div className="mt-2 sm:mt-2.5 flex items-end justify-between">
                   <div>
-                    <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{todayAppts.length}</div>
-                    <div className="text-xs text-purple-700 font-bold mt-2 truncate">
+                    <div className="text-2xl sm:text-[25px] font-black text-slate-900 tracking-tight leading-none">{todayAppts.length}</div>
+                    <div className="text-xs text-purple-700 font-bold mt-1 truncate">
                       {todayAppts.length > 0 ? `${completedToday} done · ${pendingToday} pending` : 'No appointments scheduled'}
                     </div>
                   </div>
 
                   {/* Purple Mini Sparkline */}
-                  <div className="w-14 h-7 sm:w-16 sm:h-8 shrink-0 relative">
+                  <div className="w-12 h-6 sm:w-13 sm:h-6.5 shrink-0 relative">
                     <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                       <defs>
                         <linearGradient id="kpiPurpleGradAdmin" x1="0" y1="0" x2="0" y2="1">
@@ -13556,7 +13705,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
                 {/* Half Gradient Accent Line Beneath Card */}
                 <div 
-                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                  className="h-[3px] rounded-br-xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
                   style={{
                     background: 'linear-gradient(90deg, transparent 0%, #8B5CF6 100%)'
                   }}
@@ -13565,15 +13714,15 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
               {/* Card 3: Today's Revenue (Emerald Gradient with Top-Right Radial Glow) */}
               <div 
-                className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                className="p-3 sm:py-3.5 sm:px-4 rounded-xl border border-emerald-200/90 shadow-[0_8px_20px_rgba(16,185,129,0.06)] hover:shadow-[0_14px_30px_rgba(16,185,129,0.14)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
                 style={{
                   background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)'
                 }}
                 onClick={() => { setActiveTab('financials'); }}
               >
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
-                    <span className="text-base font-black font-sans leading-none">₹</span>
+                  <div className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-sm shadow-emerald-500/25">
+                    <span className="text-sm font-black font-sans leading-none">₹</span>
                   </div>
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider">Today's Revenue</span>
@@ -13583,18 +13732,18 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
                 
-                <div className="mt-3 sm:mt-4 flex items-end justify-between">
+                <div className="mt-2 sm:mt-2.5 flex items-end justify-between">
                   <div>
-                    <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
+                    <div className="text-2xl sm:text-[25px] font-black text-slate-900 tracking-tight leading-none">
                       ₹{todayRevenue >= 1000 ? (todayRevenue / 1000).toFixed(1) + 'K' : todayRevenue.toLocaleString('en-IN')}
                     </div>
-                    <div className="text-xs text-emerald-700 font-bold mt-2 truncate">
+                    <div className="text-xs text-emerald-700 font-bold mt-1 truncate">
                       ₹{getThisMonthRevenue().toLocaleString('en-IN')} this month
                     </div>
                   </div>
 
                   {/* Green Mini Sparkline */}
-                  <div className="w-14 h-7 sm:w-16 sm:h-8 shrink-0 relative">
+                  <div className="w-12 h-6 sm:w-13 sm:h-6.5 shrink-0 relative">
                     <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                       <defs>
                         <linearGradient id="kpiGreenGradAdmin" x1="0" y1="0" x2="0" y2="1">
@@ -13610,7 +13759,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
                 {/* Half Gradient Accent Line Beneath Card */}
                 <div 
-                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                  className="h-[3px] rounded-br-xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
                   style={{
                     background: 'linear-gradient(90deg, transparent 0%, #10B981 100%)'
                   }}
@@ -13619,15 +13768,15 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
               {/* Card 4: Staff Present Today (Amber / Orange Gradient with Bottom-Left Radial Glow) */}
               <div 
-                className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-amber-200/90 shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                className="p-3 sm:py-3.5 sm:px-4 rounded-xl border border-amber-200/90 shadow-[0_8px_20px_rgba(245,158,11,0.06)] hover:shadow-[0_14px_30px_rgba(245,158,11,0.14)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
                 style={{
                   background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)'
                 }}
                 onClick={() => { setActiveTab('workforce'); }}
               >
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/25">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
+                  <div className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-gradient-to-tr from-amber-600 to-amber-400 text-white flex items-center justify-center shrink-0 shadow-sm shadow-amber-500/25">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
                   </div>
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">Staff Present Today</span>
@@ -13637,15 +13786,15 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
                 
-                <div className="mt-3 sm:mt-4 flex items-end justify-between">
+                <div className="mt-2 sm:mt-2.5 flex items-end justify-between">
                   <div>
-                    <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
-                      {staffPresentCount} <span className="text-lg font-bold text-slate-500">/ {staff.length}</span>
+                    <div className="text-2xl sm:text-[25px] font-black text-slate-900 tracking-tight leading-none">
+                      {staffPresentCount} <span className="text-base font-bold text-slate-500">/ {staff.length}</span>
                     </div>
-                    <div className="text-xs text-amber-700 font-bold mt-2 truncate flex items-center gap-1.5 flex-wrap">
+                    <div className="text-xs text-amber-700 font-bold mt-1 truncate flex items-center gap-1.5 flex-wrap">
                       <span>{staff.length > 0 ? `${Math.round((staffPresentCount / staff.length) * 100)}% on duty` : '0% on duty'}</span>
                       {staffOnLeaveCount > 0 && (
-                        <span className="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded text-[10.5px] font-extrabold border border-rose-200 inline-flex items-center">
+                        <span className="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded text-[10px] font-extrabold border border-rose-200 inline-flex items-center">
                           {staffOnLeaveCount} on leave
                         </span>
                       )}
@@ -13653,7 +13802,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
 
                   {/* Amber Mini Sparkline */}
-                  <div className="w-14 h-7 sm:w-16 sm:h-8 shrink-0 relative">
+                  <div className="w-12 h-6 sm:w-13 sm:h-6.5 shrink-0 relative">
                     <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                       <defs>
                         <linearGradient id="kpiAmberGradAdmin" x1="0" y1="0" x2="0" y2="1">
@@ -13669,7 +13818,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
                 {/* Half Gradient Accent Line Beneath Card */}
                 <div 
-                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                  className="h-[3px] rounded-br-xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
                   style={{
                     background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)'
                   }}
@@ -13678,7 +13827,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
               {/* Card 5: Pending Patient Payments (Rose / Red Gradient with Top-Right Radial Glow) */}
               <div 
-                className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-rose-200/90 shadow-[0_12px_28px_rgba(244,63,94,0.08)] hover:shadow-[0_16px_36px_rgba(244,63,94,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
+                className="p-3 sm:py-3.5 sm:px-4 rounded-xl border border-rose-200/90 shadow-[0_8px_20px_rgba(244,63,94,0.06)] hover:shadow-[0_14px_30px_rgba(244,63,94,0.14)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
                 style={{
                   background: 'radial-gradient(circle at 100% 0%, rgba(244, 63, 94, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFF1F2 50%, #FFE4E6 100%)'
                 }}
@@ -13686,8 +13835,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 title="Click to view detailed billing and patient receivables"
               >
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-rose-600 to-rose-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-500/25">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-gradient-to-tr from-rose-600 to-rose-500 text-white flex items-center justify-center shrink-0 shadow-sm shadow-rose-500/25">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                   </div>
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="text-[10px] font-extrabold text-rose-900 uppercase tracking-wider">Pending Patient Payments</span>
@@ -13697,12 +13846,12 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
                 
-                <div className="mt-3 sm:mt-4 flex items-end justify-between">
+                <div className="mt-2 sm:mt-2.5 flex items-end justify-between">
                   <div>
-                    <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
+                    <div className="text-2xl sm:text-[25px] font-black text-slate-900 tracking-tight leading-none">
                       ₹{totalPendingPaymentsAmount >= 1000 ? (totalPendingPaymentsAmount / 1000).toFixed(1) + 'K' : totalPendingPaymentsAmount.toLocaleString('en-IN')}
                     </div>
-                    <div className="text-xs text-rose-700 font-bold mt-2 truncate flex items-center gap-1.5">
+                    <div className="text-xs text-rose-700 font-bold mt-1 truncate flex items-center gap-1.5">
                       <span>{pendingBillsList.length} bill{pendingBillsList.length === 1 ? '' : 's'}</span>
                       <span>·</span>
                       <span>{pendingPaymentsPatientsCount} patient{pendingPaymentsPatientsCount === 1 ? '' : 's'}</span>
@@ -13710,7 +13859,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
 
                   {/* Rose Mini Sparkline */}
-                  <div className="w-14 h-7 sm:w-16 sm:h-8 shrink-0 relative">
+                  <div className="w-12 h-6 sm:w-13 sm:h-6.5 shrink-0 relative">
                     <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
                       <defs>
                         <linearGradient id="kpiRoseGradAdmin" x1="0" y1="0" x2="0" y2="1">
@@ -13726,7 +13875,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
 
                 {/* Half Gradient Accent Line Beneath Card */}
                 <div 
-                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
+                  className="h-[3px] rounded-br-xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
                   style={{
                     background: 'linear-gradient(90deg, transparent 0%, #F43F5E 100%)'
                   }}
@@ -13740,293 +13889,694 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             <div className="dashboard-sec2-grid">
               {/* Left Column: Financial Overview */}
               <div className="dash-card-shell fin-overview-panel">
-                {/* Header Row */}
-                <div className="fin-header-row">
-                  <div className="fin-title-group">
-                    <div className="fin-icon-box">
-                      <span>₹</span>
+                {/* ──────────────────────────────────────────────────────────── */}
+                {/* 1. DESKTOP FINANCIAL OVERVIEW: 12-Month Diverging Cashflow  */}
+                {/* ──────────────────────────────────────────────────────────── */}
+                <div className="hidden lg:flex lg:flex-col flex-1">
+                  <div className="dash-card-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h3 className="dash-card-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        Financial Overview
+                      </h3>
+                      {domainSyncing.finance && (
+                        <span style={{ fontSize: '10.5px', color: '#2563EB', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#EFF6FF', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                          <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>↻</span> Syncing
+                        </span>
+                      )}
                     </div>
-                    <h3 className="fin-title-text">Financial Overview</h3>
-                    {domainSyncing.finance && (
-                      <span style={{ fontSize: '10.5px', color: '#2563EB', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#EFF6FF', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
-                        <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>↻</span> Syncing
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="fin-controls-group">
-                    <button
-                      type="button"
-                      onClick={() => setShowExpenseModal(true)}
-                      className="fin-record-btn"
-                      title="Manage and record hospital operational expenses"
-                    >
-                      Record Expense
-                    </button>
-
-                    <div className="fin-select-box">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowExpenseModal(true)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          background: '#EFF6FF',
+                          border: '1px solid #BFDBFE',
+                          color: '#1D4ED8',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          transition: 'all 0.15s ease'
+                        }}
+                        title="Manage and record hospital operational expenses"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        <span>Record Expense</span>
+                      </button>
                       <select
                         value={finSelectedMonth}
                         onChange={(e) => setFinSelectedMonth(e.target.value)}
-                        className="fin-select-input"
+                        className="fin-month-select"
                       >
                         {getAvailableMonths().map(m => (
                           <option key={m.value} value={m.value}>{m.label}</option>
                         ))}
                       </select>
-                      <svg className="fin-select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
                     </div>
                   </div>
-                </div>
 
-                {/* Main Body with Revenue, Legend & Daily Bar Chart */}
-                {(() => {
-                  const finData = getFinancialOverviewData(finSelectedMonth);
-                  const { dailyData, totalRevenue, endDay } = finData;
+                  {/* Main Body: Summary Column on Left + Diverging Cashflow Bar Chart on Right */}
+                  {(() => {
+                    const finData = getFinancialOverviewData(finSelectedMonth);
+                    
+                    // Compute 12-Month Annual Cashflow Dataset matching reference image
+                    const targetYear = finSelectedMonth ? parseInt(finSelectedMonth.split('-')[0], 10) || 2026 : 2026;
+                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    
+                    const yearBills = bills.filter(b => {
+                      if (b.status !== 'Paid') return false;
+                      const d = new Date(b.createdAt);
+                      return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
+                    });
 
-                  // Dynamic scale matching Image 1: Y-axis has max tick (e.g. 30K) and 0 at baseline
-                  const rawMax = Math.max(1000, ...dailyData.map(d => Math.max(d.revenue || 0, d.expenses || 0)));
-                  let yMax = 5000;
-                  if (rawMax <= 5000) yMax = 5000;
-                  else if (rawMax <= 10000) yMax = 10000;
-                  else if (rawMax <= 20000) yMax = 20000;
-                  else if (rawMax <= 30000) yMax = 30000;
-                  else if (rawMax <= 50000) yMax = 50000;
-                  else if (rawMax <= 100000) yMax = 100000;
-                  else if (rawMax <= 200000) yMax = 200000;
-                  else if (rawMax <= 500000) yMax = 500000;
-                  else yMax = Math.ceil(rawMax / 100000) * 100000;
+                    const yearPharmacy = (pharmacySales || []).filter(s => {
+                      if (s.status === 'CANCELLED') return false;
+                      const d = new Date(s.saleDate || s.createdAt);
+                      return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
+                    });
 
-                  const formatTick = (val) => {
-                    const abs = Math.abs(val);
-                    if (abs >= 100000) {
-                      const l = (abs / 100000).toFixed(1).replace('.0', '');
-                      return `${l}L`;
-                    }
-                    if (abs >= 1000) {
-                      return `${Math.round(abs / 1000)}K`;
-                    }
-                    return `${abs}`;
-                  };
+                    const inactivePoStatuses = ['Draft', 'Cancelled', 'Rejected'];
+                    const yearPOs = purchaseOrders.filter(po => {
+                      if (inactivePoStatuses.includes(po.status)) return false;
+                      const hasChildren = purchaseOrders.some(c => (c.parentPOId === po.poId || c.parentPOId === po._id) && (c.poId !== po.poId && c._id !== po._id));
+                      if (po.isParent && hasChildren) return false;
 
-                  // Chart Geometry (Calibrated for crisp mobile & desktop rendering)
-                  const pLeft = 28;
-                  const pRight = 428;
-                  const pWidth = pRight - pLeft;
-                  const pTop = 14;
-                  const yZero = 112;
-                  const chartH = yZero - pTop;
-                  const totalDays = dailyData.length;
-                  const colStep = pWidth / Math.max(1, totalDays);
-                  const barW = Math.max(2.6, Math.min(4.2, (colStep - 2.2) / 2));
-                  const barGap = 1.0;
+                      const d = new Date(po.createdAt || po.orderDate || po.date || po.updatedAt || Date.now());
+                      return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
+                    });
 
-                  // X-Axis Key Days matching Image 1: 1, 5, 10, 15, 20, 25, and endDay
-                  const xKeyDays = new Set([1]);
-                  for (let d = 5; d < endDay; d += 5) {
-                    if (endDay - d >= 2) xKeyDays.add(d);
-                  }
-                  xKeyDays.add(endDay);
+                    const yearOpExpenses = (expenses || []).filter(e => {
+                      const d = new Date(e.date || e.createdAt);
+                      return !isNaN(d.getTime()) && d.getFullYear() === targetYear;
+                    });
 
-                  return (
-                    <>
-                      {/* Row 2: Total Revenue & Legend */}
-                      <div className="fin-metric-legend-row">
-                        <div className="fin-rev-display">
-                          <div className="fin-rev-val">
-                            ₹{totalRevenue.toLocaleString('en-IN')}
+                    let rawMax = 1000;
+                    const monthlyCashflow = monthNames.map((mName, mIdx) => {
+                      const monthBillsSum = yearBills
+                        .filter(b => new Date(b.createdAt).getMonth() === mIdx)
+                        .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+
+                      const monthPharmacySum = yearPharmacy
+                        .filter(s => new Date(s.saleDate || s.createdAt).getMonth() === mIdx)
+                        .reduce((sum, s) => sum + (Number(s.grandTotal) || 0), 0);
+
+                      const totalMonthIncome = monthBillsSum + monthPharmacySum;
+
+                      const monthPOsSum = yearPOs
+                        .filter(po => new Date(po.createdAt || po.orderDate || po.date || po.updatedAt || Date.now()).getMonth() === mIdx)
+                        .reduce((sum, p) => sum + (p.totalAmount || 0), 0);
+
+                      const monthOpExpensesSum = yearOpExpenses
+                        .filter(e => new Date(e.date || e.createdAt).getMonth() === mIdx)
+                        .reduce((sum, e) => sum + (e.amount || 0), 0);
+
+                      const totalMonthExpense = monthPOsSum + monthOpExpensesSum;
+
+                      if (totalMonthIncome > rawMax) rawMax = totalMonthIncome;
+                      if (totalMonthExpense > rawMax) rawMax = totalMonthExpense;
+
+                      return {
+                        month: mName,
+                        index: mIdx,
+                        label: `${mName} ${targetYear}`,
+                        income: totalMonthIncome,
+                        expense: totalMonthExpense,
+                        net: totalMonthIncome - totalMonthExpense
+                      };
+                    });
+
+                    // Calculate clean yMax (4K, 8K, 15K, 25K, 50K, 100K, 200K, etc.)
+                    let yMax = 5000;
+                    if (rawMax <= 4000) yMax = 4000;
+                    else if (rawMax <= 8000) yMax = 8000;
+                    else if (rawMax <= 15000) yMax = 15000;
+                    else if (rawMax <= 25000) yMax = 25000;
+                    else if (rawMax <= 50000) yMax = 50000;
+                    else if (rawMax <= 100000) yMax = 100000;
+                    else if (rawMax <= 200000) yMax = 200000;
+                    else if (rawMax <= 500000) yMax = 500000;
+                    else yMax = Math.ceil(rawMax / 100000) * 100000;
+
+                    const formatTick = (val) => {
+                      const abs = Math.abs(val);
+                      if (abs >= 100000) {
+                        const l = (abs / 100000).toFixed(1).replace('.0', '');
+                        return `${val < 0 ? '-' : ''}${l}L`;
+                      }
+                      if (abs >= 1000) {
+                        return `${val < 0 ? '-' : ''}${Math.round(abs / 1000)}K`;
+                      }
+                      return `${val}`;
+                    };
+
+                    // SVG Geometry
+                    const pLeft = 46;
+                    const pRight = 514;
+                    const pWidth = pRight - pLeft;
+                    const yZero = 90;
+                    const maxBarH = 68;
+                    const colStep = pWidth / 12;
+                    const barWidth = 18;
+
+                    const yGridLines = [
+                      { y: yZero - maxBarH, label: formatTick(yMax) },
+                      { y: yZero - maxBarH / 2, label: formatTick(yMax / 2) },
+                      { y: yZero, label: '0' },
+                      { y: yZero + maxBarH / 2, label: formatTick(-yMax / 2) },
+                      { y: yZero + maxBarH, label: formatTick(-yMax) }
+                    ];
+
+                    return (
+                      <div className="fin-overview-body">
+                        {/* Left Summary Area */}
+                        <div className="fin-summary-col">
+                          {/* Revenue */}
+                          <div className="fin-summary-box rev">
+                            <span className="fin-summary-lbl">Revenue</span>
+                            <span className="fin-summary-val" style={{ color: '#0F172A' }}>
+                              ₹{finData.totalRevenue >= 100000 ? (finData.totalRevenue / 100000).toFixed(2) + 'L' : finData.totalRevenue.toLocaleString('en-IN')}
+                            </span>
+                            <span className="fin-summary-sub green">
+                              {finData.totalRevenue > 0 ? 'Total collections' : 'No collections'}
+                            </span>
                           </div>
-                          <div className="fin-rev-sub">
-                            Total Revenue
+
+                          {/* Expenses */}
+                          <div 
+                            className="fin-summary-box exp"
+                            onClick={() => setShowExpenseModal(true)}
+                            style={{ cursor: 'pointer' }}
+                            title="Click to view & record operational expenses"
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span className="fin-summary-lbl">Expenses</span>
+                              <span style={{ fontSize: '9.5px', color: '#DC2626', fontWeight: 800, background: '#FEE2E2', padding: '1px 5px', borderRadius: '4px' }}>
+                                + Record
+                              </span>
+                            </div>
+                            <span className="fin-summary-val" style={{ color: '#0F172A' }}>
+                              ₹{finData.totalExpenses >= 100000 ? (finData.totalExpenses / 100000).toFixed(2) + 'L' : finData.totalExpenses.toLocaleString('en-IN')}
+                            </span>
+                            <span className="fin-summary-sub red">
+                              {finData.totalExpenses > 0 
+                                ? (finData.totalPoExpenses > 0 && finData.totalOpExpenses > 0
+                                    ? `₹${finData.totalPoExpenses.toLocaleString('en-IN')} POs • ₹${finData.totalOpExpenses.toLocaleString('en-IN')} Ops`
+                                    : (finData.totalPoExpenses > 0 ? `${finData.poCount} PO purchase${finData.poCount > 1 ? 's' : ''}` : `${finData.opCount} operational item${finData.opCount > 1 ? 's' : ''}`))
+                                : '₹0 expenses'}
+                            </span>
+                          </div>
+
+                          {/* Net Income */}
+                          <div className="fin-summary-box net">
+                            <span className="fin-summary-lbl">Net Income</span>
+                            <span className="fin-summary-val" style={{ color: finData.netIncome >= 0 ? '#059669' : '#DC2626' }}>
+                              {finData.netIncome < 0 ? '-₹' : '₹'}
+                              {Math.abs(finData.netIncome) >= 100000 ? (Math.abs(finData.netIncome) / 100000).toFixed(2) + 'L' : Math.abs(finData.netIncome).toLocaleString('en-IN')}
+                            </span>
+                            <span className="fin-summary-sub blue">
+                              Net operating balance
+                            </span>
                           </div>
                         </div>
 
-                        <div className="fin-legend-container">
-                          <span className="fin-legend-pill">
-                            <span className="fin-legend-dot-inc" />
-                            Income
-                          </span>
-                          <span className="fin-legend-pill">
-                            <span className="fin-legend-dot-exp" />
-                            Expense
-                          </span>
-                        </div>
-                      </div>
+                        {/* Right Chart Area: Diverging Bi-directional Cashflow Bars */}
+                        <div className="fin-chart-col">
+                          {/* Chart Legend */}
+                          <div className="fin-chart-legend" style={{ justifyContent: 'flex-end', gap: '16px', marginBottom: '8px' }}>
+                            <span className="fin-legend-item" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#0F172A' }}>
+                              <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#0D382B', display: 'inline-block' }}></span>
+                              Income
+                            </span>
+                            <span className="fin-legend-item" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#0F172A' }}>
+                              <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#4ADE80', display: 'inline-block' }}></span>
+                              Expense
+                            </span>
+                          </div>
 
-                      {/* Row 3: Daily Bar Chart */}
-                      <div className="fin-daily-chart-wrap">
-                        <svg viewBox="0 0 440 145" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-                          {/* Y-Axis Label: Top Max */}
-                          <text
-                            x={pLeft - 6}
-                            y={pTop + 5}
-                            textAnchor="end"
-                            fill="#94A3B8"
-                            fontSize="11"
-                            fontWeight="700"
-                            fontFamily="'Outfit', sans-serif"
-                          >
-                            {formatTick(yMax)}
-                          </text>
-
-                          {/* Y-Axis Label: Zero */}
-                          <text
-                            x={pLeft - 6}
-                            y={yZero}
-                            textAnchor="end"
-                            fill="#94A3B8"
-                            fontSize="11"
-                            fontWeight="700"
-                            fontFamily="'Outfit', sans-serif"
-                          >
-                            0
-                          </text>
-
-                          {/* Baseline */}
-                          <line
-                            x1={pLeft}
-                            y1={yZero}
-                            x2={pRight}
-                            y2={yZero}
-                            stroke="#F1F5F9"
-                            strokeWidth="1.5"
-                          />
-
-                          {/* Daily Paired Bars */}
-                          {dailyData.map((d, i) => {
-                            const cx = pLeft + (i * colStep) + (colStep / 2);
-                            const xInc = cx - barW - (barGap / 2);
-                            const xExp = cx + (barGap / 2);
-
-                            const hInc = d.revenue > 0 ? Math.max(3.5, (d.revenue / yMax) * chartH) : 0;
-                            const hExp = d.expenses > 0 ? Math.max(3.5, (d.expenses / yMax) * chartH) : 0;
-
-                            const yInc = yZero - hInc;
-                            const yExp = yZero - hExp;
-
-                            const isHovered = finChartHoverIdx === i;
-
-                            return (
-                              <g key={d.day}>
-                                {/* Hover Column Background */}
-                                {isHovered && (
-                                  <rect
-                                    x={cx - (colStep / 2) + 0.5}
-                                    y={pTop}
-                                    width={colStep - 1}
-                                    height={chartH}
-                                    rx="3"
-                                    fill="rgba(241, 245, 249, 0.7)"
-                                    pointerEvents="none"
+                          {/* SVG Diverging Bar Chart */}
+                          <div style={{ position: 'relative', width: '100%', flex: 1, minHeight: '185px' }}>
+                            <svg viewBox="0 0 530 185" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                              {/* Horizontal Grid Lines & Y-Axis Scale */}
+                              {yGridLines.map((grid, idx) => (
+                                <g key={idx}>
+                                  <line 
+                                    x1={pLeft} 
+                                    y1={grid.y} 
+                                    x2={pRight} 
+                                    y2={grid.y} 
+                                    stroke={grid.y === yZero ? "#E2E8F0" : "#F1F5F9"} 
+                                    strokeWidth={grid.y === yZero ? "1.5" : "1"} 
+                                    strokeDasharray={grid.y === yZero ? "none" : "3 3"} 
                                   />
-                                )}
-
-                                {/* Income Bar (Green) */}
-                                {hInc > 0 && (
-                                  <rect
-                                    x={xInc}
-                                    y={yInc}
-                                    width={barW}
-                                    height={hInc}
-                                    rx="1.5"
-                                    fill="#10B981"
-                                  />
-                                )}
-
-                                {/* Expense Bar (Blue) */}
-                                {hExp > 0 && (
-                                  <rect
-                                    x={xExp}
-                                    y={yExp}
-                                    width={barW}
-                                    height={hExp}
-                                    rx="1.5"
-                                    fill="#2563EB"
-                                  />
-                                )}
-
-                                {/* X-Axis Day Number */}
-                                {xKeyDays.has(d.day) && (
-                                  <text
-                                    x={cx}
-                                    y={yZero + 18}
-                                    textAnchor="middle"
-                                    fill={isHovered ? "#0F172A" : "#94A3B8"}
-                                    fontSize="10.5"
-                                    fontWeight={isHovered ? "850" : "700"}
+                                  <text 
+                                    x={pLeft - 8} 
+                                    y={grid.y + 3.5} 
+                                    textAnchor="end" 
+                                    fill="#94A3B8" 
+                                    fontSize="9.5" 
+                                    fontWeight="750" 
                                     fontFamily="'Outfit', sans-serif"
                                   >
-                                    {d.day}
+                                    {grid.label}
                                   </text>
-                                )}
+                                </g>
+                              ))}
 
-                                {/* Column Hit Area */}
-                                <rect
-                                  x={cx - (colStep / 2)}
-                                  y={pTop - 5}
-                                  width={colStep}
-                                  height={chartH + 28}
-                                  fill="transparent"
-                                  style={{ cursor: 'pointer' }}
-                                  onMouseEnter={() => setFinChartHoverIdx(i)}
-                                  onMouseLeave={() => setFinChartHoverIdx(null)}
-                                />
-                              </g>
-                            );
-                          })}
-                        </svg>
+                              {/* 12 Monthly Diverging Bars */}
+                              {monthlyCashflow.map((m, i) => {
+                                const xCenter = pLeft + (i * colStep) + (colStep / 2);
+                                const xBar = xCenter - (barWidth / 2);
+                                
+                                // Height calculations
+                                const hInc = m.income > 0 ? Math.max(5, (m.income / yMax) * maxBarH) : 0;
+                                const hExp = m.expense > 0 ? Math.max(5, (m.expense / yMax) * maxBarH) : 0;
+                                
+                                const yInc = yZero - hInc;
+                                const yExp = yZero;
+                                const isHovered = finChartHoverIdx === i;
 
-                        {/* Interactive Floating Tooltip */}
-                        {finChartHoverIdx !== null && dailyData[finChartHoverIdx] && (() => {
-                          const item = dailyData[finChartHoverIdx];
-                          const cx = pLeft + (finChartHoverIdx * colStep) + (colStep / 2);
-                          const leftPct = (cx / 440) * 100;
-                          const boundLeft = Math.max(16, Math.min(84, leftPct));
+                                return (
+                                  <g key={m.month}>
+                                    {/* Hover Pill Aura */}
+                                    {isHovered && (
+                                      <rect 
+                                        x={xCenter - 14} 
+                                        y={Math.min(yInc - 4, yZero - 8)} 
+                                        width={barWidth + 10} 
+                                        height={Math.max(20, hInc + hExp + 8)} 
+                                        rx="7" 
+                                        fill="rgba(134, 239, 172, 0.22)" 
+                                        stroke="#86EFAC" 
+                                        strokeWidth="1.5" 
+                                        pointerEvents="none" 
+                                      />
+                                    )}
 
-                          return (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                top: '-10px',
-                                left: `${boundLeft}%`,
-                                transform: 'translateX(-50%)',
-                                background: '#FFFFFF',
-                                border: '1px solid #E2E8F0',
-                                borderRadius: '12px',
-                                padding: '8px 12px',
-                                boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.12), 0 4px 10px rgba(0, 0, 0, 0.04)',
-                                zIndex: 50,
-                                pointerEvents: 'none',
-                                minWidth: '135px',
-                                animation: 'popIn 0.15s ease-out'
-                              }}
-                            >
-                              <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '4px' }}>
-                                {item.fullDate}
+                                    {/* Top Income Bar (Pointing UP with rounded top corners) */}
+                                    {hInc > 0 && (
+                                      <rect 
+                                        x={xBar} 
+                                        y={yInc} 
+                                        width={barWidth} 
+                                        height={hInc} 
+                                        rx="4" 
+                                        fill="#0D382B" 
+                                        style={{ transition: 'all 0.2s ease' }}
+                                      />
+                                    )}
+
+                                    {/* Bottom Expense Bar (Pointing DOWN with rounded bottom corners) */}
+                                    {hExp > 0 && (
+                                      <rect 
+                                        x={xBar} 
+                                        y={yExp} 
+                                        width={barWidth} 
+                                        height={hExp} 
+                                        rx="4" 
+                                        fill="#4ADE80" 
+                                        style={{ transition: 'all 0.2s ease' }}
+                                      />
+                                    )}
+
+                                    {/* X-Axis Month Label */}
+                                    <text 
+                                      x={xCenter} 
+                                      y={yZero + maxBarH + 16} 
+                                      textAnchor="middle" 
+                                      fill={isHovered ? "#0F172A" : "#64748B"} 
+                                      fontSize="10" 
+                                      fontWeight={isHovered ? "850" : "700"}
+                                    >
+                                      {m.month}
+                                    </text>
+
+                                    {/* Invisible Full Column Hit Area */}
+                                    <rect 
+                                      x={xCenter - (colStep / 2)} 
+                                      y={yZero - maxBarH - 10} 
+                                      width={colStep} 
+                                      height={(maxBarH * 2) + 20} 
+                                      fill="transparent" 
+                                      style={{ cursor: 'pointer' }}
+                                      onMouseEnter={() => setFinChartHoverIdx(i)}
+                                      onMouseLeave={() => setFinChartHoverIdx(null)}
+                                    />
+                                  </g>
+                                );
+                              })}
+                            </svg>
+
+                            {/* Interactive Hover Tooltip Card (Matching Reference Design) */}
+                            {finChartHoverIdx !== null && monthlyCashflow[finChartHoverIdx] && (() => {
+                              const item = monthlyCashflow[finChartHoverIdx];
+                              const xCenter = pLeft + (finChartHoverIdx * colStep) + (colStep / 2);
+                              const leftPct = (xCenter / 530) * 100;
+                              const boundLeft = Math.max(18, Math.min(82, leftPct));
+
+                              return (
+                                <div 
+                                  style={{
+                                    position: 'absolute',
+                                    top: '-4px',
+                                    left: `${boundLeft}%`,
+                                    background: '#FFFFFF',
+                                    border: '1px solid #E2E8F0',
+                                    borderRadius: '12px',
+                                    padding: '10px 14px',
+                                    boxShadow: '0 12px 28px -4px rgba(15, 23, 42, 0.12), 0 4px 10px rgba(0, 0, 0, 0.04)',
+                                    zIndex: 50,
+                                    pointerEvents: 'none',
+                                    transform: 'translateX(-50%)',
+                                    minWidth: '145px',
+                                    animation: 'popIn 0.15s ease-out'
+                                  }}
+                                >
+                                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '6px' }}>
+                                    {item.label}
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: 700, color: '#0F172A', marginBottom: '3px' }}>
+                                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#0D382B' }}></span> Income:
+                                    </span>
+                                    <span>₹{item.income.toLocaleString('en-IN')}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: 700, color: '#0F172A', marginBottom: '4px' }}>
+                                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#4ADE80' }}></span> Expense:
+                                    </span>
+                                    <span>₹{item.expense.toLocaleString('en-IN')}</span>
+                                  </div>
+                                  <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '4px', marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: 800 }}>
+                                    <span style={{ color: '#475569' }}>Net:</span>
+                                    <span style={{ color: item.net >= 0 ? '#059669' : '#DC2626' }}>
+                                      {item.net < 0 ? '-₹' : '₹'}{Math.abs(item.net).toLocaleString('en-IN')}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* ──────────────────────────────────────────────────────────── */}
+                {/* 2. MOBILE FINANCIAL OVERVIEW: Clean Daily Cashflow for Phones */}
+                {/* ──────────────────────────────────────────────────────────── */}
+                <div className="lg:hidden flex flex-col gap-3">
+                    {/* Header Row */}
+                    <div className="fin-header-row">
+                      <div className="fin-title-group">
+                        <div className="fin-icon-box">
+                          <span>₹</span>
+                        </div>
+                        <h3 className="fin-title-text">Financial Overview</h3>
+                        {domainSyncing.finance && (
+                          <span style={{ fontSize: '10.5px', color: '#2563EB', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#EFF6FF', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                            <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>↻</span> Syncing
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="fin-controls-group">
+                        <button
+                          type="button"
+                          onClick={() => setShowExpenseModal(true)}
+                          className="fin-record-btn"
+                          title="Manage and record hospital operational expenses"
+                        >
+                          Record Expense
+                        </button>
+
+                        <div className="fin-select-box">
+                          <select
+                            value={finSelectedMonth}
+                            onChange={(e) => setFinSelectedMonth(e.target.value)}
+                            className="fin-select-input"
+                          >
+                            {getAvailableMonths().map(m => (
+                              <option key={m.value} value={m.value}>{m.label}</option>
+                            ))}
+                          </select>
+                          <svg className="fin-select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Main Body with Revenue, Legend & Daily Bar Chart */}
+                    {(() => {
+                      const finData = getFinancialOverviewData(finSelectedMonth);
+                      const { dailyData, totalRevenue, endDay } = finData;
+
+                      const rawMax = Math.max(1000, ...dailyData.map(d => Math.max(d.revenue || 0, d.expenses || 0)));
+                      let yMax = 5000;
+                      if (rawMax <= 5000) yMax = 5000;
+                      else if (rawMax <= 10000) yMax = 10000;
+                      else if (rawMax <= 20000) yMax = 20000;
+                      else if (rawMax <= 30000) yMax = 30000;
+                      else if (rawMax <= 50000) yMax = 50000;
+                      else if (rawMax <= 100000) yMax = 100000;
+                      else if (rawMax <= 200000) yMax = 200000;
+                      else if (rawMax <= 500000) yMax = 500000;
+                      else yMax = Math.ceil(rawMax / 100000) * 100000;
+
+                      const formatTick = (val) => {
+                        const abs = Math.abs(val);
+                        if (abs >= 100000) {
+                          const l = (abs / 100000).toFixed(1).replace('.0', '');
+                          return `${l}L`;
+                        }
+                        if (abs >= 1000) {
+                          return `${Math.round(abs / 1000)}K`;
+                        }
+                        return `${abs}`;
+                      };
+
+                      // Chart Geometry
+                      const pLeft = 28;
+                      const pRight = 428;
+                      const pWidth = pRight - pLeft;
+                      const pTop = 14;
+                      const yZero = 112;
+                      const chartH = yZero - pTop;
+                      const totalDays = dailyData.length;
+                      const colStep = pWidth / Math.max(1, totalDays);
+                      const barW = Math.max(2.6, Math.min(4.2, (colStep - 2.2) / 2));
+                      const barGap = 1.0;
+
+                      const xKeyDays = new Set([1]);
+                      for (let d = 5; d < endDay; d += 5) {
+                        if (endDay - d >= 2) xKeyDays.add(d);
+                      }
+                      xKeyDays.add(endDay);
+
+                      return (
+                        <>
+                          {/* Row 2: Total Revenue & Legend */}
+                          <div className="fin-metric-legend-row">
+                            <div className="fin-rev-display">
+                              <div className="fin-rev-val">
+                                ₹{totalRevenue.toLocaleString('en-IN')}
                               </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
-                                <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
-                                  Income
-                                </span>
-                                <span style={{ fontWeight: 800, color: '#059669' }}>₹{item.revenue.toLocaleString('en-IN')}</span>
-                              </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', fontWeight: 700, color: '#0F172A' }}>
-                                <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }} />
-                                  Expense
-                                </span>
-                                <span style={{ fontWeight: 800, color: '#2563EB' }}>₹{item.expenses.toLocaleString('en-IN')}</span>
+                              <div className="fin-rev-sub">
+                                Total Revenue
                               </div>
                             </div>
-                          );
-                        })()}
-                      </div>
-                    </>
-                  );
-                })()}
+
+                            <div className="fin-legend-container">
+                              <span className="fin-legend-pill">
+                                <span className="fin-legend-dot-inc" />
+                                Income
+                              </span>
+                              <span className="fin-legend-pill">
+                                <span className="fin-legend-dot-exp" />
+                                Expense
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Row 3: Daily Bar Chart */}
+                          <div className="fin-daily-chart-wrap">
+                            <svg viewBox="0 0 440 145" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                              {/* Y-Axis Label: Top Max */}
+                              <text
+                                x={pLeft - 6}
+                                y={pTop + 5}
+                                textAnchor="end"
+                                fill="#94A3B8"
+                                fontSize="11"
+                                fontWeight="700"
+                                fontFamily="'Outfit', sans-serif"
+                              >
+                                {formatTick(yMax)}
+                              </text>
+
+                              {/* Y-Axis Label: Zero */}
+                              <text
+                                x={pLeft - 6}
+                                y={yZero}
+                                textAnchor="end"
+                                fill="#94A3B8"
+                                fontSize="11"
+                                fontWeight="700"
+                                fontFamily="'Outfit', sans-serif"
+                              >
+                                0
+                              </text>
+
+                              {/* Baseline */}
+                              <line
+                                x1={pLeft}
+                                y1={yZero}
+                                x2={pRight}
+                                y2={yZero}
+                                stroke="#F1F5F9"
+                                strokeWidth="1.5"
+                              />
+
+                              {/* Daily Paired Bars */}
+                              {dailyData.map((d, i) => {
+                                const cx = pLeft + (i * colStep) + (colStep / 2);
+                                const xInc = cx - barW - (barGap / 2);
+                                const xExp = cx + (barGap / 2);
+
+                                const hInc = d.revenue > 0 ? Math.max(3.5, (d.revenue / yMax) * chartH) : 0;
+                                const hExp = d.expenses > 0 ? Math.max(3.5, (d.expenses / yMax) * chartH) : 0;
+
+                                const yInc = yZero - hInc;
+                                const yExp = yZero - hExp;
+
+                                const isHovered = finChartHoverIdx === i;
+
+                                return (
+                                  <g key={d.day}>
+                                    {/* Hover Column Background */}
+                                    {isHovered && (
+                                      <rect
+                                        x={cx - (colStep / 2) + 0.5}
+                                        y={pTop}
+                                        width={colStep - 1}
+                                        height={chartH}
+                                        rx="3"
+                                        fill="rgba(241, 245, 249, 0.7)"
+                                        pointerEvents="none"
+                                      />
+                                    )}
+
+                                    {/* Income Bar (Green) */}
+                                    {hInc > 0 && (
+                                      <rect
+                                        x={xInc}
+                                        y={yInc}
+                                        width={barW}
+                                        height={hInc}
+                                        rx="1.5"
+                                        fill="#10B981"
+                                      />
+                                    )}
+
+                                    {/* Expense Bar (Blue) */}
+                                    {hExp > 0 && (
+                                      <rect
+                                        x={xExp}
+                                        y={yExp}
+                                        width={barW}
+                                        height={hExp}
+                                        rx="1.5"
+                                        fill="#2563EB"
+                                      />
+                                    )}
+
+                                    {/* X-Axis Day Number */}
+                                    {xKeyDays.has(d.day) && (
+                                      <text
+                                        x={cx}
+                                        y={yZero + 18}
+                                        textAnchor="middle"
+                                        fill={isHovered ? "#0F172A" : "#94A3B8"}
+                                        fontSize="10.5"
+                                        fontWeight={isHovered ? "850" : "700"}
+                                        fontFamily="'Outfit', sans-serif"
+                                      >
+                                        {d.day}
+                                      </text>
+                                    )}
+
+                                    {/* Column Hit Area */}
+                                    <rect
+                                      x={cx - (colStep / 2)}
+                                      y={pTop - 5}
+                                      width={colStep}
+                                      height={chartH + 28}
+                                      fill="transparent"
+                                      style={{ cursor: 'pointer' }}
+                                      onMouseEnter={() => setFinChartHoverIdx(i)}
+                                      onMouseLeave={() => setFinChartHoverIdx(null)}
+                                    />
+                                  </g>
+                                );
+                              })}
+                            </svg>
+
+                            {/* Interactive Floating Tooltip */}
+                            {finChartHoverIdx !== null && dailyData[finChartHoverIdx] && (() => {
+                              const item = dailyData[finChartHoverIdx];
+                              const cx = pLeft + (finChartHoverIdx * colStep) + (colStep / 2);
+                              const leftPct = (cx / 440) * 100;
+                              const boundLeft = Math.max(16, Math.min(84, leftPct));
+
+                              return (
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    top: '-10px',
+                                    left: `${boundLeft}%`,
+                                    transform: 'translateX(-50%)',
+                                    background: '#FFFFFF',
+                                    border: '1px solid #E2E8F0',
+                                    borderRadius: '12px',
+                                    padding: '8px 12px',
+                                    boxShadow: '0 10px 25px -4px rgba(15, 23, 42, 0.12), 0 4px 10px rgba(0, 0, 0, 0.04)',
+                                    zIndex: 50,
+                                    pointerEvents: 'none',
+                                    minWidth: '135px',
+                                    animation: 'popIn 0.15s ease-out'
+                                  }}
+                                >
+                                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', marginBottom: '4px' }}>
+                                    {item.fullDate}
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
+                                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
+                                      Income
+                                    </span>
+                                    <span style={{ fontWeight: 800, color: '#059669' }}>₹{item.revenue.toLocaleString('en-IN')}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', fontWeight: 700, color: '#0F172A' }}>
+                                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }} />
+                                      Expense
+                                    </span>
+                                    <span style={{ fontWeight: 800, color: '#2563EB' }}>₹{item.expenses.toLocaleString('en-IN')}</span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
               </div>
 
               {/* Right Column: Attention Center */}
