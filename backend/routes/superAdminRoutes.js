@@ -26,6 +26,7 @@ const multer = require('multer');
 const path = require('path');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const r2 = require('../config/r2');
+const { logoProcessingService } = require('../services/logoProcessingService');
 
 // Configure multer for memory storage to stream to R2
 const storage = multer.memoryStorage();
@@ -1038,6 +1039,102 @@ router.get('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
   } catch (err) {
     console.error('Fetch single hospital error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ==================== CENTRALIZED CLINIC LOGO PROCESSING ENDPOINT ====================
+router.post('/hospitals/:id/logo', requireRole('Onboarding Manager'), upload.single('logo'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!req.file) {
+      return res.status(400).json({ error: 'No logo file uploaded.' });
+    }
+
+    const hospital = await SuperAdminHospital.findOne({
+      $or: [
+        ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []),
+        { code: id },
+        { code: String(id).toLowerCase().trim() },
+        { hospitalId: String(id).toUpperCase().trim() }
+      ]
+    });
+
+    if (!hospital) {
+      return res.status(404).json({ error: 'Hospital not found.' });
+    }
+
+    const processingResult = await logoProcessingService.processAndStoreLogo({
+      buffer: req.file.buffer,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      hospitalId: hospital.hospitalId || hospital.code
+    });
+
+    hospital.logo = processingResult.logoUrl;
+    hospital.originalLogoUrl = processingResult.originalLogoUrl;
+    hospital.logoProcessingStatus = processingResult.processingStatus;
+    hospital.logoUpdatedAt = new Date();
+    hospital.logoDimensions = {
+      width: processingResult.width,
+      height: processingResult.height,
+      aspectRatio: processingResult.aspectRatio
+    };
+
+    await hospital.save();
+
+    const auditDesc = 'Updated logo for clinic ' + hospital.name + ' (status: ' + processingResult.processingStatus + ')';
+    await writeAudit(req, 'upload_hospital_logo', auditDesc);
+
+    return res.status(200).json({
+      success: true,
+      hospital,
+      logoUrl: processingResult.logoUrl,
+      originalLogoUrl: processingResult.originalLogoUrl,
+      processingStatus: processingResult.processingStatus,
+      fallbackReason: processingResult.fallbackReason,
+      dimensions: {
+        width: processingResult.width,
+        height: processingResult.height,
+        aspectRatio: processingResult.aspectRatio
+      }
+    });
+  } catch (err) {
+    console.error('[HOSPITAL_LOGO_UPLOAD] Error processing logo:', err);
+    return res.status(500).json({ error: err.message || 'Failed to process clinic logo.' });
+  }
+});
+
+// Standalone logo processing for onboarding wizard (before hospital record is created)
+router.post('/process-logo', requireRole('Onboarding Manager'), upload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No logo file uploaded.' });
+    }
+
+    const tempId = req.body.hospitalCode || req.body.hospitalName || 'wizard';
+    const processingResult = await logoProcessingService.processAndStoreLogo({
+      buffer: req.file.buffer,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      hospitalId: String(tempId).replace(/[^a-zA-Z0-9_-]/g, '')
+    });
+
+    return res.status(200).json({
+      success: true,
+      logoUrl: processingResult.logoUrl,
+      originalLogoUrl: processingResult.originalLogoUrl,
+      processingStatus: processingResult.processingStatus,
+      fallbackReason: processingResult.fallbackReason,
+      dimensions: {
+        width: processingResult.width,
+        height: processingResult.height,
+        aspectRatio: processingResult.aspectRatio
+      }
+    });
+  } catch (err) {
+    console.error('[PROCESS_LOGO_PREVIEW] Error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to process logo.' });
   }
 });
 

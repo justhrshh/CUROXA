@@ -14,6 +14,8 @@ import CommonMasterUploadView from '../components/superadmin/masters/CommonMaste
 import SuperAdminMasterApprovalsView from '../components/superadmin/masters/SuperAdminMasterApprovalsView';
 import StaffOnboardingPage from '../components/admin/StaffOnboardingPage';
 import HospitalProfileView from '../components/superadmin/HospitalProfileView';
+import { LogoUploader } from '../components/common/LogoUploader';
+import { ClinicLogo } from '../components/common/ClinicLogo';
 import { TopbarContext } from '../context/TopbarContext';
 import '../css/superadmin-responsive.css';
 
@@ -618,67 +620,24 @@ const HospitalIdentityStep = ({ wizardHospital, updateWizardField }) => {
 
       {/* Logo + Name Row */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
-        {/* Logo Dropzone */}
-        <div>
-          <div
-            style={dropzoneStyle}
-            onClick={() => logoInputRef.current && logoInputRef.current.click()}
-            onDragOver={(e) => { e.preventDefault(); setLogoDragOver(true); }}
-            onDragLeave={() => setLogoDragOver(false)}
-            onDrop={(e) => { e.preventDefault(); setLogoDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleLogoFile(f); }}
-            title="Click or drag to upload logo"
-          >
-            {wizardHospital && wizardHospital.logo ? (
-              <img
-                src={wizardHospital.logo}
-                alt="Clinic Logo"
-                style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '6px' }}
-              />
-            ) : (
-              <React.Fragment>
-                <LucideIcon name="upload-cloud" size={24} color="#93C5FD" />
-                <span style={{ fontSize: '10px', color: '#94A3B8', marginTop: '4px', textAlign: 'center', lineHeight: 1.3 }}>Upload<br/>Logo</span>
-              </React.Fragment>
-            )}
-          </div>
-          <input
-            ref={logoInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/jpg,image/svg+xml"
-            style={{ display: 'none' }}
-            onChange={(e) => handleLogoFile(e.target.files[0])}
+        {/* Logo Dropzone with Automatic Background Removal */}
+        <div style={{ minWidth: '220px', maxWidth: '280px' }}>
+          <LogoUploader
+            hospitalCode={wizardHospital?.code}
+            initialLogo={wizardHospital?.logo && wizardHospital.logo !== 'H' ? wizardHospital.logo : ''}
+            initialOriginalLogo={wizardHospital?.originalLogoUrl || ''}
+            initialStatus={wizardHospital?.logoProcessingStatus || 'none'}
+            onLogoChange={({ logoUrl, originalLogoUrl, processingStatus, dimensions }) => {
+              updateWizardField('logo', logoUrl);
+              updateWizardField('originalLogoUrl', originalLogoUrl);
+              updateWizardField('logoProcessingStatus', processingStatus);
+              updateWizardField('logoDimensions', dimensions);
+            }}
+            onLogoRemove={() => {
+              updateWizardField('logo', '');
+              updateWizardField('logoProcessingStatus', 'none');
+            }}
           />
-          {/* Logo action buttons */}
-          <div style={{ display: 'flex', gap: '6px', marginTop: '8px', justifyContent: 'center' }}>
-            <button
-              type="button"
-              onClick={() => logoInputRef.current && logoInputRef.current.click()}
-              style={{
-                fontSize: '10px', fontWeight: 700, color: '#2563EB',
-                background: '#EFF6FF', border: '1px solid #BFDBFE',
-                borderRadius: '6px', padding: '3px 9px', cursor: 'pointer',
-              }}
-            >
-              {wizardHospital && wizardHospital.logo ? 'Change' : 'Upload'}
-            </button>
-            {wizardHospital && wizardHospital.logo && (
-              <button
-                type="button"
-                onClick={() => { updateWizardField('logo', ''); setLogoError(''); }}
-                style={{
-                  fontSize: '10px', fontWeight: 700, color: '#DC2626',
-                  background: '#FEF2F2', border: '1px solid #FECACA',
-                  borderRadius: '6px', padding: '3px 9px', cursor: 'pointer',
-                }}
-              >
-                Remove
-              </button>
-            )}
-          </div>
-          {logoError && (
-            <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#DC2626' }}>{logoError}</p>
-          )}
-          <p style={{ margin: '4px 0 0 0', fontSize: '9px', color: '#94A3B8', textAlign: 'center' }}>PNG / JPG / SVG · max 2 MB</p>
         </div>
 
         {/* Clinic Name Edit */}
@@ -9290,25 +9249,16 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               <div className="sa-clinic-card-header">
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                                   <div style={{
-                                    width: '36px',
+                                    minWidth: '36px',
+                                    maxWidth: '90px',
                                     height: '36px',
-                                    borderRadius: '10px',
-                                    background: '#EFF6FF',
-                                    color: '#2563EB',
-                                    border: '1px solid #DBEAFE',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    fontWeight: 700,
-                                    fontSize: '13px',
                                     flexShrink: 0,
-                                    overflow: 'hidden'
+                                    background: 'transparent'
                                   }}>
-                                    {hosp.logo && hosp.logo !== 'H' && (hosp.logo.startsWith('data:') || hosp.logo.startsWith('http://') || hosp.logo.startsWith('https://') || hosp.logo.startsWith('/uploads/')) ? (
-                                      <img src={hosp.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                                    ) : (
-                                      initials
-                                    )}
+                                    <ClinicLogo hospital={hosp} maxHeight={36} maxWidth={90} />
                                   </div>
                                   <div style={{ minWidth: 0 }}>
                                     <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -9481,27 +9431,18 @@ const SuperAdminDashboard = ({ initialTab }) => {
                               >
                                 <td style={{ ...styles.tableTd, padding: '12px 18px', verticalAlign: 'middle' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div style={{
-                                      width: '32px',
-                                      height: '32px',
-                                      borderRadius: '8px',
-                                      background: '#EFF6FF',
-                                      color: '#2563EB',
-                                      border: '1px solid #DBEAFE',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      fontWeight: 600,
-                                      fontSize: '12px',
-                                      flexShrink: 0,
-                                      overflow: 'hidden'
-                                    }}>
-                                      {hosp.logo && hosp.logo !== 'H' && (hosp.logo.startsWith('data:') || hosp.logo.startsWith('http://') || hosp.logo.startsWith('https://') || hosp.logo.startsWith('/uploads/')) ? (
-                                        <img src={hosp.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                                      ) : (
-                                        initials
-                                      )}
-                                    </div>
+                                      <div style={{
+                                        minWidth: '32px',
+                                        maxWidth: '85px',
+                                        height: '32px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        flexShrink: 0,
+                                        background: 'transparent'
+                                      }}>
+                                        <ClinicLogo hospital={hosp} maxHeight={32} maxWidth={85} />
+                                      </div>
                                     <div>
                                       <div style={{ fontSize: '13px', fontWeight: 600, color: '#1E293B', lineHeight: '1.3' }}>{hosp.name}</div>
                                       <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px', lineHeight: '1.3' }}>ID: {hosp.code} • {hosp.limits?.storageUsed || 0} GB used</div>
@@ -16826,104 +16767,32 @@ const SuperAdminDashboard = ({ initialTab }) => {
               />
             </div>
 
-            {/* Logo Dropzone & Controls */}
+            {/* Logo Dropzone & Controls with Auto Background Removal */}
             <div style={{ marginBottom: '18px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
                 Clinic Logo
               </label>
-              
-              <div
-                style={{
-                  width: '100%',
-                  height: '140px',
-                  borderRadius: '12px',
-                  border: logoEditDragOver ? '2px dashed #2563EB' : '2px dashed #CBD5E1',
-                  background: logoEditDragOver ? '#EFF6FF' : '#F8FAFC',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  overflow: 'hidden',
-                  transition: 'all 0.15s ease',
-                  position: 'relative'
+              <LogoUploader
+                hospitalId={logoEditHosp?._id || logoEditHosp?.hospitalId}
+                hospitalCode={logoEditHosp?.code}
+                initialLogo={logoEditDraft && logoEditDraft !== 'H' ? logoEditDraft : ''}
+                initialOriginalLogo={logoEditHosp?.originalLogoUrl || ''}
+                initialStatus={logoEditHosp?.logoProcessingStatus || 'none'}
+                onLogoChange={({ logoUrl, originalLogoUrl, processingStatus, dimensions }) => {
+                  setLogoEditDraft(logoUrl);
+                  setLogoEditHosp(prev => ({
+                    ...prev,
+                    logo: logoUrl,
+                    originalLogoUrl,
+                    logoProcessingStatus: processingStatus,
+                    logoDimensions: dimensions
+                  }));
                 }}
-                onClick={() => logoEditInputRef.current && logoEditInputRef.current.click()}
-                onDragOver={e => { e.preventDefault(); setLogoEditDragOver(true); }}
-                onDragLeave={() => setLogoEditDragOver(false)}
-                onDrop={e => {
-                  e.preventDefault();
-                  setLogoEditDragOver(false);
-                  const f = e.dataTransfer.files?.[0];
-                  if (f) handleLogoEditFile(f);
-                }}
-              >
-                {logoEditDraft && logoEditDraft !== 'H' ? (
-                  <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px' }}>
-                    <img 
-                      src={logoEditDraft} 
-                      alt="Logo Preview" 
-                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
-                    />
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: '#64748B' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <LucideIcon name="upload-cloud" style={{ width: '20px', height: '20px' }} />
-                    </div>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#1E293B' }}>Click or drag & drop logo here</span>
-                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>PNG, JPG, or SVG (max 2 MB)</span>
-                  </div>
-                )}
-              </div>
-
-              <input
-                ref={logoEditInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,image/svg+xml"
-                style={{ display: 'none' }}
-                onChange={e => {
-                  if (e.target.files?.[0]) handleLogoEditFile(e.target.files[0]);
+                onLogoRemove={() => {
+                  setLogoEditDraft('');
+                  setLogoEditHosp(prev => ({ ...prev, logo: 'H', logoProcessingStatus: 'none' }));
                 }}
               />
-
-              <div style={{ display: 'flex', gap: '8px', marginTop: '10px', alignItems: 'center' }}>
-                <button
-                  type="button"
-                  onClick={() => logoEditInputRef.current && logoEditInputRef.current.click()}
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: '#2563EB',
-                    background: '#EFF6FF',
-                    border: '1px solid #BFDBFE',
-                    borderRadius: '6px',
-                    padding: '5px 12px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {logoEditDraft && logoEditDraft !== 'H' ? 'Change Image' : 'Upload Image'}
-                </button>
-                {logoEditDraft && logoEditDraft !== 'H' && (
-                  <button
-                    type="button"
-                    onClick={() => setLogoEditDraft('')}
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      color: '#DC2626',
-                      background: '#FEF2F2',
-                      border: '1px solid #FECACA',
-                      borderRadius: '6px',
-                      padding: '5px 12px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Remove Logo
-                  </button>
-                )}
-                <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#94A3B8' }}>Max 2MB</span>
-              </div>
             </div>
 
             {logoEditError && (

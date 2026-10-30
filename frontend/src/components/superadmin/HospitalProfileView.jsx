@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { LogoUploader } from '../common/LogoUploader';
+import { ClinicLogo } from '../common/ClinicLogo';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { getAccessToken } from '../../utils/authTokenStore';
@@ -944,25 +946,16 @@ export default function HospitalProfileView({
       }}>
         <div className="sa-profile-header-identity" style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
           <div style={{
-            width: '64px',
-            height: '64px',
-            borderRadius: '14px',
-            background: '#EFF6FF',
-            color: '#2563EB',
-            border: '1.5px solid #DBEAFE',
+            minHeight: '64px',
+            minWidth: '64px',
+            maxWidth: '220px',
+            background: 'transparent',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontWeight: 800,
-            fontSize: '22px',
-            flexShrink: 0,
-            overflow: 'hidden'
+            flexShrink: 0
           }}>
-            {hospital.logo && hospital.logo !== 'H' && (hospital.logo.startsWith('data:') || hospital.logo.startsWith('http://') || hospital.logo.startsWith('https://') || hospital.logo.startsWith('/uploads/')) ? (
-              <img src={hospital.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            ) : (
-              initials
-            )}
+            <ClinicLogo hospital={hospital} maxHeight={64} maxWidth={220} />
           </div>
 
           <div>
@@ -1233,104 +1226,32 @@ export default function HospitalProfileView({
                 </div>
               </div>
 
-              {/* Right Column: Logo Upload & Dropzone */}
+              {/* Right Column: Logo Upload with Auto Background Removal */}
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 750, color: '#334155', marginBottom: '6px' }}>
-                  Clinic Logo (PNG, JPG, or SVG, max 2MB)
+                  Clinic Logo
                 </label>
-                <div
-                  style={{
-                    width: '100%',
-                    height: '140px',
-                    borderRadius: '12px',
-                    border: brandingDragOver ? '2px dashed #2563EB' : '2px dashed #CBD5E1',
-                    background: brandingDragOver ? '#EFF6FF' : '#F8FAFC',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    overflow: 'hidden',
-                    transition: 'all 0.15s ease',
-                    position: 'relative'
+                <LogoUploader
+                  hospitalId={hospital?._id || hospital?.hospitalId}
+                  hospitalCode={hospital?.code}
+                  initialLogo={brandingDraft.logo && brandingDraft.logo !== 'H' ? brandingDraft.logo : ''}
+                  initialOriginalLogo={hospital?.originalLogoUrl || ''}
+                  initialStatus={hospital?.logoProcessingStatus || 'none'}
+                  onLogoChange={({ logoUrl, originalLogoUrl, processingStatus, dimensions }) => {
+                    setBrandingDraft(prev => ({ ...prev, logo: logoUrl }));
+                    setHospital(prev => ({
+                      ...prev,
+                      logo: logoUrl,
+                      originalLogoUrl,
+                      logoProcessingStatus: processingStatus,
+                      logoDimensions: dimensions
+                    }));
                   }}
-                  onClick={() => logoInputRef.current && logoInputRef.current.click()}
-                  onDragOver={e => { e.preventDefault(); setBrandingDragOver(true); }}
-                  onDragLeave={() => setBrandingDragOver(false)}
-                  onDrop={e => {
-                    e.preventDefault();
-                    setBrandingDragOver(false);
-                    const f = e.dataTransfer.files?.[0];
-                    if (f) handleLogoFile(f);
-                  }}
-                >
-                  {brandingDraft.logo && brandingDraft.logo !== 'H' ? (
-                    <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px' }}>
-                      <img src={brandingDraft.logo} alt="Logo Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: '#64748B' }}>
-                      <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <LucideIcon name="upload-cloud" style={{ width: '20px', height: '20px' }} />
-                      </div>
-                      <span style={{ fontSize: '12px', fontWeight: 650, color: '#1E293B' }}>Click or drag & drop logo here</span>
-                      <span style={{ fontSize: '11px', color: '#94A3B8' }}>PNG, JPG, or SVG (max 2 MB)</span>
-                    </div>
-                  )}
-                </div>
-
-                <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/svg+xml"
-                  style={{ display: 'none' }}
-                  onChange={e => {
-                    if (e.target.files?.[0]) handleLogoFile(e.target.files[0]);
+                  onLogoRemove={() => {
+                    setBrandingDraft(prev => ({ ...prev, logo: '' }));
+                    setHospital(prev => ({ ...prev, logo: 'H', logoProcessingStatus: 'none' }));
                   }}
                 />
-
-                <div style={{ display: 'flex', gap: '8px', marginTop: '10px', alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={() => logoInputRef.current && logoInputRef.current.click()}
-                    style={{
-                      fontSize: '11.5px',
-                      fontWeight: 700,
-                      color: '#2563EB',
-                      background: '#EFF6FF',
-                      border: '1px solid #BFDBFE',
-                      borderRadius: '6px',
-                      padding: '6px 14px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {brandingDraft.logo && brandingDraft.logo !== 'H' ? 'Change Image' : 'Upload Image'}
-                  </button>
-                  {brandingDraft.logo && brandingDraft.logo !== 'H' && (
-                    <button
-                      type="button"
-                      onClick={() => setBrandingDraft(prev => ({ ...prev, logo: '' }))}
-                      style={{
-                        fontSize: '11.5px',
-                        fontWeight: 700,
-                        color: '#DC2626',
-                        background: '#FEF2F2',
-                        border: '1px solid #FECACA',
-                        borderRadius: '6px',
-                        padding: '6px 14px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Remove Logo
-                    </button>
-                  )}
-                </div>
-
-                {brandingError && (
-                  <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', marginTop: '12px' }}>
-                    {brandingError}
-                  </div>
-                )}
               </div>
             </div>
 

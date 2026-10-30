@@ -9,3 +9,5 @@ npm-debug.log*
 # Generated seed credentials
 .seed-admin.txt
 .seed-otp.txt
+
+uploads/

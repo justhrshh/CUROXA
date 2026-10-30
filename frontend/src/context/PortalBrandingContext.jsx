@@ -73,14 +73,14 @@ export const HospitalBrandLogo = ({
         onError={() => setImgError(true)}
         className={className}
         style={{
-          width: `${size}px`,
-          height: `${size}px`,
-          borderRadius: `${borderRadius}px`,
+          maxHeight: `${size}px`,
+          maxWidth: `${Math.round(size * 3.5)}px`,
+          width: 'auto',
+          height: 'auto',
           objectFit: 'contain',
-          border: '1px solid rgba(226, 232, 240, 0.9)',
-          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.06)',
+          background: 'transparent',
           flexShrink: 0,
-          background: '#FFFFFF',
+          display: 'inline-block',
           ...style
         }}
       />

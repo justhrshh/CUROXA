@@ -12,6 +12,18 @@ const superAdminHospitalSchema = new mongoose.Schema({
     match: [/^HSP-[A-Z0-9]{6}$/, 'hospitalId must match format HSP-XXXXXX with 6 uppercase alphanumeric characters']
   },
   logo: { type: String, default: 'H' },
+  originalLogoUrl: { type: String, default: '' },
+  logoProcessingStatus: {
+    type: String,
+    enum: ['none', 'processed', 'transparent_original', 'fallback'],
+    default: 'none'
+  },
+  logoUpdatedAt: { type: Date },
+  logoDimensions: {
+    width: { type: Number },
+    height: { type: Number },
+    aspectRatio: { type: Number }
+  },
   letterheadUrl: { type: String, default: '' },
   customDomain: { type: String, default: '' },
   plan: { type: String, default: 'Standard Basic' },
