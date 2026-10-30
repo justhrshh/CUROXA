@@ -32,7 +32,7 @@ const Login = () => {
   useEffect(() => {
     const savedUser = localStorage.getItem('quroxa_saved_username');
     if (savedUser && localStorage.getItem('quroxa_remember_me') === 'true') {
-      setStaffId(savedUser.slice(0, 10));
+      setStaffId(savedUser.trim().slice(0, 80));
     }
   }, []);
 
@@ -168,7 +168,7 @@ const Login = () => {
     setShowServerSplash(true);
     try {
       const response = await api.post('/auth/login', {
-        staff_id: staffId,
+        staff_id: staffId.trim(),
         password: password,
         ...(portalHospitalId ? { hospitalId: portalHospitalId } : {})
       });
@@ -193,7 +193,7 @@ const Login = () => {
 
       if (rememberMe) {
         localStorage.setItem('quroxa_remember_me', 'true');
-        localStorage.setItem('quroxa_saved_username', staffId);
+        localStorage.setItem('quroxa_saved_username', staffId.trim());
       } else {
         localStorage.removeItem('quroxa_remember_me');
         localStorage.removeItem('quroxa_saved_username');
@@ -299,15 +299,18 @@ const Login = () => {
     setLoading(true);
     try {
       const response = await api.post('/auth/forgot-password', {
-        email: forgotEmail,
+        email: forgotEmail.trim(),
         tenantId: hospital?.code || undefined
       });
       setForgotSuccess(response.data.message
         ? `${response.data.message} (Please check your Spam/Junk folder if not received.)`
         : 'OTP sent successfully! Please check your inbox.');
+      if (response.data.dev_otp) {
+        setForgotOtp(response.data.dev_otp);
+      }
       setForgotStep(2);
     } catch (err) {
-      setForgotError(err.response?.data?.error || 'Failed to request OTP. Please try again.');
+      setForgotError(err.response?.data?.error || 'Failed to request OTP. Please verify your email.');
     } finally {
       setLoading(false);
     }
@@ -567,18 +570,21 @@ const Login = () => {
             {/* ── PASSWORD LOGIN FORM ── */}
             <form onSubmit={handleLogin} className="space-y-4">
               
-              {/* Outlined Input: Username or Email */}
+              {/* Outlined Input: Username (or Staff Mobile Number / Login ID) */}
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
                   <User className="w-5 h-5" />
                 </div>
                 <input 
+                  id="username"
+                  name="username"
                   type="text" 
+                  autoComplete="username"
                   required 
                   maxLength={80}
                   value={staffId} 
-                  onChange={(e) => setStaffId(e.target.value.toLowerCase().slice(0, 80))} 
-                  placeholder="Username, Phone, or Email" 
+                  onChange={(e) => setStaffId(e.target.value.slice(0, 80))} 
+                  placeholder="Username" 
                   className="w-full h-11 sm:h-12 pl-11 pr-4 bg-slate-50/70 hover:bg-slate-50 focus:bg-white rounded-xl border border-slate-300 text-[15px] sm:text-base text-slate-900 placeholder:text-slate-500 placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition shadow-2xs" 
                 />
               </div>
@@ -659,14 +665,14 @@ const Login = () => {
                 )}
               </button>
 
-              {/* ── Patient Portal Button ── */}
+              {/* ── Patient Portal Button (Universal) ── */}
               <button 
                 type="button" 
                 onClick={handlePatientPortalNavigation} 
                 className="w-full h-10 sm:h-11 mt-2.5 sm:mt-3 rounded-xl bg-emerald-50/80 hover:bg-emerald-100/90 border border-emerald-200/90 text-emerald-800 font-semibold text-[13px] flex items-center justify-center gap-2 transition active:scale-[0.98] shadow-sm"
               >
                 <User className="w-4 h-4 text-emerald-600" />
-                <span>{hospital ? `${hospital.name} Patient Portal` : 'Patient Portal Login'}</span>
+                <span>Patient Portal</span>
               </button>
 
               {/* ── CARD FOOTER: Copyright & Legal links inside panel ── */}
@@ -740,7 +746,7 @@ const Login = () => {
               </div>
               <h3 className="text-lg font-bold text-slate-900">Reset Password</h3>
               <p className="text-xs text-slate-500 mt-1">
-                {forgotStep === 1 ? 'Enter your email to receive an OTP' : 'Enter the OTP and your new password'}
+                {forgotStep === 1 ? 'Enter your registered email to receive an OTP' : 'Enter the OTP and your new password'}
               </p>
             </div>
 
@@ -760,13 +766,13 @@ const Login = () => {
             {forgotStep === 1 ? (
               <form onSubmit={handleRequestOtp} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address or Staff ID</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Registered Email Address</label>
                   <input
-                    type="text"
+                    type="email"
                     required
                     value={forgotEmail}
-                    onChange={(e) => setForgotEmail(e.target.value)}
-                    placeholder="name@example.com or staff ID"
+                    onChange={(e) => setForgotEmail(e.target.value.trim())}
+                    placeholder="Enter your registered email address"
                     className="w-full h-11 px-3.5 bg-slate-50/60 focus:bg-white rounded-xl border border-slate-300 text-xs text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
                   />
                 </div>

@@ -361,12 +361,30 @@ router.post("/login", tenantMiddleware, async (req, res) => {
 
   try {
     console.log(`[LOGIN DEBUG] Request for staff_id: "${staff_id}"`);
-    // Search across all tenants first
+    const cleanStaffId = String(staff_id).trim();
+    const cleanStaffIdLower = cleanStaffId.toLowerCase();
+    const digitsOnly = cleanStaffId.replace(/\D/g, "");
+
+    const loginOrConditions = [
+      { staff_id: cleanStaffIdLower },
+      { staff_id: cleanStaffId },
+      { email: cleanStaffIdLower },
+      { phone: cleanStaffId },
+      { phone: cleanStaffIdLower }
+    ];
+    if (digitsOnly.length >= 7) {
+      loginOrConditions.push({ phone: digitsOnly });
+      loginOrConditions.push({ staff_id: digitsOnly });
+      if (digitsOnly.length === 10) {
+        loginOrConditions.push({ phone: "+91" + digitsOnly });
+        loginOrConditions.push({ phone: "+91 " + digitsOnly });
+        loginOrConditions.push({ staff_id: "+91" + digitsOnly });
+      }
+    }
+
+    // Search across all tenants first by username, staff mobile number, or email
     let users = await User.find({
-      $or: [
-        { staff_id: staff_id },
-        { email: staff_id.toLowerCase().trim() }
-      ]
+      $or: loginOrConditions
     }).select("+password_hash");
 
     if (users.length === 0) {
@@ -384,12 +402,13 @@ router.post("/login", tenantMiddleware, async (req, res) => {
 
     if (users.length === 0) {
       console.log(`[LOGIN DEBUG] Exact match failed. Attempting regex match.`);
-      // Case-insensitive regex fallback for staff_id or email
-      const safeSearchStr = staff_id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Case-insensitive regex fallback for staff_id, phone, or email
+      const safeSearchStr = cleanStaffId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       users = await User.find({
         $or: [
           { staff_id: { $regex: new RegExp(`^${safeSearchStr}$`, 'i') } },
-          { email: { $regex: new RegExp(`^${safeSearchStr}$`, 'i') } }
+          { email: { $regex: new RegExp(`^${safeSearchStr}$`, 'i') } },
+          { phone: { $regex: new RegExp(`^${safeSearchStr}$`, 'i') } }
         ]
       }).select("+password_hash");
     }
@@ -1343,7 +1362,7 @@ router.delete("/doctor/signature", tenantMiddleware, verifyToken, handleStaffSig
 router.post("/forgot-password", tenantMiddleware, async (req, res) => {
   const { email } = req.body;
   if (!email || !String(email).trim()) {
-    return res.status(400).json({ error: "Please provide an email address or Staff ID" });
+    return res.status(400).json({ error: "Please provide your registered email address" });
   }
 
   try {
