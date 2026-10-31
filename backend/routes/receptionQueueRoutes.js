@@ -19,7 +19,8 @@ const {
   getStaffReceptionQueueData,
   advanceReceptionQueue,
   skipReceptionTicket,
-  completeReceptionTicket
+  completeReceptionTicket,
+  serveReceptionTicket
 } = require('../utils/receptionQueueEngine');
 const { resolveTrustedHospitalBranding, buildBrandedOtpEmail } = require('../utils/hospitalBrandingHelper');
 const { sendEmail } = require('../utils/emailService');
@@ -822,6 +823,48 @@ router.post('/staff/complete/:ticketId', verifyToken, authorizeStaffReception, a
   } catch (error) {
     console.error('[STAFF RECEPTION QUEUE COMPLETE ERROR]:', error);
     return res.status(500).json({ error: 'Failed to complete ticket.' });
+  }
+});
+
+/**
+ * POST /api/reception-queue/staff/serve/:ticketId
+ * Sets a specific ticket to 'Serving' status and broadcasts to public displays & patient queues.
+ */
+router.post('/staff/serve/:ticketId', verifyToken, authorizeStaffReception, async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId || req.body.tenantId;
+    const hospital = await SuperAdminHospital.findOne({ code: tenantId });
+    if (!hospital) {
+      return res.status(404).json({ error: 'Clinic tenant record not found.' });
+    }
+
+    const { ticketId } = req.params;
+    const queueDate = req.body.date ? normalizeQueueDate(req.body.date) : normalizeQueueDate(new Date());
+
+    const servingTicket = await serveReceptionTicket({
+      tenantId,
+      clinicCode: hospital.code,
+      queueDate,
+      ticketId
+    });
+
+    if (!servingTicket) {
+      return res.status(404).json({ error: 'Ticket not found.' });
+    }
+
+    const io = req.app.get('io');
+    broadcastReceptionQueueUpdate(io, hospital.code, tenantId, queueDate);
+
+    const updatedQueueData = await getStaffReceptionQueueData({ tenantId, queueDate });
+
+    return res.json({
+      success: true,
+      ticket: servingTicket,
+      ...updatedQueueData
+    });
+  } catch (error) {
+    console.error('[STAFF RECEPTION QUEUE SERVE ERROR]:', error);
+    return res.status(500).json({ error: 'Failed to set ticket as serving.' });
   }
 });
 

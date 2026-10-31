@@ -156,6 +156,21 @@ const PublicReceptionQueuePage = () => {
             waitingCount: data.waitingCount || 0,
             isServing: Boolean(data.currentTicketNumber)
           });
+
+          // Instantly sync patient's personal position & ticket status
+          const activeSession = sessionToken || sessionStorage.getItem(`reception_token_${clinicCode.toLowerCase()}`);
+          if (activeSession) {
+            api.get(`/reception-queue/ticket/${encodeURIComponent(activeSession)}`)
+              .then(res => {
+                if (res.data?.ticket) {
+                  setActiveTicket(res.data.ticket);
+                  setPatientPosition(res.data.position);
+                }
+              })
+              .catch(err => {
+                console.warn('[RECEPTION REFRESH ERROR]:', err.message);
+              });
+          }
         }
       });
 
@@ -1368,7 +1383,7 @@ const PublicReceptionQueuePage = () => {
                   Currently Serving
                 </div>
                 <div style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', marginTop: '4px' }}>
-                  {patientPosition?.currentServingDisplay || queueMetrics.currentTicketDisplay || 'Desk Free'}
+                  {queueMetrics.currentTicketDisplay || patientPosition?.currentServingDisplay || 'Desk Free'}
                 </div>
               </div>
 

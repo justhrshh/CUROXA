@@ -4234,6 +4234,17 @@ const ReceptionistDashboard = () => {
     if (!ticket) return;
     setActiveReceptionTicket(ticket);
 
+    // Synchronize desk status with backend so Currently Serving reflects immediately across all screens
+    if (ticket._id) {
+      api.post(`/reception-queue/staff/serve/${ticket._id}`)
+        .then(() => {
+          if (fetchData) fetchData();
+        })
+        .catch(err => {
+          console.warn('[SERVE TICKET WARNING]:', err.response?.data?.error || err.message);
+        });
+    }
+
     const isExisting = ticket.patientType === 'Existing';
     const pObj = isExisting ? (ticket.existingPatientDetails || {}) : (ticket.preliminaryDetails || {});
     const defaultDocId = doctors && doctors.length > 0 ? doctors[0]._id : '';

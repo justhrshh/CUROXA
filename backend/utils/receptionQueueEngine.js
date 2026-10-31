@@ -520,6 +520,48 @@ async function completeReceptionTicket({ tenantId, ticketId, patientId = null })
   return completed;
 }
 
+/**
+ * Promotes a specific ticket to 'Serving' atomically.
+ * If another ticket is currently 'Serving', it is safely demoted to 'Waiting'.
+ */
+async function serveReceptionTicket({ tenantId, clinicCode, queueDate, ticketId }) {
+  const normDate = normalizeQueueDate(queueDate);
+  const cleanTenant = String(tenantId).trim();
+  const lockKey = `${cleanTenant}_${normDate}`;
+
+  return withQueueLock(lockKey, async () => {
+    // 1. Demote any other ticket that is currently 'Serving' or 'Called' to 'Waiting'
+    await ReceptionQueue.updateMany(
+      {
+        tenantId: cleanTenant,
+        queueDate: normDate,
+        status: { $in: ['Serving', 'Called'] },
+        _id: { $ne: ticketId }
+      },
+      {
+        $set: { status: 'Waiting' }
+      }
+    );
+
+    // 2. Atomically set this ticket to 'Serving'
+    const servingTicket = await ReceptionQueue.findOneAndUpdate(
+      {
+        _id: ticketId,
+        tenantId: cleanTenant
+      },
+      {
+        $set: {
+          status: 'Serving',
+          servedAt: new Date()
+        }
+      },
+      { returnDocument: 'after' }
+    );
+
+    return servingTicket;
+  });
+}
+
 module.exports = {
   normalizeQueueDate,
   allocateReceptionTicket,
@@ -529,5 +571,6 @@ module.exports = {
   getStaffReceptionQueueData,
   advanceReceptionQueue,
   skipReceptionTicket,
-  completeReceptionTicket
+  completeReceptionTicket,
+  serveReceptionTicket
 };
