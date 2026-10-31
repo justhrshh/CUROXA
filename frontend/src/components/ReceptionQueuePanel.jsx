@@ -368,6 +368,81 @@ const ReceptionQueuePanel = ({
       maxWidth: '100%',
       boxSizing: 'border-box'
     }}>
+      <style>{`
+        .rq-metrics-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 14px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .rq-metric-card {
+          background: #FFFFFF;
+          border-radius: 12px;
+          border: 1px solid #E2E8F0;
+          padding: 16px 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          box-sizing: border-box;
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .rq-metric-label {
+          font-size: 11.5px;
+          color: #64748B;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+        .rq-metric-val {
+          font-size: 24px;
+          font-weight: 900;
+          margin-top: 2px;
+          line-height: 1.1;
+        }
+        .rq-metric-val.rq-desk-status {
+          font-size: 18px;
+          margin-top: 4px;
+        }
+        .rq-metric-icon {
+          width: 40px;
+          height: 40px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        @media (max-width: 900px) {
+          .rq-metrics-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 8px !important;
+          }
+          .rq-metric-card {
+            padding: 10px 12px !important;
+            border-radius: 10px !important;
+          }
+          .rq-metric-label {
+            font-size: 10px !important;
+          }
+          .rq-metric-val {
+            font-size: 18px !important;
+          }
+          .rq-metric-val.rq-desk-status {
+            font-size: 13px !important;
+          }
+          .rq-metric-icon {
+            width: 32px !important;
+            height: 32px !important;
+            border-radius: 8px !important;
+          }
+          .rq-metric-icon svg {
+            width: 15px !important;
+            height: 15px !important;
+          }
+        }
+      `}</style>
+
       {/* ── DRAINING MODE ALERT (WHEN SUPER ADMIN DISABLED MODULE) ── */}
       {queueData.isDrainingMode && (
         <div style={{
@@ -391,93 +466,55 @@ const ReceptionQueuePanel = ({
       )}
 
       {/* ── METRICS OVERVIEW BAR ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
-        gap: '14px',
-        width: '100%',
-        boxSizing: 'border-box'
-      }}>
+      <div className="rq-metrics-grid">
         {/* Metric 1 */}
-        <div style={{
-          background: '#FFFFFF',
-          borderRadius: '12px',
-          border: '1px solid #E2E8F0',
-          padding: '16px 20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
+        <div className="rq-metric-card">
           <div>
-            <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Waiting Now</div>
-            <div style={{ fontSize: '24px', fontWeight: 900, color: '#0D9488', marginTop: '2px' }}>
+            <div className="rq-metric-label">Waiting Now</div>
+            <div className="rq-metric-val" style={{ color: '#0D9488' }}>
               {queueData.metrics.waitingCount}
             </div>
           </div>
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#CCFBF1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="rq-metric-icon" style={{ background: '#CCFBF1' }}>
             <Users size={20} color="#0D9488" />
           </div>
         </div>
 
         {/* Metric 2 */}
-        <div style={{
-          background: '#FFFFFF',
-          borderRadius: '12px',
-          border: '1px solid #E2E8F0',
-          padding: '16px 20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
+        <div className="rq-metric-card">
           <div>
-            <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Desk Status</div>
-            <div style={{ fontSize: '18px', fontWeight: 900, color: queueData.currentServing ? '#0F172A' : '#64748B', marginTop: '4px' }}>
+            <div className="rq-metric-label">Desk Status</div>
+            <div className="rq-metric-val rq-desk-status" style={{ color: queueData.currentServing ? '#0F172A' : '#64748B' }}>
               {queueData.currentServing ? queueData.currentServing.ticketDisplay : 'Desk Free'}
             </div>
           </div>
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: queueData.currentServing ? '#EFF6FF' : '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="rq-metric-icon" style={{ background: queueData.currentServing ? '#EFF6FF' : '#F1F5F9' }}>
             <Play size={18} color={queueData.currentServing ? '#2563EB' : '#94A3B8'} />
           </div>
         </div>
 
         {/* Metric 3 */}
-        <div style={{
-          background: '#FFFFFF',
-          borderRadius: '12px',
-          border: '1px solid #E2E8F0',
-          padding: '16px 20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
+        <div className="rq-metric-card">
           <div>
-            <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Skipped</div>
-            <div style={{ fontSize: '24px', fontWeight: 900, color: '#F59E0B', marginTop: '2px' }}>
+            <div className="rq-metric-label">Skipped</div>
+            <div className="rq-metric-val" style={{ color: '#F59E0B' }}>
               {queueData.metrics.skippedCount}
             </div>
           </div>
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="rq-metric-icon" style={{ background: '#FEF3C7' }}>
             <SkipForward size={18} color="#D97706" />
           </div>
         </div>
 
         {/* Metric 4 */}
-        <div style={{
-          background: '#FFFFFF',
-          borderRadius: '12px',
-          border: '1px solid #E2E8F0',
-          padding: '16px 20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
+        <div className="rq-metric-card">
           <div>
-            <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Completed Today</div>
-            <div style={{ fontSize: '24px', fontWeight: 900, color: '#16A34A', marginTop: '2px' }}>
+            <div className="rq-metric-label">Completed Today</div>
+            <div className="rq-metric-val" style={{ color: '#16A34A' }}>
               {queueData.metrics.completedCount}
             </div>
           </div>
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="rq-metric-icon" style={{ background: '#DCFCE7' }}>
             <CheckCircle size={20} color="#16A34A" />
           </div>
         </div>

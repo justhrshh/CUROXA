@@ -5517,6 +5517,224 @@ const ReceptionistDashboard = () => {
             min-width: 750px !important;
           }
         }
+
+        /* Dashboard Welcome Hero Banner Responsiveness */
+        .rec-hero-banner {
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(243, 244, 255, 0.92) 50%, rgba(238, 248, 255, 0.95) 100%);
+          border: 1px solid rgba(219, 234, 254, 0.9);
+          border-radius: 20px;
+          padding: 24px 28px;
+          box-shadow: 0 4px 20px -4px rgba(37, 99, 235, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 18px;
+          margin-bottom: 22px;
+          position: relative;
+          overflow: hidden;
+        }
+        .rec-hero-title {
+          font-size: 28px;
+          font-weight: 900;
+          margin: 0 0 4px 0;
+          letter-spacing: -0.5px;
+          background: linear-gradient(135deg, #1E40AF 0%, #4338CA 50%, #7C3AED 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          line-height: 1.15;
+        }
+        .rec-hero-actions {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+          flex-wrap: wrap;
+          position: relative;
+          z-index: 1;
+        }
+        @media (max-width: 640px) {
+          .rec-hero-banner {
+            padding: 12px 14px !important;
+            margin-bottom: 12px !important;
+            border-radius: 14px !important;
+            gap: 10px !important;
+          }
+          .rec-hero-banner .rec-hero-greeting {
+            font-size: 10px !important;
+            margin-bottom: 1px !important;
+          }
+          .rec-hero-banner .rec-hero-title {
+            font-size: 17px !important;
+            margin-bottom: 2px !important;
+          }
+          .rec-hero-banner .rec-hero-subtitle {
+            font-size: 11px !important;
+          }
+          .rec-hero-actions {
+            width: 100% !important;
+            display: grid !important;
+            grid-template-columns: 1fr 1fr 1fr auto !important;
+            gap: 6px !important;
+          }
+          .rec-hero-actions .btn {
+            height: 34px !important;
+            padding: 0 4px !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            border-radius: 8px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            white-space: nowrap !important;
+            gap: 4px !important;
+          }
+          .rec-hero-actions .btn svg,
+          .rec-hero-actions .btn i {
+            width: 13px !important;
+            height: 13px !important;
+          }
+          .rec-hero-actions .rec-cal-btn {
+            width: 34px !important;
+            height: 34px !important;
+            padding: 0 !important;
+            border-radius: 8px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+          }
+          .rec-hero-text-long {
+            display: none !important;
+          }
+          .rec-hero-text-short {
+            display: inline !important;
+          }
+        }
+        @media (min-width: 641px) {
+          .rec-hero-text-long {
+            display: inline !important;
+          }
+          .rec-hero-text-short {
+            display: none !important;
+          }
+        }
+
+        /* Intake Workstation Responsive Layout */
+        .rx-lookup-header {
+          padding: 12px 20px;
+          background: linear-gradient(90deg, #FFFFFF 0%, #F8FAFC 100%);
+          border-bottom: 1px solid #E2E8F0;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-shrink: 0;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+        .rx-lookup-actions {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .rx-lookup-grid {
+          display: grid;
+          grid-template-columns: 360px 1fr;
+          gap: 16px;
+          padding: 16px;
+          flex: 1;
+          min-height: 0;
+          overflow: hidden;
+        }
+        @media (max-width: 900px) {
+          .rx-lookup-header {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            padding: 12px 14px !important;
+            gap: 10px !important;
+          }
+          .rx-lookup-actions {
+            width: 100% !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+          }
+          .rx-lookup-actions > span {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .rx-lookup-actions > button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .rx-lookup-grid {
+            grid-template-columns: 1fr !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow-y: auto !important;
+            padding: 10px !important;
+            gap: 12px !important;
+            min-height: unset !important;
+          }
+        }
+
+        /* Mobile Responsive Card Views */
+        .rx-mobile-card {
+          background: #FFFFFF;
+          border: 1px solid #E2E8F0;
+          border-radius: 12px;
+          padding: 14px;
+          margin-bottom: 10px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          box-sizing: border-box;
+        }
+        .rx-mobile-card:last-child {
+          margin-bottom: 0;
+        }
+        .rx-mobile-filter-select {
+          height: 38px;
+          border-radius: 10px;
+          border: 1.5px solid #CBD5E1;
+          padding: 0 12px;
+          font-size: 13px;
+          font-weight: 700;
+          color: #0F172A;
+          background: #FFFFFF;
+          outline: none;
+          width: 100%;
+          margin-bottom: 12px;
+          box-sizing: border-box;
+        }
+        @media (min-width: 768px) {
+          .rx-mobile-filter-wrapper {
+            display: none !important;
+          }
+          .rx-mobile-cards-view {
+            display: none !important;
+          }
+          .rx-desktop-table-view {
+            display: block !important;
+          }
+          .rx-desktop-filters-view {
+            display: flex !important;
+          }
+        }
+        @media (max-width: 767px) {
+          .rx-mobile-filter-wrapper {
+            display: block !important;
+          }
+          .rx-mobile-cards-view {
+            display: flex !important;
+            flex-direction: column !important;
+          }
+          .rx-desktop-table-view {
+            display: none !important;
+          }
+          .rx-desktop-filters-view {
+            display: none !important;
+          }
+        }
       `}</style>
 
       {notification && (
@@ -6495,21 +6713,7 @@ const ReceptionistDashboard = () => {
             })()}
 
             {/* 1. FRONT-DESK COMMAND CENTER HERO BANNER */}
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(243, 244, 255, 0.92) 50%, rgba(238, 248, 255, 0.95) 100%)',
-              border: '1px solid rgba(219, 234, 254, 0.9)',
-              borderRadius: '20px',
-              padding: '24px 28px',
-              boxShadow: '0 4px 20px -4px rgba(37, 99, 235, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '18px',
-              marginBottom: '22px',
-              position: 'relative',
-              overflow: 'hidden'
-            }}>
+            <div className="rec-hero-banner">
               {/* Subtle background ambient mesh glow */}
               <div style={{
                 position: 'absolute',
@@ -6524,28 +6728,19 @@ const ReceptionistDashboard = () => {
 
               {/* Left: Welcome Title & Context */}
               <div style={{ position: 'relative', zIndex: 1 }}>
-                <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '3px' }}>
+                <div className="rec-hero-greeting" style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '3px' }}>
                   WELCOME BACK,
                 </div>
-                <h1 style={{
-                  fontSize: '28px',
-                  fontWeight: 900,
-                  margin: '0 0 4px 0',
-                  letterSpacing: '-0.5px',
-                  background: 'linear-gradient(135deg, #1E40AF 0%, #4338CA 50%, #7C3AED 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  lineHeight: 1.15
-                }}>
+                <h1 className="rec-hero-title">
                   {user.name || currentUser.name || 'receptionist-1'}
                 </h1>
-                <div style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
+                <div className="rec-hero-subtitle" style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
                   Here's what's happening at your front desk today.
                 </div>
               </div>
 
               {/* Right: Quick Action Buttons */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
+              <div className="rec-hero-actions">
                 <button 
                   className="btn" 
                   style={{
@@ -6572,7 +6767,9 @@ const ReceptionistDashboard = () => {
                   onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1.5px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(37, 99, 235, 0.38)'; }}
                   onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(37, 99, 235, 0.28)'; }}
                 >
-                  <i data-lucide="plus" style={{ width: '16px', strokeWidth: 3 }}></i> Create Appointment
+                  <i data-lucide="plus" style={{ width: '16px', strokeWidth: 3 }}></i>
+                  <span className="rec-hero-text-long">Create Appointment</span>
+                  <span className="rec-hero-text-short">+ Appt</span>
                 </button>
                 <button 
                   className="btn" 
@@ -6601,7 +6798,8 @@ const ReceptionistDashboard = () => {
                   onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(5, 150, 105, 0.28)'; }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                  Book Lab Test
+                  <span className="rec-hero-text-long">Book Lab Test</span>
+                  <span className="rec-hero-text-short">Lab Test</span>
                 </button>
                 <button 
                   className="btn" 
@@ -6630,10 +6828,11 @@ const ReceptionistDashboard = () => {
                   onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(124, 58, 237, 0.28)'; }}
                 >
                   <i data-lucide="sparkles" style={{ width: '16px', height: '16px' }}></i>
-                  Book Direct Service
+                  <span className="rec-hero-text-long">Book Direct Service</span>
+                  <span className="rec-hero-text-short">Service</span>
                 </button>
                 <button 
-                  className="btn" 
+                  className="btn rec-cal-btn" 
                   style={{
                     width: '42px',
                     height: '42px',
@@ -7742,7 +7941,7 @@ const ReceptionistDashboard = () => {
             </div>
 
             {/* Top KPI Demographic & Overview Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+            <div className="rec-kpi-grid grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-6">
 
               {/* Card 1: Total Patients — Blue */}
               <div
@@ -7903,8 +8102,21 @@ const ReceptionistDashboard = () => {
                 {/* Quick Gender Filter Pills & Buttons */}
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                   
-                  {/* Segmented Gender Pills */}
-                  <div style={{ display: 'flex', gap: '4px', background: '#F1F5F9', padding: '3px', borderRadius: '10px' }}>
+                  {/* Mobile Gender Select */}
+                  <div className="rx-mobile-filter-wrapper" style={{ width: '100%' }}>
+                    <select
+                      className="rx-mobile-filter-select"
+                      value={patientGenderFilter}
+                      onChange={e => { setPatientGenderFilter(e.target.value); setPatientPage(1); }}
+                    >
+                      <option value="All">All Patients ({totalPatients})</option>
+                      <option value="Male">Male Patients ({maleCount})</option>
+                      <option value="Female">Female Patients ({femaleCount})</option>
+                    </select>
+                  </div>
+
+                  {/* Segmented Gender Pills (Desktop) */}
+                  <div className="rx-desktop-filters-view" style={{ display: 'flex', gap: '4px', background: '#F1F5F9', padding: '3px', borderRadius: '10px' }}>
                     <button
                       type="button"
                       onClick={() => setPatientGenderFilter('All')}
@@ -8098,7 +8310,7 @@ const ReceptionistDashboard = () => {
               )}
 
               {/* Patient Directory Table */}
-              <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
+              <div className="rx-desktop-table-view" style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
@@ -8376,6 +8588,117 @@ const ReceptionistDashboard = () => {
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              
+              {/* Mobile Card List View for Patients */}
+              <div className="rx-mobile-cards-view">
+                {allFiltered.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '36px 16px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                    <span style={{ fontSize: '28px', display: 'block', marginBottom: '8px' }}>🔍</span>
+                    <div style={{ fontWeight: 800, fontSize: '15px', color: '#0F172A' }}>No Patients Found</div>
+                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
+                      No patient records match the active search query or filter criteria.
+                    </div>
+                    {(patientSearchText || patientGenderFilter !== 'All' || activeFiltersCount > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPatientSearchText('');
+                          setPatientGenderFilter('All');
+                          setPatientStartRegDate('');
+                          setPatientEndRegDate('');
+                          setPatientBookingTypeFilter('All');
+                        }}
+                        style={{ marginTop: '10px', padding: '6px 14px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
+                      >
+                        Clear All Filters
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  allFiltered.slice((patientPage - 1) * 10, patientPage * 10).map((p, idx) => {
+                    const avatarTheme = getAvatarTheme(p.name);
+                    const initials = getInitials(p.name);
+                    const isMale = p.gender?.toLowerCase() === 'male';
+                    const isFemale = p.gender?.toLowerCase() === 'female';
+                    const globalIdx = (patientPage - 1) * 10 + idx + 1;
+
+                    return (
+                      <div key={p._id} className="rx-mobile-card">
+                        {/* Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ minWidth: '24px', height: '22px', borderRadius: '6px', background: '#F1F5F9', color: '#475569', fontWeight: 800, fontSize: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
+                              #{globalIdx}
+                            </span>
+                            <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '11px', background: '#F1F5F9', color: '#334155', padding: '2px 6px', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
+                              {getFormattedPatientId(p._id, p)}
+                            </span>
+                          </div>
+                          {isMale ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, background: '#EEF2FF', color: '#4F46E5', border: '1px solid #C7D2FE' }}>
+                              <span>♂</span> Male
+                            </span>
+                          ) : isFemale ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, background: '#FDF2F8', color: '#DB2777', border: '1px solid #FBCFE8' }}>
+                              <span>♀</span> Female
+                            </span>
+                          ) : (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: '#F1F5F9', color: '#475569' }}>
+                              {p.gender || 'Other'}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Details */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: avatarTheme.bg, color: avatarTheme.text, border: `1.5px solid ${avatarTheme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '12px', flexShrink: 0 }}>
+                            {initials}
+                          </div>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '13.5px', lineHeight: 1.2 }}>{p.name}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap', fontSize: '11px', color: '#64748B' }}>
+                              {p.age && <span>{p.age} Yrs</span>}
+                              {p.bloodGroup && (
+                                <span style={{ fontWeight: 800, color: '#DC2626', background: '#FEF2F2', padding: '1px 5px', borderRadius: '4px' }}>
+                                  {p.bloodGroup}
+                                </span>
+                              )}
+                              {p.contact && <span>• 📞 {p.contact}</span>}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', paddingTop: '4px' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ flex: 1, height: '32px', fontSize: '11.5px', fontWeight: 700, borderRadius: '8px', border: '1px solid #BFDBFE', background: '#EFF6FF', color: '#2563EB', cursor: 'pointer', justifyContent: 'center' }}
+                            onClick={() => handleOpenPatientProfile(p)}
+                          >
+                            Profile
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ flex: 1, height: '32px', fontSize: '11.5px', fontWeight: 800, borderRadius: '8px', border: 'none', background: '#2563EB', color: '#FFFFFF', cursor: 'pointer', justifyContent: 'center' }}
+                            onClick={() => {
+                              resetRegistrationForm();
+                              setSelectedPatient(p);
+                              setIsExistingPatient(true);
+                              setBookingType('opd');
+                              switchTab('registration-form');
+                            }}
+                          >
+                            Book Appt
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
               {/* Table Footer with Record Count & 10-Row Pagination */}
@@ -10751,7 +11074,7 @@ const ReceptionistDashboard = () => {
                 overflow: 'hidden'
               }}>
                 {/* Top Command Bar */}
-                <div style={{
+                <div className="rx-lookup-header" style={{
                   padding: '12px 20px',
                   background: 'linear-gradient(90deg, #FFFFFF 0%, #F8FAFC 100%)',
                   borderBottom: '1px solid #E2E8F0',
@@ -10794,7 +11117,7 @@ const ReceptionistDashboard = () => {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className="rx-lookup-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <span style={{
                       fontSize: '12px',
                       fontWeight: 700,
@@ -10859,7 +11182,7 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* Main 2-Column Workstation Layout */}
-                <div style={{
+                <div className="rx-lookup-grid" style={{
                   display: 'grid',
                   gridTemplateColumns: '360px 1fr',
                   gap: '16px',
@@ -14152,8 +14475,23 @@ const ReceptionistDashboard = () => {
             {/* Glass Container Card */}
             <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', border: '1px solid #E2E8F0', background: '#FFFFFF', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
               
-              {/* Category Segmented Filter Pills */}
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+              {/* Mobile Filter Dropdown */}
+              <div className="rx-mobile-filter-wrapper">
+                <select
+                  className="rx-mobile-filter-select"
+                  value={apptTypeFilter}
+                  onChange={e => { setApptTypeFilter(e.target.value); setAppointmentPage(1); }}
+                >
+                  <option value="All">All Bookings ({counts.All})</option>
+                  <option value="Pending Approval">Online Requests (Pending) ({pendingReqCount})</option>
+                  <option value="Appointment">Appointments (OPD) ({counts.Appointment})</option>
+                  <option value="Lab Test">Lab Tests ({counts['Lab Test']})</option>
+                  <option value="Clinical Service">Clinical Services ({counts['Clinical Service']})</option>
+                </select>
+              </div>
+
+              {/* Category Segmented Filter Pills (Desktop) */}
+              <div className="rx-desktop-filters-view" style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
                 {[
                   { key: 'All', label: 'All Bookings', count: counts.All, color: '#2563EB', activeBg: '#EFF6FF' },
                   { key: 'Pending Approval', label: 'Online Requests (Pending)', count: pendingReqCount, color: '#EA580C', activeBg: '#FFF7ED' },
@@ -14240,7 +14578,7 @@ const ReceptionistDashboard = () => {
               </div>
 
               {/* Table with Strictly Aligned Fixed Width Columns */}
-              <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
+              <div className="rx-desktop-table-view" style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1040px' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
@@ -15432,6 +15770,195 @@ const ReceptionistDashboard = () => {
                 </table>
               </div>
 
+              
+              {/* Mobile Card List View for Appointments */}
+              <div className="rx-mobile-cards-view">
+                {paginatedGroups.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '36px 16px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                    <span style={{ fontSize: '28px', display: 'block', marginBottom: '8px' }}>📅</span>
+                    <div style={{ fontWeight: 800, fontSize: '15px', color: '#0F172A' }}>No Bookings Found</div>
+                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
+                      {appointmentSearch.trim() ? `No bookings match "${appointmentSearch}"` : "No bookings found for the selected category or date range."}
+                    </div>
+                    {(appointmentSearch || apptTypeFilter !== 'All' || startDate || endDate) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAppointmentSearch('');
+                          setApptTypeFilter('All');
+                          setStartDate('');
+                          setEndDate('');
+                          setAppointmentPage(1);
+                        }}
+                        style={{ marginTop: '10px', padding: '6px 14px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
+                      >
+                        Clear All Filters
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  paginatedGroups.map((group, localIdx) => {
+                    const globalSerial = startIdx + localIdx + 1;
+                    const { isMulti, primary, addOns } = group;
+                    const isPrimaryCompleted = primary.status === 'Completed' || primary.status === 'Paid' || primary.rawItem?.status === 'Completed' || primary.rawItem?.status === 'Paid';
+                    const visitIdVal = primary.rawItem?.visitId || primary.visitId;
+
+                    return (
+                      <div key={primary.id || globalSerial} className="rx-mobile-card">
+                        {/* Card Header: Serial, Badges, Status */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{
+                              minWidth: '24px',
+                              height: '22px',
+                              borderRadius: '6px',
+                              background: '#F1F5F9',
+                              color: '#475569',
+                              fontWeight: 800,
+                              fontSize: '11px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '0 4px'
+                            }}>
+                              #{globalSerial}
+                            </span>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              background: primary.type === 'Lab Test' ? '#ECFDF5' : (primary.type === 'Clinical Service' ? '#F5F3FF' : '#EFF6FF'),
+                              color: primary.type === 'Lab Test' ? '#059669' : (primary.type === 'Clinical Service' ? '#7C3AED' : '#2563EB'),
+                              border: primary.type === 'Lab Test' ? '1px solid #A7F3D0' : (primary.type === 'Clinical Service' ? '1px solid #DDD6FE' : '1px solid #BFDBFE')
+                            }}>
+                              {primary.type}
+                            </span>
+                            {isMulti && (
+                              <span style={{ fontSize: '10px', background: '#7C3AED', color: '#FFFFFF', borderRadius: '5px', padding: '1px 5px', fontWeight: 800 }}>
+                                Multi ({addOns.length + 1})
+                              </span>
+                            )}
+                          </div>
+                          <span className={`status-badge ${
+                            primary.status === 'Completed' || primary.status === 'Paid' ? 'available' : 
+                            primary.status === 'Rescheduled' ? 'rescheduled' :
+                            (primary.status === 'Cancelled' ? 'critical' : 'pending')
+                          }`} style={{ fontSize: '11px', padding: '2px 8px' }}>
+                            {primary.status}
+                          </span>
+                        </div>
+
+                        {/* Patient Details */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ 
+                            width: '36px', 
+                            height: '36px', 
+                            borderRadius: '50%', 
+                            background: '#EFF6FF', 
+                            color: '#2563EB', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            fontWeight: 800, 
+                            fontSize: '12px',
+                            flexShrink: 0,
+                            border: '1.5px solid #BFDBFE'
+                          }}>
+                            {getInitials(primary.patientName)}
+                          </div>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '13.5px', lineHeight: 1.2 }}>
+                              {primary.patientName}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap', fontSize: '11px', color: '#64748B' }}>
+                              {(primary.rawItem?.patientId?.uhId || primary.patientId?.uhId || getFormattedUhid(primary.patientId?._id || primary.patientId)) && (
+                                <span style={{ fontWeight: 700, color: '#0369A1' }}>
+                                  {primary.rawItem?.patientId?.uhId || primary.patientId?.uhId || getFormattedUhid(primary.patientId?._id || primary.patientId)}
+                                </span>
+                              )}
+                              {primary.detailName && (
+                                <span>• {primary.detailName}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Booking Info: Date, Time & Token */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: '#F8FAFC', padding: '8px 10px', borderRadius: '8px', fontSize: '11.5px' }}>
+                          <div>
+                            <div style={{ color: '#64748B', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' }}>Date & Time</div>
+                            <div style={{ fontWeight: 700, color: '#0F172A', marginTop: '1px' }}>
+                              {primary.date ? new Date(primary.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'N/A'} · {primary.time || 'General Slot'}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ color: '#64748B', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' }}>Token / Visit</div>
+                            <div style={{ fontWeight: 800, color: primary.tokenNumber ? '#2563EB' : '#64748B', marginTop: '1px' }}>
+                              {primary.tokenNumber ? (
+                                <span style={{ background: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '4px', border: '1px solid #BFDBFE' }}>
+                                  Token #{primary.tokenNumber}
+                                </span>
+                              ) : visitIdVal ? (
+                                <span>{visitIdVal}</span>
+                              ) : (
+                                <span>Not Checked In</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', paddingTop: '4px' }}>
+                          <button 
+                            type="button" 
+                            className="btn btn-secondary" 
+                            style={{ flex: 1, height: '32px', fontSize: '11.5px', fontWeight: 700, borderRadius: '8px', border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#334155', cursor: 'pointer', justifyContent: 'center' }} 
+                            onClick={() => {
+                              if (primary.type === 'Lab Test') {
+                                setSelectedLabRequest({
+                                  testName: primary.rawItem?.testName || primary.rawItem?.test || primary.detailName,
+                                  results: primary.rawItem?.results || ''
+                                });
+                                setLabModalOpen(true);
+                              } else {
+                                openDetailsModal(primary.rawItem);
+                              }
+                            }}
+                          >
+                            Details
+                          </button>
+                          {primary.type === 'Appointment' && (
+                            <>
+                              {isPrimaryCompleted ? (
+                                <button 
+                                  type="button" 
+                                  style={{ flex: 1, height: '32px', fontSize: '11.5px', fontWeight: 700, borderRadius: '8px', border: '1px solid #BFDBFE', background: '#EFF6FF', color: '#1D4ED8', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} 
+                                  onClick={() => handleDirectSharePrescription(primary.rawItem?._id || primary._id, primary.rawItem?.patientId || primary.patientId)}
+                                >
+                                  Share Rx
+                                </button>
+                              ) : (
+                                !primary.isServed && primary.status !== 'Cancelled' && (
+                                  <button 
+                                    type="button" 
+                                    style={{ flex: 1, height: '32px', fontSize: '11.5px', fontWeight: 700, borderRadius: '8px', border: 'none', background: '#2563EB', color: '#FFFFFF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} 
+                                    disabled={isCheckingIn}
+                                    onClick={() => handleCheckInAppointment(primary.rawItem)}
+                                  >
+                                    Check In
+                                  </button>
+                                )
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
               {/* Table Footer with Record Count & 10-Row Pagination */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #F1F5F9', flexWrap: 'wrap', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -16058,7 +16585,7 @@ const ReceptionistDashboard = () => {
               </div>
 
               {/* Invoices Table */}
-              <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
+              <div className="rx-desktop-table-view" style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
@@ -16286,6 +16813,134 @@ const ReceptionistDashboard = () => {
                   </tbody>
                 </table>
               </div>
+
+              
+              {/* Mobile Card List View for Billing */}
+              {(() => {
+                const pageSize = 10;
+                const totalBillingPages = Math.ceil(sorted.length / pageSize) || 1;
+                const currentBillingPage = Math.min(Math.max(1, billingPage), totalBillingPages);
+                const startBillingIdx = (currentBillingPage - 1) * pageSize;
+                const paginatedBills = sorted.slice(startBillingIdx, startBillingIdx + pageSize);
+
+                return (
+                  <div className="rx-mobile-cards-view">
+                    {paginatedBills.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '36px 16px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                        <span style={{ fontSize: '28px', display: 'block', marginBottom: '8px' }}>🧾</span>
+                        <div style={{ fontWeight: 800, fontSize: '15px', color: '#0F172A' }}>No Invoices Found</div>
+                        <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
+                          {billingSearch.trim() ? `No billing records match "${billingSearch}"` : "No transactions found matching active filters."}
+                        </div>
+                        {(billingSearch || billingStatusFilter !== 'All') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBillingSearch('');
+                              setBillingStatusFilter('All');
+                              setBillingPage(1);
+                            }}
+                            style={{ marginTop: '10px', padding: '6px 14px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
+                          >
+                            Clear Filters
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      paginatedBills.map((bill, localIdx) => {
+                        const globalIdx = startBillingIdx + localIdx;
+                        const isPaid = (bill.status || 'Unpaid') === 'Paid';
+                        const patientName = bill.patientId?.name || 'Unknown Patient';
+                        const avatarTheme = getAvatarTheme(patientName);
+                        const initials = getInitials(patientName);
+                        const invId = `#INV-${(bill._id || '').substring(Math.max(0, (bill._id || '').length - 6)).toUpperCase() || 'N/A'}`;
+
+                        return (
+                          <div key={bill._id || globalIdx} className="rx-mobile-card">
+                            {/* Header: S.No, InvId, Status */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ minWidth: '24px', height: '22px', borderRadius: '6px', background: '#F1F5F9', color: '#475569', fontWeight: 800, fontSize: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
+                                  #{globalIdx + 1}
+                                </span>
+                                <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '11px', background: '#EFF6FF', color: '#2563EB', padding: '2px 7px', borderRadius: '5px', border: '1px solid #BFDBFE' }}>
+                                  {invId}
+                                </span>
+                              </div>
+                              {isPaid ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }}>
+                                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#10B981' }}></span>
+                                  Paid
+                                </span>
+                              ) : (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }}>
+                                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#F59E0B' }}></span>
+                                  Unpaid
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Patient and Date */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: avatarTheme.bg, color: avatarTheme.text, border: `1.5px solid ${avatarTheme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '11.5px', flexShrink: 0 }}>
+                                {initials}
+                              </div>
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '13.5px' }}>{patientName}</div>
+                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                                  Date: {new Date(bill.createdAt || bill.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: 900, color: '#0F172A', fontSize: '15px', fontFamily: "'Outfit', sans-serif" }}>
+                                  ₹{(bill.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                                {bill.discountPercent > 0 && (
+                                  <div style={{ fontSize: '10px', color: '#EF4444', fontWeight: 700 }}>
+                                    {bill.discountPercent}% off
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', paddingTop: '4px' }}>
+                              {!isPaid ? (
+                                <button 
+                                  type="button" 
+                                  className="btn btn-primary" 
+                                  style={{ flex: 1, height: '32px', fontSize: '11.5px', fontWeight: 800, background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                  onClick={() => {
+                                    setSelectedBillForPayment(bill);
+                                    setDiscountPercent(0);
+                                    setDiscountReason('');
+                                    setPaymentMethod('Cash');
+                                    setShowPaymentModal(true);
+                                  }}
+                                >
+                                  Collect Payment
+                                </button>
+                              ) : (
+                                <button 
+                                  type="button" 
+                                  className="btn btn-secondary" 
+                                  style={{ flex: 1, height: '32px', fontSize: '11.5px', fontWeight: 700, borderRadius: '8px', border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                  onClick={() => {
+                                    setSelectedBillForPrint(bill);
+                                    setShowBillModal(true);
+                                  }}
+                                >
+                                  View Receipt
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Table Footer with Record Count & 10-Row Pagination */}
               {(() => {
