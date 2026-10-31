@@ -5059,6 +5059,47 @@ const ReceptionistDashboard = () => {
           .top-nav {
             margin-left: 0 !important;
             padding: 0 16px !important;
+            height: 60px !important;
+          }
+          .main-content {
+            margin-left: 0 !important;
+            margin-top: 60px !important;
+            min-height: calc(100vh - 60px) !important;
+            padding: 16px 14px calc(85px + env(safe-area-inset-bottom, 20px)) 14px !important;
+          }
+          .main-content.registration-fullscreen {
+            top: 60px !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            padding: 0 !important;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .top-nav {
+            padding: 0 12px !important;
+            height: 56px !important;
+          }
+          .main-content {
+            margin-top: 56px !important;
+            min-height: calc(100vh - 56px) !important;
+            padding: 12px 10px calc(85px + env(safe-area-inset-bottom, 20px)) 10px !important;
+          }
+          .main-content.registration-fullscreen {
+            top: 56px !important;
+          }
+          .rec-top-title {
+            font-size: 14px !important;
+          }
+          .rec-shield-icon {
+            width: 34px !important;
+            height: 34px !important;
+            border-radius: 9px !important;
+          }
+          .rec-shield-icon svg {
+            width: 16px !important;
+            height: 16px !important;
           }
         }
 
@@ -5148,6 +5189,34 @@ const ReceptionistDashboard = () => {
           grid-template-columns: repeat(4, 1fr) !important;
           gap: 20px !important;
           margin-bottom: 32px !important;
+        }
+        @media (max-width: 1024px) {
+          .kpi-card-container {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 14px !important;
+            margin-bottom: 20px !important;
+          }
+        }
+        @media (max-width: 540px) {
+          .kpi-card-container {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 10px !important;
+            margin-bottom: 16px !important;
+          }
+          .modern-kpi-card {
+            padding: 12px 14px !important;
+            gap: 10px !important;
+            border-radius: 12px !important;
+          }
+          .modern-kpi-icon {
+            width: 38px !important;
+            height: 38px !important;
+            border-radius: 9px !important;
+          }
+          .modern-kpi-icon svg, .modern-kpi-icon i {
+            width: 17px !important;
+            height: 17px !important;
+          }
         }
         .modern-kpi-card {
           background: #ffffff !important;
@@ -11417,6 +11486,322 @@ const ReceptionistDashboard = () => {
     opacity: 0.65;
     cursor: not-allowed;
   }
+
+  /* ─── ENTERPRISE REGISTRATION WORKSTATION MOBILE & TABLET FLUID RESPONSIVE SYSTEM ─── */
+  .rx-workstation-scroll {
+    flex: 1;
+    overflow-y: auto;
+    background: #F1F5F9;
+    padding: 12px 18px 24px;
+    -webkit-overflow-scrolling: touch;
+  }
+  @media (max-width: 900px) {
+    .rx-workstation-scroll {
+      padding: 8px 8px calc(85px + env(safe-area-inset-bottom, 20px)) 8px !important;
+    }
+  }
+  @media (max-width: 480px) {
+    .rx-workstation-scroll {
+      padding: 4px 4px calc(90px + env(safe-area-inset-bottom, 20px)) 4px !important;
+    }
+  }
+
+  .rx-workstation-card {
+    max-width: 1440px;
+    margin: 0 auto;
+    background: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(15,23,42,0.06);
+    overflow: hidden;
+  }
+  @media (max-width: 640px) {
+    .rx-workstation-card {
+      border-radius: 6px !important;
+      border: 1px solid #E2E8F0 !important;
+    }
+  }
+
+  .rx-workstation-subbar {
+    background: #FFFFFF;
+    padding: 0 20px;
+    height: 46px;
+    border-bottom: 1px solid #E2E8F0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  @media (max-width: 640px) {
+    .rx-workstation-subbar {
+      padding: 6px 10px !important;
+      height: auto !important;
+      min-height: 42px !important;
+      flex-wrap: wrap !important;
+      gap: 6px !important;
+    }
+  }
+
+  .rx-workstation-header {
+    background: linear-gradient(90deg, #0284C7 0%, #0369A1 100%);
+    color: #FFFFFF;
+    padding: 7px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #0284C7;
+  }
+  .rx-workflow-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(0,0,0,0.15);
+    padding: 2px 4px;
+    border-radius: 6px;
+  }
+  @media (max-width: 768px) {
+    .rx-workstation-header {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      padding: 8px 10px !important;
+      gap: 8px !important;
+    }
+    .rx-workflow-tabs {
+      width: 100% !important;
+      display: flex !important;
+      justify-content: space-between !important;
+      overflow-x: auto !important;
+    }
+    .rx-workflow-btn {
+      flex: 1 !important;
+      text-align: center !important;
+      padding: 6px 4px !important;
+      font-size: 11px !important;
+      white-space: nowrap !important;
+    }
+  }
+
+  /* Demographics Grid (Demographics Left + Photo Right) */
+  .rx-demographics-grid {
+    display: grid;
+    grid-template-columns: 1fr 200px;
+    gap: 16px;
+    padding: 12px 16px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .rx-demographics-grid {
+      grid-template-columns: 1fr !important;
+      gap: 14px !important;
+      padding: 10px 10px !important;
+    }
+  }
+
+  /* Demographics 3 Columns */
+  .rx-demographics-cols {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 18px;
+    row-gap: 10px;
+    align-items: start;
+  }
+  @media (max-width: 992px) {
+    .rx-demographics-cols {
+      grid-template-columns: 1fr 1fr !important;
+      column-gap: 14px !important;
+    }
+  }
+  @media (max-width: 680px) {
+    .rx-demographics-cols {
+      grid-template-columns: 1fr !important;
+      row-gap: 14px !important;
+    }
+  }
+
+  /* Photo Column */
+  .rx-photo-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    border-left: 1px dashed #CBD5E1;
+    padding-left: 14px;
+  }
+  @media (max-width: 900px) {
+    .rx-photo-col {
+      border-left: none !important;
+      border-top: 1px dashed #CBD5E1 !important;
+      padding-left: 0 !important;
+      padding-top: 14px !important;
+      width: 100% !important;
+      justify-content: center !important;
+    }
+  }
+
+  /* Field Rows inside Demographics */
+  .rx-field-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+  }
+  .rx-field-label {
+    width: 90px;
+    text-align: right;
+    font-size: 11.5px;
+    font-weight: 650;
+    color: #334155;
+    flex-shrink: 0;
+  }
+  .rx-field-colon {
+    width: 6px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #94A3B8;
+    flex-shrink: 0;
+  }
+  @media (max-width: 520px) {
+    .rx-field-row {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      height: auto !important;
+      min-height: 0 !important;
+      gap: 3px !important;
+      margin-bottom: 8px !important;
+    }
+    .rx-field-label {
+      width: 100% !important;
+      text-align: left !important;
+      font-size: 11px !important;
+      font-weight: 750 !important;
+    }
+    .rx-field-colon {
+      display: none !important;
+    }
+    .rx-field-row input, .rx-field-row select {
+      height: 34px !important;
+      font-size: 12.5px !important;
+    }
+  }
+
+  /* Initial Vitals Grid */
+  .rx-vitals-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    column-gap: 10px;
+    row-gap: 6px;
+    padding: 8px 16px;
+    align-items: center;
+    background: #FFFFFF;
+  }
+  .rx-vital-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .rx-vital-lbl {
+    width: 65px;
+    text-align: right;
+    font-size: 11px;
+    font-weight: 650;
+    color: #475569;
+    flex-shrink: 0;
+  }
+  @media (max-width: 992px) {
+    .rx-vitals-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+      row-gap: 8px !important;
+    }
+  }
+  @media (max-width: 540px) {
+    .rx-vitals-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      gap: 8px !important;
+      padding: 8px !important;
+    }
+    .rx-vital-row {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 2px !important;
+    }
+    .rx-vital-lbl {
+      width: 100% !important;
+      text-align: left !important;
+      font-size: 10.5px !important;
+    }
+    .rx-vital-colon {
+      display: none !important;
+    }
+  }
+
+  /* Scheduling Grid */
+  .rx-scheduling-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 16px;
+    row-gap: 7px;
+  }
+  @media (max-width: 768px) {
+    .rx-scheduling-grid {
+      grid-template-columns: 1fr !important;
+      gap: 8px !important;
+    }
+  }
+  .rx-add-doctor-wrap {
+    padding-left: 107px;
+  }
+  @media (max-width: 640px) {
+    .rx-add-doctor-wrap {
+      padding-left: 0 !important;
+      width: 100% !important;
+    }
+  }
+
+  /* Billing Grid */
+  .rx-billing-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr;
+    column-gap: 14px;
+    row-gap: 8px;
+    align-items: center;
+  }
+  @media (max-width: 1024px) {
+    .rx-billing-grid {
+      grid-template-columns: 1fr 1fr !important;
+      gap: 10px !important;
+    }
+  }
+  @media (max-width: 640px) {
+    .rx-billing-grid {
+      grid-template-columns: 1fr !important;
+      gap: 10px !important;
+    }
+  }
+
+  /* Bottom Actions */
+  .rx-bottom-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #E2E8F0;
+  }
+  @media (max-width: 640px) {
+    .rx-bottom-actions {
+      flex-direction: column !important;
+      width: 100% !important;
+      gap: 8px !important;
+      padding: 10px 0 !important;
+    }
+    .rx-bottom-actions button {
+      width: 100% !important;
+      height: 42px !important;
+      font-size: 13px !important;
+      justify-content: center !important;
+    }
+  }
 `}</style>
 
 <div style={{
@@ -11433,7 +11818,7 @@ const ReceptionistDashboard = () => {
 }}>
   
   {/* Header / Top Sub-Bar (Edge-to-edge, height 46px) */}
-  <div style={{
+  <div className="rx-workstation-subbar" style={{
     background: '#FFFFFF',
     padding: '0 20px',
     height: '46px',
@@ -11586,11 +11971,11 @@ const ReceptionistDashboard = () => {
   )}
 
   {/* Redesigned Enterprise HIS Table Registration Workstation (Matching media_1791436391758.jpg) */}
-  <div style={{ flex: 1, overflowY: "auto", background: "#F1F5F9", padding: "12px 18px 24px" }}>
-    <div style={{ maxWidth: "1440px", margin: "0 auto", background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "8px", boxShadow: "0 1px 4px rgba(15,23,42,0.06)", overflow: "hidden" }}>
+  <div className="rx-workstation-scroll" style={{ flex: 1, overflowY: "auto", background: "#F1F5F9", padding: "12px 18px 24px" }}>
+    <div className="rx-workstation-card" style={{ maxWidth: "1440px", margin: "0 auto", background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "8px", boxShadow: "0 1px 4px rgba(15,23,42,0.06)", overflow: "hidden" }}>
 
       {/* ─── WORKSTATION TOP BANNER (Enterprise Header matching HIS/LIS Reference) ─── */}
-      <div style={{
+      <div className="rx-workstation-header" style={{
         background: "linear-gradient(90deg, #0284C7 0%, #0369A1 100%)",
         color: "#FFFFFF",
         padding: "7px 16px",
@@ -11614,9 +11999,10 @@ const ReceptionistDashboard = () => {
         </div>
 
         {/* Workflow Type Switcher Tabs */}
-        <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "rgba(0,0,0,0.15)", padding: "2px 4px", borderRadius: "6px" }}>
+        <div className="rx-workflow-tabs" style={{ display: "flex", alignItems: "center", gap: "4px", background: "rgba(0,0,0,0.15)", padding: "2px 4px", borderRadius: "6px" }}>
           <button
             type="button"
+            className="rx-workflow-btn"
             onClick={() => setBookingType("doctor")}
             style={{
               padding: "4px 10px",
@@ -11634,6 +12020,7 @@ const ReceptionistDashboard = () => {
           </button>
           <button
             type="button"
+            className="rx-workflow-btn"
             onClick={() => setBookingType("lab")}
             style={{
               padding: "4px 10px",
@@ -11651,6 +12038,7 @@ const ReceptionistDashboard = () => {
           </button>
           <button
             type="button"
+            className="rx-workflow-btn"
             onClick={() => setBookingType("service")}
             style={{
               padding: "4px 10px",
@@ -11693,10 +12081,10 @@ const ReceptionistDashboard = () => {
         };
 
         return (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 200px", gap: "16px", padding: "12px 16px", alignItems: "start" }}>
+          <div className="rx-demographics-grid" style={{ display: "grid", gridTemplateColumns: "1fr 200px", gap: "16px", padding: "12px 16px", alignItems: "start" }}>
 
             {/* LEFT SIDE: 3 DISTINCT SMART COLUMNS [Personal Details | Contact Details | Residential Address] */}
-            <div style={{
+            <div className="rx-demographics-cols" style={{
               display: "grid",
               gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
               columnGap: "18px",
@@ -11713,11 +12101,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 1. Patient Name (with Integrated Title Dropdown) */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     Patient Name <span style={{ color: "#EF4444" }}>*</span>
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0, display: "flex", gap: "4px", alignItems: "center" }}>
                     <select
                       style={{
@@ -11766,11 +12154,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 3. Gender */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     Gender <span style={{ color: "#EF4444" }}>*</span>
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <select
                       style={{
@@ -11796,11 +12184,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 4. Age (Y/M/D) */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     Age (Y/M/D) {!formData.dob && <span style={{ color: "#EF4444" }}>*</span>}
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0, display: "flex", gap: "3px" }}>
                     <input
                       type="number"
@@ -11836,11 +12224,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 5. DOB */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     DOB {formData.dob ? <span style={{ color: "#10B981", fontSize: "10px" }}>✓</span> : (!formData.age ? <span style={{ color: "#EF4444" }}>*</span> : null)}
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <input
                       type="date"
@@ -11854,11 +12242,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 6. Blood Group */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     Blood Group
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <select
                       style={{
@@ -11898,11 +12286,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 1. Mobile No. (Top of Column) */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     Mobile No. <span style={{ color: "#EF4444" }}>*</span>
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <input
                       type="text"
@@ -11920,11 +12308,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 2. Emergency No. (Same Column directly underneath Mobile No.) */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     Emergency No.
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <input
                       type="text"
@@ -11942,11 +12330,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 3. Email Address (Mandatory with OTP) */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px", position: "relative" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px", position: "relative" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     Email <span style={{ color: "#EF4444" }}>*</span>
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", alignItems: "center" }}>
                     <input
                       type="email"
@@ -12031,11 +12419,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 4. Referred By */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     Referred By
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <input
                       type="text"
@@ -12059,11 +12447,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 1. Address / Street */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     Address
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <input
                       type="text"
@@ -12077,11 +12465,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 2. City */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     City
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <input
                       type="text"
@@ -12095,11 +12483,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 3. State */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     State
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <input
                       type="text"
@@ -12113,11 +12501,11 @@ const ReceptionistDashboard = () => {
                 </div>
 
                 {/* 4. PIN Code */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "90px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     PIN Code
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <input
                       type="text"
@@ -12135,7 +12523,7 @@ const ReceptionistDashboard = () => {
             </div>
 
             {/* RIGHT SIDE: PATIENT PHOTO FRAME & ACTIONS (Exact match with media_1791436391758.jpg) */}
-            <div style={{
+            <div className="rx-photo-col" style={{
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -12307,7 +12695,7 @@ const ReceptionistDashboard = () => {
           : '';
 
         return (
-          <div style={{
+          <div className="rx-vitals-grid" style={{
             display: "grid",
             gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
             columnGap: "10px",
@@ -12317,9 +12705,9 @@ const ReceptionistDashboard = () => {
             background: "#FFFFFF"
           }}>
             {/* BP */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>BP (S/D)</label>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
+            <div className="rx-vital-row" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <label className="rx-vital-lbl" style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>BP (S/D)</label>
+              <span className="rx-vital-colon" style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
               <div style={{ display: "flex", alignItems: "center", gap: "2px", flex: 1 }}>
                 <input type="number" placeholder="120" style={{ ...tableInp, flex: 1 }} value={vitalBpSys} onChange={e => setVitalBpSys(e.target.value)} />
                 <span style={{ color: "#94A3B8", fontSize: "11px" }}>/</span>
@@ -12328,9 +12716,9 @@ const ReceptionistDashboard = () => {
             </div>
 
             {/* Pulse */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>Pulse</label>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
+            <div className="rx-vital-row" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <label className="rx-vital-lbl" style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>Pulse</label>
+              <span className="rx-vital-colon" style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
               <div style={{ display: "flex", alignItems: "center", gap: "3px", flex: 1 }}>
                 <input type="number" placeholder="72" style={tableInp} value={vitalPulse} onChange={e => setVitalPulse(e.target.value)} />
                 <span style={{ fontSize: "10px", color: "#64748B", flexShrink: 0 }}>bpm</span>
@@ -12338,9 +12726,9 @@ const ReceptionistDashboard = () => {
             </div>
 
             {/* Temp */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>Temp</label>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
+            <div className="rx-vital-row" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <label className="rx-vital-lbl" style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>Temp</label>
+              <span className="rx-vital-colon" style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
               <div style={{ display: "flex", alignItems: "center", gap: "3px", flex: 1 }}>
                 <input type="number" step="0.1" placeholder="98.6" style={tableInp} value={vitalTemp} onChange={e => setVitalTemp(e.target.value)} />
                 <span style={{ fontSize: "10px", color: "#64748B", flexShrink: 0 }}>°F</span>
@@ -12348,9 +12736,9 @@ const ReceptionistDashboard = () => {
             </div>
 
             {/* Weight */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>Weight</label>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
+            <div className="rx-vital-row" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <label className="rx-vital-lbl" style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>Weight</label>
+              <span className="rx-vital-colon" style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
               <div style={{ display: "flex", alignItems: "center", gap: "3px", flex: 1 }}>
                 <input type="number" step="0.1" placeholder="68" style={tableInp} value={vitalWeight} onChange={e => setVitalWeight(e.target.value)} />
                 <span style={{ fontSize: "10px", color: "#64748B", flexShrink: 0 }}>kg</span>
@@ -12358,9 +12746,9 @@ const ReceptionistDashboard = () => {
             </div>
 
             {/* Height */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>Height</label>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
+            <div className="rx-vital-row" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <label className="rx-vital-lbl" style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>Height</label>
+              <span className="rx-vital-colon" style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
               <div style={{ display: "flex", alignItems: "center", gap: "3px", flex: 1 }}>
                 <input type="number" step="0.5" placeholder="174" style={tableInp} value={vitalHeight} onChange={e => setVitalHeight(e.target.value)} />
                 <span style={{ fontSize: "10px", color: "#64748B", flexShrink: 0 }}>cm</span>
@@ -12368,9 +12756,9 @@ const ReceptionistDashboard = () => {
             </div>
 
             {/* BMI */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>BMI</label>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
+            <div className="rx-vital-row" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <label className="rx-vital-lbl" style={{ width: "65px", textAlign: "right", fontSize: "11px", fontWeight: 650, color: "#475569", flexShrink: 0 }}>BMI</label>
+              <span className="rx-vital-colon" style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>:</span>
               <div style={{ flex: 1 }}>
                 <input
                   type="text"
@@ -12731,18 +13119,18 @@ const ReceptionistDashboard = () => {
         return (
           <div style={{ padding: "10px 16px", display: "flex", flexDirection: "column", gap: "8px" }}>
             {/* Primary Appointment Row in Strict 3 Columns */}
-            <div style={{
+            <div className="rx-scheduling-grid" style={{
               display: "grid",
               gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
               columnGap: "16px",
               rowGap: "7px"
             }}>
               {/* Col 1: Doctor * */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                <label className="rx-field-label" style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Doctor <span style={{ color: "#EF4444" }}>*</span>
                 </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <select
                     style={{ ...tableInp, cursor: "pointer" }}
@@ -12761,11 +13149,11 @@ const ReceptionistDashboard = () => {
               </div>
 
               {/* Col 2: Consultation Date * */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                <label className="rx-field-label" style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Date <span style={{ color: "#EF4444" }}>*</span>
                 </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <input
                     type="date"
@@ -12779,11 +13167,11 @@ const ReceptionistDashboard = () => {
               </div>
 
               {/* Col 3: Consultation Fee (READ-ONLY LOCKED 🔒) */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                <label className="rx-field-label" style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Consult Fee
                 </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                 <div style={{
                   flex: 1, minWidth: 0, height: "30px",
                   background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "4px",
@@ -12805,11 +13193,11 @@ const ReceptionistDashboard = () => {
             </div>
 
             {/* Time Slot Chips (Spanning full width) */}
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", minHeight: "30px" }}>
-              <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+            <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", minHeight: "30px" }}>
+              <label className="rx-field-label" style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                 Time Slot
               </label>
-              <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+              <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
               <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" }}>
                 {(!formData.doctorId || !bookingDate) ? (
                   <span style={{ fontSize: "11px", color: "#94A3B8", fontStyle: "italic" }}>
@@ -12843,10 +13231,10 @@ const ReceptionistDashboard = () => {
                         disabled={full || past}
                         onClick={() => { if (!full && !past) setSelectedSlot(time); }}
                         style={{
-                          height: "24px",
+                          height: "26px",
                           padding: "0 8px",
                           fontSize: "11px",
-                          borderRadius: "3px",
+                          borderRadius: "4px",
                           border: sel ? "1px solid #0284C7" : "1px solid #CBD5E1",
                           background: sel ? "#0284C7" : (full || past ? "#F1F5F9" : "#FFFFFF"),
                           color: sel ? "#FFFFFF" : (full || past ? "#94A3B8" : "#334155"),
@@ -12864,7 +13252,7 @@ const ReceptionistDashboard = () => {
 
             {/* Additional Appointments (if any) */}
             {additionalApptsList.map((addon, aIdx) => (
-              <div key={addon.id || aIdx} style={{
+              <div key={addon.id || aIdx} className="rx-scheduling-grid" style={{
                 background: "#F8FAFC",
                 border: "1px dashed #93C5FD",
                 borderRadius: "4px",
@@ -12874,11 +13262,11 @@ const ReceptionistDashboard = () => {
                 columnGap: "16px",
                 rowGap: "6px"
               }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 700, color: "#1D4ED8", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 700, color: "#1D4ED8", flexShrink: 0 }}>
                     Appt #{aIdx + 2} Doctor
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1 }}>
                     <select
                       style={tableInp}
@@ -12895,11 +13283,11 @@ const ReceptionistDashboard = () => {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
-                  <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+                <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", height: "30px" }}>
+                  <label className="rx-field-label" style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                     Date
                   </label>
-                  <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                  <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                   <div style={{ flex: 1 }}>
                     <input
                       type="date"
@@ -12927,7 +13315,7 @@ const ReceptionistDashboard = () => {
             ))}
 
             {!reschedulingAppointment && (
-              <div style={{ paddingLeft: "107px" }}>
+              <div className="rx-add-doctor-wrap" style={{ paddingLeft: "107px" }}>
                 <button
                   type="button"
                   onClick={handleAddAdditionalAppt}
@@ -12999,7 +13387,7 @@ const ReceptionistDashboard = () => {
         return (
           <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
             {/* Table Row for Settlement Metrics */}
-            <div style={{
+            <div className="rx-billing-grid" style={{
               display: "grid",
               gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1fr",
               columnGap: "14px",
@@ -13007,12 +13395,12 @@ const ReceptionistDashboard = () => {
               alignItems: "center"
             }}>
               {/* Payment Mode */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <label style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <label className="rx-field-label" style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Payment Mode
                 </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
-                <div style={{ flex: 1, display: "flex", gap: "3px" }}>
+                <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: "3px" }}>
                   {["Cash", "UPI", "Card", "Other"].map(mode => {
                     const isSel = !isBookingSplitPayment && bookingPaymentMethod === mode;
                     return (
@@ -13028,6 +13416,7 @@ const ReceptionistDashboard = () => {
                         }}
                         style={{
                           flex: 1,
+                          minWidth: "48px",
                           height: "30px",
                           borderRadius: "4px",
                           border: isSel ? "1.5px solid #0284C7" : "1px solid #CBD5E1",
@@ -13078,11 +13467,11 @@ const ReceptionistDashboard = () => {
               </div>
 
               {/* Discount % & Reason */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <label style={{ width: "75px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <label className="rx-field-label" style={{ width: "75px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Discount %
                 </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, display: "flex", gap: "4px" }}>
                   <input
                     type="number"
@@ -13106,33 +13495,33 @@ const ReceptionistDashboard = () => {
               </div>
 
               {/* Gross Amount */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <label style={{ width: "75px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <label className="rx-field-label" style={{ width: "75px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Gross Total
                 </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, height: "30px", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "4px", padding: "0 8px", display: "flex", alignItems: "center", fontWeight: 800, fontSize: "13px", color: "#0F172A" }}>
                   ₹{sub.toFixed(2)}
                 </div>
               </div>
 
               {/* Net Payable */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <label style={{ width: "75px", textAlign: "right", fontSize: "11.5px", fontWeight: 700, color: "#059669", flexShrink: 0 }}>
+              <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <label className="rx-field-label" style={{ width: "75px", textAlign: "right", fontSize: "11.5px", fontWeight: 700, color: "#059669", flexShrink: 0 }}>
                   Net Payable
                 </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, height: "30px", background: "#ECFDF5", border: "1.5px solid #10B981", borderRadius: "4px", padding: "0 8px", display: "flex", alignItems: "center", fontWeight: 900, fontSize: "13.5px", color: "#065F46" }}>
                   ₹{total.toFixed(2)}
                 </div>
               </div>
 
               {/* Amount Paid & Balance Due */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <label style={{ width: "75px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
+              <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <label className="rx-field-label" style={{ width: "75px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                   Amount Paid
                 </label>
-                <span style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
+                <span className="rx-field-colon" style={{ width: "6px", textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94A3B8", flexShrink: 0 }}>:</span>
                 <div style={{ flex: 1, display: "flex", gap: "4px", alignItems: "center" }}>
                   {isBookingSplitPayment ? (
                     <div style={{ ...tableInp, display: "flex", alignItems: "center", justifyContent: "flex-end", background: "#F1F5F9", color: "#0F172A", fontWeight: 800, paddingRight: "8px" }}>
@@ -13386,7 +13775,7 @@ const ReceptionistDashboard = () => {
             )}
 
             {/* Bottom Row Action Buttons (Save & Close, matching Reference) */}
-            <div style={{
+            <div className="rx-bottom-actions" style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -18668,6 +19057,12 @@ const ReceptionistDashboard = () => {
         {/* MOBILE BOTTOM NAV */}
         <div className={`mob-nav-item ${activeTab === 'dash' ? 'active' : ''}`} onClick={() => switchTab('dash')}>
           <i data-lucide="layout-grid"></i><span>Home</span>
+        </div>
+        <div className={`mob-nav-item ${activeTab === 'reception-queue' ? 'active' : ''}`} onClick={() => switchTab('reception-queue')}>
+          <i data-lucide="list-ordered"></i><span>Queue</span>
+        </div>
+        <div className={`mob-nav-item ${activeTab === 'registration-form' ? 'active' : ''}`} onClick={() => switchTab('registration-form')}>
+          <i data-lucide="user-plus"></i><span>Register</span>
         </div>
         <div className={`mob-nav-item ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => switchTab('appointments')}>
           <i data-lucide="calendar"></i><span>Apps</span>

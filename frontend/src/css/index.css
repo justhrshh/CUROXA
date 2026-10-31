@@ -1606,29 +1606,33 @@ div[style*="textAlign: center"] {
         bottom: 0;
         left: 0;
         width: 100%;
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(255, 255, 255, 0.96);
         backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
         border-top: 1px solid #E2E8F0;
         z-index: 1000;
         justify-content: space-around;
-        padding: 12px 0;
-        padding-bottom: calc(12px + env(safe-area-inset-bottom));
+        padding: 6px 0;
+        padding-bottom: calc(6px + env(safe-area-inset-bottom, 8px));
         box-shadow: 0 -10px 30px rgba(0,0,0,0.05);
     }
     .mob-nav-item {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 6px;
-        color: #94A3B8;
-        font-size: 11px;
-        font-weight: 800;
+        gap: 3px;
+        color: #64748B;
+        font-size: 10px;
+        font-weight: 750;
         cursor: pointer;
-        transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        padding: 3px 6px;
+        border-radius: 8px;
+        transition: 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
-    .mob-nav-item i { width: 22px; height: 22px; }
+    .mob-nav-item i, .mob-nav-item svg { width: 19px; height: 19px; }
     .mob-nav-item.active {
-        color: var(--primary);
+        color: var(--primary, #2563EB);
+        background: rgba(37, 99, 235, 0.08);
     }
     
     /* Elegant table overflow handling */
