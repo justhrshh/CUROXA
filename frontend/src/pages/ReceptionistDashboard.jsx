@@ -4211,7 +4211,10 @@ const ReceptionistDashboard = () => {
   };
 
   const handleCreateAppointmentForProfilePatient = (patientObj) => {
-    const pat = patientObj || selectedPatient;
+    // Guard against React SyntheticEvent being passed as patientObj
+    const pat = (patientObj && !patientObj.nativeEvent && !patientObj.preventDefault && patientObj.name) 
+      ? patientObj 
+      : selectedPatient;
     if (!pat) return;
 
     let patDob = pat.dob ? (typeof pat.dob === 'string' && pat.dob.includes('T') ? pat.dob.split('T')[0] : pat.dob) : '';
@@ -4245,11 +4248,36 @@ const ReceptionistDashboard = () => {
     setBookingType('opd');
     setIsExistingPatient(true);
     setSelectedPatient(pat);
+
+    // Reset previous booking session state completely
+    setSelectedSymptoms([]);
+    setBookingPaymentMethod('');
+    setOtpVerified(false);
+    setOtpSent(false);
+    setVerificationOtp('');
+    setAdditionalApptsList([]);
+    setSelectedSlot('');
+    setBookingDate(getLocalDateString());
+    setVitalTemp('');
+    setVitalPulse('');
+    setVitalBpSys('');
+    setVitalBpDia('');
+    setVitalResp('');
+    setVitalSpo2('');
+    setVitalWeight('');
+    setVitalHeight('');
     setActiveReceptionTicket(null);
     setReschedulingAppointment(null);
     setAddOnOriginAppt(null);
     setBookingDiscountPercent(0);
     setBookingDiscountReason('');
+    setPatientPhoto(null);
+    setPhotoZoom(1);
+    setPhotoOffsetX(0);
+    setPhotoOffsetY(0);
+    setIsBookingSplitPayment(false);
+    setBookingPaymentRows([{ method: 'Cash', amount: '', transactionRef: '', notes: '' }]);
+
     switchTab('registration-form', true);
   };
 
@@ -4478,26 +4506,33 @@ const ReceptionistDashboard = () => {
   };
 
   const handleRePrintPatientSlip = (p, targetBill = null) => {
-    if (!p) return;
+    const pat = p || targetBill?.patientId;
+    if (!pat && !targetBill) return;
+    const patId = pat?._id || pat;
+
     const patientBills = bills.filter(b => {
-      const pId = b.patientId?._id || b.patientId;
-      return pId && pId.toString() === p._id.toString() && b.status === 'Paid';
+      const bPatId = b.patientId?._id || b.patientId;
+      return bPatId && patId && bPatId.toString() === patId.toString() && b.status === 'Paid';
     });
 
-    if (patientBills.length === 0) {
-      showToast(`No paid payment receipts found for ${p.name}.`, "info");
+    const billToPrint = targetBill || (patientBills.length > 0 ? patientBills[0] : null);
+
+    if (!billToPrint) {
+      showToast(`No paid payment receipts found.`, "info");
       return;
     }
 
-    const billToPrint = targetBill || patientBills[0];
+    const patientName = pat?.name || billToPrint.patientName || billToPrint.patientId?.name || 'Patient';
+    const patientContact = pat?.contact || billToPrint.patientContact || billToPrint.patientId?.contact || 'N/A';
+    const patientAgeGender = `${pat?.age || billToPrint.patientId?.age || 'N/A'} / ${pat?.gender || billToPrint.patientId?.gender || 'N/A'}`;
 
     setActiveSlipData({
       receiptNo: `REC-${(billToPrint._id || '').slice(-6).toUpperCase()}`,
       date: new Date(billToPrint.createdAt || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-      patientName: p.name || 'Patient',
-      patientId: getFormattedPatientId(p._id),
-      contact: p.contact || 'N/A',
-      ageGender: `${p.age || 'N/A'} / ${p.gender || 'N/A'}`,
+      patientName: patientName,
+      patientId: getFormattedPatientId(patId || billToPrint.patientId?._id || billToPrint.patientId),
+      contact: patientContact,
+      ageGender: patientAgeGender,
       testName: (billToPrint.items || []).map(i => i.description).join(', ') || 'Medical Services',
       items: billToPrint.items || [{ description: 'Clinic Services', amount: billToPrint.totalAmount }],
       originalAmount: billToPrint.originalAmount || billToPrint.totalAmount,
@@ -5184,21 +5219,22 @@ const ReceptionistDashboard = () => {
         }
 
         @media (max-width: 1024px) {
-          .main-content {
+          .main-content,
+          .main-content.collapsed {
             margin-left: 0 !important;
             padding: 16px 14px calc(85px + env(safe-area-inset-bottom, 20px)) 14px !important;
           }
-          .main-content.registration-fullscreen {
-            position: relative !important;
-            top: 0 !important;
+          .main-content.registration-fullscreen,
+          .main-content.registration-fullscreen.collapsed {
+            position: fixed !important;
+            top: 60px !important;
+            bottom: 0 !important;
             left: 0 !important;
             right: 0 !important;
-            bottom: auto !important;
-            margin-top: 60px !important;
-            margin-left: 0 !important;
             width: 100% !important;
-            min-height: calc(100vh - 60px) !important;
             height: auto !important;
+            max-height: none !important;
+            margin: 0 !important;
             padding: 0 0 calc(90px + env(safe-area-inset-bottom, 20px)) 0 !important;
             overflow-y: auto !important;
             -webkit-overflow-scrolling: touch !important;
@@ -5206,7 +5242,7 @@ const ReceptionistDashboard = () => {
           }
           .main-content.registration-fullscreen .tab-content {
             height: auto !important;
-            min-height: 0 !important;
+            min-height: 100% !important;
             overflow: visible !important;
             display: block !important;
             padding: 0 !important;
@@ -5246,12 +5282,16 @@ const ReceptionistDashboard = () => {
             height: auto !important;
             overflow: visible !important;
           }
+          .rx-slot-row {
+            height: auto !important;
+            min-height: 34px !important;
+          }
         }
 
         @media (max-width: 640px) {
-          .main-content.registration-fullscreen {
-            margin-top: 56px !important;
-            min-height: calc(100vh - 56px) !important;
+          .main-content.registration-fullscreen,
+          .main-content.registration-fullscreen.collapsed {
+            top: 56px !important;
           }
           .rx-lookup-header {
             flex-direction: column !important;
@@ -8717,12 +8757,15 @@ const ReceptionistDashboard = () => {
                     )}
                   </div>
                 ) : (
-                  allFiltered.slice((patientPage - 1) * 10, patientPage * 10).map((p, idx) => {
+                  (() => {
+                    const maxPatientPages = Math.max(1, Math.ceil(allFiltered.length / 10));
+                    const safePatientPage = Math.min(Math.max(1, patientPage), maxPatientPages);
+                    return allFiltered.slice((safePatientPage - 1) * 10, safePatientPage * 10).map((p, idx) => {
                     const avatarTheme = getAvatarTheme(p.name);
                     const initials = getInitials(p.name);
                     const isMale = p.gender?.toLowerCase() === 'male';
                     const isFemale = p.gender?.toLowerCase() === 'female';
-                    const globalIdx = (patientPage - 1) * 10 + idx + 1;
+                    const globalIdx = (safePatientPage - 1) * 10 + idx + 1;
 
                     return (
                       <div key={p._id} className="rx-mobile-card">
@@ -8793,7 +8836,8 @@ const ReceptionistDashboard = () => {
                         </div>
                       </div>
                     );
-                  })
+                  });
+                  })()
                 )}
               </div>
 
@@ -9003,7 +9047,7 @@ const ReceptionistDashboard = () => {
                     fontSize: '12.5px',
                     boxShadow: '0 4px 12px rgba(37,99,235,0.25)' 
                   }} 
-                  onClick={handleCreateAppointmentForProfilePatient}
+                  onClick={() => handleCreateAppointmentForProfilePatient()}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19" />
@@ -12065,6 +12109,7 @@ const ReceptionistDashboard = () => {
     height: 30px;
   }
   .rx-field-label {
+    display: block !important;
     width: 90px;
     text-align: right;
     font-size: 11.5px;
@@ -13613,7 +13658,7 @@ const ReceptionistDashboard = () => {
             </div>
 
             {/* Time Slot Chips (Spanning full width) */}
-            <div className="rx-field-row" style={{ display: "flex", alignItems: "center", gap: "6px", minHeight: "30px" }}>
+            <div className="rx-field-row rx-slot-row" style={{ display: "flex", alignItems: "flex-start", gap: "6px", minHeight: "34px", height: "auto", padding: "4px 0" }}>
               <label className="rx-field-label" style={{ width: "95px", textAlign: "right", fontSize: "11.5px", fontWeight: 650, color: "#334155", flexShrink: 0 }}>
                 Time Slot
               </label>
@@ -16036,7 +16081,7 @@ const ReceptionistDashboard = () => {
                                   Share Rx
                                 </button>
                               ) : (
-                                !primary.isServed && primary.status !== 'Cancelled' && (
+                                !primary.tokenNumber && primary.status !== 'Cancelled' && primary.status !== 'Prescription Pending' && isAppointmentToday(primary.date) && !isApptExpired24h(primary.date, primary.time) && (
                                   <button 
                                     type="button" 
                                     style={{ flex: 1, height: '32px', fontSize: '11.5px', fontWeight: 700, borderRadius: '8px', border: 'none', background: '#2563EB', color: '#FFFFFF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} 
@@ -16047,9 +16092,98 @@ const ReceptionistDashboard = () => {
                                   </button>
                                 )
                               )}
+                              {/* Same-day Add-On consultation button for mobile */}
+                              {(primary.status === 'Scheduled' || primary.status === 'Paid' || primary.status === 'Confirmed' || primary.status === 'In Progress') && isAppointmentToday(primary.date) && (
+                                <button
+                                  type="button"
+                                  style={{ flex: 1, height: '32px', fontSize: '11.5px', fontWeight: 800, borderRadius: '8px', border: 'none', background: '#8B5CF6', color: '#FFFFFF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                                  onClick={() => {
+                                    const patientData = typeof primary.patientId === 'object' ? primary.patientId : null;
+                                    if (patientData) {
+                                      setSelectedPatient(patientData);
+                                      setAddOnOriginAppt(primary.rawItem);
+                                      setFormData({
+                                        title: patientData.title || '',
+                                        name: patientData.name || '',
+                                        age: patientData.age || '',
+                                        gender: patientData.gender || '',
+                                        contact: patientData.contact || '',
+                                        email: patientData.email || '',
+                                        bloodGroup: patientData.bloodGroup || 'O+',
+                                        address: patientData.address || '',
+                                        medicalHistory: patientData.medicalHistory ? (Array.isArray(patientData.medicalHistory) ? patientData.medicalHistory.join(', ') : patientData.medicalHistory) : '',
+                                        doctorId: ''
+                                      });
+                                      setIsExistingPatient(true);
+                                      switchTab('registration-form', true);
+                                      showToast(`Adding same-day consultation for ${patientData.name}.`, 'success');
+                                    } else {
+                                      showToast('Patient details unavailable for add-on consultation.', 'warning');
+                                    }
+                                  }}
+                                  title="Add same-day additional consultation"
+                                >
+                                  + Add-On
+                                </button>
+                              )}
                             </>
                           )}
                         </div>
+
+                        {/* Multi-Visit Add-On Appointments Section */}
+                        {isMulti && addOns && addOns.length > 0 && (
+                          <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #CBD5E1', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 800, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                              Same-Day Add-On Visits ({addOns.length}):
+                            </div>
+                            {addOns.map((addon, aIdx) => {
+                              const isAddonCompleted = addon.status === 'Completed' || addon.status === 'Paid' || addon.rawItem?.status === 'Completed' || addon.rawItem?.status === 'Paid';
+                              const addonVisitId = addon.rawItem?.visitId || addon.visitId;
+                              return (
+                                <div key={addon.id || aIdx} style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 10px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                    <span style={{ fontWeight: 800, fontSize: '12px', color: '#0F172A' }}>
+                                      {addon.detailName || addon.type}
+                                    </span>
+                                    <span className={`status-badge ${
+                                      addon.status === 'Completed' || addon.status === 'Paid' ? 'available' : 
+                                      addon.status === 'Rescheduled' ? 'rescheduled' :
+                                      (addon.status === 'Cancelled' ? 'critical' : 'pending')
+                                    }`} style={{ fontSize: '10.5px', padding: '1px 6px' }}>
+                                      {addon.status}
+                                    </span>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#64748B', marginBottom: '6px' }}>
+                                    <span>{addon.time || 'General Slot'}</span>
+                                    <span style={{ fontWeight: 700, color: addon.tokenNumber ? '#2563EB' : '#64748B' }}>
+                                      {addon.tokenNumber ? `Token #${addon.tokenNumber}` : (addonVisitId || 'Not Checked In')}
+                                    </span>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '6px' }}>
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary"
+                                      style={{ flex: 1, height: '28px', fontSize: '11px', fontWeight: 700, borderRadius: '6px', border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#334155', cursor: 'pointer', justifyContent: 'center' }}
+                                      onClick={() => openDetailsModal(addon.rawItem)}
+                                    >
+                                      Details
+                                    </button>
+                                    {addon.type === 'Appointment' && !addon.tokenNumber && addon.status !== 'Cancelled' && addon.status !== 'Prescription Pending' && isAppointmentToday(addon.date) && !isApptExpired24h(addon.date, addon.time) && !isAddonCompleted && (
+                                      <button
+                                        type="button"
+                                        style={{ flex: 1, height: '28px', fontSize: '11px', fontWeight: 700, borderRadius: '6px', border: 'none', background: '#2563EB', color: '#FFFFFF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                                        disabled={isCheckingIn}
+                                        onClick={() => handleCheckInAppointment(addon.rawItem)}
+                                      >
+                                        Check In
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })
@@ -17023,8 +17157,7 @@ const ReceptionistDashboard = () => {
                                   className="btn btn-secondary" 
                                   style={{ flex: 1, height: '32px', fontSize: '11.5px', fontWeight: 700, borderRadius: '8px', border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                                   onClick={() => {
-                                    setSelectedBillForPrint(bill);
-                                    setShowBillModal(true);
+                                    handleRePrintPatientSlip(bill.patientId, bill);
                                   }}
                                 >
                                   View Receipt
@@ -19813,7 +19946,7 @@ const ReceptionistDashboard = () => {
         <div className={`mob-nav-item ${activeTab === 'reception-queue' ? 'active' : ''}`} onClick={() => switchTab('reception-queue')}>
           <i data-lucide="list-ordered"></i><span>Queue</span>
         </div>
-        <div className={`mob-nav-item ${activeTab === 'registration-form' ? 'active' : ''}`} onClick={() => switchTab('registration-form')}>
+        <div className={`mob-nav-item ${activeTab === 'registration-form' ? 'active' : ''}`} onClick={() => { if (activeTab !== 'registration-form') switchTab('registration-form'); }}>
           <i data-lucide="user-plus"></i><span>Register</span>
         </div>
         <div className={`mob-nav-item ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => switchTab('appointments')}>
