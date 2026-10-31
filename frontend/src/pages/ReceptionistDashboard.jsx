@@ -873,6 +873,7 @@ const ReceptionistDashboard = () => {
   }, [detailsModalOpen, selectedAppointment?._id]);
 
   const [isExistingPatient, setIsExistingPatient] = useState(null); // null = choose mode, true = existing, false = new register
+  const [activeReceptionTicket, setActiveReceptionTicket] = useState(null); // Reception Queue Ticket being processed
   const [searchPatientQuery, setSearchPatientQuery] = useState('');
   const [pendingRegistrationPayload, setPendingRegistrationPayload] = useState(null);
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -3046,6 +3047,7 @@ const ReceptionistDashboard = () => {
     if (tabId === 'registration-form' && !bypassReset) {
       setIsExistingPatient(null);
       setSelectedPatient(null);
+      setActiveReceptionTicket(null);
       
       let draftData = null;
       let contactToUse = '';
@@ -3391,23 +3393,35 @@ const ReceptionistDashboard = () => {
           return;
         }
 
-        if (!formData.email || !formData.email.trim()) {
-          showToast("Please enter Patient Email Address. Email is mandatory.", "error");
-          setLoading(false);
-          return;
-        }
+        if (!activeReceptionTicket) {
+          if (!formData.email || !formData.email.trim()) {
+            showToast("Please enter Patient Email Address. Email is mandatory.", "error");
+            setLoading(false);
+            return;
+          }
 
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(formData.email.trim())) {
-          showToast("Please enter a valid email address.", "error");
-          setLoading(false);
-          return;
-        }
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(formData.email.trim())) {
+            showToast("Please enter a valid email address.", "error");
+            setLoading(false);
+            return;
+          }
 
-        if (!otpVerified) {
-          showToast("Please verify the patient's email using OTP before confirming.", "error");
-          setLoading(false);
-          return;
+          if (!otpVerified) {
+            showToast("Please verify the patient's email using OTP before confirming.", "error");
+            setLoading(false);
+            return;
+          }
+        } else {
+          // Patient arrived via Reception QR flow where arrival was authenticated
+          if (formData.email && formData.email.trim()) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(formData.email.trim())) {
+              showToast("Please enter a valid email address.", "error");
+              setLoading(false);
+              return;
+            }
+          }
         }
       } else if (!selectedPatient) {
         showToast("Please select a patient.", "error");
@@ -3751,6 +3765,37 @@ const ReceptionistDashboard = () => {
         }
       }
 
+      // Auto check-in same-day OPD consultations to allocate live Doctor Consultation Token
+      let assignedDoctorToken = null;
+      let checkInVisitId = null;
+      const isPrimaryApptToday = isAppointmentToday(allApptsToBook[0]?.date || bookingDate);
+      if (primaryApptId && (isPrimaryApptToday || activeReceptionTicket)) {
+        try {
+          const checkInRes = await api.post(`/appointments/${primaryApptId}/check-in`);
+          const checkInData = checkInRes.data;
+          assignedDoctorToken = checkInData?.token?.tokenNumber || checkInData?.appointment?.tokenNumber;
+          checkInVisitId = checkInData?.visitId || checkInData?.appointment?.visitId;
+
+          if (checkInData?.appointment) {
+            setAppointments(prev => prev.map(a => a._id === primaryApptId ? { ...a, ...checkInData.appointment, visitId: checkInVisitId || a.visitId } : a));
+          }
+        } catch (checkInErr) {
+          console.warn("[AUTO CHECK-IN WARNING]:", checkInErr.response?.data?.error || checkInErr.message);
+        }
+      }
+
+      // If intake originated from Reception Queue, complete the ticket
+      const completedTicketRef = activeReceptionTicket;
+      if (completedTicketRef && completedTicketRef._id) {
+        try {
+          await api.post(`/reception-queue/staff/complete/${completedTicketRef._id}`, {
+            patientId: finalPatientId
+          });
+        } catch (ticketErr) {
+          console.warn("[RECEPTION TICKET COMPLETE ERROR]:", ticketErr.response?.data?.error || ticketErr.message);
+        }
+      }
+
       setActiveSlipData({
         receiptNo: `REC-${Date.now().toString().slice(-6)}`,
         date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
@@ -3759,6 +3804,8 @@ const ReceptionistDashboard = () => {
         contact: activePatient.contact || 'N/A',
         ageGender: `${activePatient.age || 'N/A'} / ${activePatient.gender || 'N/A'}`,
         testName: 'OPD Consultation & Booking Fee',
+        tokenNumber: assignedDoctorToken || undefined,
+        proposalNo: assignedDoctorToken ? `#${assignedDoctorToken}` : undefined,
         items: finalItems,
         originalAmount: finalOrigAmt,
         discountAmount: finalDiscAmt,
@@ -3772,13 +3819,22 @@ const ReceptionistDashboard = () => {
       });
       setShowSlipPdfModal(true);
 
-      showToast(isAddOnProcessed ? "Add-On Appointment registered and existing visit billing updated successfully!" : `${apptsToCreate.length} Appointment(s) registered & Payment completed successfully!`, "success");
+      const firstDocName = allApptsToBook[0]?.doctorName || 'Doctor';
+      if (assignedDoctorToken) {
+        showToast(
+          `Consultation booked & checked in! Token #${assignedDoctorToken} assigned for Dr. ${firstDocName.replace(/^Dr\.\s*/i, '')}.${completedTicketRef ? ` Reception Ticket #${completedTicketRef.ticketDisplay} completed.` : ''}`,
+          "success"
+        );
+      } else {
+        showToast(isAddOnProcessed ? "Add-On Appointment registered and existing visit billing updated successfully!" : `${apptsToCreate.length} Appointment(s) registered & Payment completed successfully!`, "success");
+      }
 
       // Reset Form State
       setFormData({ title: '', name: '', age: '', gender: '', contact: '', email: '', doctorId: '', bloodGroup: '', address: '', medicalHistory: '', referredBy: '', allergies: 'None', currentMedications: '' });
       setBookingDate(getLocalDateString());
       setSelectedSlot('');
       setSelectedSymptoms([]);
+      setActiveReceptionTicket(null);
       setAdditionalApptsList([]);
       setIsExistingPatient(null);
       setSelectedPatient(null);
@@ -4172,6 +4228,131 @@ const ReceptionistDashboard = () => {
     setIsExistingPatient(true);
     setSelectedPatient(pat);
     switchTab('registration-form', true);
+  };
+
+  const handleProcessReceptionTicket = (ticket) => {
+    if (!ticket) return;
+    setActiveReceptionTicket(ticket);
+
+    const isExisting = ticket.patientType === 'Existing';
+    const pObj = isExisting ? (ticket.existingPatientDetails || {}) : (ticket.preliminaryDetails || {});
+    const defaultDocId = doctors && doctors.length > 0 ? doctors[0]._id : '';
+
+    if (isExisting) {
+      const ticketPatId = ticket.patientId ? (typeof ticket.patientId === 'object' ? String(ticket.patientId._id) : String(ticket.patientId)) : null;
+      const matchedPat = patientsList.find(p => {
+        const pIdStr = String(p._id);
+        if (ticketPatId && pIdStr === ticketPatId) return true;
+        if (p.uhId && (p.uhId === pObj.uhId || p.uhId === pObj.patientId)) return true;
+        if (p.patientId && (p.patientId === pObj.patientId || p.patientId === pObj.uhId)) return true;
+        if (p.contact && (p.contact === pObj.contact || p.contact === ticket.patientId?.contact)) return true;
+        return false;
+      });
+
+      if (matchedPat) {
+        setSelectedPatient(matchedPat);
+        setFormData({
+          title: matchedPat.title || pObj.title || '',
+          name: matchedPat.name || pObj.name || '',
+          dob: matchedPat.dob || '',
+          age: matchedPat.age ? String(matchedPat.age) : (pObj.age ? String(pObj.age) : ''),
+          ageMonths: matchedPat.ageMonths || '',
+          ageDays: matchedPat.ageDays || '',
+          gender: matchedPat.gender || pObj.gender || 'Male',
+          contact: matchedPat.contact || pObj.contact || '',
+          email: matchedPat.email || pObj.email || '',
+          bloodGroup: matchedPat.bloodGroup || pObj.bloodGroup || 'O+',
+          address: matchedPat.address || pObj.address || '',
+          addressStreet: matchedPat.addressStreet || '',
+          addressCity: matchedPat.addressCity || '',
+          addressState: matchedPat.addressState || '',
+          addressPincode: matchedPat.addressPincode || '',
+          medicalHistory: matchedPat.medicalHistory ? (Array.isArray(matchedPat.medicalHistory) ? matchedPat.medicalHistory.join(', ') : matchedPat.medicalHistory) : '',
+          allergies: matchedPat.allergies || 'None',
+          currentMedications: matchedPat.currentMedications || '',
+          referredBy: matchedPat.referredBy || '',
+          emergencyContact: matchedPat.emergencyContact || '',
+          doctorId: defaultDocId,
+          amountPaid: '',
+          customConsultFee: undefined
+        });
+      } else {
+        setSelectedPatient({
+          _id: ticketPatId,
+          name: pObj.name || 'Patient',
+          contact: pObj.contact || ticket.patientId?.contact || '',
+          uhId: pObj.uhId || pObj.patientId || '',
+          patientId: pObj.patientId || pObj.uhId || ''
+        });
+        setFormData({
+          title: pObj.title || '',
+          name: pObj.name || '',
+          dob: '',
+          age: pObj.age ? String(pObj.age) : '',
+          ageMonths: '',
+          ageDays: '',
+          gender: pObj.gender || 'Male',
+          contact: pObj.contact || '',
+          email: pObj.email || '',
+          bloodGroup: pObj.bloodGroup || 'O+',
+          address: pObj.address || '',
+          addressStreet: '',
+          addressCity: '',
+          addressState: '',
+          addressPincode: '',
+          allergies: pObj.allergies || 'None',
+          currentMedications: '',
+          referredBy: '',
+          emergencyContact: '',
+          doctorId: defaultDocId,
+          amountPaid: '',
+          customConsultFee: undefined
+        });
+      }
+      setIsExistingPatient(true);
+    } else {
+      setSelectedPatient(null);
+      setIsExistingPatient(false);
+      setFormData({
+        title: pObj.title || '',
+        name: pObj.name || '',
+        dob: pObj.dob || '',
+        age: pObj.age ? String(pObj.age) : '',
+        ageMonths: '',
+        ageDays: '',
+        gender: pObj.gender || 'Male',
+        contact: pObj.contact || '',
+        email: pObj.email || '',
+        bloodGroup: pObj.bloodGroup || 'O+',
+        address: pObj.address || '',
+        addressStreet: '',
+        addressCity: '',
+        addressState: '',
+        addressPincode: '',
+        medicalHistory: '',
+        allergies: pObj.allergies || 'None',
+        currentMedications: '',
+        referredBy: '',
+        emergencyContact: '',
+        doctorId: defaultDocId,
+        amountPaid: '',
+        customConsultFee: undefined
+      });
+      setOtpVerified(true);
+      setDpdpConsent(true);
+    }
+
+    setBookingType('opd');
+    setBookingDate(getLocalDateString());
+    setSelectedSlot('');
+    setBookingPaymentMethod('Cash');
+    setBookingDiscountPercent(0);
+    setBookingDiscountReason('');
+    setReschedulingAppointment(null);
+    setAddOnOriginAppt(null);
+
+    switchTab('registration-form', true);
+    showToast(`Processing Reception Ticket #${ticket.ticketDisplay} for ${pObj.name || 'Patient'}.`, 'info');
   };
 
   const [activePatientMenuId, setActivePatientMenuId] = useState(null);
@@ -11257,12 +11438,17 @@ const ReceptionistDashboard = () => {
         onClick={() => {
           setSelectedPatient(null);
           setIsExistingPatient(null);
-          setFormData({
-            title: '',
-            name: '', age: '', gender: '', contact: '', email: '', doctorId: '',
-            bloodGroup: '', address: '', medicalHistory: '', referredBy: '',
-            allergies: 'None', currentMedications: ''
-          });
+          if (activeReceptionTicket) {
+            setActiveReceptionTicket(null);
+            switchTab('reception-queue');
+          } else {
+            setFormData({
+              title: '',
+              name: '', age: '', gender: '', contact: '', email: '', doctorId: '',
+              bloodGroup: '', address: '', medicalHistory: '', referredBy: '',
+              allergies: 'None', currentMedications: ''
+            });
+          }
         }}
         style={{
           background: '#EFF6FF',
@@ -11281,7 +11467,7 @@ const ReceptionistDashboard = () => {
         title="Return to patient lookup"
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-        Back to Search
+        {activeReceptionTicket ? 'Back to Reception Queue' : 'Back to Search'}
       </button>
 
       <div style={{ width: '1px', height: '16px', background: '#CBD5E1' }}></div>
@@ -11332,6 +11518,61 @@ const ReceptionistDashboard = () => {
       </button>
     </div>
   </div>
+
+  {/* Active Reception Queue Ticket Banner */}
+  {activeReceptionTicket && (
+    <div style={{
+      background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)',
+      color: '#FFFFFF',
+      padding: '9px 20px',
+      borderBottom: '1px solid #0D9488',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      flexWrap: 'wrap',
+      gap: '10px',
+      flexShrink: 0
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <span style={{
+          background: '#FFFFFF',
+          color: '#0F766E',
+          fontWeight: 900,
+          fontSize: '12.5px',
+          padding: '2px 9px',
+          borderRadius: '5px'
+        }}>
+          Reception Ticket #{activeReceptionTicket.ticketDisplay}
+        </span>
+        <span style={{ fontSize: '13px', fontWeight: 600 }}>
+          Walk-In Intake: <strong>{activeReceptionTicket.preliminaryDetails?.name || activeReceptionTicket.existingPatientDetails?.name || formData.name || 'Patient'}</strong>
+          {(activeReceptionTicket.preliminaryDetails?.contact || activeReceptionTicket.patientId?.contact) && ` (${activeReceptionTicket.preliminaryDetails?.contact || activeReceptionTicket.patientId?.contact})`}
+          {' • '}{activeReceptionTicket.patientType} Patient
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveReceptionTicket(null);
+            switchTab('reception-queue');
+          }}
+          style={{
+            background: 'rgba(255, 255, 255, 0.2)',
+            color: '#FFFFFF',
+            border: '1px solid rgba(255, 255, 255, 0.4)',
+            borderRadius: '6px',
+            padding: '4px 12px',
+            fontSize: '11.5px',
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
+        >
+          ← Return to Reception Queue
+        </button>
+      </div>
+    </div>
+  )}
 
   {/* Redesigned Enterprise HIS Table Registration Workstation (Matching media_1791436391758.jpg) */}
   <div style={{ flex: 1, overflowY: "auto", background: "#F1F5F9", padding: "12px 18px 24px" }}>
@@ -13173,7 +13414,9 @@ const ReceptionistDashboard = () => {
                             ? (isExistingPatient ? "Order Lab Tests & Settle" : "Save & Register Lab Patient")
                             : (bookingType === "service"
                                 ? (isExistingPatient ? "Book Procedure & Settle" : "Save & Register Procedure Patient")
-                                : (isExistingPatient ? "Book Appointment & Pay" : "Save & Register Patient"))))}
+                                : (activeReceptionTicket
+                                    ? (isExistingPatient ? "Confirm Booking & Assign Token" : "Complete Registration & Assign Token")
+                                    : (isExistingPatient ? "Book Appointment & Pay" : "Save & Register Patient")))))}
               </button>
 
               <button
@@ -13187,6 +13430,10 @@ const ReceptionistDashboard = () => {
                   setBookingPaymentRows([{ method: 'Cash', amount: '', transactionRef: '', notes: '' }]);
                   setIsBookingSplitPayment(false);
                   setFormData({ title: "", name: "", dob: "", age: "", ageMonths: "", ageDays: "", gender: "", contact: "", email: "", doctorId: "", bloodGroup: "", address: "", addressStreet: "", addressCity: "", addressState: "", addressPincode: "", medicalHistory: "", referredBy: "", allergies: "None", currentMedications: "", emergencyContact: "", amountPaid: "", customConsultFee: undefined });
+                  if (activeReceptionTicket) {
+                    setActiveReceptionTicket(null);
+                    switchTab('reception-queue');
+                  }
                 }}
                 style={{
                   height: "32px",
@@ -13200,7 +13447,7 @@ const ReceptionistDashboard = () => {
                   cursor: "pointer"
                 }}
               >
-                Close / Cancel
+                {activeReceptionTicket ? 'Cancel & Return to Queue' : 'Close / Cancel'}
               </button>
             </div>
           </div>
@@ -14882,6 +15129,7 @@ const ReceptionistDashboard = () => {
               setAppointments={setAppointments}
               showToast={showToast}
               fetchData={fetchData}
+              onProcessIntake={handleProcessReceptionTicket}
             />
           </div>
         )}

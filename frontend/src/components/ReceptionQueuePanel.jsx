@@ -12,7 +12,8 @@ const ReceptionQueuePanel = ({
   appointments = [],
   setAppointments,
   showToast,
-  fetchData
+  fetchData,
+  onProcessIntake
 }) => {
   const [queueData, setQueueData] = useState({
     queueDate: '',
@@ -589,7 +590,13 @@ const ReceptionQueuePanel = ({
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
               <button
                 type="button"
-                onClick={() => openIntakeModal(queueData.currentServing)}
+                onClick={() => {
+                  if (onProcessIntake) {
+                    onProcessIntake(queueData.currentServing);
+                  } else {
+                    openIntakeModal(queueData.currentServing);
+                  }
+                }}
                 style={{
                   background: 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)',
                   color: '#FFFFFF',
@@ -606,7 +613,7 @@ const ReceptionQueuePanel = ({
                 }}
               >
                 <Sparkles size={16} />
-                Process & Book Appointment
+                Process Intake
               </button>
 
               <button
@@ -840,7 +847,13 @@ const ReceptionQueuePanel = ({
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button
                           type="button"
-                          onClick={() => openIntakeModal(t)}
+                          onClick={() => {
+                            if (onProcessIntake) {
+                              onProcessIntake(t);
+                            } else {
+                              openIntakeModal(t);
+                            }
+                          }}
                           style={{
                             padding: '7px 12px',
                             borderRadius: '6px',
@@ -980,8 +993,8 @@ const ReceptionQueuePanel = ({
         )}
       </div>
 
-      {/* ── DESK INTAKE & APPOINTMENT BOOKING MODAL ── */}
-      {selectedTicketForIntake && (
+      {/* ── DESK INTAKE & APPOINTMENT BOOKING MODAL (FALLBACK ONLY IF NOT HANDLED VIA FULL WORKSTATION PAGE) ── */}
+      {!onProcessIntake && selectedTicketForIntake && (
         <div style={{
           position: 'fixed',
           inset: 0,
