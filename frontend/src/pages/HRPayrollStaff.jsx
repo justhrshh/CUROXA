@@ -1099,7 +1099,7 @@ export default function HRPayrollStaff({ onExit }) {
           .admin-portal {
             font-family: 'Outfit', sans-serif;
             background: #F8FAFC;
-            min-height: calc(100vh / 0.9);
+            min-height: 100vh;
             display: flex;
             color: #1E293B;
             width: 100%;
@@ -1114,7 +1114,7 @@ export default function HRPayrollStaff({ onExit }) {
             position: fixed;
             top: 0;
             left: 0;
-            height: calc(100vh / 0.9);
+            height: 100vh;
             z-index: 1000;
             transition: all 0.3s ease;
           }
@@ -3051,11 +3051,11 @@ export default function HRPayrollStaff({ onExit }) {
       <style>{`
         html, body {
           overflow: hidden !important;
-          height: calc(100vh / 0.9) !important;
+          height: 100vh !important;
         }
         .hr-portal-container {
           display: flex;
-          height: calc(100vh / 0.9);
+          height: 100vh;
           overflow: hidden;
           background-color: #F8FAFC;
           font-family: 'Urbanist', sans-serif;
@@ -3316,7 +3316,7 @@ export default function HRPayrollStaff({ onExit }) {
           flex-direction: column;
           min-width: 0;
           transition: all 0.3s ease;
-          height: calc(100vh / 0.9);
+          height: 100vh;
           overflow: hidden;
         }
 

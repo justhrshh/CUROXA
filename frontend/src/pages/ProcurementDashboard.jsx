@@ -1648,7 +1648,7 @@ const ProcurementDashboard = ({ initialTab, itemMasterSubView }) => {
           flex-grow: 1;
           display: flex;
           flex-direction: column;
-          height: calc(100vh / 0.9) !important;
+          height: 100vh !important;
           overflow-y: auto !important;
           background: #F8FAFC;
         }

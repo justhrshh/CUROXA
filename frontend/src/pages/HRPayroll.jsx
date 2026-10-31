@@ -780,7 +780,7 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
     <div className="text-slate-800 flex relative overflow-hidden font-sans" style={{ 
       background: '#F8FAFC',
       color: '#1E293B',
-      height: 'calc(100vh / 0.9)'
+      height: '100vh'
     }}>
       
 
@@ -802,7 +802,7 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
           borderRight: '1px solid #E2E8F0',
           boxShadow: '4px 0 24px rgba(30, 58, 138, 0.03)',
           bottom: 0,
-          height: 'calc(100vh / 0.9)'
+          height: '100vh'
         }}
       >
         {/* Dedicated Circular Toggle Button Overlapping Right Edge */}
@@ -1613,7 +1613,7 @@ export default function HRPayroll({ onExit, initialTab = 'Dashboard', initialIsA
           gap: 28px;
           padding: 0;
           animation: adminFadeIn 0.3s ease-out;
-          height: calc(100vh / 0.9 - 104px);
+          height: calc(100vh - );
           min-height: 500px;
         }
 

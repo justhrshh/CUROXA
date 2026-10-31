@@ -2108,32 +2108,29 @@ div[style*="textAlign: center"] {
   background: #94A3B8;
 }
 
-/* Lock viewport on desktop displays (>= 1280px) — mobile/tablet uses native responsive 100% zoom */
-@media (min-width: 1280px) {
-  html {
+/* Responsive 100% viewport width and height across all displays (no artificial zoom downscaling) */
+html, body {
+  zoom: 1 !important;
+  background-color: #F8FAFC !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+}
+
+@media (min-width: 1025px) {
+  html, body {
     overflow: hidden !important;
-    zoom: 0.9;
-    background-color: #F8FAFC !important;
     height: 100% !important;
-  }
-  body {
-    overflow: hidden !important;
-    background-color: #F8FAFC !important;
-    height: 100% !important;
-    margin: 0 !important;
   }
 }
 
-@media (max-width: 1279px) {
+@media (max-width: 1024px) {
   html, body {
-    zoom: 1 !important;
     overflow-x: hidden !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
-    background-color: #F8FAFC !important;
     height: auto !important;
     min-height: 100% !important;
-    margin: 0 !important;
   }
 }
 
@@ -2161,23 +2158,26 @@ html.login-page-active [style*="height:100vh"] {
   height: 100dvh !important;
 }
 
-/* Scale full height containers under zoom 0.9 to occupy exactly 100% physical height (100 / 0.9 = 111.11vh) */
+/* Full height containers occupy standard 100vh */
 .sidebar, 
 [style*="height: 100vh"],
 [style*="height:100vh"],
 .h-screen {
-  height: 111.11vh !important;
+  height: 100vh !important;
+  height: 100dvh !important;
 }
 
 [style*="min-height: 100vh"],
 [style*="min-height:100vh"],
 .min-h-screen {
-  min-height: 111.11vh !important;
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
 }
 
 /* Main content: scroll internally, fill remaining viewport height below top-nav */
 .main-content {
-  height: calc(100vh / 0.9 - 56px) !important;
+  height: calc(100vh - 76px) !important;
+  height: calc(100dvh - 76px) !important;
   overflow-y: auto !important;
 }
 

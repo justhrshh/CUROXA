@@ -2410,7 +2410,7 @@ const PatientDashboard = () => {
           background: radial-gradient(ellipse at 15% 15%, rgba(37, 99, 235, 0.05) 0%, transparent 60%),
                       radial-gradient(ellipse at 85% 85%, rgba(6, 182, 212, 0.05) 0%, transparent 60%),
                       #F8FAFC !important;
-          min-height: calc(100vh / 0.9);
+          min-height: 100vh;
           color: #0F172A !important;
         }
 
@@ -2442,7 +2442,7 @@ const PatientDashboard = () => {
         /* Sidebar Styling Override */
         .patient-portal-container .sidebar {
           width: 256px !important;
-          height: calc(100vh / 0.9) !important;
+          height: 100vh !important;
           background: #FFFFFF !important;
           border-right: 1px solid #E2E8F0 !important;
           box-shadow: 2px 0 20px rgba(15, 23, 42, 0.02) !important;

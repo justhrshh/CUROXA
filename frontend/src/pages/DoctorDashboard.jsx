@@ -4920,7 +4920,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
           border-right: 1px solid #E2E8F0 !important;
           box-shadow: none !important;
           padding: 24px 0 !important;
-          height: calc(100vh / 0.9) !important;
+          height: 100vh !important;
           position: fixed !important;
           top: 0 !important;
           left: 0 !important;
@@ -5258,7 +5258,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
           height: 100vh !important;
           height: 100dvh !important;
           min-height: 100vh !important;
-          min-height: calc(100vh / 0.9) !important;
+          min-height: 100vh !important;
           z-index: 1000 !important;
           border-right: 1px solid rgba(226, 232, 240, 0.85) !important;
           border-top-right-radius: 28px !important;
@@ -5868,7 +5868,7 @@ I have scanned the medical reference databases, but couldn't find a direct match
             bottom: 0,
             left: 0,
             height: '100%',
-            minHeight: 'calc(100vh / 0.9)',
+            minHeight: '100vh',
             display: 'flex',
             flexDirection: 'column',
             zIndex: 1000,

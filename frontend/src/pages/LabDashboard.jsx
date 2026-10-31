@@ -1167,7 +1167,7 @@ const LabDashboard = () => {
           display: flex !important;
           flex-direction: column !important;
           width: 256px !important;
-          height: calc(100vh / 0.9) !important;
+          height: 100vh !important;
           position: fixed !important;
           top: 0 !important;
           left: 0 !important;

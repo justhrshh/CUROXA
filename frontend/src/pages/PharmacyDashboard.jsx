@@ -3374,7 +3374,7 @@ const PharmacyDashboard = () => {
           height: 100vh !important;
           height: 100dvh !important;
           min-height: 100vh !important;
-          min-height: calc(100vh / 0.9) !important;
+          min-height: 100vh !important;
           z-index: 1000 !important;
           border-right: 1px solid rgba(226, 232, 240, 0.85) !important;
           border-top-right-radius: 28px !important;
@@ -4227,7 +4227,7 @@ const PharmacyDashboard = () => {
             bottom: 0,
             left: 0,
             height: '100%',
-            minHeight: 'calc(100vh / 0.9)',
+            minHeight: '100vh',
             display: 'flex',
             flexDirection: 'column',
             zIndex: 1000,
