@@ -4210,23 +4210,46 @@ const ReceptionistDashboard = () => {
     setVitalHeight('');
   };
 
-  const handleCreateAppointmentForProfilePatient = () => {
-    if (!selectedPatient) return;
-    const pat = { ...selectedPatient };
+  const handleCreateAppointmentForProfilePatient = (patientObj) => {
+    const pat = patientObj || selectedPatient;
+    if (!pat) return;
+
+    let patDob = pat.dob ? (typeof pat.dob === 'string' && pat.dob.includes('T') ? pat.dob.split('T')[0] : pat.dob) : '';
+    let patAge = pat.age ? String(pat.age) : '';
+
     setFormData({
       title: pat.title || '',
-      name: pat.name,
-      age: pat.age,
-      gender: pat.gender,
-      contact: pat.contact,
+      name: pat.name || '',
+      dob: patDob,
+      age: patAge,
+      ageMonths: pat.ageMonths || '',
+      ageDays: pat.ageDays || '',
+      gender: pat.gender || 'Male',
+      contact: pat.contact || '',
       email: pat.email || '',
       bloodGroup: pat.bloodGroup || 'O+',
       address: pat.address || '',
-      medicalHistory: pat.medicalHistory ? pat.medicalHistory.join(', ') : '',
-      doctorId: ''
+      addressStreet: pat.addressStreet || '',
+      addressCity: pat.addressCity || '',
+      addressState: pat.addressState || '',
+      addressPincode: pat.addressPincode || '',
+      medicalHistory: pat.medicalHistory ? (Array.isArray(pat.medicalHistory) ? pat.medicalHistory.join(', ') : pat.medicalHistory) : '',
+      allergies: pat.allergies || 'None',
+      currentMedications: pat.currentMedications || '',
+      referredBy: pat.referredBy || '',
+      emergencyContact: pat.emergencyContact || '',
+      doctorId: doctors && doctors.length > 0 ? doctors[0]._id : '',
+      amountPaid: '',
+      customConsultFee: undefined
     });
+    setBookingType('opd');
     setIsExistingPatient(true);
     setSelectedPatient(pat);
+    setActiveReceptionTicket(null);
+    setReschedulingAppointment(null);
+    setAddOnOriginAppt(null);
+    setBookingDiscountPercent(0);
+    setBookingDiscountReason('');
     switchTab('registration-form', true);
   };
 
@@ -5163,11 +5186,88 @@ const ReceptionistDashboard = () => {
         @media (max-width: 1024px) {
           .main-content {
             margin-left: 0 !important;
-            padding: 16px 14px 90px 14px !important;
+            padding: 16px 14px calc(85px + env(safe-area-inset-bottom, 20px)) 14px !important;
           }
           .main-content.registration-fullscreen {
+            position: relative !important;
+            top: 0 !important;
             left: 0 !important;
+            right: 0 !important;
+            bottom: auto !important;
+            margin-top: 60px !important;
+            margin-left: 0 !important;
+            width: 100% !important;
+            min-height: calc(100vh - 60px) !important;
+            height: auto !important;
+            padding: 0 0 calc(90px + env(safe-area-inset-bottom, 20px)) 0 !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            display: block !important;
+          }
+          .main-content.registration-fullscreen .tab-content {
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            display: block !important;
             padding: 0 !important;
+          }
+          .rx-lookup-workstation {
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            display: block !important;
+          }
+          .rx-lookup-grid {
+            display: flex !important;
+            flex-direction: column !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            padding: 10px !important;
+            gap: 12px !important;
+          }
+          .rx-lookup-left-col,
+          .rx-lookup-right-col {
+            height: auto !important;
+            overflow: visible !important;
+            width: 100% !important;
+          }
+          .rx-lookup-table-wrap {
+            max-height: 480px !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+          .rx-workstation-scroll {
+            overflow-y: visible !important;
+            height: auto !important;
+            padding: 10px 8px calc(90px + env(safe-area-inset-bottom, 20px)) !important;
+          }
+          .rx-workstation-card {
+            height: auto !important;
+            overflow: visible !important;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .main-content.registration-fullscreen {
+            margin-top: 56px !important;
+            min-height: calc(100vh - 56px) !important;
+          }
+          .rx-lookup-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 10px !important;
+            padding: 10px 12px !important;
+          }
+          .rx-lookup-actions {
+            width: 100% !important;
+            justify-content: space-between !important;
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+          }
+          .rx-lookup-actions button {
+            width: 100% !important;
+            justify-content: center !important;
           }
         }
 
@@ -6769,7 +6869,7 @@ const ReceptionistDashboard = () => {
                 >
                   <i data-lucide="plus" style={{ width: '16px', strokeWidth: 3 }}></i>
                   <span className="rec-hero-text-long">Create Appointment</span>
-                  <span className="rec-hero-text-short">+ Appt</span>
+                  <span className="rec-hero-text-short">Appt</span>
                 </button>
                 <button 
                   className="btn" 
@@ -8685,11 +8785,7 @@ const ReceptionistDashboard = () => {
                             className="btn btn-primary"
                             style={{ flex: 1, height: '32px', fontSize: '11.5px', fontWeight: 800, borderRadius: '8px', border: 'none', background: '#2563EB', color: '#FFFFFF', cursor: 'pointer', justifyContent: 'center' }}
                             onClick={() => {
-                              resetRegistrationForm();
-                              setSelectedPatient(p);
-                              setIsExistingPatient(true);
-                              setBookingType('opd');
-                              switchTab('registration-form');
+                              handleCreateAppointmentForProfilePatient(p);
                             }}
                           >
                             Book Appt
@@ -11061,7 +11157,7 @@ const ReceptionistDashboard = () => {
           <div className="tab-content active" style={{ height: '100%', width: '100%', padding: 0, margin: 0, overflow: 'hidden' }}>
 
             {isExistingPatient === null ? (
-              <div style={{
+              <div className="rx-lookup-workstation" style={{
                 display: 'flex',
                 flexDirection: 'column',
                 height: '100%',
@@ -11192,7 +11288,7 @@ const ReceptionistDashboard = () => {
                   overflow: 'hidden'
                 }}>
                   {/* Left Column: Search & Quick Actions */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', height: '100%', overflowY: 'auto' }}>
+                  <div className="rx-lookup-left-col" style={{ display: 'flex', flexDirection: 'column', gap: '14px', height: '100%', overflowY: 'auto' }}>
                     {/* Search Card */}
                     <div style={{
                       background: '#FFFFFF',
@@ -11368,7 +11464,7 @@ const ReceptionistDashboard = () => {
                   </div>
 
                   {/* Right Column: Patients Table / Search Results */}
-                  <div style={{
+                  <div className="rx-lookup-right-col" style={{
                     background: '#FFFFFF',
                     borderRadius: '12px',
                     border: '1px solid #E2E8F0',
@@ -11432,7 +11528,7 @@ const ReceptionistDashboard = () => {
                           </div>
 
                           {/* Table Container */}
-                          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                          <div className="rx-lookup-table-wrap" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                             {displayedPatients.length === 0 ? (
                               <div style={{
                                 padding: '48px 24px',
@@ -12326,20 +12422,21 @@ const ReceptionistDashboard = () => {
           <button
             type="button"
             className="rx-workflow-btn"
-            onClick={() => setBookingType("doctor")}
+            onClick={() => setBookingType("opd")}
             style={{
               padding: "4px 10px",
               borderRadius: "4px",
               border: "none",
-              background: bookingType === "doctor" ? "#FFFFFF" : "transparent",
-              color: bookingType === "doctor" ? "#0369A1" : "#FFFFFF",
+              background: (bookingType === "doctor" || bookingType === "opd") ? "#FFFFFF" : "transparent",
+              color: (bookingType === "doctor" || bookingType === "opd") ? "#0369A1" : "#FFFFFF",
               fontSize: "11px",
-              fontWeight: bookingType === "doctor" ? 800 : 600,
+              fontWeight: (bookingType === "doctor" || bookingType === "opd") ? 800 : 600,
               cursor: "pointer",
               transition: "all 0.15s ease"
             }}
           >
-            🩺 Doctor Consultation
+            <i data-lucide="stethoscope" style={{ width: "13px" }}></i>
+            Doctor Consultation
           </button>
           <button
             type="button"
@@ -21619,6 +21716,19 @@ const ReceptionistDashboard = () => {
                 padding: '6px 0'
               }}
             >
+              <div
+                onClick={() => {
+                  setActivePatientMenuId(null);
+                  handleCreateAppointmentForProfilePatient(targetPatient);
+                }}
+                style={{ padding: '10px 14px', fontSize: '12.5px', fontWeight: 700, color: '#2563EB', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'background 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#EFF6FF'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="10" y1="16" x2="14" y2="16"/></svg>
+                Book Doctor Appointment
+              </div>
+
               <div
                 onClick={() => {
                   setActivePatientMenuId(null);
