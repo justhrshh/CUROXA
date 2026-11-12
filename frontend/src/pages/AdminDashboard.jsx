@@ -135,6 +135,14 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
   const [letterheadBlobUrl, setLetterheadBlobUrl] = useState(null);
   const [receptionQrCopied, setReceptionQrCopied] = useState(false);
   const [receptionDisplayCopied, setReceptionDisplayCopied] = useState(false);
+  // Doctor Daily QR Capacity states
+  const [qrDoctorCapacities, setQrDoctorCapacities] = useState([]);
+  const [qrCapacityDate, setQrCapacityDate] = useState(new Date().toISOString().split('T')[0]);
+  const [qrCapacityLoading, setQrCapacityLoading] = useState(false);
+  const [editingDoctorCapacityId, setEditingDoctorCapacityId] = useState(null);
+  const [editingCapacityValue, setEditingCapacityValue] = useState('');
+  const [savingCapacityId, setSavingCapacityId] = useState(null);
+  const [qrCapacityMessage, setQrCapacityMessage] = useState({ text: '', type: '' });
 
   // Prescription template layout states
   const [prescriptionTemplates, setPrescriptionTemplates] = useState([]);
@@ -226,6 +234,66 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       fetchLetterhead();
     }
   }, [activeTab]);
+
+  // Doctor Daily QR Capacity management
+  const fetchDoctorCapacities = async (targetDate) => {
+    setQrCapacityLoading(true);
+    try {
+      const dateParam = targetDate || qrCapacityDate || new Date().toISOString().split('T')[0];
+      const res = await api.get(`/reception-queue/admin/doctor-capacities?date=${dateParam}`);
+      if (res.data?.success) {
+        setQrDoctorCapacities(res.data.capacities || res.data.doctors || []);
+      }
+    } catch (err) {
+      console.error('Failed to load doctor capacities:', err);
+      setQrCapacityMessage({
+        text: err.response?.data?.message || 'Failed to load doctor capacities',
+        type: 'error'
+      });
+    } finally {
+      setQrCapacityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'reception-qr') {
+      fetchDoctorCapacities(qrCapacityDate);
+    } else if (activeTab === 'workforce') {
+      fetchStaff();
+    }
+  }, [activeTab, qrCapacityDate]);
+
+  const handleSaveDoctorCapacity = async (doctorId) => {
+    let payloadCapacity = null;
+    if (editingCapacityValue !== '' && editingCapacityValue !== null && editingCapacityValue !== undefined) {
+      const val = parseInt(editingCapacityValue, 10);
+      if (isNaN(val) || val <= 0) {
+        setQrCapacityMessage({ text: 'Daily capacity must be a positive integer (at least 1), or leave empty to clear.', type: 'error' });
+        return;
+      }
+      payloadCapacity = val;
+    }
+    setSavingCapacityId(doctorId);
+    setQrCapacityMessage({ text: '', type: '' });
+    try {
+      const res = await api.put(`/reception-queue/admin/doctor-capacity/${doctorId}`, { dailyMaxCapacity: payloadCapacity });
+      if (res.data?.success) {
+        const msg = payloadCapacity !== null
+          ? `Daily capacity updated to ${payloadCapacity} for Dr. ${res.data.doctor?.name || ''}`
+          : `Daily capacity cleared for Dr. ${res.data.doctor?.name || ''}`;
+        setQrCapacityMessage({ text: msg, type: 'success' });
+        setEditingDoctorCapacityId(null);
+        setEditingCapacityValue('');
+        await fetchDoctorCapacities(qrCapacityDate);
+        try { await fetchStaff(); } catch (_) {}
+      }
+    } catch (err) {
+      console.error('Failed to update doctor capacity:', err);
+      setQrCapacityMessage({ text: err.response?.data?.message || err.response?.data?.error || 'Failed to update doctor capacity', type: 'error' });
+    } finally {
+      setSavingCapacityId(null);
+    }
+  };
 
   const handleSaveTemplate = async () => {
     try {
@@ -843,7 +911,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
     setApprovalItemsDraft(initialQuantities);
     setApprovalSellingPricesDraft(initialSellingPrices);
   };
-  const [editStaffFields, setEditStaffFields] = useState({ name: '', role: getAvailableRoles()[0]?.value || 'doctor', specialty: '', max_slots: 10, password: '', email: '', phone: '', weeklyOff: 'Sunday', shiftName: 'General Shift', doctorSlots: [] });
+  const [editStaffFields, setEditStaffFields] = useState({ name: '', role: getAvailableRoles()[0]?.value || 'doctor', specialty: '', dailyMaxCapacity: '', max_slots: 10, password: '', email: '', phone: '', weeklyOff: 'Sunday', shiftName: 'General Shift', doctorSlots: [] });
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [showAddStaffPassword, setShowAddStaffPassword] = useState(false);
 
@@ -3045,6 +3113,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
           active: true,
           initials,
           avatarColor,
+          dailyMaxCapacity: user.dailyMaxCapacity !== undefined && user.dailyMaxCapacity !== null ? user.dailyMaxCapacity : null,
           max_slots: user.max_slots,
           email: user.email || '',
           phone: user.phone || '',
@@ -3295,6 +3364,11 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         role: editStaffFields.role,
         specialty: editStaffFields.specialty,
         department: editStaffFields.specialty,
+        dailyMaxCapacity: editStaffFields.role === 'doctor'
+          ? (editStaffFields.dailyMaxCapacity !== '' && editStaffFields.dailyMaxCapacity !== undefined && editStaffFields.dailyMaxCapacity !== null
+              ? Math.max(1, parseInt(editStaffFields.dailyMaxCapacity, 10))
+              : null)
+          : undefined,
         max_slots: editStaffFields.role === 'doctor' ? (editStaffFields.max_slots ? Number(editStaffFields.max_slots) : 10) : undefined,
         consultationFee: editStaffFields.role === 'doctor' ? (editStaffFields.consultationFee !== undefined ? Number(editStaffFields.consultationFee) : 500) : undefined,
         email: editStaffFields.email || '',
@@ -3330,7 +3404,8 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
             role: response.data.role,
             dept: response.data.specialty || response.data.department || editStaffFields.specialty || (response.data.role === 'doctor' ? 'General Medicine' : response.data.role === 'hr' ? 'HR & Administration' : 'Administration'),
             department: response.data.department || response.data.specialty || editStaffFields.specialty || 'Administration',
-            max_slots: response.data.max_slots,
+            dailyMaxCapacity: response.data.dailyMaxCapacity !== undefined ? response.data.dailyMaxCapacity : (payload.dailyMaxCapacity !== undefined ? payload.dailyMaxCapacity : item.dailyMaxCapacity),
+            max_slots: response.data.max_slots !== undefined ? response.data.max_slots : item.max_slots,
             email: response.data.email !== undefined ? response.data.email : editStaffFields.email,
             phone: response.data.phone !== undefined ? response.data.phone : editStaffFields.phone,
             consultationFee: response.data.consultationFee !== undefined ? response.data.consultationFee : 500,
@@ -3349,6 +3424,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       setEditingStaff(null);
       setShowEditPassword(false);
       fetchStaff();
+      try { fetchDoctorCapacities(qrCapacityDate); } catch (_) {}
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       console.error('Backend update failed:', err);
@@ -3458,7 +3534,9 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       carriedForwardLeaves: user.carriedForwardLeaves || 0,
       monthlyLeaveAllocation: user.monthlyLeaveAllocation || { sick: 1, casual: 1, annual: 1.25 },
       documents: user.documents || [],
-      consultationFee: user.consultationFee
+      consultationFee: user.consultationFee,
+      dailyMaxCapacity: user.dailyMaxCapacity !== undefined && user.dailyMaxCapacity !== null ? user.dailyMaxCapacity : null,
+      max_slots: user.max_slots
     };
   };
 
@@ -3502,6 +3580,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
         leaveBalance: merged.leaveBalance,
         doctorSlots: merged.doctorSlots,
         weeklyOff: merged.weeklyOff,
+        dailyMaxCapacity: merged.dailyMaxCapacity !== undefined && merged.dailyMaxCapacity !== '' && merged.dailyMaxCapacity !== null ? Math.max(1, parseInt(merged.dailyMaxCapacity, 10)) : (merged.dailyMaxCapacity === '' || merged.dailyMaxCapacity === null ? null : undefined),
         carriedForwardLeaves: merged.carriedForwardLeaves,
         monthlyLeaveAllocation: merged.monthlyLeaveAllocation,
         documents: merged.documents,
@@ -3512,6 +3591,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
       }
       await api.put(`/admin/users/${id}`, payload);
       await fetchStaff();
+      try { await fetchDoctorCapacities(qrCapacityDate); } catch (_) {}
       setSelectedStaffProfile(prev => prev ? { ...prev, ...merged } : null);
     } catch (err) {
       console.error('Failed to update employee from profile view:', err);
@@ -15917,7 +15997,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                                     </div>
                                     <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600, marginTop: '1px' }}>
                                       {item.role === 'doctor'
-                                        ? (item.max_slots ? `${item.max_slots} slots/day` : '10 slots/day')
+                                        ? (item.dailyMaxCapacity ? `${item.dailyMaxCapacity} slots/day` : 'Unconfigured')
                                         : 'Standard'}
                                     </div>
                                   </td>
@@ -15958,6 +16038,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                                             name: item.name,
                                             role: item.role,
                                             specialty: item.dept || '',
+                                            dailyMaxCapacity: item.dailyMaxCapacity !== undefined && item.dailyMaxCapacity !== null ? item.dailyMaxCapacity : '',
                                             max_slots: item.max_slots || 10,
                                             password: '',
                                             email: item.email || '',
@@ -24344,6 +24425,294 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                   </div>
                 </div>
               </div>
+
+              {/* Doctor Daily QR Capacity Section */}
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '12px',
+                border: '1px solid #E2E8F0',
+                padding: '24px',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '12px',
+                  borderBottom: '1px solid #E2E8F0',
+                  paddingBottom: '16px'
+                }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <Stethoscope size={18} color="#0D9488" />
+                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                        Doctor Slots Per Day
+                      </h3>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '12.5px', color: '#64748B' }}>
+                      Configure the maximum number of patients each doctor can accept per day. This setting is shared with Employee Management.
+                    </p>
+                  </div>
+
+                  {/* Date Picker Filter */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Calendar size={15} color="#64748B" />
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Selected Date:</span>
+                    <input
+                      type="date"
+                      value={qrCapacityDate}
+                      min={new Date().toISOString().split('T')[0]}
+                      onChange={(e) => setQrCapacityDate(e.target.value)}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '12.5px',
+                        color: '#0F172A',
+                        outline: 'none',
+                        background: '#F8FAFC'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fetchDoctorCapacities(qrCapacityDate)}
+                      disabled={qrCapacityLoading}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid #CBD5E1',
+                        background: '#FFFFFF',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: '#334155',
+                        cursor: qrCapacityLoading ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {qrCapacityLoading ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Feedback message banner */}
+                {qrCapacityMessage.text && (
+                  <div style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    fontSize: '12.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    background: qrCapacityMessage.type === 'error' ? '#FEF2F2' : '#F0FDF4',
+                    border: qrCapacityMessage.type === 'error' ? '1px solid #FECACA' : '1px solid #BBF7D0',
+                    color: qrCapacityMessage.type === 'error' ? '#B91C1C' : '#15803D'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {qrCapacityMessage.type === 'error' ? <AlertCircle size={15} /> : <CheckCircle2 size={15} />}
+                      <span>{qrCapacityMessage.text}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setQrCapacityMessage({ text: '', type: '' })}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0 }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+
+                {/* Doctor Capacities Table */}
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+                    <thead>
+                      <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 700 }}>
+                        <th style={{ padding: '10px 14px' }}>Doctor</th>
+                        <th style={{ padding: '10px 14px' }}>Department</th>
+                        <th style={{ padding: '10px 14px' }}>Specialty</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center' }}>Doctor Slots Per Day</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center' }}>Booked ({qrCapacityDate})</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center' }}>Remaining</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center' }}>Status</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {qrDoctorCapacities.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
+                            {qrCapacityLoading ? 'Loading doctor capacities...' : 'No active doctors found for this clinic.'}
+                          </td>
+                        </tr>
+                      ) : (
+                        qrDoctorCapacities.map((doc) => {
+                          const isEditing = editingDoctorCapacityId === doc._id;
+                          const isConfigured = typeof doc.dailyMaxCapacity === 'number' && doc.dailyMaxCapacity > 0;
+                          return (
+                            <tr key={doc._id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                              <td style={{ padding: '12px 14px', fontWeight: 600, color: '#0F172A' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: '50%',
+                                    background: '#E0F2FE',
+                                    color: '#0369A1',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontWeight: 700,
+                                    fontSize: '11px'
+                                  }}>
+                                    {doc.name ? doc.name.charAt(0).toUpperCase() : 'D'}
+                                  </div>
+                                  <span>{doc.name}</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 14px', color: '#475569' }}>{doc.department || '—'}</td>
+                              <td style={{ padding: '12px 14px', color: '#475569' }}>{doc.specialty || '—'}</td>
+                              <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                                {isEditing ? (
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={editingCapacityValue}
+                                      onChange={(e) => setEditingCapacityValue(e.target.value)}
+                                      placeholder="e.g. 30"
+                                      style={{
+                                        width: '70px',
+                                        padding: '4px 6px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #0D9488',
+                                        fontSize: '12px',
+                                        textAlign: 'center',
+                                        outline: 'none'
+                                      }}
+                                      autoFocus
+                                    />
+                                  </div>
+                                ) : isConfigured ? (
+                                  <span style={{ fontWeight: 700, color: '#0F172A' }}>{doc.dailyMaxCapacity} / day</span>
+                                ) : (
+                                  <span style={{
+                                    fontSize: '11px',
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    background: '#F1F5F9',
+                                    color: '#64748B',
+                                    fontWeight: 600
+                                  }}>
+                                    Unconfigured
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 600, color: '#334155' }}>
+                                {isConfigured ? doc.bookedCount : '—'}
+                              </td>
+                              <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 700 }}>
+                                {!isConfigured ? (
+                                  <span style={{ color: '#94A3B8' }}>—</span>
+                                ) : (doc.remainingCapacity !== undefined && doc.remainingCapacity !== null ? doc.remainingCapacity : (doc.remainingSlots || 0)) > 0 ? (
+                                  <span style={{ color: '#0D9488' }}>{doc.remainingCapacity !== undefined && doc.remainingCapacity !== null ? doc.remainingCapacity : doc.remainingSlots}</span>
+                                ) : (
+                                  <span style={{ color: '#EF4444' }}>0</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                                {(() => {
+                                  const displayStatus = doc.status || doc.statusBadge || (isConfigured ? 'Available' : 'Not Configured');
+                                  const isAvail = displayStatus === 'Available';
+                                  const isFull = displayStatus === 'Full' || displayStatus === 'Fully Booked';
+                                  const isOff = displayStatus.toLowerCase().includes('off') || displayStatus.toLowerCase().includes('leave');
+                                  return (
+                                    <span style={{
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      padding: '3px 8px',
+                                      borderRadius: '12px',
+                                      background: isAvail ? '#DCFCE7' : isFull ? '#FEE2E2' : isOff ? '#FEF3C7' : '#F1F5F9',
+                                      color: isAvail ? '#15803D' : isFull ? '#B91C1C' : isOff ? '#B45309' : '#64748B',
+                                      border: isAvail ? '1px solid #86EFAC' : isFull ? '1px solid #FECACA' : isOff ? '1px solid #FDE68A' : '1px solid #CBD5E1'
+                                    }}>
+                                      {displayStatus}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                              <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                                {isEditing ? (
+                                  <div style={{ display: 'inline-flex', gap: '6px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveDoctorCapacity(doc._id)}
+                                      disabled={savingCapacityId === doc._id}
+                                      style={{
+                                        padding: '4px 10px',
+                                        borderRadius: '6px',
+                                        border: 'none',
+                                        background: '#0D9488',
+                                        color: '#FFFFFF',
+                                        fontSize: '11.5px',
+                                        fontWeight: 700,
+                                        cursor: savingCapacityId === doc._id ? 'not-allowed' : 'pointer'
+                                      }}
+                                    >
+                                      {savingCapacityId === doc._id ? 'Saving...' : 'Save'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingDoctorCapacityId(null);
+                                        setEditingCapacityValue('');
+                                      }}
+                                      style={{
+                                        padding: '4px 8px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #CBD5E1',
+                                        background: '#FFFFFF',
+                                        color: '#475569',
+                                        fontSize: '11.5px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingDoctorCapacityId(doc._id);
+                                      setEditingCapacityValue(doc.dailyMaxCapacity ? String(doc.dailyMaxCapacity) : '');
+                                    }}
+                                    style={{
+                                      padding: '4px 10px',
+                                      borderRadius: '6px',
+                                      border: '1px solid #CBD5E1',
+                                      background: '#FFFFFF',
+                                      color: '#0D9488',
+                                      fontSize: '11.5px',
+                                      fontWeight: 700,
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {isConfigured ? 'Edit Capacity' : 'Set Capacity'}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           );
         })()}
@@ -27169,10 +27538,10 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                 <>
                   <div style={{ background: '#FAF5FF', border: '1px solid #F3E8FF', borderRadius: '12px', padding: '10px 14px' }}>
                     <div style={{ fontSize: '10.5px', fontWeight: 750, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Max Daily Appt Slots
+                      Doctor Slots Per Day
                     </div>
                     <div style={{ fontSize: '13px', fontWeight: 800, color: '#581C87', marginTop: '3px' }}>
-                      {viewingStaff.max_slots || 10} slots / day
+                      {viewingStaff.dailyMaxCapacity ? `${viewingStaff.dailyMaxCapacity} slots / day` : 'Unconfigured'}
                     </div>
                   </div>
 
@@ -27247,6 +27616,7 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                     name: viewingStaff.name,
                     role: viewingStaff.role,
                     specialty: viewingStaff.dept || '',
+                    dailyMaxCapacity: viewingStaff.dailyMaxCapacity !== undefined && viewingStaff.dailyMaxCapacity !== null ? viewingStaff.dailyMaxCapacity : '',
                     max_slots: viewingStaff.max_slots || 10,
                     consultationFee: viewingStaff.consultationFee !== undefined ? viewingStaff.consultationFee : 500,
                     password: '',
@@ -27735,18 +28105,21 @@ const AdminDashboard = ({ initialStaffSubView = null, initialTab = null } = {}) 
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
                         <div>
                           <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 800, color: '#6B21A8', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                            Daily Max Slots
+                            Doctor Slots Per Day
                           </label>
                           <input 
                             type="number" 
                             className="admin-text-input" 
                             style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #DDD6FE', padding: '0 10px', fontSize: '12.5px', fontWeight: 700, background: '#FFFFFF', boxSizing: 'border-box' }}
                             min="1" 
-                            max="100" 
-                            value={editStaffFields.max_slots} 
-                            onChange={e => setEditStaffFields({...editStaffFields, max_slots: Number(e.target.value)})} 
-                            required 
+                            max="500" 
+                            placeholder="e.g. 20 (or leave empty)"
+                            value={editStaffFields.dailyMaxCapacity !== undefined && editStaffFields.dailyMaxCapacity !== null ? editStaffFields.dailyMaxCapacity : ''} 
+                            onChange={e => setEditStaffFields({...editStaffFields, dailyMaxCapacity: e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value, 10))})} 
                           />
+                          <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#6B7280', lineHeight: 1.3 }}>
+                            Maximum number of patients this doctor can accept per day through the clinic's configured booking capacity.
+                          </p>
                         </div>
                         <div>
                           <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 800, color: '#6B21A8', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>

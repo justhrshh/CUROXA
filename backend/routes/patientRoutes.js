@@ -78,18 +78,6 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: "This phone number is already linked to another patient account." });
     }
 
-    if (otp) {
-      try {
-        const RegistrationOtp = require('../models/RegistrationOtp');
-        const otpRecord = await RegistrationOtp.findOne({ email: cleanEmail, otp_code: otp });
-        if (otpRecord) {
-          await RegistrationOtp.deleteOne({ _id: otpRecord._id }).catch(() => {});
-        }
-      } catch (otpErr) {
-        console.warn("OTP check warning:", otpErr);
-      }
-    }
-
     const { resolveOrCreateUhid, generateHospitalPatientId } = require('../utils/identifierEngine');
     // Global platform-level UH-ID: retained across hospitals for the same patient
     const uhId = await resolveOrCreateUhid({

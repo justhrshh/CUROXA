@@ -49,6 +49,18 @@ const receptionQueueSchema = new mongoose.Schema({
     ref: 'Patient',
     default: null
   },
+  // Optional preselected doctor and target appointment date for Dynamic Doctor QR booking
+  doctorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+    index: true
+  },
+  targetAppointmentDate: {
+    type: String, // YYYY-MM-DD
+    default: null,
+    index: true
+  },
   existingPatientDetails: {
     name: { type: String },
     uhId: { type: String },
@@ -108,5 +120,6 @@ receptionQueueSchema.index(
 // Efficient lookups for active queue status and count calculations
 receptionQueueSchema.index({ tenantId: 1, queueDate: 1, status: 1 });
 receptionQueueSchema.index({ tenantId: 1, patientId: 1, queueDate: 1 });
+receptionQueueSchema.index({ tenantId: 1, doctorId: 1, targetAppointmentDate: 1, status: 1 });
 
 module.exports = mongoose.model('ReceptionQueue', receptionQueueSchema);

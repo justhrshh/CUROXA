@@ -111,6 +111,7 @@ export default function StaffOnboardingPage({
     shiftName: 'General Shift',
     specialty: 'General Medicine',
     consultationFee: 500,
+    dailyMaxCapacity: '',
     max_slots: 10,
     weeklyOff: ['Sunday'], // ALL ROLES support weekly off
     doctorSlots: [...DEFAULT_DOCTOR_SLOTS],
@@ -365,6 +366,7 @@ export default function StaffOnboardingPage({
       // Doctor Specific Fields
       specialty: formData.role === 'doctor' ? formData.specialty : undefined,
       consultationFee: formData.role === 'doctor' ? Number(formData.consultationFee) || 500 : undefined,
+      dailyMaxCapacity: formData.role === 'doctor' && formData.dailyMaxCapacity !== '' && formData.dailyMaxCapacity !== undefined && formData.dailyMaxCapacity !== null ? Math.max(1, parseInt(formData.dailyMaxCapacity, 10)) : null,
       max_slots: formData.role === 'doctor' ? Number(formData.max_slots) || 10 : undefined,
       doctorSlots: formData.role === 'doctor' ? formData.doctorSlots : [],
       // Optional Demographics
@@ -1030,22 +1032,25 @@ export default function StaffOnboardingPage({
                   </div>
                 </div>
 
-                {/* Col 3: Max Daily Slots */}
+                {/* Col 3: Doctor Slots Per Day */}
                 <div style={fieldRow}>
                   <span style={labelStyle}>
-                    Max Slots / Day
+                    Doctor Slots Per Day
                   </span>
                   <span style={colonStyle}>:</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <input
                       type="number"
                       min="1"
-                      name="max_slots"
-                      placeholder="10"
-                      value={formData.max_slots}
-                      onChange={e => setFormData({ ...formData, max_slots: e.target.value })}
+                      name="dailyMaxCapacity"
+                      placeholder="e.g. 20 (or leave empty)"
+                      value={formData.dailyMaxCapacity !== undefined && formData.dailyMaxCapacity !== null ? formData.dailyMaxCapacity : ''}
+                      onChange={e => setFormData({ ...formData, dailyMaxCapacity: e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value, 10)) })}
                       style={tableInp}
                     />
+                    <p style={{ margin: '4px 0 0 0', fontSize: '10.5px', color: '#64748B', lineHeight: 1.3 }}>
+                      Maximum number of patients this doctor can accept per day through the clinic's configured booking capacity.
+                    </p>
                   </div>
                 </div>
               </>
@@ -1569,6 +1574,7 @@ export default function StaffOnboardingPage({
                   shiftName: 'General Shift',
                   specialty: 'General Medicine',
                   consultationFee: 500,
+                  dailyMaxCapacity: '',
                   max_slots: 10,
                   weeklyOff: ['Sunday'],
                   doctorSlots: [...DEFAULT_DOCTOR_SLOTS],

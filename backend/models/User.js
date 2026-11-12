@@ -92,6 +92,11 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 10
   },
+  dailyMaxCapacity: {
+    type: Number,
+    default: null,
+    min: 1
+  },
   consultationFee: {
     type: Number,
     default: 500

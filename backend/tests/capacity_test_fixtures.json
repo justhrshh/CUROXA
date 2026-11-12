@@ -1,0 +1,20 @@
+{
+  "clinicCode": "quroxa_test_clinic",
+  "tenantId": "quroxa_test_clinic",
+  "doctorId": "6af406487b3d0357801d98c8",
+  "doctorName": "Dr. Test Two",
+  "date": "2026-11-12",
+  "seededAt": "2026-11-12T07:26:30.885Z",
+  "patientIds": [
+    "6af56a26fb1c81fcb184dbdc",
+    "6af56a27fb1c81fcb184dbde",
+    "6af56a27fb1c81fcb184dbe0",
+    "6af56a27fb1c81fcb184dbe2"
+  ],
+  "ticketIds": [
+    "6af56a27fb1c81fcb184dbdd",
+    "6af56a27fb1c81fcb184dbdf",
+    "6af56a27fb1c81fcb184dbe1",
+    "6af56a28fb1c81fcb184dbe3"
+  ]
+}

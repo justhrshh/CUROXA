@@ -69,7 +69,7 @@ function buildBrandedOtpEmail({ otp, title = 'Verify Your Identity', message, ho
   const logoUrl = resolveEmailLogoUrl(hospital?.logo);
   const primaryColor = hospital?.primaryColor || '#2563eb';
   
-  const subject = `${hospitalName} Verification Code: ${otp}`;
+  const subject = `${hospitalName} Verification Code`;
   const text = `Your ${hospitalName} verification code is: ${otp}. This code is valid for ${expiryMinutes} minutes.`;
 
   const logoMarkup = logoUrl ? `

@@ -4,7 +4,7 @@ import axios from 'axios';
 import { 
   Users, Stethoscope, Clock, ShieldCheck, Mail, ArrowRight, 
   CheckCircle2, RefreshCw, AlertCircle, ChevronRight, UserCheck, 
-  Sparkles, Lock, ArrowLeft, LogOut
+  Sparkles, Lock, ArrowLeft, LogOut, Phone, User
 } from 'lucide-react';
 import api, { getApiBaseUrl } from '../utils/api';
 import { socket } from '../utils/socket';
@@ -28,14 +28,19 @@ const DoctorQueuePage = () => {
   // Authenticated Patient Live Queue Data
   const [patientLiveInfo, setPatientLiveInfo] = useState(null);
 
-  // OTP Auth Form States
-  const [emailInput, setEmailInput] = useState('');
+  // OTP Auth Form States (Mobile Number Primary)
+  const [mobileInput, setMobileInput] = useState('');
+  const [maskedMobile, setMaskedMobile] = useState('');
   const [otpInput, setOtpInput] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Multi-Profile Selection States (Shared Family Mobile Disambiguation)
+  const [profileSelectionToken, setProfileSelectionToken] = useState('');
+  const [profiles, setProfiles] = useState([]);
 
   // Timer reference for resend cooldown
   const timerRef = useRef(null);
@@ -180,11 +185,37 @@ const DoctorQueuePage = () => {
     setAuthSuccess('');
   };
 
-  // Handle Send OTP
+  // Helper: Normalize & validate 10-digit Indian Mobile number
+  const validateIndianMobile = (phone) => {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (digits.length === 10 && /^[6-9]/.test(digits)) {
+      return { valid: true, normalized: digits };
+    }
+    if (digits.length === 12 && digits.startsWith('91') && /^[6-9]/.test(digits.slice(2))) {
+      return { valid: true, normalized: digits.slice(2) };
+    }
+    if (digits.length === 11 && digits.startsWith('0') && /^[6-9]/.test(digits.slice(1))) {
+      return { valid: true, normalized: digits.slice(1) };
+    }
+    return { valid: false, error: 'Please enter a valid 10-digit Indian mobile number.' };
+  };
+
+  // Helper: Mask mobile for display e.g. "+91 ******3210"
+  const maskMobile = (phone) => {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (digits.length >= 10) {
+      const last4 = digits.slice(-4);
+      return `+91 ******${last4}`;
+    }
+    return phone || '******';
+  };
+
+  // Handle Send SMS OTP
   const handleSendOtp = async (e) => {
     if (e) e.preventDefault();
-    if (!emailInput || !emailInput.includes('@')) {
-      setAuthError('Please enter a valid email address.');
+    const validation = validateIndianMobile(mobileInput);
+    if (!validation.valid) {
+      setAuthError(validation.error);
       return;
     }
 
@@ -194,23 +225,30 @@ const DoctorQueuePage = () => {
 
     try {
       const res = await axios.post(`${API_BASE}/public-queue/${publicQueueId}/send-otp`, {
-        email: emailInput.trim()
+        mobile: validation.normalized
       });
-      setAuthSuccess(res.data.message || 'Verification code sent to your email.');
+      setMaskedMobile(res.data.maskedMobile || res.data.mobile || maskMobile(validation.normalized));
+      setAuthSuccess(res.data.message || 'Verification code sent via SMS.');
       setOtpSent(true);
       startCooldown(30);
     } catch (err) {
-      setAuthError(err.response?.data?.error || 'Failed to send verification code. Please try again.');
+      setAuthError(err.response?.data?.error || 'Failed to send SMS verification code. Please check your mobile number.');
     } finally {
       setAuthLoading(false);
     }
   };
 
-  // Handle Verify OTP
+  // Handle Verify SMS OTP
   const handleVerifyOtp = async (e) => {
     if (e) e.preventDefault();
     if (!otpInput || otpInput.trim().length < 6) {
       setAuthError('Please enter the 6-digit verification code.');
+      return;
+    }
+
+    const validation = validateIndianMobile(mobileInput);
+    if (!validation.valid) {
+      setAuthError(validation.error);
       return;
     }
 
@@ -219,9 +257,18 @@ const DoctorQueuePage = () => {
 
     try {
       const res = await axios.post(`${API_BASE}/public-queue/${publicQueueId}/verify-otp`, {
-        email: emailInput.trim(),
+        mobile: validation.normalized,
         otp: otpInput.trim()
       });
+
+      // Handle Multiple Profiles Disambiguation (Shared Family Mobile)
+      if (res.data.multipleProfiles) {
+        setProfileSelectionToken(res.data.profileSelectionToken);
+        setProfiles(res.data.profiles || []);
+        setScreenMode('select_profile');
+        setAuthLoading(false);
+        return;
+      }
 
       if (res.data.isExisting) {
         // Existing Patient: Authenticate session and load live queue
@@ -229,26 +276,27 @@ const DoctorQueuePage = () => {
         localStorage.setItem('user', JSON.stringify({
           role: 'patient',
           name: res.data.patient.name,
-          email: res.data.patient.email,
-          uhId: res.data.patient.uhId,
-          patientId: res.data.patient.patientId
+          phone: res.data.patient.phone || validation.normalized,
+          email: res.data.patient.email || '',
+          uhId: res.data.patient.uhId || '',
+          patientId: res.data.patient.patientId || ''
         }));
         setAuthSuccess('Verification successful! Loading live queue...');
         setTimeout(() => {
           fetchPatientLiveQueue();
         }, 300);
       } else {
-        // New Patient: Redirect to existing patient registration flow
+        // New Patient: Redirect to patient registration flow
         localStorage.setItem('token', res.data.tempToken);
         localStorage.setItem('user', JSON.stringify({
           role: 'patient',
           isNewPatient: true,
-          emailOrPhone: res.data.email
+          emailOrPhone: res.data.mobile || validation.normalized
         }));
         navigate('/patient-register', {
           state: {
             tempToken: res.data.tempToken,
-            emailOrPhone: res.data.email,
+            emailOrPhone: res.data.mobile || validation.normalized,
             returnToQueue: `/doctor/queue/${publicQueueId}`
           }
         });
@@ -260,16 +308,36 @@ const DoctorQueuePage = () => {
     }
   };
 
-  // Mask Email for display: e.g. "p****@gmail.com"
-  const maskEmail = (email) => {
-    if (!email) return '';
-    const parts = email.split('@');
-    if (parts.length !== 2) return email;
-    const name = parts[0];
-    const maskedName = name.length > 2 
-      ? name[0] + '*'.repeat(Math.min(name.length - 2, 4)) + name[name.length - 1]
-      : name[0] + '***';
-    return `${maskedName}@${parts[1]}`;
+  // Handle Profile Selection (Disambiguation)
+  const handleSelectProfile = async (patientId) => {
+    if (!patientId || !profileSelectionToken) return;
+    setAuthLoading(true);
+    setAuthError('');
+
+    try {
+      const res = await axios.post(`${API_BASE}/public-queue/${publicQueueId}/select-profile`, {
+        profileSelectionToken,
+        patientId
+      });
+
+      localStorage.setItem('token', res.data.token);
+      localStorage.setItem('user', JSON.stringify({
+        role: 'patient',
+        name: res.data.patient.name,
+        phone: res.data.patient.phone,
+        email: res.data.patient.email || '',
+        uhId: res.data.patient.uhId || '',
+        patientId: res.data.patient.patientId || ''
+      }));
+      setAuthSuccess('Profile selected! Loading live queue...');
+      setTimeout(() => {
+        fetchPatientLiveQueue();
+      }, 300);
+    } catch (err) {
+      setAuthError(err.response?.data?.error || 'Failed to select patient profile. Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
   // Loading Screen
@@ -443,7 +511,7 @@ const DoctorQueuePage = () => {
         )}
 
         {/* ══════════════════════════════════════════════════
-            MODE 2: EMAIL OTP AUTHENTICATION
+            MODE 2: MOBILE SMS OTP AUTHENTICATION
             ══════════════════════════════════════════════════ */}
         {screenMode === 'auth' && (
           <div className="bg-white rounded-2xl border border-slate-200/70 p-6 shadow-xs flex flex-col gap-5">
@@ -461,7 +529,7 @@ const DoctorQueuePage = () => {
               </button>
               <div>
                 <h2 className="text-base font-bold text-slate-900">Patient Verification</h2>
-                <p className="text-xs text-slate-500">Fast and secure Email OTP access</p>
+                <p className="text-xs text-slate-500">Fast and secure SMS OTP access</p>
               </div>
             </div>
 
@@ -480,39 +548,43 @@ const DoctorQueuePage = () => {
             )}
 
             {!otpSent ? (
-              // Step 1: Request Email
+              // Step 1: Request Mobile Number
               <form onSubmit={handleSendOtp} className="flex flex-col gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-                    Email Address
+                    Mobile Number
                   </label>
-                  <div className="relative">
-                    <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <div className="relative flex items-center">
+                    <div className="absolute left-3 flex items-center gap-1.5 text-slate-500 font-semibold text-xs border-r border-slate-200 pr-2 pointer-events-none">
+                      <Phone size={14} className="text-slate-400" />
+                      <span>+91</span>
+                    </div>
                     <input
-                      type="email"
-                      value={emailInput}
-                      onChange={(e) => setEmailInput(e.target.value)}
-                      placeholder="patient@example.com"
+                      type="tel"
+                      maxLength={10}
+                      value={mobileInput}
+                      onChange={(e) => setMobileInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      placeholder="98765 43210"
                       required
                       autoFocus
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                      className="w-full pl-20 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold tracking-wider text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
                     />
                   </div>
                   <p className="text-[11px] text-slate-400 mt-1.5">
-                    We'll send a 6-digit one-time code to authenticate your portal session.
+                    We'll send a 6-digit one-time SMS verification code to identify your token and queue position.
                   </p>
                 </div>
 
                 <button
                   type="submit"
-                  disabled={authLoading}
+                  disabled={authLoading || mobileInput.length < 10}
                   className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] disabled:opacity-50 text-white font-bold text-sm rounded-xl transition shadow-md shadow-blue-500/20 flex items-center justify-center gap-2"
                 >
                   {authLoading ? (
                     <RefreshCw size={16} className="animate-spin" />
                   ) : (
                     <>
-                      <span>Send Verification Code</span>
+                      <span>Send SMS Verification Code</span>
                       <ArrowRight size={16} />
                     </>
                   )}
@@ -526,8 +598,8 @@ const DoctorQueuePage = () => {
                     <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
                       6-Digit Code
                     </label>
-                    <span className="text-[11px] text-slate-400 font-medium">
-                      Sent to {maskEmail(emailInput)}
+                    <span className="text-[11px] text-slate-500 font-semibold">
+                      Sent via SMS to {maskedMobile || maskMobile(mobileInput)}
                     </span>
                   </div>
                   <input
@@ -541,7 +613,7 @@ const DoctorQueuePage = () => {
                     className="w-full py-3 text-center tracking-[0.5em] text-2xl font-black bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
                   />
                   <div className="flex items-center justify-between mt-2 text-xs">
-                    <span className="text-slate-400 text-[11px]">Valid for 5 minutes</span>
+                    <span className="text-slate-400 text-[11px]">Valid for 10 minutes</span>
                     <button
                       type="button"
                       disabled={resendCooldown > 0 || authLoading}
@@ -553,22 +625,99 @@ const DoctorQueuePage = () => {
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={authLoading || otpInput.length < 6}
-                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-50 text-white font-bold text-sm rounded-xl transition shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2"
-                >
-                  {authLoading ? (
-                    <RefreshCw size={16} className="animate-spin" />
-                  ) : (
-                    <>
-                      <span>Verify & View Queue</span>
-                      <CheckCircle2 size={16} />
-                    </>
-                  )}
-                </button>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="submit"
+                    disabled={authLoading || otpInput.length < 6}
+                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-50 text-white font-bold text-sm rounded-xl transition shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2"
+                  >
+                    {authLoading ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <>
+                        <span>Verify & View Queue</span>
+                        <CheckCircle2 size={16} />
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpSent(false);
+                      setOtpInput('');
+                      setAuthError('');
+                    }}
+                    className="w-full py-2 text-xs text-slate-500 hover:text-slate-700 font-semibold transition"
+                  >
+                    Change mobile number
+                  </button>
+                </div>
               </form>
             )}
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════
+            MODE 2B: MULTI-PROFILE SELECTION (SHARED MOBILE)
+            ══════════════════════════════════════════════════ */}
+        {screenMode === 'select_profile' && (
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-6 shadow-xs flex flex-col gap-5">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setScreenMode('auth');
+                  setAuthError('');
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Select Patient Profile</h2>
+                <p className="text-xs text-slate-500">Multiple patients found for this mobile number</p>
+              </div>
+            </div>
+
+            {authError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-red-700 text-xs">
+                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                <div>{authError}</div>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2.5">
+              <p className="text-xs text-slate-600 font-medium">
+                Please select who is attending Dr. {doctor?.name || 'the doctor'}'s queue today:
+              </p>
+
+              {profiles.map((prof) => (
+                <button
+                  key={prof.id}
+                  type="button"
+                  onClick={() => handleSelectProfile(prof.id)}
+                  disabled={authLoading}
+                  className="p-3.5 bg-slate-50 hover:bg-blue-50/70 hover:border-blue-300 border border-slate-200 rounded-xl text-left transition flex items-center justify-between group active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs">
+                      {prof.name?.[0]?.toUpperCase() || 'P'}
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition">
+                        {prof.name}
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-medium flex items-center gap-2 mt-0.5">
+                        {prof.uhId && <span>UHID: {prof.uhId}</span>}
+                        {prof.gender && <span>• {prof.gender}</span>}
+                        {prof.age && <span>• {prof.age} yrs</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight size={18} className="text-slate-400 group-hover:text-blue-600 transition" />
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

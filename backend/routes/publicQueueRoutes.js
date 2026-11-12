@@ -6,21 +6,25 @@ const router = express.Router();
 const User = require('../models/User');
 const Patient = require('../models/Patient');
 const SuperAdminHospital = require('../models/SuperAdminHospital');
-const RegistrationOtp = require('../models/RegistrationOtp');
 const { getDoctorQueueState, normalizeDateString } = require('../utils/queueEngine');
 const { resolveTrustedHospitalBranding, buildBrandedOtpEmail } = require('../utils/hospitalBrandingHelper');
 const { sendEmail } = require('../utils/emailService');
 const { getJwtSecret } = require('../config/env');
+const { 
+  createAndDispatchOtp, 
+  atomicVerifyOtp,
+  generateProfileSelectionToken,
+  verifyAndConsumeProfileSelectionToken
+} = require('../services/otp/otpService');
+const { 
+  normalizeIndianMobile, 
+  isValidIndianMobile, 
+  maskPhoneNumber 
+} = require('../utils/phoneNormalization');
 
-// In-memory rate limiting map for OTP requests: Map<email, { count: number, resetAt: number, lastSentAt: number }>
-const otpRateLimitMap = new Map();
-// In-memory attempt tracking for OTP verification: Map<email, { attempts: number, lockUntil: number }>
-const otpAttemptsMap = new Map();
-
-// Helper to hash OTP with SHA-256
-const hashOtp = (code) => {
-  return crypto.createHash('sha256').update(String(code).trim()).digest('hex');
-};
+// ----------------------------------------------------
+// PUBLIC DOCTOR QUEUE LIVE VIEW ROUTES
+// ----------------------------------------------------
 
 /**
  * Resolves doctor and hospital from publicQueueId.
@@ -117,6 +121,7 @@ router.get('/:publicQueueId', async (req, res) => {
 
 // ----------------------------------------------------
 // 2. SEND OTP: POST /api/public-queue/:publicQueueId/send-otp
+// Mobile SMS Primary via PING4SMS gateway
 // ----------------------------------------------------
 router.post('/:publicQueueId/send-otp', async (req, res) => {
   try {
@@ -125,78 +130,42 @@ router.post('/:publicQueueId/send-otp', async (req, res) => {
       return res.status(404).json({ error: 'Invalid queue identifier.' });
     }
 
-    const { email } = req.body;
-    if (!email || typeof email !== 'string' || !email.includes('@')) {
-      return res.status(400).json({ error: 'A valid email address is required.' });
+    const rawMobile = req.body.mobile || req.body.phone || req.body.contact;
+    if (!rawMobile) {
+      return res.status(400).json({ error: 'A valid 10-digit Indian mobile number is required.' });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
-    const now = Date.now();
-
-    // 1. Rate limiting check (Max 3 OTP requests per 10 minutes, min 30 seconds interval between requests)
-    const rateInfo = otpRateLimitMap.get(cleanEmail) || { count: 0, resetAt: now + 10 * 60 * 1000, lastSentAt: 0 };
-    if (now > rateInfo.resetAt) {
-      rateInfo.count = 0;
-      rateInfo.resetAt = now + 10 * 60 * 1000;
+    const phoneValidation = normalizeIndianMobile(rawMobile);
+    if (!phoneValidation.isValid) {
+      return res.status(400).json({ error: phoneValidation.error || 'A valid 10-digit Indian mobile number is required.' });
     }
 
-    if (rateInfo.lastSentAt && (now - rateInfo.lastSentAt) < 30 * 1000) {
-      const waitSec = Math.ceil((30 * 1000 - (now - rateInfo.lastSentAt)) / 1000);
-      return res.status(429).json({ error: `Please wait ${waitSec} seconds before requesting a new code.` });
-    }
+    const cleanMobile = phoneValidation.normalized;
 
-    if (rateInfo.count >= 4) {
-      return res.status(429).json({ error: 'Too many verification code requests. Please try again after 10 minutes.' });
-    }
-
-    // 2. Generate cryptographically strong 6-digit OTP
-    const rawOtp = crypto.randomInt(100000, 999999).toString();
-    const hashedCode = hashOtp(rawOtp);
-    const expiresAt = new Date(now + 5 * 60 * 1000); // 5 minutes expiry
-
-    // Save hashed OTP in RegistrationOtp collection (dual-storing hashed + raw fallback in existing pattern for compatibility)
-    await RegistrationOtp.findOneAndUpdate(
-      { email: cleanEmail },
-      {
-        otp_code: rawOtp, // existing auth routes check raw otp_code
-        expires_at: expiresAt
-      },
-      { upsert: true, new: true }
-    );
-
-    // Update rate limit metadata
-    rateInfo.count += 1;
-    rateInfo.lastSentAt = now;
-    otpRateLimitMap.set(cleanEmail, rateInfo);
-    // Reset verification attempts on new OTP send
-    otpAttemptsMap.delete(cleanEmail);
-
-    // 3. Dispatch branded email using existing email infrastructure
-    const hospitalBranding = await resolveTrustedHospitalBranding(resolved.tenantId);
-    const emailHtmlBody = buildBrandedOtpEmail({
-      otp: rawOtp,
-      title: `${hospitalBranding.name} Live Queue Check-In`,
-      message: `Use the 6-digit verification code below to verify your patient identity and monitor <strong>Dr. ${resolved.doctor.name}</strong>'s live queue. This code expires in <strong>5 minutes</strong>.`,
-      hospital: hospitalBranding,
-      expiryMinutes: 5
+    // Central challenge dispatch via otpService with Zero-Orphan Rollback commitment
+    const dispatchResult = await createAndDispatchOtp({
+      targetIdentifier: cleanMobile,
+      identifierType: 'phone',
+      tenantId: resolved.tenantId,
+      purpose: 'PUBLIC_DOCTOR_QUEUE',
+      deliveryChannel: 'sms',
+      expiryMinutes: 10,
+      _mockSmsTransport: req.body._mockSmsTransport || req.app.get('mockSmsTransport')
     });
 
-    try {
-      await sendEmail({
-        to: cleanEmail,
-        subject: `${rawOtp} is your Live Queue verification code - ${hospitalBranding.name}`,
-        text: `Your ${hospitalBranding.name} verification code is: ${rawOtp}. This code expires in 5 minutes.`,
-        html: emailHtmlBody,
-        senderName: hospitalBranding.name
+    if (!dispatchResult.success) {
+      return res.status(dispatchResult.status || 500).json({
+        error: dispatchResult.error || 'Failed to deliver SMS verification code. Please check your mobile number or try again later.'
       });
-    } catch (mailErr) {
-      console.warn('[PUBLIC QUEUE OTP EMAIL WARNING]:', mailErr.message);
     }
 
-    // STRICT PRIVACY: Generic response (no account enumeration)
+    const maskedMobile = maskPhoneNumber(cleanMobile);
     return res.json({
       success: true,
-      message: 'If the email is valid, a verification code has been dispatched.'
+      channel: 'sms',
+      message: `A 6-digit verification code has been dispatched via SMS to ${maskedMobile}.`,
+      maskedMobile,
+      mobile: maskedMobile
     });
   } catch (error) {
     console.error('Send queue OTP error:', error);
@@ -214,45 +183,32 @@ router.post('/:publicQueueId/verify-otp', async (req, res) => {
       return res.status(404).json({ error: 'Invalid queue identifier.' });
     }
 
-    const { email, otp } = req.body;
-    if (!email || !otp) {
-      return res.status(400).json({ error: 'Email and verification code are required.' });
+    const rawMobile = req.body.mobile || req.body.phone || req.body.contact;
+    const { otp } = req.body;
+
+    if (!rawMobile || !otp) {
+      return res.status(400).json({ error: 'Mobile number and verification code are required.' });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
+    const phoneValidation = normalizeIndianMobile(rawMobile);
+    if (!phoneValidation.isValid) {
+      return res.status(400).json({ error: phoneValidation.error || 'A valid 10-digit Indian mobile number is required.' });
+    }
+
+    const cleanMobile = phoneValidation.normalized;
     const cleanOtp = String(otp).trim();
-    const now = Date.now();
 
-    // Check brute-force attempts on this email
-    const attemptInfo = otpAttemptsMap.get(cleanEmail) || { attempts: 0, lockUntil: 0 };
-    if (attemptInfo.lockUntil > now) {
-      const waitMin = Math.ceil((attemptInfo.lockUntil - now) / 60000);
-      return res.status(429).json({ error: `Too many invalid attempts. Please try again in ${waitMin} minutes.` });
+    // 1. Central atomic verification (purpose: PUBLIC_DOCTOR_QUEUE)
+    const verifyResult = await atomicVerifyOtp({
+      targetIdentifier: cleanMobile,
+      tenantId: resolved.tenantId,
+      purpose: 'PUBLIC_DOCTOR_QUEUE',
+      otpCandidate: cleanOtp
+    });
+
+    if (!verifyResult.success) {
+      return res.status(verifyResult.status || 400).json({ error: verifyResult.error || 'Invalid verification code.' });
     }
-
-    // Look up stored OTP
-    const otpDoc = await RegistrationOtp.findOne({ email: cleanEmail });
-    if (!otpDoc || otpDoc.expires_at < new Date()) {
-      return res.status(400).json({ error: 'Verification code has expired or was not requested. Please request a new code.' });
-    }
-
-    const isMatch = (otpDoc.otp_code === cleanOtp);
-    if (!isMatch) {
-      attemptInfo.attempts += 1;
-      if (attemptInfo.attempts >= 5) {
-        attemptInfo.lockUntil = now + 15 * 60 * 1000; // 15 minutes lockout
-      }
-      otpAttemptsMap.set(cleanEmail, attemptInfo);
-      return res.status(400).json({ error: 'Invalid verification code.' });
-    }
-
-    // Single-use: Invalidate OTP immediately upon success
-    await RegistrationOtp.deleteOne({ _id: otpDoc._id }).catch(() => {});
-    otpAttemptsMap.delete(cleanEmail);
-
-    // Check if patient already exists in the system
-    let patientDoc = await Patient.findOne({ email: cleanEmail }).sort({ updatedAt: -1 });
-    let userDoc = await User.findOne({ email: cleanEmail, role: 'patient' });
 
     let secretKey;
     try {
@@ -261,68 +217,216 @@ router.post('/:publicQueueId/verify-otp', async (req, res) => {
       secretKey = process.env.JWT_SECRET || 'secret_key';
     }
 
-    if (patientDoc || userDoc) {
-      // EXISTING PATIENT
-      // If user doc doesn't exist yet, create or update user
-      if (!userDoc && patientDoc) {
+    // 2. Query patient records matching this verified mobile strictly within this tenant
+    const matchingPatients = await Patient.find({
+      tenantId: resolved.tenantId,
+      contact: cleanMobile
+    }).sort({ updatedAt: -1 }).lean();
+
+    // 3. Shared family mobile disambiguation: multiple profiles detected
+    if (matchingPatients.length > 1) {
+      const profileSelectionToken = await generateProfileSelectionToken({
+        tenantId: resolved.tenantId,
+        contact: cleanMobile,
+        allowedPatientIds: matchingPatients.map(p => p._id.toString())
+      });
+
+      return res.json({
+        isExisting: true,
+        multipleProfiles: true,
+        message: 'Multiple patient profiles found for this mobile number. Please select your profile.',
+        profileSelectionToken,
+        profiles: matchingPatients.map(p => ({
+          id: p._id.toString(),
+          name: p.name,
+          uhId: p.uhId || p.patientId || '',
+          gender: p.gender || '',
+          age: p.age || null
+        }))
+      });
+    }
+
+    // 4. Single existing patient found
+    if (matchingPatients.length === 1) {
+      const patientDoc = matchingPatients[0];
+
+      let userDoc = await User.findOne({ staff_id: cleanMobile, tenantId: resolved.tenantId }) ||
+                    await User.findOne({ phone: cleanMobile, role: 'patient', tenantId: resolved.tenantId });
+
+      if (!userDoc) {
         userDoc = await User.create({
           name: patientDoc.name,
-          email: cleanEmail,
-          phone: patientDoc.contact,
-          staff_id: patientDoc.contact,
+          email: patientDoc.email || `${cleanMobile}_${patientDoc._id}@curoxa.patient`,
+          phone: cleanMobile,
+          staff_id: cleanMobile,
           role: 'patient',
-          tenantId: patientDoc.tenantId || resolved.tenantId || 'city_hospital',
+          tenantId: patientDoc.tenantId || resolved.tenantId,
           isSetupComplete: true,
           password_hash: 'PATIENT_OTP_AUTH'
         });
       }
 
-      const targetId = patientDoc ? patientDoc._id : userDoc._id;
-      const patientName = patientDoc ? patientDoc.name : userDoc.name;
-
       const tokenPayload = {
-        id: targetId,
+        id: patientDoc._id,
         userId: userDoc._id,
-        staff_id: userDoc.staff_id || (patientDoc ? patientDoc.contact : cleanEmail),
-        email: cleanEmail,
-        phone: userDoc.phone || (patientDoc ? patientDoc.contact : ''),
+        staff_id: userDoc.staff_id || cleanMobile,
+        email: patientDoc.email || userDoc.email || '',
+        phone: cleanMobile,
         role: 'patient',
         actualStaffRole: userDoc.role,
-        tenantId: userDoc.tenantId || resolved.tenantId || 'city_hospital'
+        tenantId: patientDoc.tenantId || resolved.tenantId
       };
 
       const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '24h' });
 
       return res.json({
         isExisting: true,
+        multipleProfiles: false,
         message: 'Identity verified successfully.',
         token,
         patient: {
-          id: targetId,
-          name: patientName,
-          email: cleanEmail,
+          id: patientDoc._id,
+          name: patientDoc.name,
+          phone: cleanMobile,
+          email: patientDoc.email || '',
           uhId: patientDoc?.uhId || '',
           patientId: patientDoc?.patientId || ''
         }
       });
-    } else {
-      // NEW PATIENT: Issue safe temporary onboarding token (no fabricated DB patient record)
-      const tempToken = jwt.sign(
-        { emailOrPhone: cleanEmail, isNewPatient: true, role: 'patient' },
-        secretKey,
-        { expiresIn: '1h' }
-      );
+    }
+
+    // 5. Existing registered user without patient record
+    let userDoc = await User.findOne({ phone: cleanMobile, role: 'patient', tenantId: resolved.tenantId });
+    if (userDoc) {
+      const tokenPayload = {
+        id: userDoc._id,
+        userId: userDoc._id,
+        staff_id: userDoc.staff_id || cleanMobile,
+        email: userDoc.email || '',
+        phone: cleanMobile,
+        role: 'patient',
+        actualStaffRole: userDoc.role,
+        tenantId: userDoc.tenantId || resolved.tenantId
+      };
+      const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '24h' });
 
       return res.json({
-        isExisting: false,
-        message: 'Identity verified. Please complete patient registration.',
-        tempToken,
-        email: cleanEmail
+        isExisting: true,
+        multipleProfiles: false,
+        message: 'Identity verified successfully.',
+        token,
+        patient: {
+          id: userDoc._id,
+          name: userDoc.name,
+          phone: cleanMobile,
+          email: userDoc.email || '',
+          uhId: '',
+          patientId: ''
+        }
       });
     }
+
+    // 6. NEW PATIENT: Issue safe temporary onboarding token (no fabricated DB patient record)
+    const tempToken = jwt.sign(
+      { emailOrPhone: cleanMobile, isNewPatient: true, role: 'patient' },
+      secretKey,
+      { expiresIn: '1h' }
+    );
+
+    return res.json({
+      isExisting: false,
+      multipleProfiles: false,
+      message: 'Identity verified. Please complete patient registration.',
+      tempToken,
+      mobile: cleanMobile
+    });
   } catch (error) {
     console.error('Verify queue OTP error:', error);
     return res.status(500).json({ error: 'Failed to verify code.' });
+  }
+});
+
+// ----------------------------------------------------
+// 3A. SELECT PROFILE: POST /api/public-queue/:publicQueueId/select-profile
+// Secure disambiguation endpoint for shared family mobile numbers
+// ----------------------------------------------------
+router.post('/:publicQueueId/select-profile', async (req, res) => {
+  try {
+    const resolved = await resolveDoctorByPublicId(req.params.publicQueueId);
+    if (!resolved) {
+      return res.status(404).json({ error: 'Invalid queue identifier.' });
+    }
+
+    const { profileSelectionToken, patientId } = req.body;
+    if (!profileSelectionToken || !patientId) {
+      return res.status(400).json({ error: 'profileSelectionToken and patientId are required.' });
+    }
+
+    // 1. Atomically verify and consume single-use token in persistent storage
+    const tokenValidation = await verifyAndConsumeProfileSelectionToken(profileSelectionToken, patientId);
+    if (!tokenValidation.valid) {
+      return res.status(403).json({ error: tokenValidation.error });
+    }
+
+    // 2. Fetch authenticated patient record strictly scoped to authorized tenant
+    const patientDoc = await Patient.findOne({ _id: patientId, tenantId: tokenValidation.tenantId });
+    if (!patientDoc) {
+      return res.status(403).json({ error: 'Access denied. The requested patient profile is not authorized for this hospital session.' });
+    }
+
+    let secretKey;
+    try {
+      secretKey = getJwtSecret();
+    } catch (e) {
+      secretKey = process.env.JWT_SECRET || 'secret_key';
+    }
+
+    // 3. Resolve or create user account for this patient profile
+    let userDoc = await User.findOne({ staff_id: patientDoc.contact, tenantId: patientDoc.tenantId }) ||
+                  await User.findOne({ phone: patientDoc.contact, role: 'patient', tenantId: patientDoc.tenantId });
+
+    if (!userDoc) {
+      userDoc = await User.create({
+        name: patientDoc.name,
+        email: patientDoc.email || `${patientDoc.contact}_${patientDoc._id}@curoxa.patient`,
+        phone: patientDoc.contact,
+        staff_id: patientDoc.contact,
+        role: 'patient',
+        tenantId: patientDoc.tenantId || tokenValidation.tenantId,
+        isSetupComplete: true,
+        password_hash: 'PATIENT_OTP_AUTH'
+      });
+    }
+
+    // 4. Generate authenticated 24h patient session token
+    const tokenPayload = {
+      id: patientDoc._id,
+      userId: userDoc._id,
+      staff_id: userDoc.staff_id || patientDoc.contact,
+      email: patientDoc.email || userDoc.email || '',
+      phone: patientDoc.contact,
+      role: 'patient',
+      actualStaffRole: userDoc.role,
+      tenantId: patientDoc.tenantId || userDoc.tenantId || tokenValidation.tenantId
+    };
+    const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '24h' });
+
+    return res.json({
+      success: true,
+      message: 'Profile selected successfully.',
+      token,
+      patient: {
+        id: patientDoc._id,
+        name: patientDoc.name,
+        phone: patientDoc.contact,
+        email: patientDoc.email || '',
+        uhId: patientDoc.uhId || '',
+        patientId: patientDoc.patientId || ''
+      }
+    });
+  } catch (error) {
+    console.error('Select queue profile error:', error);
+    return res.status(500).json({ error: 'Failed to select patient profile.' });
   }
 });
 
@@ -360,7 +464,7 @@ router.get('/:publicQueueId/patient-view', async (req, res) => {
 
     // Resolve patient record server-side (do NOT trust client params)
     const patientEmail = decoded.email || decoded.emailOrPhone;
-    const patientPhone = decoded.phone;
+    const patientPhone = decoded.phone || (decoded.emailOrPhone && !decoded.emailOrPhone.includes('@') ? decoded.emailOrPhone : null);
     const patientId = decoded.id;
 
     const patientOrQuery = [];
@@ -370,7 +474,10 @@ router.get('/:publicQueueId/patient-view', async (req, res) => {
 
     let currentPatient = null;
     if (patientOrQuery.length > 0) {
-      currentPatient = await Patient.findOne({ $or: patientOrQuery }).lean();
+      currentPatient = await Patient.findOne({
+        tenantId: resolved.tenantId,
+        $or: patientOrQuery
+      }).lean();
     }
 
     // Look for active appointment for this patient with this doctor today

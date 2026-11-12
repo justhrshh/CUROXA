@@ -188,7 +188,8 @@ app.use("/api", apiLimiter);
 app.use(express.json({ limit: "2mb" }));
 
 const path = require("path");
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+const secureUploadsMiddleware = require('./middleware/secureUploadsMiddleware');
+app.use('/uploads', secureUploadsMiddleware);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Lightweight cache hints for safe GET endpoints (per-tenant data)

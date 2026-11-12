@@ -29,6 +29,12 @@ const receptionOtpSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  // Unique challenge/dispatch version identifier to prevent race conditions on concurrent resend/cleanup
+  dispatchId: {
+    type: String,
+    default: null,
+    index: true
+  },
   attempts: {
     type: Number,
     default: 0

@@ -4298,7 +4298,8 @@ const ReceptionistDashboard = () => {
 
     const isExisting = ticket.patientType === 'Existing';
     const pObj = isExisting ? (ticket.existingPatientDetails || {}) : (ticket.preliminaryDetails || {});
-    const defaultDocId = doctors && doctors.length > 0 ? doctors[0]._id : '';
+    const ticketDocId = ticket.doctorId?._id || ticket.doctorId || '';
+    const defaultDocId = ticketDocId || (doctors && doctors.length > 0 ? doctors[0]._id : '');
 
     if (isExisting) {
       const ticketPatId = ticket.patientId ? (typeof ticket.patientId === 'object' ? String(ticket.patientId._id) : String(ticket.patientId)) : null;
@@ -4405,7 +4406,7 @@ const ReceptionistDashboard = () => {
     }
 
     setBookingType('opd');
-    setBookingDate(getLocalDateString());
+    setBookingDate(ticket.targetAppointmentDate || getLocalDateString());
     setSelectedSlot('');
     setBookingPaymentMethod('Cash');
     setBookingDiscountPercent(0);

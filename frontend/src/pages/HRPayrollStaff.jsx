@@ -111,7 +111,7 @@ export default function HRPayrollStaff({ onExit }) {
   const [showAddStaffPassword, setShowAddStaffPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [newStaff, setNewStaff] = useState({ 
-    staff_id: '', password: '', confirmPassword: '', role: getAvailableRoles()[0]?.value || 'doctor', name: '', max_slots: '', email: '',
+    staff_id: '', password: '', confirmPassword: '', role: getAvailableRoles()[0]?.value || 'doctor', name: '', dailyMaxCapacity: '', max_slots: 10, email: '',
     dob: '', gender: '', bloodGroup: '', aadhaar: '', pan: '', address: '', weeklyOff: '',
     emergencyContactName: '', emergencyContactRelation: '', emergencyContactPhone: ''
   });
@@ -135,6 +135,8 @@ export default function HRPayrollStaff({ onExit }) {
             dept: user.specialty || (user.role === 'doctor' ? 'General Medicine' : user.role === 'hr' ? 'HR & Administration' : 'Administration'),
             initials,
             documents: user.documents || [],
+            dailyMaxCapacity: user.dailyMaxCapacity !== undefined && user.dailyMaxCapacity !== null ? user.dailyMaxCapacity : null,
+            max_slots: user.max_slots,
             carriedForwardLeaves: user.carriedForwardLeaves || 0,
             monthlyLeaveAllocation: user.monthlyLeaveAllocation || { sick: 1, casual: 1, annual: 1.25 },
             weeklyOff: user.weeklyOff || 'Sunday',
@@ -360,7 +362,7 @@ export default function HRPayrollStaff({ onExit }) {
       await api.post('/admin/users', payload);
       showToast('Staff account created successfully!', 'success');
       setNewStaff({ 
-        staff_id: '', password: '', confirmPassword: '', role: getAvailableRoles()[0]?.value || 'doctor', name: '', max_slots: '', email: '',
+        staff_id: '', password: '', confirmPassword: '', role: getAvailableRoles()[0]?.value || 'doctor', name: '', dailyMaxCapacity: '', max_slots: 10, email: '',
         dob: '', gender: '', bloodGroup: '', aadhaar: '', pan: '', address: '', weeklyOff: '',
         emergencyContactName: '', emergencyContactRelation: '', emergencyContactPhone: ''
       });
@@ -397,6 +399,11 @@ export default function HRPayrollStaff({ onExit }) {
         role: editingStaff.role,
         email: editingStaff.email,
         specialty: editingStaff.dept || editingStaff.specialty,
+        dailyMaxCapacity: editingStaff.role === 'doctor'
+          ? (editingStaff.dailyMaxCapacity !== '' && editingStaff.dailyMaxCapacity !== undefined && editingStaff.dailyMaxCapacity !== null
+              ? Math.max(1, parseInt(editingStaff.dailyMaxCapacity, 10))
+              : null)
+          : undefined,
         max_slots: editingStaff.max_slots,
         weeklyOff: editingStaff.weeklyOff || 'Sunday',
         shiftName: editingStaff.shiftName || 'General Shift'
@@ -2415,16 +2422,19 @@ export default function HRPayrollStaff({ onExit }) {
                 {editingStaff.role === 'doctor' && (
                   <>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>Daily Max Appointment Slots</label>
+                      <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>Doctor Slots Per Day</label>
                       <input 
                         type="number" 
                         style={{ height: '40px', padding: '0 12px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
                         min="1" 
-                        max="100" 
-                        value={editingStaff.max_slots || 10} 
-                        onChange={e => setEditingStaff({...editingStaff, max_slots: Number(e.target.value)})} 
-                        required 
+                        max="500" 
+                        placeholder="e.g. 20 (or leave empty)"
+                        value={editingStaff.dailyMaxCapacity !== undefined && editingStaff.dailyMaxCapacity !== null ? editingStaff.dailyMaxCapacity : ''} 
+                        onChange={e => setEditingStaff({...editingStaff, dailyMaxCapacity: e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value, 10))})} 
                       />
+                      <span style={{ fontSize: '11px', color: '#64748B' }}>
+                        Maximum number of patients this doctor can accept per day through the clinic's configured booking capacity.
+                      </span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>Doctor Consultation Fee (₹)</label>
@@ -2817,17 +2827,19 @@ export default function HRPayrollStaff({ onExit }) {
                 {newStaff.role === 'doctor' && (
                   <>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>Daily Max Appointment Slots</label>
+                      <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>Doctor Slots Per Day</label>
                       <input 
                         type="number" 
                         style={{ height: '40px', padding: '0 12px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
                         min="1" 
-                        max="100" 
-                        placeholder="e.g. 10"
-                        value={newStaff.max_slots} 
-                        onChange={e => setNewStaff({...newStaff, max_slots: Number(e.target.value)})} 
-                        required 
+                        max="500" 
+                        placeholder="e.g. 20 (or leave empty)"
+                        value={newStaff.dailyMaxCapacity !== undefined && newStaff.dailyMaxCapacity !== null ? newStaff.dailyMaxCapacity : ''} 
+                        onChange={e => setNewStaff({...newStaff, dailyMaxCapacity: e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value, 10))})} 
                       />
+                      <span style={{ fontSize: '11px', color: '#64748B' }}>
+                        Maximum number of patients this doctor can accept per day through the clinic's configured booking capacity.
+                      </span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>Doctor Consultation Fee (₹)</label>

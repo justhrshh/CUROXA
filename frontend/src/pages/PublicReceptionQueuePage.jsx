@@ -6,7 +6,7 @@ import {
   CheckCircle, AlertCircle, Clock, Users, ArrowRight, RefreshCw, 
   ChevronRight, Calendar, User, Phone, Shield, Building2, MapPin, 
   HelpCircle, AlertTriangle, ArrowLeft, HeartPulse, Check, Sparkles,
-  Droplet, Mail, Plus, Minus, ChevronDown
+  Droplet, Mail, Plus, Minus, ChevronDown, Stethoscope
 } from 'lucide-react';
 import curoxaLogo from '../assets/quroxa_new_logo.png';
 
@@ -15,8 +15,8 @@ const PublicReceptionQueuePage = () => {
   const [searchParams] = useSearchParams();
 
   // App step states: 
-  // 'loading' | 'clinic_unavailable' | 'module_disabled' | 'email_entry' | 
-  // 'otp_entry' | 'ambiguous_match' | 'existing_patient_appointment' | 
+  // 'loading' | 'clinic_unavailable' | 'module_disabled' | 'doctor_date_selection' |
+  // 'email_entry' | 'otp_entry' | 'ambiguous_match' | 'existing_patient_appointment' | 
   // 'new_patient_form' | 'ticket_active' | 'session_expired'
   const [step, setStep] = useState('loading');
   
@@ -29,8 +29,18 @@ const PublicReceptionQueuePage = () => {
     isServing: false
   });
 
+  // Doctor & Date selection states
+  const [doctorsList, setDoctorsList] = useState([]);
+  const [selectedDoctorId, setSelectedDoctorId] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [doctorAvailability, setDoctorAvailability] = useState(null);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+
   // User input states
-  const [email, setEmail] = useState('');
+  const [contact, setContact] = useState('');
+  const [maskedTarget, setMaskedTarget] = useState('');
+  const [verifiedContact, setVerifiedContact] = useState('');
   const [otp, setOtp] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
 
@@ -106,7 +116,7 @@ const PublicReceptionQueuePage = () => {
           }
         }
 
-        setStep('email_entry');
+        setStep('doctor_date_selection');
       } catch (err) {
         if (!isMounted) return;
         setStep('clinic_unavailable');
@@ -188,7 +198,7 @@ const PublicReceptionQueuePage = () => {
             setActiveTicket(res.data.ticket);
             setPatientPosition(res.data.position);
           }
-        } else if (step === 'email_entry' || step === 'otp_entry') {
+        } else if (step === 'mobile_entry' || step === 'email_entry' || step === 'otp_entry') {
           const res = await api.get(`/reception-queue/clinic/${encodeURIComponent(clinicCode)}`);
           if (res.data?.queue) {
             setQueueMetrics({
@@ -210,6 +220,76 @@ const PublicReceptionQueuePage = () => {
     };
   }, [clinicCode, sessionToken, step]);
 
+  // 2b. Fetch eligible doctors when clinicCode or selectedDate changes
+  const fetchDoctorsForDate = async (targetDate) => {
+    if (!clinicCode) return;
+    setLoadingDoctors(true);
+    try {
+      const dateStr = targetDate || selectedDate;
+      const res = await api.get(`/reception-queue/clinic/${encodeURIComponent(clinicCode)}/doctors?date=${dateStr}`);
+      const docs = res.data?.doctors || [];
+      setDoctorsList(docs);
+
+      // Dynamic Doctor Selection Rule:
+      // Exactly 1 doctor: automatically select, do not display dropdown
+      // Multiple doctors: display dropdown
+      if (docs.length === 1) {
+        setSelectedDoctorId(docs[0]._id);
+      } else if (docs.length > 1) {
+        setSelectedDoctorId((prev) => {
+          if (prev && docs.some(d => d._id === prev)) return prev;
+          return docs[0]._id;
+        });
+      } else {
+        setSelectedDoctorId('');
+        setDoctorAvailability(null);
+      }
+    } catch (err) {
+      console.error('Failed to load eligible doctors:', err);
+      setDoctorsList([]);
+      setSelectedDoctorId('');
+      setDoctorAvailability(null);
+    } finally {
+      setLoadingDoctors(false);
+    }
+  };
+
+  useEffect(() => {
+    if (clinicCode && (step === 'doctor_date_selection' || step === 'loading')) {
+      fetchDoctorsForDate(selectedDate);
+    }
+  }, [clinicCode, selectedDate, step]);
+
+  // 2c. Fetch doctor availability whenever doctor or date changes
+  const fetchDoctorAvailability = async (docId, dateStr) => {
+    if (!clinicCode || !docId || !dateStr) {
+      setDoctorAvailability(null);
+      return;
+    }
+    setLoadingAvailability(true);
+    try {
+      const res = await api.get(
+        `/reception-queue/clinic/${encodeURIComponent(clinicCode)}/doctor-availability?doctorId=${encodeURIComponent(docId)}&date=${encodeURIComponent(dateStr)}`
+      );
+      if (res.data?.success) {
+        setDoctorAvailability(res.data);
+      } else {
+        setDoctorAvailability(null);
+      }
+    } catch (err) {
+      console.error('Failed to load doctor availability:', err);
+      setDoctorAvailability(null);
+    } finally {
+      setLoadingAvailability(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedDoctorId && selectedDate && (step === 'doctor_date_selection' || step === 'mobile_entry' || step === 'email_entry' || step === 'otp_entry')) {
+      fetchDoctorAvailability(selectedDoctorId, selectedDate);
+    }
+  }, [selectedDoctorId, selectedDate, step]);
+
   // 3. Resend OTP countdown timer
   useEffect(() => {
     let timer;
@@ -219,14 +299,15 @@ const PublicReceptionQueuePage = () => {
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
-  // Handler: Dispatch OTP
+  // Handler: Dispatch Mobile OTP
   const handleSendOtp = async (e) => {
     if (e) e.preventDefault();
     setErrorMessage('');
     setSuccessNotice('');
 
-    if (!email || !email.includes('@') || !email.includes('.')) {
-      setErrorMessage('Please enter a valid email address.');
+    const cleanMobile = contact.replace(/\D/g, '');
+    if (!/^[6-9]\d{9}$/.test(cleanMobile)) {
+      setErrorMessage('Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).');
       return;
     }
 
@@ -234,10 +315,12 @@ const PublicReceptionQueuePage = () => {
     try {
       const res = await api.post('/reception-queue/send-otp', {
         clinicCode,
-        email: email.trim().toLowerCase()
+        contact: cleanMobile
       });
 
-      setSuccessNotice('A 6-digit verification code has been sent to your email.');
+      const masked = res.data.maskedTarget || `+91 ******${cleanMobile.slice(-4)}`;
+      setMaskedTarget(masked);
+      setSuccessNotice(res.data.message || `A 6-digit verification code has been dispatched via SMS to ${masked}.`);
       setStep('otp_entry');
       setResendCooldown(30);
     } catch (err) {
@@ -247,23 +330,27 @@ const PublicReceptionQueuePage = () => {
     }
   };
 
-  // Handler: Verify OTP
+  // Handler: Verify Mobile OTP
   const handleVerifyOtp = async (e) => {
     if (e) e.preventDefault();
     setErrorMessage('');
     setSuccessNotice('');
 
     if (!otp || otp.trim().length !== 6) {
-      setErrorMessage('Please enter the 6-digit code sent to your email.');
+      setErrorMessage('Please enter the 6-digit code sent to your mobile.');
       return;
     }
+
+    const cleanMobile = contact.replace(/\D/g, '');
 
     setActionLoading(true);
     try {
       const res = await api.post('/reception-queue/verify-otp', {
         clinicCode,
-        email: email.trim().toLowerCase(),
-        otp: otp.trim()
+        contact: cleanMobile,
+        otp: otp.trim(),
+        doctorId: selectedDoctorId || undefined,
+        targetAppointmentDate: selectedDate || undefined
       });
 
       const data = res.data;
@@ -286,12 +373,19 @@ const PublicReceptionQueuePage = () => {
         setStep('ticket_active');
       } else if (data.status === 'new_patient_details_required') {
         setSessionToken(data.sessionToken);
+        const verified = data.verifiedContact || cleanMobile;
+        setVerifiedContact(verified);
+        setFormData(prev => ({ ...prev, contact: verified }));
         setStep('new_patient_form');
       } else {
         setErrorMessage('Unexpected server response. Please try again.');
       }
     } catch (err) {
-      setErrorMessage(err.response?.data?.error || 'Invalid or expired verification code.');
+      if (err.response?.status === 409) {
+        setErrorMessage(err.response?.data?.error || 'This doctor has reached the maximum booking capacity for the selected date. Please select another doctor or date.');
+      } else {
+        setErrorMessage(err.response?.data?.error || 'Invalid or expired verification code.');
+      }
     } finally {
       setActionLoading(false);
     }
@@ -307,10 +401,19 @@ const PublicReceptionQueuePage = () => {
       return;
     }
 
-    const cleanPhone = formData.contact.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
-      setErrorMessage('Please enter a valid 10-digit mobile number.');
+    const verifiedPhone = verifiedContact || contact.replace(/\D/g, '');
+    if (!verifiedPhone || verifiedPhone.length < 10) {
+      setErrorMessage('Verified mobile number is missing. Please restart check-in.');
       return;
+    }
+
+    // Optional email validation
+    if (formData.email && formData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email.trim())) {
+        setErrorMessage('Please provide a valid email address or leave it empty.');
+        return;
+      }
     }
 
     setActionLoading(true);
@@ -323,7 +426,7 @@ const PublicReceptionQueuePage = () => {
         clinicCode,
         title: formData.title,
         name: formData.name.trim(),
-        contact: cleanPhone,
+        contact: verifiedPhone,
         gender: formData.gender,
         age: formData.age ? parseInt(formData.age, 10) : undefined,
         dob: formData.dob || undefined,
@@ -331,6 +434,8 @@ const PublicReceptionQueuePage = () => {
         bloodGroup: formData.bloodGroup || undefined,
         address: formData.address?.trim() || undefined,
         allergies: formData.allergies?.trim() || undefined,
+        doctorId: selectedDoctorId || undefined,
+        targetAppointmentDate: selectedDate || undefined,
         idempotencyKey
       });
 
@@ -343,7 +448,11 @@ const PublicReceptionQueuePage = () => {
         setErrorMessage('Failed to join reception queue. Please try again.');
       }
     } catch (err) {
-      setErrorMessage(err.response?.data?.error || 'Failed to submit registration. Please try again.');
+      if (err.response?.status === 409) {
+        setErrorMessage(err.response?.data?.error || 'This doctor has reached the maximum booking capacity for the selected date. Please select another doctor or date.');
+      } else {
+        setErrorMessage(err.response?.data?.error || 'Failed to submit registration. Please try again.');
+      }
     } finally {
       setActionLoading(false);
     }
@@ -356,11 +465,27 @@ const PublicReceptionQueuePage = () => {
     setActiveTicket(null);
     setPatientPosition(null);
     setExistingPatientData(null);
-    setEmail('');
+    setContact('');
     setOtp('');
+    setMaskedTarget('');
+    setVerifiedContact('');
     setErrorMessage('');
     setSuccessNotice('');
-    setStep('email_entry');
+    setFormData({
+      title: 'Mr.',
+      name: '',
+      contact: '',
+      gender: 'Male',
+      age: '',
+      dob: '',
+      email: '',
+      bloodGroup: '',
+      address: '',
+      allergies: ''
+    });
+    setShowMoreOptions(false);
+    // Return to mobile number verification, preserving clinic and doctor/date context
+    setStep(selectedDoctorId ? 'mobile_entry' : 'doctor_date_selection');
   };
 
   return (
@@ -465,14 +590,38 @@ const PublicReceptionQueuePage = () => {
             borderRadius: '10px',
             padding: '12px 14px',
             display: 'flex',
-            alignItems: 'flex-start',
-            gap: '10px',
+            flexDirection: 'column',
+            gap: '8px',
             fontSize: '13px',
             color: '#991B1B',
             lineHeight: 1.4
           }}>
-            <AlertCircle size={17} color="#DC2626" style={{ flexShrink: 0, marginTop: '2px' }} />
-            <div>{errorMessage}</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+              <AlertCircle size={17} color="#DC2626" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ flex: 1 }}>{errorMessage}</div>
+            </div>
+            {errorMessage.includes('capacity') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorMessage('');
+                  setStep('doctor_date_selection');
+                }}
+                style={{
+                  alignSelf: 'flex-start',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  background: '#DC2626',
+                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                Change Doctor or Date
+              </button>
+            )}
           </div>
         )}
 
@@ -536,17 +685,358 @@ const PublicReceptionQueuePage = () => {
           </div>
         )}
 
-        {/* ── STATE 4: EMAIL ENTRY (STEP 1 OF VERIFICATION) ── */}
-        {step === 'email_entry' && (
+        {/* ── STATE 3b: DOCTOR & DATE SELECTION (STEP 1) ── */}
+        {step === 'doctor_date_selection' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
+                Select Doctor & Date
+              </h2>
+              <p style={{ margin: 0, fontSize: '13px', color: '#64748B', lineHeight: 1.4 }}>
+                Choose your preferred consulting doctor and date to check slot availability.
+              </p>
+            </div>
+
+            {/* Date Selection */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                Consultation Date
+              </label>
+              <input
+                type="date"
+                value={selectedDate}
+                min={new Date().toISOString().split('T')[0]}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  borderRadius: '8px',
+                  border: '1.5px solid #CBD5E1',
+                  fontSize: '14px',
+                  color: '#0F172A',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  background: '#FFFFFF'
+                }}
+              />
+            </div>
+
+            {/* Doctor Selection */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                Consulting Doctor
+              </label>
+
+              {loadingDoctors ? (
+                <div style={{
+                  padding: '16px',
+                  borderRadius: '8px',
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  textAlign: 'center',
+                  fontSize: '13px',
+                  color: '#64748B',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}>
+                  <RefreshCw size={15} className="animate-spin" color="#2563EB" />
+                  Loading available doctors...
+                </div>
+              ) : doctorsList.length === 0 ? (
+                <div style={{
+                  padding: '14px',
+                  borderRadius: '8px',
+                  background: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  fontSize: '13px',
+                  color: '#B91C1C',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <AlertCircle size={16} color="#DC2626" style={{ flexShrink: 0 }} />
+                  <span>No doctors available for appointments on this date. Please select another date.</span>
+                </div>
+              ) : doctorsList.length === 1 ? (
+                /* Single Doctor: Automatically selected, NO dropdown */
+                <div style={{
+                  padding: '14px',
+                  borderRadius: '10px',
+                  background: '#F0FDF4',
+                  border: '1.5px solid #86EFAC',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  <div style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '50%',
+                    background: '#DCFCE7',
+                    color: '#15803D',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '14px'
+                  }}>
+                    {doctorsList[0].name ? doctorsList[0].name.charAt(0).toUpperCase() : 'D'}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
+                      {doctorsList[0].name}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#166534', fontWeight: 600 }}>
+                      {doctorsList[0].specialty || doctorsList[0].department || 'Consultant'}
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: '10.5px',
+                    fontWeight: 700,
+                    background: '#DCFCE7',
+                    color: '#15803D',
+                    padding: '3px 8px',
+                    borderRadius: '12px',
+                    border: '1px solid #86EFAC'
+                  }}>
+                    Primary Doctor
+                  </span>
+                </div>
+              ) : (
+                /* Multiple Doctors: Display dropdown selector */
+                <select
+                  value={selectedDoctorId}
+                  onChange={(e) => setSelectedDoctorId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '14px',
+                    color: '#0F172A',
+                    boxSizing: 'border-box',
+                    outline: 'none',
+                    background: '#FFFFFF'
+                  }}
+                >
+                  {doctorsList.map((doc) => (
+                    <option key={doc._id} value={doc._id}>
+                      {doc.name} — {doc.specialty || doc.department || 'General'}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* Availability Box */}
+            {selectedDoctorId && (
+              <div>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                  Slot Availability
+                </label>
+
+                {loadingAvailability ? (
+                  <div style={{
+                    padding: '16px',
+                    borderRadius: '8px',
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    textAlign: 'center',
+                    fontSize: '12.5px',
+                    color: '#64748B'
+                  }}>
+                    Checking real-time capacity...
+                  </div>
+                ) : doctorAvailability ? (
+                  <div style={{
+                    background: '#F8FAFC',
+                    border: '1.5px solid #E2E8F0',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, 1fr)',
+                      gap: '8px',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ background: '#FFFFFF', padding: '8px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                        <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>Daily Capacity</div>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
+                          {doctorAvailability.dailyCapacity}
+                        </div>
+                      </div>
+                      <div style={{ background: '#FFFFFF', padding: '8px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                        <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>Already Booked</div>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#334155', marginTop: '2px' }}>
+                          {doctorAvailability.bookedCount}
+                        </div>
+                      </div>
+                      <div style={{ background: '#FFFFFF', padding: '8px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                        <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>Remaining Slots</div>
+                        <div style={{
+                          fontSize: '16px',
+                          fontWeight: 800,
+                          color: doctorAvailability.remainingSlots > 0 ? '#0D9488' : '#DC2626',
+                          marginTop: '2px'
+                        }}>
+                          {doctorAvailability.remainingSlots}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #E2E8F0', paddingTop: '10px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Booking Status:</span>
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '3px 10px',
+                        borderRadius: '12px',
+                        background: doctorAvailability.isAvailable && doctorAvailability.remainingSlots > 0 ? '#DCFCE7' : '#FEE2E2',
+                        color: doctorAvailability.isAvailable && doctorAvailability.remainingSlots > 0 ? '#15803D' : '#B91C1C',
+                        border: doctorAvailability.isAvailable && doctorAvailability.remainingSlots > 0 ? '1px solid #86EFAC' : '1px solid #FECACA'
+                      }}>
+                        {doctorAvailability.isAvailable && doctorAvailability.remainingSlots > 0 ? '● Available' : '● Full'}
+                      </span>
+                    </div>
+
+                    {(!doctorAvailability.isAvailable || doctorAvailability.remainingSlots <= 0) && (
+                      <div style={{
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        background: '#FEF2F2',
+                        border: '1px solid #FECACA',
+                        fontSize: '12px',
+                        color: '#991B1B',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        <AlertCircle size={14} color="#DC2626" style={{ flexShrink: 0 }} />
+                        <span>This doctor has reached the maximum booking capacity for the selected date. Please choose another doctor or date.</span>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {/* Continue Button */}
+            <button
+              type="button"
+              disabled={
+                loadingDoctors ||
+                loadingAvailability ||
+                !selectedDoctorId ||
+                !doctorAvailability ||
+                !doctorAvailability.isAvailable ||
+                doctorAvailability.remainingSlots <= 0
+              }
+              onClick={() => {
+                setErrorMessage('');
+                setStep('mobile_entry');
+              }}
+              style={{
+                width: '100%',
+                padding: '13px',
+                borderRadius: '8px',
+                background: (
+                  loadingDoctors ||
+                  loadingAvailability ||
+                  !selectedDoctorId ||
+                  !doctorAvailability ||
+                  !doctorAvailability.isAvailable ||
+                  doctorAvailability.remainingSlots <= 0
+                ) ? '#94A3B8' : '#2563EB',
+                color: '#FFFFFF',
+                fontSize: '14.5px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: (
+                  loadingDoctors ||
+                  loadingAvailability ||
+                  !selectedDoctorId ||
+                  !doctorAvailability ||
+                  !doctorAvailability.isAvailable ||
+                  doctorAvailability.remainingSlots <= 0
+                ) ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                marginTop: '8px',
+                boxShadow: (
+                  loadingDoctors ||
+                  loadingAvailability ||
+                  !selectedDoctorId ||
+                  !doctorAvailability ||
+                  !doctorAvailability.isAvailable ||
+                  doctorAvailability.remainingSlots <= 0
+                ) ? 'none' : '0 2px 6px rgba(37, 99, 235, 0.25)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <span>Continue to Check-In</span>
+              <ArrowRight size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* ── STATE 4: MOBILE ENTRY (STEP 2 OF VERIFICATION) ── */}
+        {(step === 'mobile_entry' || step === 'email_entry') && (
           <div>
             <div style={{ marginBottom: '18px' }}>
               <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
                 Welcome to Reception
               </h2>
               <p style={{ margin: 0, fontSize: '13px', color: '#64748B', lineHeight: 1.4 }}>
-                Enter your email to verify your identity and enter the front-desk queue.
+                Enter your mobile number to verify your identity and enter the front-desk queue.
               </p>
             </div>
+
+            {/* Selected Doctor & Date Pill */}
+            {selectedDoctorId && (
+              <div style={{
+                background: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '14px',
+                fontSize: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Stethoscope size={14} color="#15803D" />
+                  <span style={{ fontWeight: 700, color: '#15803D' }}>
+                    {doctorsList.find(d => d._id === selectedDoctorId)?.name || 'Doctor'}
+                  </span>
+                  <span style={{ color: '#64748B' }}>•</span>
+                  <span style={{ color: '#475569' }}>{selectedDate}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStep('doctor_date_selection')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#2563EB',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    fontSize: '11.5px',
+                    padding: 0
+                  }}
+                >
+                  Change
+                </button>
+              </div>
+            )}
 
             {/* Live Queue Overview Badge */}
             <div style={{
@@ -576,44 +1066,64 @@ const PublicReceptionQueuePage = () => {
             <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Your Email Address
+                  Mobile Number *
                 </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
-                  required
-                  autoFocus
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    borderRadius: '8px',
-                    border: '1.5px solid #CBD5E1',
+                <div style={{ position: 'relative' }}>
+                  <span style={{
+                    position: 'absolute',
+                    left: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
                     fontSize: '14px',
-                    color: '#0F172A',
-                    boxSizing: 'border-box',
-                    outline: 'none',
-                    transition: 'border-color 0.15s ease'
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = '#2563EB'}
-                  onBlur={(e) => e.target.style.borderColor = '#CBD5E1'}
-                />
+                    fontWeight: 700,
+                    color: '#475569'
+                  }}>
+                    +91
+                  </span>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={contact}
+                    onChange={(e) => setContact(e.target.value.replace(/\D/g, ''))}
+                    placeholder="9876543210"
+                    required
+                    autoFocus
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px 12px 48px',
+                      borderRadius: '8px',
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: '15px',
+                      letterSpacing: '0.5px',
+                      fontWeight: 600,
+                      color: '#0F172A',
+                      boxSizing: 'border-box',
+                      outline: 'none',
+                      transition: 'border-color 0.15s ease'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#2563EB'}
+                    onBlur={(e) => e.target.style.borderColor = '#CBD5E1'}
+                  />
+                </div>
+                <div style={{ marginTop: '6px', fontSize: '11.5px', color: '#64748B' }}>
+                  We'll send a 6-digit verification code via SMS to your mobile number.
+                </div>
               </div>
 
               <button
                 type="submit"
-                disabled={actionLoading || !email.trim()}
+                disabled={actionLoading || contact.replace(/\D/g, '').length !== 10}
                 style={{
                   width: '100%',
                   padding: '13px',
                   borderRadius: '8px',
-                  background: actionLoading || !email.trim() ? '#94A3B8' : '#2563EB',
+                  background: actionLoading || contact.replace(/\D/g, '').length !== 10 ? '#94A3B8' : '#2563EB',
                   color: '#FFFFFF',
                   fontSize: '14.5px',
                   fontWeight: 700,
                   border: 'none',
-                  cursor: actionLoading || !email.trim() ? 'not-allowed' : 'pointer',
+                  cursor: actionLoading || contact.replace(/\D/g, '').length !== 10 ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -637,7 +1147,7 @@ const PublicReceptionQueuePage = () => {
 
             <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: '#64748B' }}>
               <Shield size={14} color="#94A3B8" />
-              <span>We protect your health data. Zero spam.</span>
+              <span>SMS Gateway • PING4SMS Route 2 • Zero Spam</span>
             </div>
           </div>
         )}
@@ -647,7 +1157,7 @@ const PublicReceptionQueuePage = () => {
           <div>
             <button
               type="button"
-              onClick={() => { setStep('email_entry'); setErrorMessage(''); }}
+              onClick={() => { setStep('mobile_entry'); setErrorMessage(''); }}
               style={{
                 background: 'none',
                 border: 'none',
@@ -662,14 +1172,14 @@ const PublicReceptionQueuePage = () => {
                 marginBottom: '14px'
               }}
             >
-              <ArrowLeft size={14} /> Back to email
+              <ArrowLeft size={14} /> Back to mobile number
             </button>
 
             <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
-              Verify Your Code
+              Verify Your Mobile
             </h2>
             <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#64748B', lineHeight: 1.4 }}>
-              Enter the 6-digit code sent to <strong style={{ color: '#0F172A' }}>{email}</strong>.
+              Enter the 6-digit code sent via SMS to <strong style={{ color: '#0F172A' }}>{maskedTarget || `+91 ******${contact.slice(-4)}`}</strong>.
             </p>
 
             <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -780,7 +1290,7 @@ const PublicReceptionQueuePage = () => {
             }}>
               <strong style={{ display: 'block', marginBottom: '4px', color: '#0F172A' }}>Next Steps:</strong>
               1. Step up to the reception counter.<br />
-              2. Inform the front desk staff of your name and email.<br />
+              2. Inform the front desk staff of your name and mobile number.<br />
               3. The receptionist will safely select your profile.
             </div>
             <button
@@ -980,29 +1490,56 @@ const PublicReceptionQueuePage = () => {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Mobile Number *
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>
+                    Mobile Number (Verified) *
+                  </label>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#16A34A',
+                    background: '#DCFCE7',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    border: '1px solid #86EFAC'
+                  }}>
+                    <CheckCircle size={12} color="#16A34A" /> Verified
+                  </span>
+                </div>
                 <div style={{ position: 'relative' }}>
+                  <span style={{
+                    position: 'absolute',
+                    left: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    fontSize: '13.5px',
+                    fontWeight: 700,
+                    color: '#64748B'
+                  }}>
+                    +91
+                  </span>
                   <input
                     type="tel"
-                    required
-                    maxLength={10}
-                    placeholder="10-digit phone number"
+                    readOnly
                     value={formData.contact}
-                    onChange={(e) => setFormData({ ...formData, contact: e.target.value.replace(/\D/g, '') })}
                     style={{
                       width: '100%',
-                      padding: '11px 13px 11px 36px',
+                      padding: '11px 40px 11px 44px',
                       borderRadius: '10px',
                       border: '1.5px solid #CBD5E1',
                       fontSize: '14px',
-                      background: '#FFFFFF',
+                      fontWeight: 700,
+                      background: '#F1F5F9',
+                      color: '#334155',
                       boxSizing: 'border-box',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: 'not-allowed'
                     }}
                   />
-                  <Phone size={16} color="#94A3B8" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                  <Shield size={16} color="#16A34A" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)' }} />
                 </div>
               </div>
 
@@ -1251,7 +1788,7 @@ const PublicReceptionQueuePage = () => {
                 </div>
               )}
 
-              {/* Verified Arrival Email Badge */}
+              {/* Verified Arrival Mobile Badge */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -1264,7 +1801,7 @@ const PublicReceptionQueuePage = () => {
                 color: '#166534'
               }}>
                 <CheckCircle size={15} color="#16A34A" style={{ flexShrink: 0 }} />
-                <span>Verified Arrival Email: <strong style={{ color: '#0F172A' }}>{email}</strong></span>
+                <span>Verified Mobile: <strong style={{ color: '#0F172A' }}>+91 {verifiedContact || contact}</strong></span>
               </div>
 
               <button
@@ -1431,7 +1968,7 @@ const PublicReceptionQueuePage = () => {
                 marginTop: '4px'
               }}
             >
-              Check-in with another email
+              Check in with another mobile number
             </button>
           </div>
         )}

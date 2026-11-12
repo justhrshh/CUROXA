@@ -168,9 +168,11 @@ const ReceptionQueuePanel = ({
     const existingPid = ticket.patientId?._id || ticket.patientId || null;
     setCreatedPatientId(existingPid);
 
-    // Pick a default doctor if available
-    const defaultDocId = doctors && doctors.length > 0 ? doctors[0]._id : '';
-    const authoritativeToday = queueData.queueDate || new Date().toISOString().split('T')[0];
+    // Pick pre-selected doctor and date if specified on the reception ticket
+    const ticketDocId = ticket.doctorId?._id || ticket.doctorId || '';
+    const defaultDocId = ticketDocId || (doctors && doctors.length > 0 ? doctors[0]._id : '');
+    const ticketDate = ticket.targetAppointmentDate || '';
+    const authoritativeToday = ticketDate || queueData.queueDate || new Date().toISOString().split('T')[0];
 
     setIntakeFormData({
       title: patientObj?.title || '',

@@ -127,6 +127,7 @@ router.post("/users", isHrOrAdmin, requireActiveSubscription, async (req, res) =
       role,
       name,
       email: email ? email.trim().toLowerCase() : "",
+      dailyMaxCapacity: role === "doctor" && req.body.dailyMaxCapacity !== undefined && req.body.dailyMaxCapacity !== null && req.body.dailyMaxCapacity !== '' && !isNaN(parseInt(req.body.dailyMaxCapacity, 10)) && parseInt(req.body.dailyMaxCapacity, 10) > 0 ? parseInt(req.body.dailyMaxCapacity, 10) : null,
       max_slots: role === "doctor" ? (max_slots ? Number(max_slots) : 10) : undefined,
       consultationFee: role === "doctor" ? (req.body.consultationFee !== undefined ? Number(req.body.consultationFee) : 500) : undefined,
       specialty: req.body.specialty || '',
@@ -190,7 +191,7 @@ router.put("/users/:id", isHrOrAdmin, requireActiveSubscription, async (req, res
       'shiftName', 'grade', 'experienceYears', 'bankDetails', 'ctcAnnual', 
       'pfEnrolled', 'esiEnrolled', 'taxBracket', 'leaveBalance', 'avatar', 'status',
       'carriedForwardLeaves', 'monthlyLeaveAllocation', 'documents',
-      'doctorSlots', 'weeklyOff', 'consultationFee'
+      'doctorSlots', 'weeklyOff', 'consultationFee', 'dailyMaxCapacity'
     ];
 
     allowedFields.forEach(field => {
@@ -205,8 +206,21 @@ router.put("/users/:id", isHrOrAdmin, requireActiveSubscription, async (req, res
       updateFields.employeeId = await generateHospitalEmployeeId(req.tenantId);
     }
 
-    if (req.body.role === "doctor") {
-      updateFields.max_slots = req.body.max_slots ? Number(req.body.max_slots) : 10;
+    if (req.body.role === "doctor" || existingStaff.role === "doctor") {
+      if (req.body.max_slots !== undefined && req.body.max_slots !== null && req.body.max_slots !== '') {
+        const parsedMaxSlots = Number(req.body.max_slots);
+        if (!isNaN(parsedMaxSlots) && parsedMaxSlots > 0) {
+          updateFields.max_slots = parsedMaxSlots;
+        }
+      }
+      if (req.body.dailyMaxCapacity !== undefined) {
+        if (req.body.dailyMaxCapacity === null || req.body.dailyMaxCapacity === '' || req.body.dailyMaxCapacity === 0) {
+          updateFields.dailyMaxCapacity = null;
+        } else {
+          const capVal = parseInt(req.body.dailyMaxCapacity, 10);
+          updateFields.dailyMaxCapacity = !isNaN(capVal) && capVal > 0 ? capVal : null;
+        }
+      }
     }
 
     const updateObj = { $set: updateFields };

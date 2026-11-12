@@ -15,6 +15,8 @@ const { resolveTrustedHospitalBranding, buildBrandedOtpEmail, validateHospitalLo
 const { getHospitalSubscriptionStatus, checkAndDispatchExpiryNotifications } = require("../utils/subscriptionHelper");
 const { sendEmail } = require("../utils/emailService");
 const { getCanonicalLogoUrl } = require("../config/urls");
+const { createAndDispatchOtp, atomicVerifyOtp, generateProfileSelectionToken, verifyAndConsumeProfileSelectionToken } = require("../services/otp/otpService");
+const { normalizeIndianMobile, isValidIndianMobile, maskPhoneNumber } = require("../utils/phoneNormalization");
 const multer = require("multer");
 const router = express.Router();
 
@@ -1469,46 +1471,38 @@ router.post("/forgot-password", tenantMiddleware, async (req, res) => {
       });
     }
 
-    // Generate a secure 6-digit numeric OTP with purpose FORGOT_PASSWORD
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    user.otp_code = otp;
-    user.otp_expires_at = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes validity
-    user.otp_purpose = "FORGOT_PASSWORD";
     if (!user.email && destinationEmail) {
       user.email = destinationEmail;
+      await user.save();
     }
-    await user.save();
 
     const hospital = await resolveTrustedHospitalBranding(user.tenantId);
-    const emailContent = buildBrandedOtpEmail({
-      otp,
-      title: "Verify Your Identity",
-      message: `You requested a password reset for your ${hospital.name} account. Use the verification code below to complete the process. This code is valid for <strong>15 minutes</strong>.`,
-      hospital,
-      expiryMinutes: 15
-    });
 
-    const emailResult = await sendEmail({
-      to: destinationEmail,
-      subject: emailContent.subject,
-      text: emailContent.text,
-      html: emailContent.html,
+    // Dispatch via centralized otpService with Zero-Orphan Rollback commitment
+    const dispatchResult = await createAndDispatchOtp({
+      targetIdentifier: destinationEmail,
+      identifierType: 'email',
+      tenantId: user.tenantId,
+      purpose: 'FORGOT_PASSWORD',
+      deliveryChannel: 'email',
+      expiryMinutes: 15,
+      subject: `${hospital.name} Password Reset Verification Code`,
+      html: (authoritativeOtp) => buildBrandedOtpEmail({
+        otp: authoritativeOtp,
+        title: "Verify Your Identity",
+        message: `You requested a password reset for your ${hospital.name} account. Use the verification code below to complete the process. This code is valid for <strong>15 minutes</strong>.`,
+        hospital,
+        expiryMinutes: 15
+      }).html,
       senderName: hospital.name
     });
-    const emailSent = emailResult.success;
 
-    console.log(`[SECURITY] Password-reset OTP generated for ${destinationEmail} (Tenant: ${user.tenantId}, Hospital: ${hospital.name}, Purpose: FORGOT_PASSWORD, Sent: ${emailSent})`);
+    console.log(`[SECURITY] Password-reset OTP generated for ${destinationEmail} (Tenant: ${user.tenantId}, Hospital: ${hospital.name}, Purpose: FORGOT_PASSWORD, Sent: ${dispatchResult.success})`);
 
-    if (!emailSent) {
+    if (!dispatchResult.success) {
       console.error(`[SECURITY] Failed to deliver password-reset OTP email to ${destinationEmail}`);
-      if (process.env.NODE_ENV !== "production") {
-        return res.json({
-          message: `OTP generated (email delivery failed via configured SMTP). Verification code: ${otp}`,
-          dev_otp: otp
-        });
-      }
-      return res.status(500).json({
-        error: "Failed to deliver verification email. Please contact your system administrator or check mail server settings."
+      return res.status(dispatchResult.status || 500).json({
+        error: dispatchResult.error || "Failed to deliver verification email. Please contact your system administrator or check mail server settings."
       });
     }
 
@@ -1532,23 +1526,43 @@ router.post("/verify-otp", tenantMiddleware, async (req, res) => {
     const searchInput = String(email).trim();
     const searchEmail = searchInput.toLowerCase();
 
-    // Find user by email, staff_id, or phone
-    let user = await User.findOne({
-      $or: [
-        { email: searchEmail },
-        { staff_id: searchInput },
-        { staff_id: searchEmail },
-        { phone: searchInput }
-      ]
-    }).select("+password_hash");
+    // Find user by email, staff_id, or phone scoped to tenant context when provided
+    const lookupConditions = [
+      { email: searchEmail },
+      { staff_id: searchInput },
+      { staff_id: searchEmail },
+      { phone: searchInput }
+    ];
+
+    let user = null;
+    if (req.tenantId && req.tenantId !== 'city_hospital') {
+      user = await User.findOne({
+        tenantId: req.tenantId,
+        $or: lookupConditions
+      }).select("+password_hash");
+    }
+
+    if (!user) {
+      user = await User.findOne({
+        $or: lookupConditions
+      }).select("+password_hash");
+    }
 
     if (!user) {
       return res.status(400).json({ error: "Invalid email or OTP" });
     }
 
-    // Verify OTP matches, purpose is FORGOT_PASSWORD, and has not expired
-    if (!user.otp_code || user.otp_code !== String(otp).trim() || !user.otp_expires_at || user.otp_expires_at < new Date() || user.otp_purpose !== "FORGOT_PASSWORD") {
-      return res.status(400).json({ error: "Invalid or expired OTP" });
+    // 1. Central atomic verification (guarantees concurrency safety & brute force protection)
+    const targetIdentifier = user.email ? user.email.toLowerCase().trim() : searchEmail;
+    const verifyResult = await atomicVerifyOtp({
+      targetIdentifier,
+      tenantId: user.tenantId,
+      purpose: 'FORGOT_PASSWORD',
+      otpCandidate: String(otp).trim()
+    });
+
+    if (!verifyResult.success) {
+      return res.status(verifyResult.status || 400).json({ error: verifyResult.error || "Invalid or expired OTP" });
     }
 
     // Hash the new password
@@ -1556,11 +1570,6 @@ router.post("/verify-otp", tenantMiddleware, async (req, res) => {
     user.password_hash = await bcrypt.hash(newPassword, salt);
     user.password_version = (user.password_version || 0) + 1;
     user.hasSetPassword = true;
-
-    // Clear the OTP fields and purpose
-    user.otp_code = null;
-    user.otp_expires_at = null;
-    user.otp_purpose = null;
     await user.save();
 
     // Invalidate all active refresh sessions across all devices for this user
@@ -1727,42 +1736,38 @@ router.post("/send-registration-otp", tenantMiddleware, async (req, res) => {
       return res.status(400).json({ error: "A patient with this email is already registered." });
     }
 
-    const RegistrationOtp = require("../models/RegistrationOtp");
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires_at = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
-
-    await RegistrationOtp.findOneAndUpdate(
-      { email: searchEmail },
-      { otp_code: otp, expires_at },
-      { upsert: true, returnDocument: 'after' }
-    );
-
     // Resolve trusted hospital branding from req.tenantId (NEVER from client body)
     const hospitalBranding = await resolveTrustedHospitalBranding(req.tenantId);
 
-    const emailHtmlBody = buildBrandedOtpEmail({
-      otp,
-      title: `${hospitalBranding.name} Verification Code`,
-      message: `Use the registration verification code below to verify your email address. This code is valid for <strong>15 minutes</strong>.`,
-      hospital: hospitalBranding,
-      expiryMinutes: 15
-    });
-
-    let emailSent = false;
-
-    const emailResult = await sendEmail({
-      to: searchEmail,
-      subject: `${hospitalBranding.name} Registration Verification Code: ${otp}`,
-      html: emailHtmlBody,
+    // Centralized challenge dispatch with Zero-Orphan Rollback
+    const dispatchResult = await createAndDispatchOtp({
+      targetIdentifier: searchEmail,
+      identifierType: 'email',
+      tenantId: req.tenantId,
+      purpose: 'STAFF_REGISTRATION',
+      deliveryChannel: 'email',
+      expiryMinutes: 15,
+      subject: `${hospitalBranding.name} Registration Verification Code`,
+      html: (authoritativeOtp) => buildBrandedOtpEmail({
+        otp: authoritativeOtp,
+        title: `${hospitalBranding.name} Verification Code`,
+        message: `Use the registration verification code below to verify your email address. This code is valid for <strong>15 minutes</strong>.`,
+        hospital: hospitalBranding,
+        expiryMinutes: 15
+      }).html,
       senderName: hospitalBranding.name
     });
-    emailSent = emailResult.success;
 
-    console.log(`[SECURITY] Registration OTP generated for ${searchEmail} (Tenant: ${req.tenantId}): ${otp}`);
+    console.log(`[SECURITY] Registration OTP generated for ${searchEmail} (Tenant: ${req.tenantId}, Sent: ${dispatchResult.success})`);
     
+    if (!dispatchResult.success) {
+      return res.status(dispatchResult.status || 500).json({
+        error: dispatchResult.error || "Failed to deliver registration verification email. Please check your email address or server mail settings."
+      });
+    }
+
     res.json({
-      message: "If you entered a valid email, a verification OTP has been sent.",
-      ...(process.env.NODE_ENV !== "production" && !emailSent ? { dev_otp: otp } : {})
+      message: "If you entered a valid email, a verification OTP has been sent."
     });
   } catch (error) {
     console.error("Send registration OTP error:", error);
@@ -1779,10 +1784,17 @@ router.post("/verify-registration-otp", tenantMiddleware, async (req, res) => {
 
   try {
     const searchEmail = email.toLowerCase().trim();
-    const RegistrationOtp = require("../models/RegistrationOtp");
-    const record = await RegistrationOtp.findOne({ email: searchEmail, otp_code: otp.trim() });
-    if (!record || record.expires_at < new Date()) {
-      return res.status(400).json({ error: "Invalid or expired OTP code." });
+    
+    // 1. Central atomic verification
+    const verifyResult = await atomicVerifyOtp({
+      targetIdentifier: searchEmail,
+      tenantId: req.tenantId,
+      purpose: 'STAFF_REGISTRATION',
+      otpCandidate: String(otp).trim()
+    });
+
+    if (!verifyResult.success) {
+      return res.status(verifyResult.status || 400).json({ error: verifyResult.error || "Invalid or expired OTP code." });
     }
 
     res.json({ message: "OTP verified successfully" });
@@ -1866,47 +1878,57 @@ router.post("/send-login-otp", tenantMiddleware, async (req, res) => {
       }
     }
 
-    // 4. Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    user.login_otp_code = otp;
-    user.login_otp_expires_at = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
-    user.login_otp_purpose = "LOGIN";
-    await user.save();
-
-    // 5. Send email (if email is configured)
-    let emailSent = false;
+    // 4. Determine delivery channel and target
     const isEmail = input.includes('@');
+    const phoneCheck = !isEmail ? normalizeIndianMobile(input) : { isValid: false };
     const targetEmail = isEmail ? input.toLowerCase().trim() : (user.email ? user.email.toLowerCase().trim() : null);
-    if (targetEmail) {
-      // Resolve trusted hospital branding from user.tenantId (NEVER from client body)
-      const hospitalBranding = await resolveTrustedHospitalBranding(user.tenantId);
 
-      const emailHtmlBody = buildBrandedOtpEmail({
-        otp,
+    // Prefer SMS if user entered a valid Indian mobile number, otherwise use Email
+    const useSms = phoneCheck.isValid && !isEmail;
+    const deliveryChannel = useSms ? 'sms' : 'email';
+    const targetIdentifier = useSms ? phoneCheck.normalized : targetEmail;
+
+    if (!targetIdentifier) {
+      return res.status(400).json({
+        error: "No valid email or mobile number found to receive verification code."
+      });
+    }
+
+    // Resolve trusted hospital branding from user.tenantId (NEVER from client body)
+    const hospitalBranding = await resolveTrustedHospitalBranding(user.tenantId);
+
+    // Central challenge dispatch via otpService with Zero-Orphan Rollback commitment
+    const dispatchResult = await createAndDispatchOtp({
+      targetIdentifier,
+      identifierType: useSms ? 'phone' : 'email',
+      tenantId: user.tenantId,
+      purpose: 'STAFF_LOGIN',
+      deliveryChannel,
+      expiryMinutes: 10,
+      subject: `${hospitalBranding.name} Login Verification Code`,
+      html: (authoritativeOtp) => buildBrandedOtpEmail({
+        otp: authoritativeOtp,
         title: `${hospitalBranding.name} Login Code`,
         message: `Hello ${user.name || 'User'},<br/>You requested a One-Time Password (OTP) to log into your account. This code is valid for <strong>10 minutes</strong>.`,
         hospital: hospitalBranding,
         expiryMinutes: 10
-      });
+      }).html,
+      senderName: hospitalBranding.name,
+      allowFallback: true,
+      fallbackEmail: targetEmail
+    });
 
-      const emailResult = await sendEmail({
-        to: targetEmail,
-        subject: `${hospitalBranding.name} Login Verification Code: ${otp}`,
-        html: emailHtmlBody,
-        senderName: hospitalBranding.name
+    console.log(`[OTP] Generated login OTP for user ${user.staff_id} (Tenant: ${user.tenantId}, Channel: ${deliveryChannel}, Sent: ${dispatchResult.success})`);
+
+    // Zero-Orphan Rollback: Return error if delivery failed
+    if (!dispatchResult.success) {
+      return res.status(dispatchResult.status || 500).json({
+        error: dispatchResult.error || "Failed to deliver login verification code. Please ensure your account has a valid email or phone configured."
       });
-      emailSent = emailResult.success;
     }
 
-    console.log(`[OTP] Generated login OTP: ${otp} for user ${user.staff_id} (Tenant: ${user.tenantId})`);
-    
-    // Write OTP to a local file for easy automated testing/readout
-    const fs = require('fs');
-    fs.writeFileSync(path.join(__dirname, '..', '.seed-otp.txt'), otp, 'utf8');
-
     res.json({
-      message: "One-Time Password has been generated and sent.",
-      ...(process.env.NODE_ENV !== "production" && !emailSent ? { dev_otp: otp } : {})
+      message: "One-Time Password has been generated and sent."
     });
   } catch (error) {
     console.error("Send login OTP error:", error);
@@ -1954,9 +1976,18 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // 3. Verify OTP
-    if (!user.login_otp_code || user.login_otp_code !== targetOtp || user.login_otp_expires_at < new Date() || user.login_otp_purpose !== "LOGIN") {
-      return res.status(401).json({ error: "Invalid or expired OTP" });
+    // 3. Central atomic verification
+    const phoneCheck = normalizeIndianMobile(input);
+    const targetIdentifier = phoneCheck.isValid ? phoneCheck.normalized : (user.email ? user.email.toLowerCase().trim() : input.toLowerCase());
+    const verifyResult = await atomicVerifyOtp({
+      targetIdentifier,
+      tenantId: user.tenantId,
+      purpose: 'STAFF_LOGIN',
+      otpCandidate: targetOtp
+    });
+
+    if (!verifyResult.success) {
+      return res.status(verifyResult.status || 401).json({ error: verifyResult.error || "Invalid or expired OTP" });
     }
 
     const requestedHospitalId = req.body.hospitalId || req.body.portalHospitalId || req.headers['x-hospital-id'] || req.headers['x-portal-id'] || req.query.hospitalId;
@@ -1969,10 +2000,6 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
       }
     }
 
-    // Clear OTP
-    user.login_otp_code = null;
-    user.login_otp_expires_at = null;
-    user.login_otp_purpose = null;
     user.lastLogin = new Date();
     await user.save();
 
@@ -2360,35 +2387,51 @@ async function sendPortalOtpEmail(targetEmail, otp, tenantId) {
   return result.success;
 }
 
-// Send OTP for Patient Portal (allows existing & new patients)
-router.post('/patient-portal/send-otp', async (req, res) => {
-  const { emailOrPhone } = req.body;
-  if (!emailOrPhone) {
-    return res.status(400).json({ error: 'Email or Mobile Number is required' });
+// Send OTP for Patient Portal (Mobile Primary with SMS / Email Alternative)
+router.post('/patient-portal/send-otp', tenantMiddleware, async (req, res) => {
+  const { emailOrPhone, mobile, phone, email, tenantId: bodyTenantId } = req.body;
+  const rawInput = mobile || phone || email || emailOrPhone;
+  if (!rawInput) {
+    return res.status(400).json({ error: 'Mobile number or email address is required' });
   }
 
   try {
-    const input = emailOrPhone.trim();
+    const input = String(rawInput).trim();
     const Patient = require('../models/Patient');
-    const RegistrationOtp = require('../models/RegistrationOtp');
-    const path = require('path');
-    const fs = require('fs');
+    const derivedTenantId = req.tenantId || bodyTenantId || req.headers['x-tenant-id'] || 'city_hospital';
     
-    const isEmail = input.includes('@');
+    // Explicit email detection (either explicitly passed as email, or contains @)
+    const isEmail = Boolean(email) || input.includes('@');
     let targetEmail = null;
+    let targetIdentifier = null;
+    let deliveryChannel = 'sms';
+    let identifierType = 'phone';
     let patient = null;
     let user = null;
 
-    // 1. Strict email vs phone resolution (no cross-linking pollution)
     if (isEmail) {
       targetEmail = input.toLowerCase().trim();
-      patient = await Patient.findOne({ email: targetEmail });
-      user = await User.findOne({ email: targetEmail, role: 'patient' }) ||
-             await User.findOne({ email: targetEmail });
+      targetIdentifier = targetEmail;
+      deliveryChannel = 'email';
+      identifierType = 'email';
+
+      patient = await Patient.findOne({ tenantId: derivedTenantId, email: targetEmail });
+      user = await User.findOne({ tenantId: derivedTenantId, email: targetEmail, role: 'patient' }) ||
+             await User.findOne({ tenantId: derivedTenantId, email: targetEmail });
     } else {
-      patient = await Patient.findOne({ contact: input });
-      user = await User.findOne({ phone: input, role: 'patient' }) ||
-             await User.findOne({ staff_id: input });
+      // Primary: Mobile number verification via SMS
+      const phoneCheck = normalizeIndianMobile(input);
+      if (!phoneCheck.isValid) {
+        return res.status(400).json({ error: phoneCheck.error || 'A valid 10-digit Indian mobile number is required' });
+      }
+
+      targetIdentifier = phoneCheck.normalized;
+      deliveryChannel = 'sms';
+      identifierType = 'phone';
+
+      patient = await Patient.findOne({ tenantId: derivedTenantId, contact: targetIdentifier });
+      user = await User.findOne({ tenantId: derivedTenantId, phone: targetIdentifier, role: 'patient' }) ||
+             await User.findOne({ tenantId: derivedTenantId, staff_id: targetIdentifier });
       if (user && user.email) {
         targetEmail = user.email.toLowerCase().trim();
       } else if (patient && patient.email) {
@@ -2396,42 +2439,45 @@ router.post('/patient-portal/send-otp', async (req, res) => {
       }
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+    const maskedLogTarget = deliveryChannel === 'sms' 
+      ? maskPhoneNumber(targetIdentifier) 
+      : targetIdentifier.replace(/(?<=^.).+(?=@)/, '***');
 
-    if (user) {
-      user.login_otp_code = otp;
-      user.login_otp_expires_at = expiresAt;
-      user.login_otp_purpose = "PATIENT_PORTAL_LOGIN";
-      await user.save();
-    }
+    console.log(`[PATIENT PORTAL] Staged OTP challenge for ${maskedLogTarget} (Tenant: ${derivedTenantId}, Channel: ${deliveryChannel})`);
 
-    // Always store in RegistrationOtp for seamless verification fallback
-    try {
-      await RegistrationOtp.findOneAndUpdate(
-        { email: isEmail ? targetEmail : input },
-        { otp_code: otp, expires_at: expiresAt },
-        { upsert: true, new: true }
-      );
-    } catch (dbErr) {
-      console.warn('[PATIENT PORTAL] RegistrationOtp store warning:', dbErr.message);
-    }
+    // Centralized challenge dispatch with Zero-Orphan Rollback
+    const dispatchResult = await createAndDispatchOtp({
+      targetIdentifier,
+      identifierType,
+      tenantId: derivedTenantId,
+      purpose: 'PATIENT_PORTAL_AUTH',
+      deliveryChannel,
+      expiryMinutes: 15,
+      subject: 'Patient Portal Verification Code',
+      html: (authoritativeOtp) => `<p>Your verification code is: <strong>${authoritativeOtp}</strong>. Valid for 15 minutes.</p>`,
+      allowFallback: false,
+      _mockSmsTransport: req.body._mockSmsTransport || req.app.get('mockSmsTransport'),
+      _mockEmailTransport: req.body._mockEmailTransport || req.app.get('mockEmailTransport')
+    });
 
-    console.log(`[PATIENT PORTAL] Generated OTP for ${input}: ${otp}`);
-
-    // Write OTP to local file for debug
-    try {
-      fs.writeFileSync(path.join(__dirname, '..', '.seed-otp.txt'), otp, 'utf8');
-    } catch (_) {}
-
-    // Send email to target email address
-    if (targetEmail) {
-      const derivedTenantId = patient?.tenantId || user?.tenantId || req.tenantId || req.headers['x-tenant-id'];
-      await sendPortalOtpEmail(targetEmail, otp, derivedTenantId);
+    if (!dispatchResult.success) {
+      return res.status(dispatchResult.status || 500).json({
+        error: dispatchResult.error || (deliveryChannel === 'sms'
+          ? "Failed to deliver SMS verification code. Please check your mobile number or try again later."
+          : "Failed to deliver email verification code. Please check your email or mail server settings.")
+      });
     }
 
     const isRegistered = Boolean(patient || user);
-    return res.json({ message: 'OTP sent successfully', isNewUser: !isRegistered });
+    return res.json({ 
+      success: true,
+      channel: deliveryChannel,
+      maskedTarget: maskedLogTarget,
+      message: deliveryChannel === 'sms'
+        ? `A 6-digit verification code has been dispatched via SMS to ${maskedLogTarget}.`
+        : `A 6-digit verification code has been dispatched to ${maskedLogTarget}.`,
+      isNewUser: !isRegistered 
+    });
 
   } catch (error) {
     console.error('Patient Portal Send OTP Error:', error);
@@ -2440,64 +2486,98 @@ router.post('/patient-portal/send-otp', async (req, res) => {
 });
 
 // Verify OTP for Patient Portal
-router.post('/patient-portal/verify-otp', async (req, res) => {
-  const { emailOrPhone, otp } = req.body;
-  if (!emailOrPhone || !otp) {
-    return res.status(400).json({ error: 'Email/Mobile and OTP are required' });
+router.post('/patient-portal/verify-otp', tenantMiddleware, async (req, res) => {
+  const { emailOrPhone, mobile, phone, email, otp, tenantId: bodyTenantId } = req.body;
+  const rawInput = mobile || phone || email || emailOrPhone;
+  if (!rawInput || !otp) {
+    return res.status(400).json({ error: 'Mobile/Email and OTP verification code are required' });
   }
 
   try {
-    const input = emailOrPhone.trim();
-    const targetOtp = otp.trim();
+    const input = String(rawInput).trim();
+    const targetOtp = String(otp).trim();
     const Patient = require('../models/Patient');
-    const RegistrationOtp = require('../models/RegistrationOtp');
     const { getJwtSecret } = require('../config/env');
 
     let secretKey;
     try { secretKey = getJwtSecret(); } catch(e) { secretKey = process.env.JWT_SECRET || 'secret_key'; }
 
-    const isEmail = input.includes('@');
+    const isEmail = Boolean(email) || input.includes('@');
+    const derivedTenantId = req.tenantId || bodyTenantId || req.headers['x-tenant-id'] || 'city_hospital';
+    let targetIdentifier = null;
+
+    if (isEmail) {
+      targetIdentifier = input.toLowerCase().trim();
+    } else {
+      const phoneCheck = normalizeIndianMobile(input);
+      if (!phoneCheck.isValid) {
+        return res.status(400).json({ error: phoneCheck.error || 'A valid 10-digit Indian mobile number is required' });
+      }
+      targetIdentifier = phoneCheck.normalized;
+    }
+
+    // 1. Central atomic verification bound to tenant and purpose
+    const verifyResult = await atomicVerifyOtp({
+      targetIdentifier,
+      tenantId: derivedTenantId,
+      purpose: 'PATIENT_PORTAL_AUTH',
+      otpCandidate: targetOtp
+    });
+
+    if (!verifyResult.success) {
+      return res.status(verifyResult.status || 401).json({ error: verifyResult.error || 'Invalid or expired OTP' });
+    }
+
+    // 2. Multi-Profile Disambiguation for Shared Mobile Numbers (strictly within this tenant)
+    if (!isEmail) {
+      const allMatchingPatients = await Patient.find({ 
+        tenantId: derivedTenantId,
+        contact: targetIdentifier 
+      }).sort({ updatedAt: -1 }).lean();
+
+      if (allMatchingPatients.length > 1) {
+        const profileSelectionToken = await generateProfileSelectionToken({
+          tenantId: derivedTenantId,
+          contact: targetIdentifier,
+          allowedPatientIds: allMatchingPatients.map(p => p._id.toString())
+        });
+
+        return res.json({
+          status: 'multiple_profiles',
+          message: 'Multiple patient profiles found for this mobile number. Please select a profile.',
+          profileSelectionToken,
+          profiles: allMatchingPatients.map(p => ({
+            id: p._id.toString(),
+            name: p.name,
+            uhId: p.uhId || p.uhid || p.patientId || '',
+            gender: p.gender || '',
+            age: p.age || null
+          }))
+        });
+      }
+    }
+
+    // 3. Resolve single patient document and user account strictly within derivedTenantId
     let patientDoc = null;
     let user = null;
 
     if (isEmail) {
-      const emailLower = input.toLowerCase().trim();
-      patientDoc = await Patient.findOne({ email: emailLower });
-      user = await User.findOne({ email: emailLower, role: 'patient' }).select('+password_hash') ||
-             await User.findOne({ email: emailLower }).select('+password_hash');
+      patientDoc = await Patient.findOne({ tenantId: derivedTenantId, email: targetIdentifier });
+      user = await User.findOne({ tenantId: derivedTenantId, email: targetIdentifier, role: 'patient' }).select('+password_hash') ||
+             await User.findOne({ tenantId: derivedTenantId, email: targetIdentifier }).select('+password_hash');
     } else {
-      patientDoc = await Patient.findOne({ contact: input });
-      user = await User.findOne({ phone: input, role: 'patient' }).select('+password_hash') ||
-             await User.findOne({ staff_id: input }).select('+password_hash');
+      patientDoc = await Patient.findOne({ tenantId: derivedTenantId, contact: targetIdentifier });
+      user = await User.findOne({ tenantId: derivedTenantId, phone: targetIdentifier, role: 'patient' }).select('+password_hash') ||
+             await User.findOne({ tenantId: derivedTenantId, staff_id: targetIdentifier }).select('+password_hash');
     }
 
-    // 3. Verify OTP code
-    let otpValid = false;
-    if (user && user.login_otp_code === targetOtp && user.login_otp_expires_at >= new Date() && (!user.login_otp_purpose || user.login_otp_purpose === "PATIENT_PORTAL_LOGIN")) {
-      otpValid = true;
-    }
-
-    if (!otpValid) {
-      try {
-        const regOtpRecord = await RegistrationOtp.findOne({ email: input.toLowerCase() });
-        if (regOtpRecord && regOtpRecord.otp_code === targetOtp && regOtpRecord.expires_at >= new Date()) {
-          otpValid = true;
-          await RegistrationOtp.deleteOne({ _id: regOtpRecord._id }).catch(() => {});
-        }
-      } catch (e) {}
-    }
-
-    if (!otpValid) {
-      return res.status(401).json({ error: 'Invalid or expired OTP' });
-    }
-
-    // 4. Handle Existing Patient or User
+    // 4. Handle Single Patient or User
     if (patientDoc || user) {
-      // If user was found but not patientDoc, try looking up patientDoc by user.phone or staff_id
+      // If user was found but not patientDoc, try looking up patientDoc by user.phone or staff_id in tenant
       if (!patientDoc && user) {
         const phoneToLookup = user.phone || (user.staff_id ? user.staff_id.split('_')[0] : '');
         if (phoneToLookup) {
-          patientDoc = await Patient.findOne({ contact: phoneToLookup }).sort({ updatedAt: -1 });
+          patientDoc = await Patient.findOne({ tenantId: derivedTenantId, contact: phoneToLookup }).sort({ updatedAt: -1 });
         }
       }
 
@@ -2512,14 +2592,11 @@ router.post('/patient-portal/verify-otp', async (req, res) => {
           phone: patientDoc.contact,
           staff_id: patientDoc.contact,
           role: 'patient',
-          tenantId: patientDoc.tenantId || 'city_hospital',
+          tenantId: patientDoc.tenantId || derivedTenantId,
           isSetupComplete: isComplete,
           password_hash: 'PATIENT_OTP_AUTH'
         });
       } else if (user) {
-        user.login_otp_code = null;
-        user.login_otp_expires_at = null;
-        user.login_otp_purpose = null;
         user.lastLogin = new Date();
         if (user.isSetupComplete !== isComplete) {
           user.isSetupComplete = isComplete;
@@ -2547,12 +2624,12 @@ router.post('/patient-portal/verify-otp', async (req, res) => {
       const tokenPayload = {
         id: targetId,
         userId: user._id,
-        staff_id: user.staff_id || (patientDoc ? patientDoc.contact : input),
-        email: user.email || (patientDoc ? patientDoc.email : (isEmail ? input : '')),
-        phone: user.phone || (patientDoc ? patientDoc.contact : (!isEmail ? input : '')),
+        staff_id: user.staff_id || (patientDoc ? patientDoc.contact : targetIdentifier),
+        email: user.email || (patientDoc ? patientDoc.email : (isEmail ? targetIdentifier : '')),
+        phone: user.phone || (patientDoc ? patientDoc.contact : (!isEmail ? targetIdentifier : '')),
         role: 'patient',
         actualStaffRole: user.role,
-        tenantId: user.tenantId || (patientDoc ? patientDoc.tenantId : 'city_hospital')
+        tenantId: user.tenantId || (patientDoc ? patientDoc.tenantId : derivedTenantId)
       };
       const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '24h' });
 
@@ -2577,18 +2654,105 @@ router.post('/patient-portal/verify-otp', async (req, res) => {
     } else {
       // Completely new patient -> forward to registration
       const jwt = require('jsonwebtoken');
-      const tempToken = jwt.sign({ emailOrPhone: input, isNewPatient: true, role: 'patient' }, secretKey, { expiresIn: '1h' });
+      const tempToken = jwt.sign({ 
+        emailOrPhone: targetIdentifier, 
+        isNewPatient: true, 
+        role: 'patient',
+        tenantId: derivedTenantId
+      }, secretKey, { expiresIn: '1h' });
 
       return res.json({
         message: 'OTP verified. Proceed to registration.',
         tempToken,
         isNewUser: true,
-        emailOrPhone: input
+        emailOrPhone: targetIdentifier
       });
     }
 
   } catch (error) {
     console.error('Patient Portal Verify OTP Error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/auth/patient-portal/select-profile
+// Secure disambiguation endpoint for shared family mobile numbers
+router.post('/patient-portal/select-profile', tenantMiddleware, async (req, res) => {
+  const { profileSelectionToken, patientId } = req.body;
+  if (!profileSelectionToken || !patientId) {
+    return res.status(400).json({ error: 'profileSelectionToken and patientId are required.' });
+  }
+
+  try {
+    const Patient = require('../models/Patient');
+    const { getJwtSecret } = require('../config/env');
+    let secretKey;
+    try { secretKey = getJwtSecret(); } catch(e) { secretKey = process.env.JWT_SECRET || 'secret_key'; }
+
+    // 1. SEC-03: Atomically verify and consume single-use token in persistent storage
+    const tokenValidation = await verifyAndConsumeProfileSelectionToken(profileSelectionToken, patientId);
+    if (!tokenValidation.valid) {
+      return res.status(403).json({ error: tokenValidation.error });
+    }
+
+    // 2. SEC-06: Fetch authenticated patient record strictly scoped to authorized tenant
+    const patientDoc = await Patient.findOne({ _id: patientId, tenantId: tokenValidation.tenantId });
+    if (!patientDoc) {
+      return res.status(403).json({ error: 'Access denied. The requested patient profile is not authorized for this hospital session.' });
+    }
+
+    // 3. Resolve or create user account for this patient profile
+    let user = await User.findOne({ staff_id: patientDoc.contact, tenantId: patientDoc.tenantId }) ||
+               await User.findOne({ phone: patientDoc.contact, role: 'patient' });
+
+    const isComplete = Boolean(isPatientProfileComplete(patientDoc) || user?.isSetupComplete);
+
+    if (!user) {
+      user = await User.create({
+        name: patientDoc.name,
+        email: patientDoc.email || `${patientDoc.contact}_${patientDoc._id}@curoxa.patient`,
+        phone: patientDoc.contact,
+        staff_id: patientDoc.contact,
+        role: 'patient',
+        tenantId: patientDoc.tenantId || tokenValidation.tenantId || 'city_hospital',
+        isSetupComplete: isComplete,
+        password_hash: 'PATIENT_OTP_AUTH'
+      });
+    }
+
+    // 4. Generate authenticated 24h patient session token
+    const tokenPayload = {
+      id: patientDoc._id,
+      userId: user._id,
+      staff_id: user.staff_id || patientDoc.contact,
+      email: user.email || patientDoc.email || '',
+      phone: user.phone || patientDoc.contact,
+      role: 'patient',
+      actualStaffRole: user.role,
+      tenantId: patientDoc.tenantId || user.tenantId || tokenValidation.tenantId
+    };
+    const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '24h' });
+
+    return res.json({
+      message: 'Profile selected successfully',
+      token,
+      user: {
+        ...user.toObject(),
+        id: patientDoc._id,
+        role: 'patient',
+        actualStaffRole: user.role,
+        name: patientDoc.name,
+        uhId: patientDoc.uhId || patientDoc.uhid || '',
+        uhid: patientDoc.uhId || patientDoc.uhid || '',
+        patientId: patientDoc.patientId || '',
+        avatar: patientDoc.avatar || user.avatar || '',
+        isSetupComplete: isComplete,
+        password_hash: undefined
+      },
+      isNewUser: false
+    });
+  } catch (error) {
+    console.error('Patient Portal Profile Selection Error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

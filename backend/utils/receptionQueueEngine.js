@@ -43,7 +43,9 @@ async function allocateReceptionTicket({
   patientId = null,
   existingPatientDetails = null,
   preliminaryDetails = null,
-  idempotencyKey = null
+  idempotencyKey = null,
+  doctorId = null,
+  targetAppointmentDate = null
 }) {
   const normDate = normalizeQueueDate(queueDate);
   const cleanTenant = String(tenantId).trim();
@@ -73,16 +75,28 @@ async function allocateReceptionTicket({
     }
   }
 
-  // 3. New Patient Deduplication: check by verified email in preliminaryDetails
-  if (patientType === 'New' && preliminaryDetails?.email) {
-    const activeTicket = await ReceptionQueue.findOne({
-      tenantId: cleanTenant,
-      'preliminaryDetails.email': preliminaryDetails.email.toLowerCase().trim(),
-      queueDate: normDate,
-      status: { $in: ['Waiting', 'Called', 'Serving'] }
-    });
-    if (activeTicket) {
-      return activeTicket;
+  // 3. New Patient Deduplication: check by verified contact, patientId, or email in preliminaryDetails
+  if (patientType === 'New') {
+    const dedupeConditions = [];
+    if (patientId) {
+      dedupeConditions.push({ patientId });
+    }
+    if (preliminaryDetails?.contact) {
+      dedupeConditions.push({ 'preliminaryDetails.contact': String(preliminaryDetails.contact).trim() });
+    }
+    if (preliminaryDetails?.email && preliminaryDetails.email !== 'N/A') {
+      dedupeConditions.push({ 'preliminaryDetails.email': preliminaryDetails.email.toLowerCase().trim() });
+    }
+    if (dedupeConditions.length > 0) {
+      const activeTicket = await ReceptionQueue.findOne({
+        tenantId: cleanTenant,
+        $or: dedupeConditions,
+        queueDate: normDate,
+        status: { $in: ['Waiting', 'Called', 'Serving'] }
+      });
+      if (activeTicket) {
+        return activeTicket;
+      }
     }
   }
 
@@ -110,6 +124,8 @@ async function allocateReceptionTicket({
     patientId: patientId || null,
     existingPatientDetails: existingPatientDetails || null,
     preliminaryDetails: preliminaryDetails || null,
+    doctorId: doctorId || null,
+    targetAppointmentDate: targetAppointmentDate ? normalizeQueueDate(targetAppointmentDate) : null,
     sessionToken,
     source: 'QR'
   };
