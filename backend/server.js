@@ -46,27 +46,11 @@ const PORT = process.env.PORT || 5000;
 // Trust proxy so rate limiters see correct client IPs behind reverse proxies
 app.set("trust proxy", 1);
 
-// 1. CORS FIRST — Ensures every request/response (including preflights & errors) has CORS headers
-const corsOptions = {
-  origin: true,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'x-tenant-id',
-    'x-bypass-consent-emergency',
-    'Cache-Control',
-    'Pragma',
-    'Expires',
-    'x-requested-with',
-    'Accept',
-    'Origin'
-  ],
-  exposedHeaders: ['Content-Disposition']
-};
+// 1. CORS FIRST — Production-hardened explicit origin allowlist with credentials support
+const { getCorsOptions, getSocketIoCorsConfig } = require("./config/corsConfig");
+const corsOptions = getCorsOptions();
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 const cookieParser = require("cookie-parser");
 app.use(cookieParser());
@@ -261,12 +245,9 @@ app.use("/api/reception-queue", receptionQueueRoutes);
 
 // Create HTTP server and initialize socket.io
 const http = require("http").createServer(app);
-const io = require("socket.io")(http, {
-  cors: {
-    origin: corsOptions.origin,
-    methods: ["GET", "POST"]
-  }
-});
+// Initialize Socket.IO with hardened origin policy and allowRequest handshake validation
+const socketIoCorsConfig = getSocketIoCorsConfig();
+const io = require("socket.io")(http, socketIoCorsConfig);
 
 // Set io instance on app so it can be retrieved in routes
 app.set("io", io);

@@ -24,6 +24,8 @@ function getTrustedOrigins() {
   };
 
   addCandidate(process.env.PUBLIC_APP_URL);
+  addCandidate(process.env.STAFF_FRONTEND_URL);
+  addCandidate(process.env.PATIENT_FRONTEND_URL);
   addCandidate(process.env.FRONTEND_URL);
   addCandidate(process.env.CLIENT_URL);
   addCandidate(process.env.APP_URL);
