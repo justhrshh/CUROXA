@@ -3,10 +3,11 @@ const MedicineBatch = require('../models/MedicineBatch');
 const Medicine = require('../models/Medicine');
 const InventoryWriteOff = require('../models/InventoryWriteOff');
 const AuditLog = require('../models/AuditLog');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, forbidPatientRole } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 router.use(verifyToken);
+router.use(forbidPatientRole);
 
 /**
  * Dynamic Expiry Risk Classification

@@ -1,10 +1,11 @@
 const express = require('express');
 const ReturnLog = require('../models/ReturnLog');
 const Medicine = require('../models/Medicine');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, forbidPatientRole } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 router.use(verifyToken);
+router.use(forbidPatientRole);
 
 // Get all return logs (scoped to tenant)
 router.get('/', async (req, res) => {

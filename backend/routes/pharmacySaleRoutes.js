@@ -7,11 +7,12 @@ const Patient = require('../models/Patient');
 const AuditLog = require('../models/AuditLog');
 const DiscountSetting = require('../models/DiscountSetting');
 const { validateAndPlanFEFO, commitFEFOConsumption } = require('../utils/inventoryEngine');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, forbidPatientRole } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
 router.use(verifyToken);
+router.use(forbidPatientRole);
 
 /**
  * Atomic, collision-safe Sale ID generator per tenant and year

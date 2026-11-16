@@ -2,7 +2,7 @@ const express = require("express");
 const bcrypt = require("bcrypt");
 const User = require("../models/User");
 const AuditLog = require("../models/AuditLog");
-const { verifyToken, isAdmin, isHrOrAdmin } = require("../middleware/authMiddleware");
+const { verifyToken, isAdmin, isHrOrAdmin, forbidPatientRole } = require("../middleware/authMiddleware");
 const { requireActiveSubscription } = require("../middleware/subscriptionMiddleware");
 const { getHospitalSubscriptionStatus, getHospitalSubscriptionDates, isTrialPlan, hasHospitalUsedTrial } = require("../utils/subscriptionHelper");
 const router = express.Router();
@@ -605,7 +605,7 @@ router.post("/renew-subscription", isHrOrAdmin, async (req, res) => {
 });
 
 // Get all recent broadcasts (accessible to all authenticated staff)
-router.get("/broadcasts", verifyToken, async (req, res) => {
+router.get("/broadcasts", forbidPatientRole, async (req, res) => {
   try {
     const SuperAdminBroadcast = require("../models/SuperAdminBroadcast");
     const broadcasts = await SuperAdminBroadcast.find({}).sort({ createdAt: -1 }).limit(20);
@@ -629,7 +629,7 @@ router.get("/plans", isHrOrAdmin, async (req, res) => {
 });
 
 // Get notifications scoped to the current hospital tenant
-router.get("/notifications", verifyToken, async (req, res) => {
+router.get("/notifications", forbidPatientRole, async (req, res) => {
   try {
     const SuperAdminNotification = require("../models/SuperAdminNotification");
     const tenantId = String(req.tenantId || '').toLowerCase().trim();
@@ -655,7 +655,7 @@ const storage = multer.memoryStorage();
 const uploadLetterhead = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB limit
 
 // Get current hospital letterhead
-router.get("/letterhead", async (req, res) => {
+router.get("/letterhead", forbidPatientRole, async (req, res) => {
   try {
     const hospital = await SuperAdminHospital.findOne({ code: req.tenantId });
     if (!hospital) {

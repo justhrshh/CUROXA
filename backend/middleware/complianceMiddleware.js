@@ -36,14 +36,13 @@ const restrictEMRRole = (allowedRoles) => {
     }
 
     if (allowedRoles.includes(userRole)) {
+      if (userRole === 'patient') {
+        const patientId = req.params.patientId || req.body.patientId || req.query.patientId || req.params.id;
+        if (patientId && String(patientId) !== String(req.user?.id)) {
+          return res.status(403).json({ error: "Access denied: Patient cannot access another patient's records" });
+        }
+      }
       return next();
-    }
-
-    // Allow patient to view their own records
-    if (userRole === 'patient') {
-      const patientId = req.params.patientId || req.body.patientId || req.query.patientId || req.params.id;
-      // We will check ownership inside the specific route or ownership check middleware
-      if (patientId) return next();
     }
 
     return res.status(403).json({ error: `Access denied: Role '${userRole}' not permitted for this EMR action` });
@@ -59,16 +58,21 @@ const checkPatientConsent = (purpose) => {
         return res.status(400).json({ error: 'Patient ID is required for consent validation' });
       }
 
-      // Patients can always access their own records
-      if (req.user?.role === 'patient') {
-        return next();
-      }
-
-      // 1. Check if patient has a legal hold (bypasses deletion and always allows clinical review)
-      const patient = await Patient.findById(patientId) || await Patient.findOne({ _id: patientId, tenantId: req.tenantId });
+      // 1. Verify that a valid Patient document actually exists in the database
+      const patient = await Patient.findOne({ _id: patientId, tenantId: req.tenantId }) || await Patient.findById(patientId);
       if (!patient) {
         return res.status(404).json({ error: 'Patient not found' });
       }
+
+      // 2. Patients can only access their own records
+      if (req.user?.role === 'patient') {
+        if (String(patientId) !== String(req.user?.id)) {
+          return res.status(403).json({ error: "Access denied: Patient cannot access another patient's records" });
+        }
+        return next();
+      }
+
+      // 3. Check if patient has a legal hold (bypasses deletion and always allows clinical review)
 
       // Check if doctor is using Emergency Override
       const isEmergencyBypass = req.headers['x-bypass-consent-emergency'] === 'true' && req.user?.role === 'doctor';

@@ -6,10 +6,11 @@ const HospitalVendorAssociation = require('../models/HospitalVendorAssociation')
 const ItemMaster = require('../models/ItemMaster');
 const VendorQuotation = require('../models/VendorQuotation');
 const User = require('../models/User');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, forbidPatientRole } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 router.use(verifyToken);
+router.use(forbidPatientRole);
 
 function getFinancialYearString(date = new Date()) {
   const month = date.getMonth(); // 0-11

@@ -54,6 +54,11 @@ const socketAuthMiddleware = async (socket, next) => {
 
         const verifiedTenant = decoded.tenantId ? String(decoded.tenantId).trim().toLowerCase() : null;
 
+        // Block global patient session tokens from Socket.IO clinical rooms
+        if (decoded.role === "global_patient" || decoded.token_use === "global_portal" || verifiedTenant === "global") {
+          return next(new Error("Authentication error: Global session token is not authorized for Socket.IO clinical rooms"));
+        }
+
         // Attach verified server-side identity (CLIENT CLAIMS ≠ AUTHORITY)
         socket.user = {
           userId: decoded.id || decoded.userId,
@@ -172,6 +177,7 @@ const configureSocketTenantIsolation = (io, socket) => {
       }
       if (socket.user.userId) {
         socket.join(`user:${socket.user.userId}`);
+        socket.join(`patient:${socket.user.userId}`);
       }
     } else if (verifiedTenant) {
       // ── STAFF / ADMIN ROOM MEMBERSHIP ──
@@ -180,12 +186,14 @@ const configureSocketTenantIsolation = (io, socket) => {
       if (raw !== verifiedTenant) socket.join(raw);
       if (socket.user.userId) {
         socket.join(`user:${socket.user.userId}`);
+        socket.join(`patient:${socket.user.userId}`);
       }
       console.log(`[SOCKET_AUTH] Staff socket ${socket.id} (${socket.user.staff_id}) joined verified staff tenant: ${verifiedTenant}`);
     } else if (socket.user.role === "superadmin" || socket.user.role === "super_admin") {
       // SuperAdmin platform scope (no tenant room joined by default)
       if (socket.user.userId) {
         socket.join(`user:${socket.user.userId}`);
+        socket.join(`patient:${socket.user.userId}`);
       }
       console.log(`[SOCKET_AUTH] SuperAdmin socket ${socket.id} joined platform admin scope.`);
     }

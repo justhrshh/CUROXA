@@ -7,10 +7,11 @@ const ItemMaster = require('../models/ItemMaster');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const AuditLog = require('../models/AuditLog');
 const User = require('../models/User');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, forbidPatientRole } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 router.use(verifyToken);
+router.use(forbidPatientRole);
 
 /**
  * Authoritative financial & packaging calculator for a single GRN item row

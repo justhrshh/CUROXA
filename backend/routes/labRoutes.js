@@ -11,9 +11,16 @@ router.use(checkDoctorClinicalMode);
 router.get('/', async (req, res) => {
   try {
     const query = { tenantId: req.tenantId };
-    if (req.query.status) query.status = req.query.status;
-    if (req.query.patientId) query.patientId = req.query.patientId;
-    if (req.query.doctorId) query.doctorId = req.query.doctorId;
+    if (req.user && req.user.role === 'patient') {
+      if (!req.user.id) {
+        return res.status(403).json({ error: 'Access denied: Patient identity not established' });
+      }
+      query.patientId = req.user.id;
+    } else {
+      if (req.query.status) query.status = req.query.status;
+      if (req.query.patientId) query.patientId = req.query.patientId;
+      if (req.query.doctorId) query.doctorId = req.query.doctorId;
+    }
 
     const requests = await LabRequest.find(query)
       .populate('patientId', 'name age contact')
@@ -68,6 +75,9 @@ router.get('/affiliates', async (req, res) => {
 
 // Create lab request (scoped to tenant)
 router.post('/', async (req, res) => {
+  if (req.user && req.user.role === 'patient') {
+    return res.status(403).json({ error: 'Access denied: Patients cannot create lab requests' });
+  }
   const { appointmentId, patientId, doctorId, testName, notes, status, results, labId, labName } = req.body;
   try {
     let finalLabId = null;
@@ -160,6 +170,9 @@ router.post('/', async (req, res) => {
 
 // Update lab request (add results, change status, scoped to tenant)
 router.put('/:id', async (req, res) => {
+  if (req.user && req.user.role === 'patient') {
+    return res.status(403).json({ error: 'Access denied: Patients cannot modify lab requests' });
+  }
   const { appointmentId, patientId, doctorId, testName, notes, status, results } = req.body;
   try {
     const existing = await LabRequest.findOne({
@@ -226,6 +239,9 @@ router.put('/:id', async (req, res) => {
 
 // Delete lab requests for a specific appointment (scoped to tenant)
 router.delete('/appointment/:appointmentId', async (req, res) => {
+  if (req.user && req.user.role === 'patient') {
+    return res.status(403).json({ error: 'Access denied: Patients cannot delete lab requests' });
+  }
   try {
     await LabRequest.deleteMany({
       appointmentId: req.params.appointmentId,

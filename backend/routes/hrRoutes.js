@@ -5,8 +5,16 @@ const LeaveRequest = require("../models/LeaveRequest");
 const AttendanceRecord = require("../models/AttendanceRecord");
 const Asset = require("../models/Asset");
 const User = require("../models/User");
-const { verifyToken } = require("../middleware/authMiddleware");
+const { verifyToken, forbidPatientRole } = require("../middleware/authMiddleware");
 const { getCanonicalLogoUrl } = require("../config/urls");
+
+router.use(verifyToken);
+router.use((req, res, next) => {
+  if (req.path.startsWith('/doctor-availability')) {
+    return next();
+  }
+  return forbidPatientRole(req, res, next);
+});
 
 // Helper: tenant-specific auto-seeder for leaves, attendance, and assets
 const seedIfNeeded = async (tenantId) => {

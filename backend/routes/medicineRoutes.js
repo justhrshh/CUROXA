@@ -1,9 +1,10 @@
 const express = require('express');
 const Medicine = require('../models/Medicine');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, forbidPatientRole } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 router.use(verifyToken);
+router.use(forbidPatientRole);
 
 // Seed helper (scoped to tenant)
 const seedDefaultMedicines = async (tenantId) => {

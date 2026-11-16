@@ -29,9 +29,12 @@ router.use(checkDoctorClinicalMode);
 // Get all visits for a patient (scoped to tenant & consent check)
 router.get('/visits/patient/:patientId', checkPatientConsent('treatment'), async (req, res) => {
   try {
-    const query = req.user?.role === 'patient'
-      ? { patientId: req.params.patientId }
-      : { patientId: req.params.patientId, tenantId: req.tenantId };
+    if (req.user?.role === 'patient') {
+      if (String(req.params.patientId) !== String(req.user.id)) {
+        return res.status(403).json({ error: "Access denied: Patient cannot access another patient's records" });
+      }
+    }
+    const query = { patientId: req.params.patientId, tenantId: req.tenantId };
     const visits = await Visit.find(query)
       .populate('doctorId', 'name specialty')
       .populate({
@@ -122,9 +125,12 @@ router.put('/visits/:id', restrictEMRRole(['doctor', 'nurse', 'receptionist']), 
 // Get vitals history for a patient
 router.get('/vitals/patient/:patientId', checkPatientConsent('treatment'), restrictEMRRole(['doctor', 'nurse', 'patient', 'receptionist', 'lab', 'admin']), async (req, res) => {
   try {
-    const query = req.user?.role === 'patient'
-      ? { patientId: req.params.patientId }
-      : { patientId: req.params.patientId, tenantId: req.tenantId };
+    if (req.user?.role === 'patient') {
+      if (String(req.params.patientId) !== String(req.user.id)) {
+        return res.status(403).json({ error: "Access denied: Patient cannot access another patient's records" });
+      }
+    }
+    const query = { patientId: req.params.patientId, tenantId: req.tenantId };
     const vitals = await Vital.find(query).populate('recordedBy', 'name').sort({ createdAt: -1 });
     await writeAudit(req, req.params.patientId, 'VIEW_VITALS', 'Vitals History', { count: vitals.length });
     res.json(vitals);
@@ -179,9 +185,12 @@ router.post('/vitals', checkPatientConsent('treatment'), restrictEMRRole(['docto
 // Get SOAP notes history
 router.get('/clinical-notes/patient/:patientId', checkPatientConsent('treatment'), restrictEMRRole(['doctor', 'patient']), async (req, res) => {
   try {
-    const query = req.user?.role === 'patient'
-      ? { patientId: req.params.patientId }
-      : { patientId: req.params.patientId, tenantId: req.tenantId };
+    if (req.user?.role === 'patient') {
+      if (String(req.params.patientId) !== String(req.user.id)) {
+        return res.status(403).json({ error: "Access denied: Patient cannot access another patient's records" });
+      }
+    }
+    const query = { patientId: req.params.patientId, tenantId: req.tenantId };
     const notes = await ClinicalNote.find(query).populate('doctorId', 'name').sort({ createdAt: -1 });
     await writeAudit(req, req.params.patientId, 'VIEW_CLINICAL_NOTES', 'Clinical SOAP Notes', { count: notes.length });
     res.json(notes);
@@ -289,10 +298,16 @@ router.get('/consent/patient/:patientId', async (req, res) => {
     if (!isPatientSelf && !isDoc && !isAdm) {
       return res.status(403).json({ error: 'Access denied to consent records' });
     }
+    if (isPatientSelf && String(req.params.patientId) !== String(req.user.id)) {
+      return res.status(403).json({ error: "Access denied: Patient cannot access another patient's consent" });
+    }
 
-    let consent = await (req.user?.role === 'patient'
-      ? Consent.findOne({ patientId: req.params.patientId })
-      : Consent.findOne({ patientId: req.params.patientId, tenantId: req.tenantId }));
+    const patientExists = await Patient.findOne({ _id: req.params.patientId, tenantId: req.tenantId }) || await Patient.findById(req.params.patientId);
+    if (!patientExists) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+
+    let consent = await Consent.findOne({ patientId: req.params.patientId, tenantId: req.tenantId });
     if (!consent) {
       // Return default empty consent
       consent = {
@@ -339,6 +354,9 @@ router.post('/consent', async (req, res) => {
     const isAdm = req.user.role === 'admin';
     if (!isPatientSelf && !isAdm) {
       return res.status(403).json({ error: 'Access denied: Only patients or administrators can manage consent registers' });
+    }
+    if (isPatientSelf && String(patientId) !== String(req.user.id)) {
+      return res.status(403).json({ error: "Access denied: Patient cannot update another patient's consent" });
     }
 
     let consent = await Consent.findOne({ patientId, tenantId: req.tenantId });
@@ -395,6 +413,9 @@ router.post('/consent/patient/:patientId/dpdp-request', async (req, res) => {
     if (!isPatientSelf && !isAdm) {
       return res.status(403).json({ error: 'Unauthorized to submit compliance request' });
     }
+    if (isPatientSelf && String(patientId) !== String(req.user.id)) {
+      return res.status(403).json({ error: "Access denied: Patient cannot submit DPDP request for another patient" });
+    }
 
     let consent = await Consent.findOne({ patientId, tenantId: req.tenantId });
     if (!consent) {
@@ -447,6 +468,9 @@ router.post('/consent/patient/:patientId/dpdp-request', async (req, res) => {
 // Get DPDP requests (Admin or Patient)
 router.get('/consent/patient/:patientId/dpdp-requests', async (req, res) => {
   try {
+    if (req.user?.role === 'patient' && String(req.params.patientId) !== String(req.user.id)) {
+      return res.status(403).json({ error: "Access denied: Patient cannot view another patient's requests" });
+    }
     const consent = await Consent.findOne({ patientId: req.params.patientId, tenantId: req.tenantId });
     res.json(consent ? consent.dpdpRequests : []);
   } catch (error) {
@@ -641,9 +665,12 @@ router.put('/consent/dpdp-request/:requestId', restrictEMRRole(['admin']), async
 // Get procedures history
 router.get('/procedures/patient/:patientId', checkPatientConsent('treatment'), restrictEMRRole(['doctor', 'patient']), async (req, res) => {
   try {
-    const query = req.user?.role === 'patient'
-      ? { patientId: req.params.patientId }
-      : { patientId: req.params.patientId, tenantId: req.tenantId };
+    if (req.user?.role === 'patient') {
+      if (String(req.params.patientId) !== String(req.user.id)) {
+        return res.status(403).json({ error: "Access denied: Patient cannot access another patient's records" });
+      }
+    }
+    const query = { patientId: req.params.patientId, tenantId: req.tenantId };
     const procedures = await Procedure.find(query).populate('doctorId', 'name').sort({ createdAt: -1 });
     await writeAudit(req, req.params.patientId, 'VIEW_PROCEDURES', 'Procedures History', { count: procedures.length });
     res.json(procedures);
@@ -693,9 +720,12 @@ router.post('/procedures', checkPatientConsent('treatment'), restrictEMRRole(['d
 // Get clinical documents
 router.get('/documents/patient/:patientId', checkPatientConsent('treatment'), restrictEMRRole(['doctor', 'patient']), async (req, res) => {
   try {
-    const query = req.user?.role === 'patient'
-      ? { patientId: req.params.patientId }
-      : { patientId: req.params.patientId, tenantId: req.tenantId };
+    if (req.user?.role === 'patient') {
+      if (String(req.params.patientId) !== String(req.user.id)) {
+        return res.status(403).json({ error: "Access denied: Patient cannot access another patient's records" });
+      }
+    }
+    const query = { patientId: req.params.patientId, tenantId: req.tenantId };
     const docs = await ClinicalDocument.find(query).populate('uploadedBy', 'name').sort({ createdAt: -1 });
     await writeAudit(req, req.params.patientId, 'VIEW_CLINICAL_DOCUMENTS', 'Clinical Documents Vault', { count: docs.length });
     res.json(docs);
@@ -784,10 +814,16 @@ router.get('/audits/patient/:patientId', async (req, res) => {
     if (!isPatientSelf && !isAdm) {
       return res.status(403).json({ error: 'Access denied' });
     }
+    if (isPatientSelf && String(req.params.patientId) !== String(req.user.id)) {
+      return res.status(403).json({ error: "Access denied: Patient cannot view another patient's audit logs" });
+    }
 
-    const query = isPatientSelf
-      ? { target: req.params.patientId }
-      : { target: req.params.patientId, tenantId: req.tenantId };
+    const patientExists = await Patient.findOne({ _id: req.params.patientId, tenantId: req.tenantId }) || await Patient.findById(req.params.patientId);
+    if (!patientExists) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+
+    const query = { target: req.params.patientId, tenantId: req.tenantId };
     const audits = await AuditLog.find(query).sort({ timestamp: -1 });
     res.json(audits);
   } catch (error) {

@@ -7,6 +7,7 @@ const User = require("../models/User");
 const AuditLog = require("../models/AuditLog");
 const Appointment = require("../models/Appointment");
 const LabRequest = require("../models/LabRequest");
+const SuperAdminHospital = require("../models/SuperAdminHospital");
 const { validateAndPlanFEFO, commitFEFOConsumption } = require("../utils/inventoryEngine");
 const { sendEmail } = require("../utils/emailService");
 const { resolveEmailLogoUrl } = require("../config/urls");
@@ -185,8 +186,15 @@ router.get("/catalog/tests", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const query = { tenantId: req.tenantId };
-    if (req.query.status) query.status = req.query.status;
-    if (req.query.patientId) query.patientId = req.query.patientId;
+    if (req.user && req.user.role === 'patient') {
+      if (!req.user.id) {
+        return res.status(403).json({ error: 'Access denied: Patient identity not established' });
+      }
+      query.patientId = req.user.id;
+    } else {
+      if (req.query.status) query.status = req.query.status;
+      if (req.query.patientId) query.patientId = req.query.patientId;
+    }
 
     // Projection: includes notes, diagnosis, tests and all essential clinical fields
     const prescriptions = await Prescription.find(query)
@@ -199,7 +207,27 @@ router.get("/", async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(parseInt(req.query.limit, 10) || 500)
       .lean();
-    res.json(prescriptions);
+
+    // Enrich with server-resolved hospital letterhead for current tenant
+    let letterheadUrl = "";
+    if (req.tenantId) {
+      const hospital = await SuperAdminHospital.findOne({
+        $or: [
+          { code: req.tenantId },
+          { hospitalId: String(req.tenantId).toUpperCase() }
+        ]
+      }).select("letterheadUrl").lean();
+      if (hospital && hospital.letterheadUrl) {
+        letterheadUrl = hospital.letterheadUrl;
+      }
+    }
+
+    const enriched = prescriptions.map(p => ({
+      ...p,
+      hospitalLetterheadUrl: letterheadUrl
+    }));
+
+    res.json(enriched);
   } catch (error) {
     console.error("Get prescriptions error:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -217,6 +245,28 @@ router.get("/:id", async (req, res) => {
     if (!rx) {
       return res.status(404).json({ error: "Prescription not found" });
     }
+    if (req.user && req.user.role === 'patient') {
+      const rxPatId = rx.patientId?._id ? rx.patientId._id.toString() : rx.patientId?.toString();
+      if (rxPatId !== String(req.user.id)) {
+        return res.status(403).json({ error: "Access denied: You may only view your own prescriptions" });
+      }
+    }
+
+    // Enrich with server-resolved hospital letterhead for current tenant
+    let letterheadUrl = "";
+    if (req.tenantId) {
+      const hospital = await SuperAdminHospital.findOne({
+        $or: [
+          { code: req.tenantId },
+          { hospitalId: String(req.tenantId).toUpperCase() }
+        ]
+      }).select("letterheadUrl").lean();
+      if (hospital && hospital.letterheadUrl) {
+        letterheadUrl = hospital.letterheadUrl;
+      }
+    }
+    rx.hospitalLetterheadUrl = letterheadUrl;
+
     res.json(rx);
   } catch (error) {
     console.error("Get prescription by ID error:", error);
@@ -226,6 +276,9 @@ router.get("/:id", async (req, res) => {
 
 // Create a prescription (scoped to tenant) — NO premature stock deduction
 router.post("/", async (req, res) => {
+  if (req.user && req.user.role === 'patient') {
+    return res.status(403).json({ error: "Access denied: Patients cannot create prescriptions" });
+  }
   const { patientId, doctorId, items, status, appointmentId, notes, diagnosis, tests } = req.body;
   try {
     // Validate catalog items against current tenant's active hospital master catalog
@@ -280,6 +333,9 @@ router.post("/", async (req, res) => {
 
 // Update status or edit prescription details (scoped to tenant)
 router.put("/:id", async (req, res) => {
+  if (req.user && req.user.role === 'patient') {
+    return res.status(403).json({ error: "Access denied: Patients cannot modify prescriptions" });
+  }
   const { items, status, appointmentId, labs, diagnosis, notes, tests } = req.body;
   try {
     const rxId = req.params.id;
@@ -936,6 +992,13 @@ async function handleSharePrescription(req, res) {
           .lean();
       } catch (findErr) {
         console.warn("[PRESCRIPTION SHARE] Error fetching prescription by ID:", findErr.message);
+      }
+    }
+
+    if (prescriptionDoc && req.user && req.user.role === 'patient') {
+      const docPatId = prescriptionDoc.patientId?._id ? prescriptionDoc.patientId._id.toString() : prescriptionDoc.patientId?.toString();
+      if (docPatId !== String(req.user.id)) {
+        return res.status(403).json({ error: "Access denied: You may only share your own prescriptions" });
       }
     }
 

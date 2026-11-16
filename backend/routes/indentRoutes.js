@@ -3,10 +3,11 @@ const mongoose = require('mongoose');
 const Indent = require('../models/Indent');
 const Medicine = require('../models/Medicine');
 const Approval = require('../models/Approval');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, forbidPatientRole } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 router.use(verifyToken);
+router.use(forbidPatientRole);
 
 // GET /api/indents — Fetch indents with strict role-based filtering
 router.get('/', async (req, res) => {

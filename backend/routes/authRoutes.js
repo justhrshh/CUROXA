@@ -2398,7 +2398,28 @@ router.post('/patient-portal/send-otp', tenantMiddleware, async (req, res) => {
   try {
     const input = String(rawInput).trim();
     const Patient = require('../models/Patient');
-    const derivedTenantId = req.tenantId || bodyTenantId || req.headers['x-tenant-id'] || 'city_hospital';
+    const rawTenantId = req.headers['x-tenant-id'] || bodyTenantId || req.body?.hospitalId || req.query?.tenantId || req.tenantId;
+    if (!rawTenantId || typeof rawTenantId !== 'string' || !rawTenantId.trim()) {
+      return res.status(400).json({ error: 'Hospital context is required. Please specify a hospital.', code: 'MISSING_HOSPITAL_CONTEXT' });
+    }
+    const derivedTenantId = rawTenantId.trim().toLowerCase();
+
+    // Validate that the requested hospital exists and is active
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+    const hospital = await SuperAdminHospital.findOne({
+      $or: [
+        { code: derivedTenantId },
+        { hospitalId: derivedTenantId.toUpperCase() }
+      ]
+    }).select('status code name');
+
+    if (!hospital || hospital.status === 'Suspended') {
+      return res.status(404).json({
+        error: hospital ? `Hospital account (${hospital.name || derivedTenantId}) is inactive or suspended.` : `Hospital with code '${derivedTenantId}' does not exist.`,
+        code: 'INVALID_HOSPITAL_CONTEXT'
+      });
+    }
+    const validTenantId = hospital.code;
     
     // Explicit email detection (either explicitly passed as email, or contains @)
     const isEmail = Boolean(email) || input.includes('@');
@@ -2415,9 +2436,9 @@ router.post('/patient-portal/send-otp', tenantMiddleware, async (req, res) => {
       deliveryChannel = 'email';
       identifierType = 'email';
 
-      patient = await Patient.findOne({ tenantId: derivedTenantId, email: targetEmail });
-      user = await User.findOne({ tenantId: derivedTenantId, email: targetEmail, role: 'patient' }) ||
-             await User.findOne({ tenantId: derivedTenantId, email: targetEmail });
+      patient = await Patient.findOne({ tenantId: validTenantId, email: targetEmail });
+      user = await User.findOne({ tenantId: validTenantId, email: targetEmail, role: 'patient' }) ||
+             await User.findOne({ tenantId: validTenantId, email: targetEmail });
     } else {
       // Primary: Mobile number verification via SMS
       const phoneCheck = normalizeIndianMobile(input);
@@ -2429,9 +2450,9 @@ router.post('/patient-portal/send-otp', tenantMiddleware, async (req, res) => {
       deliveryChannel = 'sms';
       identifierType = 'phone';
 
-      patient = await Patient.findOne({ tenantId: derivedTenantId, contact: targetIdentifier });
-      user = await User.findOne({ tenantId: derivedTenantId, phone: targetIdentifier, role: 'patient' }) ||
-             await User.findOne({ tenantId: derivedTenantId, staff_id: targetIdentifier });
+      patient = await Patient.findOne({ tenantId: validTenantId, contact: targetIdentifier });
+      user = await User.findOne({ tenantId: validTenantId, phone: targetIdentifier, role: 'patient' }) ||
+             await User.findOne({ tenantId: validTenantId, staff_id: targetIdentifier });
       if (user && user.email) {
         targetEmail = user.email.toLowerCase().trim();
       } else if (patient && patient.email) {
@@ -2443,13 +2464,13 @@ router.post('/patient-portal/send-otp', tenantMiddleware, async (req, res) => {
       ? maskPhoneNumber(targetIdentifier) 
       : targetIdentifier.replace(/(?<=^.).+(?=@)/, '***');
 
-    console.log(`[PATIENT PORTAL] Staged OTP challenge for ${maskedLogTarget} (Tenant: ${derivedTenantId}, Channel: ${deliveryChannel})`);
+    console.log(`[PATIENT PORTAL] Staged OTP challenge for ${maskedLogTarget} (Tenant: ${validTenantId}, Channel: ${deliveryChannel})`);
 
     // Centralized challenge dispatch with Zero-Orphan Rollback
     const dispatchResult = await createAndDispatchOtp({
       targetIdentifier,
       identifierType,
-      tenantId: derivedTenantId,
+      tenantId: validTenantId,
       purpose: 'PATIENT_PORTAL_AUTH',
       deliveryChannel,
       expiryMinutes: 15,
@@ -2503,7 +2524,28 @@ router.post('/patient-portal/verify-otp', tenantMiddleware, async (req, res) => 
     try { secretKey = getJwtSecret(); } catch(e) { secretKey = process.env.JWT_SECRET || 'secret_key'; }
 
     const isEmail = Boolean(email) || input.includes('@');
-    const derivedTenantId = req.tenantId || bodyTenantId || req.headers['x-tenant-id'] || 'city_hospital';
+    const rawTenantId = req.headers['x-tenant-id'] || bodyTenantId || req.body?.hospitalId || req.query?.tenantId || req.tenantId;
+    if (!rawTenantId || typeof rawTenantId !== 'string' || !rawTenantId.trim()) {
+      return res.status(400).json({ error: 'Hospital context is required. Please specify a hospital.', code: 'MISSING_HOSPITAL_CONTEXT' });
+    }
+    const derivedTenantId = rawTenantId.trim().toLowerCase();
+
+    // Validate that the requested hospital exists and is active
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+    const hospital = await SuperAdminHospital.findOne({
+      $or: [
+        { code: derivedTenantId },
+        { hospitalId: derivedTenantId.toUpperCase() }
+      ]
+    }).select('status code name');
+
+    if (!hospital || hospital.status === 'Suspended') {
+      return res.status(404).json({
+        error: hospital ? `Hospital account (${hospital.name || derivedTenantId}) is inactive or suspended.` : `Hospital with code '${derivedTenantId}' does not exist.`,
+        code: 'INVALID_HOSPITAL_CONTEXT'
+      });
+    }
+    const validTenantId = hospital.code;
     let targetIdentifier = null;
 
     if (isEmail) {
@@ -2519,7 +2561,7 @@ router.post('/patient-portal/verify-otp', tenantMiddleware, async (req, res) => 
     // 1. Central atomic verification bound to tenant and purpose
     const verifyResult = await atomicVerifyOtp({
       targetIdentifier,
-      tenantId: derivedTenantId,
+      tenantId: validTenantId,
       purpose: 'PATIENT_PORTAL_AUTH',
       otpCandidate: targetOtp
     });
@@ -2531,13 +2573,13 @@ router.post('/patient-portal/verify-otp', tenantMiddleware, async (req, res) => 
     // 2. Multi-Profile Disambiguation for Shared Mobile Numbers (strictly within this tenant)
     if (!isEmail) {
       const allMatchingPatients = await Patient.find({ 
-        tenantId: derivedTenantId,
+        tenantId: validTenantId,
         contact: targetIdentifier 
       }).sort({ updatedAt: -1 }).lean();
 
       if (allMatchingPatients.length > 1) {
         const profileSelectionToken = await generateProfileSelectionToken({
-          tenantId: derivedTenantId,
+          tenantId: validTenantId,
           contact: targetIdentifier,
           allowedPatientIds: allMatchingPatients.map(p => p._id.toString())
         });
@@ -2557,18 +2599,18 @@ router.post('/patient-portal/verify-otp', tenantMiddleware, async (req, res) => 
       }
     }
 
-    // 3. Resolve single patient document and user account strictly within derivedTenantId
+    // 3. Resolve single patient document and user account strictly within validTenantId
     let patientDoc = null;
     let user = null;
 
     if (isEmail) {
-      patientDoc = await Patient.findOne({ tenantId: derivedTenantId, email: targetIdentifier });
-      user = await User.findOne({ tenantId: derivedTenantId, email: targetIdentifier, role: 'patient' }).select('+password_hash') ||
-             await User.findOne({ tenantId: derivedTenantId, email: targetIdentifier }).select('+password_hash');
+      patientDoc = await Patient.findOne({ tenantId: validTenantId, email: targetIdentifier });
+      user = await User.findOne({ tenantId: validTenantId, email: targetIdentifier, role: 'patient' }).select('+password_hash') ||
+             await User.findOne({ tenantId: validTenantId, email: targetIdentifier }).select('+password_hash');
     } else {
-      patientDoc = await Patient.findOne({ tenantId: derivedTenantId, contact: targetIdentifier });
-      user = await User.findOne({ tenantId: derivedTenantId, phone: targetIdentifier, role: 'patient' }).select('+password_hash') ||
-             await User.findOne({ tenantId: derivedTenantId, staff_id: targetIdentifier }).select('+password_hash');
+      patientDoc = await Patient.findOne({ tenantId: validTenantId, contact: targetIdentifier });
+      user = await User.findOne({ tenantId: validTenantId, phone: targetIdentifier, role: 'patient' }).select('+password_hash') ||
+             await User.findOne({ tenantId: validTenantId, staff_id: targetIdentifier }).select('+password_hash');
     }
 
     // 4. Handle Single Patient or User
@@ -2577,7 +2619,7 @@ router.post('/patient-portal/verify-otp', tenantMiddleware, async (req, res) => 
       if (!patientDoc && user) {
         const phoneToLookup = user.phone || (user.staff_id ? user.staff_id.split('_')[0] : '');
         if (phoneToLookup) {
-          patientDoc = await Patient.findOne({ tenantId: derivedTenantId, contact: phoneToLookup }).sort({ updatedAt: -1 });
+          patientDoc = await Patient.findOne({ tenantId: validTenantId, contact: phoneToLookup }).sort({ updatedAt: -1 });
         }
       }
 
@@ -2592,7 +2634,7 @@ router.post('/patient-portal/verify-otp', tenantMiddleware, async (req, res) => 
           phone: patientDoc.contact,
           staff_id: patientDoc.contact,
           role: 'patient',
-          tenantId: patientDoc.tenantId || derivedTenantId,
+          tenantId: patientDoc.tenantId || validTenantId,
           isSetupComplete: isComplete,
           password_hash: 'PATIENT_OTP_AUTH'
         });
@@ -2629,7 +2671,7 @@ router.post('/patient-portal/verify-otp', tenantMiddleware, async (req, res) => 
         phone: user.phone || (patientDoc ? patientDoc.contact : (!isEmail ? targetIdentifier : '')),
         role: 'patient',
         actualStaffRole: user.role,
-        tenantId: user.tenantId || (patientDoc ? patientDoc.tenantId : derivedTenantId)
+        tenantId: user.tenantId || (patientDoc ? patientDoc.tenantId : validTenantId)
       };
       const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '24h' });
 
@@ -2658,14 +2700,15 @@ router.post('/patient-portal/verify-otp', tenantMiddleware, async (req, res) => 
         emailOrPhone: targetIdentifier, 
         isNewPatient: true, 
         role: 'patient',
-        tenantId: derivedTenantId
+        tenantId: validTenantId
       }, secretKey, { expiresIn: '1h' });
 
       return res.json({
         message: 'OTP verified. Proceed to registration.',
         tempToken,
         isNewUser: true,
-        emailOrPhone: targetIdentifier
+        emailOrPhone: targetIdentifier,
+        tenantId: validTenantId
       });
     }
 
@@ -2714,7 +2757,7 @@ router.post('/patient-portal/select-profile', tenantMiddleware, async (req, res)
         phone: patientDoc.contact,
         staff_id: patientDoc.contact,
         role: 'patient',
-        tenantId: patientDoc.tenantId || tokenValidation.tenantId || 'city_hospital',
+        tenantId: patientDoc.tenantId || tokenValidation.tenantId,
         isSetupComplete: isComplete,
         password_hash: 'PATIENT_OTP_AUTH'
       });
@@ -2754,6 +2797,567 @@ router.post('/patient-portal/select-profile', tenantMiddleware, async (req, res)
   } catch (error) {
     console.error('Patient Portal Profile Selection Error:', error);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// QUROXA GLOBAL PATIENT PORTAL MVP ENDPOINTS (PHASE H)
+// ============================================================================
+
+/**
+ * Resolves verified hospital associations for a selected patient identity.
+ * Critical Invariant: Legacy shared UHIDs between different individuals are NOT
+ * auto-merged; cross-hospital associations require consistent demographics.
+ */
+async function resolveAssociatedHospitalsForPatient(patientDoc) {
+  const Patient = require('../models/Patient');
+  const SuperAdminHospital = require('../models/SuperAdminHospital');
+
+  const tenantRecordsMap = new Map();
+  // 1. Primary tenant where this patient record lives
+  if (patientDoc.tenantId) {
+    tenantRecordsMap.set(patientDoc.tenantId.toLowerCase().trim(), {
+      patientId: patientDoc._id.toString(),
+      hospitalPatientId: patientDoc.patientId || ''
+    });
+  }
+
+  // 2. Discover cross-hospital records if a valid universal uhId exists
+  if (patientDoc.uhId && typeof patientDoc.uhId === 'string' && patientDoc.uhId.startsWith('UH-')) {
+    const crossRecords = await Patient.find({
+      uhId: patientDoc.uhId,
+      tenantId: { $ne: patientDoc.tenantId }
+    }).select('_id tenantId name uhId patientId').lean();
+
+    for (const record of crossRecords) {
+      // Demographic integrity: Name must match to prevent merging distinct family members sharing legacy UHID
+      const nameA = String(patientDoc.name || '').toLowerCase().trim();
+      const nameB = String(record.name || '').toLowerCase().trim();
+      if (nameA === nameB && nameA.length > 0) {
+        const tId = record.tenantId.toLowerCase().trim();
+        if (!tenantRecordsMap.has(tId)) {
+          tenantRecordsMap.set(tId, {
+            patientId: record._id.toString(),
+            hospitalPatientId: record.patientId || ''
+          });
+        }
+      }
+    }
+  }
+
+  // 3. Query active eligible hospitals from SuperAdminHospital
+  const candidateTenantCodes = Array.from(tenantRecordsMap.keys());
+  const activeHospitals = await SuperAdminHospital.find({
+    code: { $in: candidateTenantCodes },
+    status: 'Active',
+    subscriptionStatus: { $in: ['ACTIVE', 'EXPIRING'] }
+  }).select('code hospitalId name logo address contactEmail contactPhone').lean();
+
+  const results = [];
+  for (const h of activeHospitals) {
+    const meta = tenantRecordsMap.get(h.code.toLowerCase().trim());
+    if (meta) {
+      results.push({
+        tenantId: h.code,
+        hospitalId: h.hospitalId || '',
+        name: h.name,
+        logo: h.logo || '',
+        address: h.address || '',
+        patientId: meta.patientId,
+        hospitalPatientId: meta.hospitalPatientId
+      });
+    }
+  }
+
+  return results;
+}
+
+// POST /api/auth/patient-portal/global/send-otp
+// Accepts 10-digit Indian mobile number without hospital context.
+router.post('/patient-portal/global/send-otp', async (req, res) => {
+  const { mobile, phone, emailOrPhone } = req.body;
+  const rawInput = mobile || phone || emailOrPhone;
+  if (!rawInput) {
+    return res.status(400).json({ error: 'Registered mobile number is required' });
+  }
+
+  const phoneCheck = normalizeIndianMobile(rawInput);
+  if (!phoneCheck.isValid) {
+    return res.status(400).json({ error: phoneCheck.error || 'A valid 10-digit Indian mobile number is required' });
+  }
+  const cleanMobile = phoneCheck.normalized;
+
+  try {
+    const dispatchResult = await createAndDispatchOtp({
+      targetIdentifier: cleanMobile,
+      identifierType: 'phone',
+      purpose: 'GLOBAL_PATIENT_AUTH',
+      tenantId: 'global',
+      deliveryChannel: 'sms',
+      preferredChannel: 'sms',
+      recipientName: 'Valued Patient'
+    });
+
+    if (!dispatchResult.success) {
+      return res.status(dispatchResult.status || 500).json({
+        error: dispatchResult.error || 'Failed to dispatch verification code. Please try again.',
+        errorCode: dispatchResult.errorCode,
+        cooldownSeconds: dispatchResult.cooldownSeconds || 30
+      });
+    }
+
+    return res.json({
+      success: true,
+      channel: 'sms',
+      maskedTarget: maskPhoneNumber(cleanMobile),
+      cooldownSeconds: dispatchResult.cooldownSeconds || 30
+    });
+  } catch (error) {
+    console.error('Global Patient Portal Send OTP Error:', error);
+    return res.status(500).json({ error: 'Internal server error while dispatching verification code' });
+  }
+});
+
+// POST /api/auth/patient-portal/global/verify-otp
+// Verifies OTP and detects profile cardinality across active hospitals.
+router.post('/patient-portal/global/verify-otp', async (req, res) => {
+  const { mobile, phone, emailOrPhone, otp } = req.body;
+  const rawInput = mobile || phone || emailOrPhone;
+  if (!rawInput || !otp) {
+    return res.status(400).json({ error: 'Mobile number and OTP verification code are required' });
+  }
+
+  const phoneCheck = normalizeIndianMobile(rawInput);
+  if (!phoneCheck.isValid) {
+    return res.status(400).json({ error: phoneCheck.error || 'A valid 10-digit Indian mobile number is required' });
+  }
+  const cleanMobile = phoneCheck.normalized;
+  const targetOtp = String(otp).trim();
+
+  try {
+    const { getJwtSecret } = require('../config/env');
+    let secretKey;
+    try { secretKey = getJwtSecret(); } catch(e) { secretKey = process.env.JWT_SECRET || 'secret_key'; }
+
+    // 1. Atomic OTP Verification
+    const verifyResult = await atomicVerifyOtp({
+      targetIdentifier: cleanMobile,
+      tenantId: 'global',
+      purpose: 'GLOBAL_PATIENT_AUTH',
+      otpCandidate: targetOtp
+    });
+
+    if (!verifyResult.success) {
+      return res.status(verifyResult.status || 401).json({
+        error: verifyResult.error || 'Invalid or expired OTP',
+        errorCode: verifyResult.errorCode
+      });
+    }
+
+    const Patient = require('../models/Patient');
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+
+    // 2. Query all patient profiles matching this contact number
+    const candidatePatients = await Patient.find({
+      contact: cleanMobile
+    }).sort({ updatedAt: -1 }).lean();
+
+    // 3. Filter patients to active hospitals only
+    const candidateTenantCodes = Array.from(new Set(candidatePatients.map(p => (p.tenantId || '').toLowerCase().trim())));
+    const activeHospitals = await SuperAdminHospital.find({
+      code: { $in: candidateTenantCodes },
+      status: 'Active',
+      subscriptionStatus: { $in: ['ACTIVE', 'EXPIRING'] }
+    }).select('code name logo hospitalId').lean();
+
+    const activeTenantSet = new Set(activeHospitals.map(h => h.code.toLowerCase().trim()));
+    const eligiblePatients = candidatePatients.filter(p => activeTenantSet.has((p.tenantId || '').toLowerCase().trim()));
+
+    // 4. Handle Profile Cardinality
+    if (eligiblePatients.length === 0) {
+      // No active patient profiles found -> registration onboarding
+      const regToken = jwt.sign({
+        phone: cleanMobile,
+        isNewPatient: true,
+        role: 'patient',
+        purpose: 'GLOBAL_PATIENT_REGISTRATION'
+      }, secretKey, { expiresIn: '15m' });
+
+      return res.json({
+        status: 'no_profile',
+        message: 'No active patient profile found for this mobile number.',
+        contact: cleanMobile,
+        isNewUser: true,
+        registrationToken: regToken
+      });
+    }
+
+    // Cluster eligible records by distinct person identity:
+    // Records across multiple hospitals sharing a universal uhId (UH-XXXXXXXX) and matching name
+    // represent the SAME individual, not multiple different people.
+    const distinctPersonMap = new Map();
+    for (const p of eligiblePatients) {
+      const normName = String(p.name || '').toLowerCase().trim();
+      const hasUhid = p.uhId && typeof p.uhId === 'string' && p.uhId.startsWith('UH-');
+      const clusterKey = hasUhid ? `uhid:${p.uhId}:${normName}` : `patient:${p._id.toString()}`;
+
+      if (!distinctPersonMap.has(clusterKey)) {
+        distinctPersonMap.set(clusterKey, {
+          primaryPatient: p,
+          allRecordIds: [p._id.toString()],
+          tenantIds: [p.tenantId]
+        });
+      } else {
+        const entry = distinctPersonMap.get(clusterKey);
+        entry.allRecordIds.push(p._id.toString());
+        entry.tenantIds.push(p.tenantId);
+      }
+    }
+    const distinctPersons = Array.from(distinctPersonMap.values());
+
+    if (distinctPersons.length > 1) {
+      // Multiple distinct individuals share this mobile (e.g. parent and child)
+      const allowedPatientIds = distinctPersons.map(d => d.primaryPatient._id.toString());
+      const profileSelectionToken = await generateProfileSelectionToken({
+        tenantId: 'global',
+        contact: cleanMobile,
+        allowedPatientIds
+      });
+
+      const hospitalNameMap = new Map(activeHospitals.map(h => [h.code.toLowerCase().trim(), h.name]));
+
+      return res.json({
+        status: 'multiple_profiles',
+        message: 'Multiple patient profiles found for this mobile number. Please select your profile.',
+        profileSelectionToken,
+        profiles: distinctPersons.map(d => {
+          const p = d.primaryPatient;
+          return {
+            id: p._id.toString(),
+            name: p.name,
+            gender: p.gender || '',
+            age: p.age || 0,
+            tenantId: p.tenantId,
+            hospitalName: hospitalNameMap.get((p.tenantId || '').toLowerCase().trim()) || p.tenantId,
+            uhId: p.uhId || p.patientId || '',
+            patientId: p.patientId || ''
+          };
+        })
+      });
+    }
+
+    // Exactly 1 Distinct Person Found: Proceed automatically to global patient portal
+    const selectedPatient = distinctPersons[0].primaryPatient;
+    const globalToken = jwt.sign({
+      id: selectedPatient._id.toString(),
+      role: 'global_patient',
+      token_use: 'global_portal',
+      contact: cleanMobile,
+      name: selectedPatient.name,
+      uhId: selectedPatient.uhId || '',
+      tenantId: selectedPatient.tenantId
+    }, secretKey, { expiresIn: '1h' });
+
+    const associatedHospitals = await resolveAssociatedHospitalsForPatient(selectedPatient);
+
+    return res.json({
+      status: 'success',
+      globalToken,
+      patient: {
+        id: selectedPatient._id.toString(),
+        name: selectedPatient.name,
+        uhId: selectedPatient.uhId || selectedPatient.patientId || '',
+        contact: cleanMobile
+      },
+      hospitals: associatedHospitals
+    });
+
+  } catch (error) {
+    console.error('Global Patient Portal Verify OTP Error:', error);
+    return res.status(500).json({ error: 'Internal server error while verifying code' });
+  }
+});
+
+// POST /api/auth/patient-portal/global/select-profile
+// Selects a single authorized profile from a multi-profile challenge.
+router.post('/patient-portal/global/select-profile', async (req, res) => {
+  const { profileSelectionToken, patientId } = req.body;
+  if (!profileSelectionToken || !patientId) {
+    return res.status(400).json({ error: 'profileSelectionToken and patientId are required.' });
+  }
+
+  try {
+    const Patient = require('../models/Patient');
+    const { getJwtSecret } = require('../config/env');
+    let secretKey;
+    try { secretKey = getJwtSecret(); } catch(e) { secretKey = process.env.JWT_SECRET || 'secret_key'; }
+
+    // Validate and consume single-use profile selection token atomically
+    const tokenValidation = await verifyAndConsumeProfileSelectionToken(profileSelectionToken, patientId);
+    if (!tokenValidation.valid) {
+      return res.status(403).json({ error: tokenValidation.error, errorCode: tokenValidation.errorCode });
+    }
+
+    const patientDoc = await Patient.findById(patientId);
+    if (!patientDoc) {
+      return res.status(404).json({ error: 'Patient profile not found.' });
+    }
+
+    // Issue Global Patient Session Token
+    const globalToken = jwt.sign({
+      id: patientDoc._id.toString(),
+      role: 'global_patient',
+      token_use: 'global_portal',
+      contact: patientDoc.contact,
+      name: patientDoc.name,
+      uhId: patientDoc.uhId || '',
+      tenantId: patientDoc.tenantId
+    }, secretKey, { expiresIn: '1h' });
+
+    const associatedHospitals = await resolveAssociatedHospitalsForPatient(patientDoc);
+
+    return res.json({
+      status: 'success',
+      globalToken,
+      patient: {
+        id: patientDoc._id.toString(),
+        name: patientDoc.name,
+        uhId: patientDoc.uhId || patientDoc.patientId || '',
+        contact: patientDoc.contact
+      },
+      hospitals: associatedHospitals
+    });
+  } catch (error) {
+    console.error('Global Patient Portal Select Profile Error:', error);
+    return res.status(500).json({ error: 'Internal server error during profile selection' });
+  }
+});
+
+// GET /api/auth/patient-portal/global/portal-data
+// Retrieves patient identity and verified associated hospitals using global token.
+router.get('/patient-portal/global/portal-data', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Authorization header is required.' });
+  }
+  const token = authHeader.split(' ')[1] || authHeader;
+
+  try {
+    const { getJwtSecret } = require('../config/env');
+    let secretKey;
+    try { secretKey = getJwtSecret(); } catch(e) { secretKey = process.env.JWT_SECRET || 'secret_key'; }
+
+    const decoded = jwt.verify(token, secretKey);
+    if (decoded.role !== 'global_patient' && decoded.token_use !== 'global_portal') {
+      return res.status(403).json({ error: 'Invalid token: Global patient session required.' });
+    }
+
+    const Patient = require('../models/Patient');
+    const patientDoc = await Patient.findById(decoded.id);
+    if (!patientDoc) {
+      return res.status(404).json({ error: 'Patient profile not found.' });
+    }
+
+    const associatedHospitals = await resolveAssociatedHospitalsForPatient(patientDoc);
+
+    return res.json({
+      status: 'success',
+      patient: {
+        id: patientDoc._id.toString(),
+        name: patientDoc.name,
+        uhId: patientDoc.uhId || patientDoc.patientId || '',
+        contact: patientDoc.contact
+      },
+      hospitals: associatedHospitals
+    });
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired global session token.' });
+  }
+});
+
+// POST /api/auth/patient-portal/global/select-hospital
+// Exchanges a valid global session token for a hospital-scoped patient JWT.
+// Preserves: req.user.id === Patient._id
+router.post('/patient-portal/global/select-hospital', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Authorization header is required.' });
+  }
+  const token = authHeader.split(' ')[1] || authHeader;
+  const { tenantId, patientId } = req.body;
+
+  if (!tenantId || typeof tenantId !== 'string' || !tenantId.trim()) {
+    return res.status(400).json({ error: 'tenantId is required to select a hospital.' });
+  }
+  const targetTenant = tenantId.trim().toLowerCase();
+
+  try {
+    const { getJwtSecret } = require('../config/env');
+    let secretKey;
+    try { secretKey = getJwtSecret(); } catch(e) { secretKey = process.env.JWT_SECRET || 'secret_key'; }
+
+    const decoded = jwt.verify(token, secretKey);
+    if (decoded.role !== 'global_patient' && decoded.token_use !== 'global_portal') {
+      return res.status(403).json({ error: 'Invalid token: Global patient session required.' });
+    }
+
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+    const hospital = await SuperAdminHospital.findOne({
+      code: targetTenant,
+      status: 'Active',
+      subscriptionStatus: { $in: ['ACTIVE', 'EXPIRING'] }
+    }).select('code hospitalId name logo status subscriptionStatus').lean();
+
+    if (!hospital) {
+      return res.status(404).json({ error: `Hospital '${targetTenant}' is inactive, suspended, or does not exist.` });
+    }
+
+    const Patient = require('../models/Patient');
+    // Find the patient record belonging to this person in the target hospital
+    let targetPatientDoc = null;
+    if (patientId) {
+      targetPatientDoc = await Patient.findOne({ _id: patientId, tenantId: hospital.code });
+    }
+    if (!targetPatientDoc && decoded.id) {
+      const primaryDoc = await Patient.findById(decoded.id);
+      if (primaryDoc) {
+        if ((primaryDoc.tenantId || '').toLowerCase().trim() === hospital.code) {
+          targetPatientDoc = primaryDoc;
+        } else if (primaryDoc.uhId && primaryDoc.uhId.startsWith('UH-')) {
+          targetPatientDoc = await Patient.findOne({
+            tenantId: hospital.code,
+            uhId: primaryDoc.uhId,
+            name: primaryDoc.name
+          });
+        }
+      }
+    }
+
+    if (!targetPatientDoc) {
+      return res.status(403).json({
+        error: `Access denied. The selected profile does not have a verified patient record at ${hospital.name}.`
+      });
+    }
+
+    // Resolve or create hospital User record for the patient
+    let user = await User.findOne({ staff_id: targetPatientDoc.contact, tenantId: hospital.code }) ||
+               await User.findOne({ phone: targetPatientDoc.contact, tenantId: hospital.code, role: 'patient' });
+
+    const isComplete = Boolean(isPatientProfileComplete(targetPatientDoc) || user?.isSetupComplete);
+
+    if (!user) {
+      user = await User.create({
+        name: targetPatientDoc.name,
+        email: targetPatientDoc.email || `${targetPatientDoc.contact}_${targetPatientDoc._id}@curoxa.patient`,
+        phone: targetPatientDoc.contact,
+        staff_id: targetPatientDoc.contact,
+        role: 'patient',
+        tenantId: hospital.code,
+        isSetupComplete: isComplete,
+        password_hash: 'PATIENT_OTP_AUTH'
+      });
+    }
+
+    // Generate authenticated 24h patient session token with strict clinical invariant:
+    // req.user.id === Patient._id
+    const tokenPayload = {
+      id: targetPatientDoc._id,
+      userId: user._id,
+      staff_id: user.staff_id || targetPatientDoc.contact,
+      email: user.email || targetPatientDoc.email || '',
+      phone: user.phone || targetPatientDoc.contact,
+      role: 'patient',
+      actualStaffRole: user.role,
+      tenantId: hospital.code,
+      uhId: targetPatientDoc.uhId || targetPatientDoc.patientId || '',
+      token_use: 'hospital_clinical'
+    };
+    const hospitalToken = jwt.sign(tokenPayload, secretKey, { expiresIn: '24h' });
+
+    return res.json({
+      status: 'success',
+      token: hospitalToken,
+      user: {
+        ...user.toObject(),
+        id: targetPatientDoc._id,
+        role: 'patient',
+        actualStaffRole: user.role,
+        name: targetPatientDoc.name,
+        uhId: targetPatientDoc.uhId || targetPatientDoc.uhid || '',
+        uhid: targetPatientDoc.uhId || targetPatientDoc.uhid || '',
+        patientId: targetPatientDoc.patientId || '',
+        avatar: targetPatientDoc.avatar || user.avatar || '',
+        isSetupComplete: isComplete,
+        password_hash: undefined
+      },
+      hospital: {
+        tenantId: hospital.code,
+        hospitalId: hospital.hospitalId || '',
+        name: hospital.name,
+        logo: hospital.logo || ''
+      }
+    });
+  } catch (error) {
+    console.error('Global Patient Portal Select Hospital Error:', error);
+    return res.status(500).json({ error: 'Internal server error while selecting hospital' });
+  }
+});
+
+// POST /api/auth/patient-portal/global/issue-registration-token
+// Issues temporary registration token scoped to a specific hospital for onboarding.
+router.post('/patient-portal/global/issue-registration-token', async (req, res) => {
+  const { tenantId, registrationToken, mobile } = req.body;
+  if (!tenantId || (!registrationToken && !mobile)) {
+    return res.status(400).json({ error: 'tenantId and registration credentials are required.' });
+  }
+
+  try {
+    const { getJwtSecret } = require('../config/env');
+    let secretKey;
+    try { secretKey = getJwtSecret(); } catch(e) { secretKey = process.env.JWT_SECRET || 'secret_key'; }
+
+    let contact = mobile;
+    if (registrationToken) {
+      try {
+        const decoded = jwt.verify(registrationToken, secretKey);
+        contact = decoded.phone || contact;
+      } catch (err) {
+        return res.status(401).json({ error: 'Registration token has expired or is invalid.' });
+      }
+    }
+
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+    const hospital = await SuperAdminHospital.findOne({
+      code: tenantId.toLowerCase().trim(),
+      status: 'Active',
+      subscriptionStatus: { $in: ['ACTIVE', 'EXPIRING'] }
+    });
+
+    if (!hospital) {
+      return res.status(404).json({ error: `Hospital '${tenantId}' not found or is inactive.` });
+    }
+
+    const tempToken = jwt.sign({
+      phone: contact,
+      emailOrPhone: contact,
+      isNewPatient: true,
+      role: 'patient',
+      tenantId: hospital.code
+    }, secretKey, { expiresIn: '15m' });
+
+    return res.json({
+      success: true,
+      tempToken,
+      tenantId: hospital.code,
+      hospital: {
+        name: hospital.name,
+        code: hospital.code,
+        hospitalId: hospital.hospitalId || ''
+      }
+    });
+  } catch (error) {
+    console.error('Issue Registration Token Error:', error);
+    return res.status(500).json({ error: 'Internal server error while issuing registration token' });
   }
 });
 

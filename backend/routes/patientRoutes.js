@@ -11,6 +11,9 @@ router.use(checkDoctorClinicalMode);
 
 // Get all patients (scoped to tenant)
 router.get('/', async (req, res) => {
+  if (req.user && req.user.role === 'patient') {
+    return res.status(403).json({ error: 'Access denied: Patients are not permitted to access the patient directory' });
+  }
   try {
     const { resolveOrCreateUhid, generateHospitalPatientId } = require('../utils/identifierEngine');
     const patients = await Patient.find({ tenantId: req.tenantId }).sort({ createdAt: 1 });
@@ -51,6 +54,14 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   const { title, name, age, ageMonths, ageDays, gender, contact, email, address, bloodGroup, allergies, currentMedications, medicalHistory, avatar, otp } = req.body;
   try {
+    // For patient self-registration, strictly enforce validated hospital context from the token
+    if (req.user && (req.user.isNewPatient || req.user.role === 'patient')) {
+      if (!req.user.tenantId) {
+        return res.status(400).json({ error: 'Hospital context is required for patient registration.', code: 'MISSING_TENANT_CONTEXT' });
+      }
+      req.tenantId = req.user.tenantId;
+    }
+
     if (!contact || contact.trim() === '') {
       return res.status(400).json({ error: "Contact/Phone number is mandatory for patient registration." });
     }
@@ -191,108 +202,46 @@ router.post('/', async (req, res) => {
 // Get a single patient (scoped to tenant or universal patient self-lookup)
 router.get('/:id', async (req, res) => {
   try {
+    // Role boundary: Patient tokens can strictly only look up their own profile
+    if (req.user && req.user.role === 'patient') {
+      const isSelf = (
+        String(req.user.id) === String(req.params.id) ||
+        (req.user.userId && String(req.user.userId) === String(req.params.id)) ||
+        (req.user.staff_id && String(req.user.staff_id) === String(req.params.id))
+      );
+      if (!isSelf) {
+        return res.status(403).json({ error: 'Access denied: You may only view your own patient profile' });
+      }
+    }
+
     let patient = null;
 
-    // 1. Try finding by _id within tenant or directly
+    // 1. Try finding by _id within tenant
     try {
       if (req.tenantId) {
         patient = await Patient.findOne({ _id: req.params.id, tenantId: req.tenantId });
       }
-      if (!patient && req.user && (req.user.role === 'patient' || req.user.id === req.params.id)) {
-        patient = await Patient.findById(req.params.id);
-      }
     } catch(e) {}
 
-    // 2. If requesting user is a patient, allow looking up own patient record
+    // 2. If requesting user is a patient, allow looking up own patient record within tenant
     if (!patient && req.user && req.user.role === 'patient') {
-      const isSelf = (req.user.id === req.params.id || req.params.id === 'me' || req.user.staff_id === req.params.id);
+      const isSelf = (
+        String(req.user.id) === String(req.params.id) ||
+        (req.user.userId && String(req.user.userId) === String(req.params.id)) ||
+        (req.user.staff_id && String(req.user.staff_id) === String(req.params.id))
+      );
       if (isSelf) {
         try {
           const reqUserPhone = req.user.phone || (req.user.staff_id ? req.user.staff_id.split('_')[0] : '');
           patient = (req.tenantId ? await Patient.findOne({ contact: reqUserPhone, tenantId: req.tenantId }) : null) || 
                     (req.tenantId ? await Patient.findOne({ contact: req.user.staff_id, tenantId: req.tenantId }) : null) ||
-                    await Patient.findOne({ contact: reqUserPhone }) ||
-                    await Patient.findOne({ contact: req.user.staff_id }) ||
-                    await Patient.findById(req.user.id);
+                    (req.tenantId ? await Patient.findOne({ _id: req.user.id, tenantId: req.tenantId }) : null);
         } catch(e) {}
-
-        // Auto-provision patient record if user exists and is completing onboarding
-        if (!patient) {
-          const userObj = await User.findById(req.user.id) ||
-                          (req.user?.staff_id ? await User.findOne({ staff_id: req.user.staff_id, tenantId: req.tenantId }) : null);
-          if (userObj) {
-            const effectiveTenant = req.tenantId || userObj.tenantId || 'city_hospital';
-            const count = await Patient.countDocuments({ tenantId: effectiveTenant });
-            let nextSeq = count + 1;
-            let formattedId = `pat-${String(nextSeq).padStart(2, '0')}`;
-            let exists = await Patient.exists({ tenantId: effectiveTenant, patientId: formattedId });
-            while (exists) {
-              nextSeq++;
-              formattedId = `pat-${String(nextSeq).padStart(2, '0')}`;
-              exists = await Patient.exists({ tenantId: effectiveTenant, patientId: formattedId });
-            }
-
-            let autoUhid = '';
-            try {
-              const { resolveOrCreateUhid } = require('../utils/identifierEngine');
-              autoUhid = await resolveOrCreateUhid({
-                contact: userObj.phone || userObj.staff_id || req.user?.staff_id,
-                name: userObj.name || 'Patient',
-                email: userObj.email || ''
-              });
-            } catch (e) {}
-
-            let autoPatId = formattedId;
-            try {
-              const { generateHospitalPatientId } = require('../utils/identifierEngine');
-              autoPatId = await generateHospitalPatientId(effectiveTenant);
-            } catch (e) {}
-
-            patient = new Patient({
-              patientId: autoPatId || formattedId,
-              uhId: autoUhid,
-              name: userObj.name || 'Patient',
-              age: userObj.age || 0,
-              ageMonths: 0,
-              ageDays: 0,
-              gender: userObj.gender || 'Male',
-              contact: userObj.phone || userObj.staff_id || req.user?.staff_id || '9999999999',
-              email: userObj.email || '',
-              address: userObj.address || '',
-              bloodGroup: userObj.bloodGroup || 'O+',
-              allergies: userObj.allergies || '',
-              currentMedications: '',
-              medicalHistory: [],
-              avatar: userObj.avatar || '',
-              tenantId: effectiveTenant
-            });
-            await patient.save();
-
-            userObj.staff_id = patient.contact;
-            userObj.name = patient.name;
-            userObj.isSetupComplete = true;
-            await userObj.save();
-
-            const io = req.app.get("io");
-            if (io && effectiveTenant) {
-              io.to(effectiveTenant).emit("data_changed", { type: "patients" });
-            }
-
-            const isComplete = isPatientProfileComplete(patient);
-            const patientObj = patient.toObject();
-            return res.json({
-              ...patientObj,
-              uhId: patient.uhId || autoUhid,
-              uhid: patient.uhId || autoUhid,
-              isSetupComplete: isComplete
-            });
-          }
-        }
       }
     }
 
     if (!patient) {
-      return res.status(404).json({ error: 'Patient not found' });
+      return res.status(404).json({ error: 'Patient profile not found. Please complete patient registration.', code: 'PATIENT_NOT_FOUND' });
     }
 
     // Ensure UHID & PatientID are backfilled if missing

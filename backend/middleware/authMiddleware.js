@@ -41,10 +41,21 @@ const verifyToken = (req, res, next) => {
       }
     }
 
+    // Reject global patient portal tokens on hospital-scoped clinical routes
+    if (decoded && (decoded.role === 'global_patient' || decoded.token_use === 'global_portal')) {
+      return res.status(403).json({
+        error: 'Access denied: Global session token is not authorized for hospital clinical APIs. Please select a hospital.',
+        code: 'GLOBAL_TOKEN_CANNOT_ACCESS_CLINICAL_API'
+      });
+    }
+
     // Patient tokens (from patient portal or registered patients)
     if (decoded && (decoded.role === 'patient' || decoded.isNewPatient)) {
+      if (!decoded.tenantId) {
+        return res.status(400).json({ error: 'Missing hospital context in token', code: 'MISSING_TENANT_CONTEXT' });
+      }
       req.user = decoded;
-      req.tenantId = decoded.tenantId || 'city_hospital';
+      req.tenantId = decoded.tenantId;
       return next();
     }
 
@@ -105,4 +116,11 @@ const isHrOrAdmin = (req, res, next) => {
   }
 };
 
-module.exports = { verifyToken, isAdmin, isSuperAdmin, isHrOrAdmin };
+const forbidPatientRole = (req, res, next) => {
+  if (req.user && req.user.role === 'patient') {
+    return res.status(403).json({ error: 'Access denied: Patient role not permitted for this resource' });
+  }
+  next();
+};
+
+module.exports = { verifyToken, isAdmin, isSuperAdmin, isHrOrAdmin, forbidPatientRole };

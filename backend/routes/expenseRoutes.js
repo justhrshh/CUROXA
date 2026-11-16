@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const HospitalExpense = require('../models/HospitalExpense');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, forbidPatientRole } = require('../middleware/authMiddleware');
 
 router.use(verifyToken);
+router.use(forbidPatientRole);
 
 // GET /api/expenses - Get all expenses for tenant
 router.get('/', async (req, res) => {

@@ -2,10 +2,13 @@ const express = require('express');
 const router = express.Router();
 const PharmacyTicket = require('../models/PharmacyTicket');
 const Medicine = require('../models/Medicine');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, forbidPatientRole } = require('../middleware/authMiddleware');
+
+router.use(verifyToken);
+router.use(forbidPatientRole);
 
 // Get all pharmacy tickets (scoped to tenant)
-router.get('/', verifyToken, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const tickets = await PharmacyTicket.find({ tenantId: req.tenantId }).sort({ createdAt: -1 });
     res.json(tickets);
@@ -16,7 +19,7 @@ router.get('/', verifyToken, async (req, res) => {
 });
 
 // Create a new pharmacy ticket (scoped to tenant)
-router.post('/', verifyToken, async (req, res) => {
+router.post('/', async (req, res) => {
   const { alertId, medicineId, medicineName, currentStock, adminComment } = req.body;
   if (!alertId || !medicineId || !medicineName) {
     return res.status(400).json({ error: 'Missing mandatory fields' });
@@ -39,7 +42,7 @@ router.post('/', verifyToken, async (req, res) => {
 });
 
 // Resolve a ticket with reason from Pharmacy (scoped to tenant)
-router.put('/:id/resolve', verifyToken, async (req, res) => {
+router.put('/:id/resolve', async (req, res) => {
   const { reason } = req.body;
   if (!reason || !reason.trim()) {
     return res.status(400).json({ error: 'Reason for resolution is required' });

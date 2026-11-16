@@ -33,6 +33,7 @@ const otpChallengeSchema = new mongoose.Schema({
     enum: [
       'STAFF_LOGIN',
       'PATIENT_PORTAL_AUTH',
+      'GLOBAL_PATIENT_AUTH',
       'FORGOT_PASSWORD',
       'RECEPTION_QUEUE',
       'PUBLIC_DOCTOR_QUEUE',

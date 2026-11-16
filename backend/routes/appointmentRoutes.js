@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const Appointment = require('../models/Appointment');
 const Patient = require('../models/Patient');
 const User = require('../models/User');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, forbidPatientRole } = require('../middleware/authMiddleware');
 const { checkDoctorClinicalMode } = require('../middleware/subscriptionMiddleware');
 const router = express.Router();
 
@@ -86,10 +86,10 @@ router.get('/', async (req, res) => {
       const patientObjectIds = allIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
       const allPatientMatchers = [...allIds, ...patientObjectIds];
 
+      query.tenantId = req.tenantId;
+      query.patientId = { $in: allPatientMatchers };
       if (req.query.doctorId) {
         query.doctorId = req.query.doctorId;
-      } else {
-        query.patientId = { $in: allPatientMatchers };
       }
     } else {
       query.tenantId = req.tenantId;
@@ -183,20 +183,6 @@ router.get('/', async (req, res) => {
       return appObj;
     });
 
-    if (req.user && req.user.role === 'patient' && req.query.doctorId) {
-      appsWithBilling = appsWithBilling.map(app => {
-        const appPatientIdStr = String(app.patientId?._id || app.patientId);
-        const isOwn = patientIds.includes(appPatientIdStr);
-        if (!isOwn) {
-          app.patientId = null;
-          app.reason = 'Reserved';
-          app.notes = '';
-          app.diagnosis = '';
-        }
-        return app;
-      });
-    }
-
     res.json(appsWithBilling);
   } catch (error) {
     console.error("Get appointments error:", error);
@@ -286,7 +272,10 @@ router.post('/', async (req, res) => {
     // Resolve / provision Patient record in target tenant
     const Patient = require('../models/Patient');
     let targetPatientId = patientId;
-    const currentPatient = await Patient.findById(patientId);
+    if (req.user && req.user.role === 'patient') {
+      targetPatientId = req.user.id;
+    }
+    const currentPatient = await Patient.findById(targetPatientId);
     if (currentPatient && currentPatient.tenantId !== resolvedTenantId) {
       let targetPatient = await Patient.findOne({
         contact: currentPatient.contact,
@@ -487,6 +476,19 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Appointment not found' });
     }
 
+    if (req.user && req.user.role === 'patient') {
+      const patientIdStr = String(currentAppointment.patientId?._id || currentAppointment.patientId);
+      if (patientIdStr !== String(req.user.id)) {
+        return res.status(403).json({ error: "Access denied. Cannot modify another patient's appointment." });
+      }
+      if (diagnosis !== undefined || req.body.tokenNumber !== undefined) {
+        return res.status(403).json({ error: "Access denied. Patients cannot modify clinical or token fields." });
+      }
+      if (status && !['Cancelled', 'Pending', 'Pending Approval'].includes(status)) {
+        return res.status(403).json({ error: "Access denied. Invalid status transition for patient." });
+      }
+    }
+
     const checkDoctorId = doctorId || currentAppointment.doctorId;
     const checkDate = date || currentAppointment.date;
     const checkTime = time || currentAppointment.time;
@@ -543,13 +545,22 @@ router.put('/:id', async (req, res) => {
 // Delete an appointment (scoped to tenant)
 router.delete('/:id', async (req, res) => {
   try {
-    const appointment = await Appointment.findOneAndDelete({ _id: req.params.id });
-    if (!appointment) return res.status(404).json({ error: 'Appointment not found' });
+    const currentAppointment = await Appointment.findById(req.params.id);
+    if (!currentAppointment) return res.status(404).json({ error: 'Appointment not found' });
+
+    if (req.user && req.user.role === 'patient') {
+      const patientIdStr = String(currentAppointment.patientId?._id || currentAppointment.patientId);
+      if (patientIdStr !== String(req.user.id)) {
+        return res.status(403).json({ error: "Access denied. Cannot delete another patient's appointment." });
+      }
+    }
+
+    await currentAppointment.deleteOne();
     const io = req.app.get("io");
     if (io) {
       io.to(String(req.tenantId).trim().toLowerCase()).emit("data_changed", { type: "appointments" });
-      if (appointment.tenantId && appointment.tenantId !== req.tenantId) {
-        io.to(String(appointment.tenantId).trim().toLowerCase()).emit("data_changed", { type: "appointments" });
+      if (currentAppointment.tenantId && currentAppointment.tenantId !== req.tenantId) {
+        io.to(String(currentAppointment.tenantId).trim().toLowerCase()).emit("data_changed", { type: "appointments" });
       }
     }
     res.json({ message: 'Appointment deleted' });
@@ -561,7 +572,7 @@ router.delete('/:id', async (req, res) => {
 
 
 // Approve an appointment request, dynamically generate bill (with 1-time Reg fee if applicable), and request payment
-router.put('/:id/approve', async (req, res) => {
+router.put('/:id/approve', forbidPatientRole, async (req, res) => {
   try {
     const appointment = await Appointment.findById(req.params.id)
       .populate('patientId')
@@ -649,7 +660,7 @@ router.put('/:id/approve', async (req, res) => {
 });
 
 // Reject an appointment request
-router.put('/:id/reject', async (req, res) => {
+router.put('/:id/reject', forbidPatientRole, async (req, res) => {
   try {
     const appointment = await Appointment.findById(req.params.id);
     if (!appointment) return res.status(404).json({ error: 'Appointment not found' });
@@ -678,6 +689,11 @@ router.post('/:id/pay', async (req, res) => {
   try {
     const appointment = await Appointment.findById(req.params.id);
     if (!appointment) return res.status(404).json({ error: 'Appointment not found' });
+
+    const currentPatId = String(appointment.patientId?._id || appointment.patientId);
+    if (req.user && req.user.role === 'patient' && currentPatId !== String(req.user.id)) {
+      return res.status(403).json({ error: "Access denied. Cannot pay for another patient's appointment." });
+    }
 
     const Billing = require('../models/Billing');
     const paymentMethod = req.body.paymentMethod || 'Online (UPI/Card)';
@@ -730,7 +746,7 @@ router.post('/:id/pay', async (req, res) => {
 });
 
 // Reception Check-in endpoint: server-authoritative token generation & queue entry
-router.post('/:id/check-in', async (req, res) => {
+router.post('/:id/check-in', forbidPatientRole, async (req, res) => {
   try {
     const appointment = await Appointment.findById(req.params.id);
     if (!appointment) {
@@ -926,7 +942,7 @@ router.post('/:id/check-in', async (req, res) => {
 });
 
 // Complete doctor consultation and advance live queue to next eligible patient
-router.post('/:id/complete-consultation', async (req, res) => {
+router.post('/:id/complete-consultation', forbidPatientRole, async (req, res) => {
   try {
     const appointment = await Appointment.findById(req.params.id);
     if (!appointment) {

@@ -1,13 +1,13 @@
 const express = require('express');
 const Billing = require('../models/Billing');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, forbidPatientRole } = require('../middleware/authMiddleware');
 const router = express.Router();
 const DiscountSetting = require('../models/DiscountSetting');
 
 router.use(verifyToken);
 
 // Get discount setting (scoped to tenant)
-router.get('/discount-setting', async (req, res) => {
+router.get('/discount-setting', forbidPatientRole, async (req, res) => {
   try {
     let setting = await DiscountSetting.findOne({ tenantId: req.tenantId });
     if (!setting) {
@@ -50,7 +50,7 @@ router.post('/discount-setting', async (req, res) => {
 });
 
 // Get pending patient payments summary (scoped to tenant)
-router.get('/pending-payments-summary', async (req, res) => {
+router.get('/pending-payments-summary', forbidPatientRole, async (req, res) => {
   try {
     const mongoose = require('mongoose');
     const bills = await Billing.find({
@@ -94,7 +94,11 @@ router.get('/pending-payments-summary', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const query = { tenantId: req.tenantId };
-    if (req.query.patientId) query.patientId = req.query.patientId;
+    if (req.user && req.user.role === 'patient') {
+      query.patientId = req.user.id;
+    } else {
+      if (req.query.patientId) query.patientId = req.query.patientId;
+    }
     if (req.query.appointmentId) query.appointmentId = req.query.appointmentId;
 
     const bills = await Billing.find(query)
@@ -109,7 +113,7 @@ router.get('/', async (req, res) => {
 
 // Create bill (scoped to tenant)
 // Create bill (scoped to tenant, supports single or multimode simultaneous payments)
-router.post('/', async (req, res) => {
+router.post('/', forbidPatientRole, async (req, res) => {
   const {
     patientId,
     appointmentId,
@@ -293,7 +297,7 @@ router.post('/', async (req, res) => {
 });
 
 // Collect payment (supports single or split payments, partial payments, overpayment protection, and audit tracking)
-router.post('/:id/collect-payment', async (req, res) => {
+router.post('/:id/collect-payment', forbidPatientRole, async (req, res) => {
   try {
     const bill = await Billing.findOne({ _id: req.params.id, tenantId: req.tenantId }).populate('patientId', 'name contact');
     if (!bill) return res.status(404).json({ error: 'Bill not found' });
@@ -451,7 +455,7 @@ router.post('/:id/collect-payment', async (req, res) => {
 });
 
 // Update bill (scoped to tenant)
-router.put('/:id', async (req, res) => {
+router.put('/:id', forbidPatientRole, async (req, res) => {
   const { patientId, appointmentId, items, totalAmount, status, paymentMethod, discountPercent, discountAmount, originalAmount, discountReason, payments } = req.body;
   try {
     const bill = await Billing.findOne({ _id: req.params.id, tenantId: req.tenantId });
