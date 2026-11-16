@@ -61,7 +61,7 @@ function getPing4smsConfig() {
   return {
     apiKey: (process.env.PING4SMS_API_KEY || '').trim(),
     senderId: (process.env.PING4SMS_SENDER_ID || DEFAULT_SENDER_ID).trim(),
-    templateId: (process.env.PING4SMS_TEMPLATE_ID || '').trim(),
+    templateId: (process.env.PING4SMS_TEMPLATE_ID || DEFAULT_TEMPLATE_ID).trim(),
     route: (process.env.PING4SMS_ROUTE || DEFAULT_ROUTE).trim(),
     apiUrl: (process.env.PING4SMS_API_URL || DEFAULT_API_URL).trim()
   };
@@ -367,6 +367,7 @@ async function sendOtpSms({ mobile, otp, tenantId, _mockTransport, _mockHttpRequ
 
 module.exports = {
   sendOtpSms,
+  validateConfig,
   buildDltOtpMessage,
   getPing4smsConfig,
   buildPing4smsRequest,
