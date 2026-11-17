@@ -2673,7 +2673,18 @@ router.post('/patient-portal/verify-otp', tenantMiddleware, async (req, res) => 
         actualStaffRole: user.role,
         tenantId: user.tenantId || (patientDoc ? patientDoc.tenantId : validTenantId)
       };
-      const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '24h' });
+      const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '30m' });
+
+      // Scope B: Server-verifiable Hospital Clinical Refresh Session
+      if (patientDoc && user) {
+        const { issuePatientHospitalRefreshSession } = require('../utils/authSessionHelper');
+        await issuePatientHospitalRefreshSession(res, {
+          user,
+          patient: patientDoc,
+          tenantId: user.tenantId || (patientDoc ? patientDoc.tenantId : validTenantId),
+          req
+        }).catch(err => console.warn('[PATIENT_HOSPITAL_REFRESH_COOKIE] Error issuing session:', err.message));
+      }
 
       return res.json({ 
         message: 'Login successful', 
@@ -2774,7 +2785,18 @@ router.post('/patient-portal/select-profile', tenantMiddleware, async (req, res)
       actualStaffRole: user.role,
       tenantId: patientDoc.tenantId || user.tenantId || tokenValidation.tenantId
     };
-    const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '24h' });
+    const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '30m' });
+
+    // Scope B: Server-verifiable Hospital Clinical Refresh Session
+    if (patientDoc && user) {
+      const { issuePatientHospitalRefreshSession } = require('../utils/authSessionHelper');
+      await issuePatientHospitalRefreshSession(res, {
+        user,
+        patient: patientDoc,
+        tenantId: patientDoc.tenantId || user.tenantId || tokenValidation.tenantId,
+        req
+      }).catch(err => console.warn('[PATIENT_HOSPITAL_REFRESH_COOKIE] Error issuing session:', err.message));
+    }
 
     return res.json({
       message: 'Profile selected successfully',
@@ -3048,6 +3070,7 @@ router.post('/patient-portal/global/verify-otp', async (req, res) => {
 
     // Exactly 1 Distinct Person Found: Proceed automatically to global patient portal
     const selectedPatient = distinctPersons[0].primaryPatient;
+    const jti = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
     const globalToken = jwt.sign({
       id: selectedPatient._id.toString(),
       role: 'global_patient',
@@ -3055,8 +3078,13 @@ router.post('/patient-portal/global/verify-otp', async (req, res) => {
       contact: cleanMobile,
       name: selectedPatient.name,
       uhId: selectedPatient.uhId || '',
-      tenantId: selectedPatient.tenantId
-    }, secretKey, { expiresIn: '1h' });
+      tenantId: selectedPatient.tenantId,
+      jti
+    }, secretKey, { expiresIn: '30m' });
+
+    // Scope A: Server-verifiable Global Patient Refresh Session
+    const { issuePatientGlobalRefreshSession } = require('../utils/authSessionHelper');
+    await issuePatientGlobalRefreshSession(res, { patient: selectedPatient, req });
 
     const associatedHospitals = await resolveAssociatedHospitalsForPatient(selectedPatient);
 
@@ -3104,6 +3132,7 @@ router.post('/patient-portal/global/select-profile', async (req, res) => {
     }
 
     // Issue Global Patient Session Token
+    const jti = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
     const globalToken = jwt.sign({
       id: patientDoc._id.toString(),
       role: 'global_patient',
@@ -3111,8 +3140,13 @@ router.post('/patient-portal/global/select-profile', async (req, res) => {
       contact: patientDoc.contact,
       name: patientDoc.name,
       uhId: patientDoc.uhId || '',
-      tenantId: patientDoc.tenantId
-    }, secretKey, { expiresIn: '1h' });
+      tenantId: patientDoc.tenantId,
+      jti
+    }, secretKey, { expiresIn: '30m' });
+
+    // Scope A: Server-verifiable Global Patient Refresh Session
+    const { issuePatientGlobalRefreshSession } = require('../utils/authSessionHelper');
+    await issuePatientGlobalRefreshSession(res, { patient: patientDoc, req });
 
     const associatedHospitals = await resolveAssociatedHospitalsForPatient(patientDoc);
 
@@ -3258,7 +3292,7 @@ router.post('/patient-portal/global/select-hospital', async (req, res) => {
       });
     }
 
-    // Generate authenticated 24h patient session token with strict clinical invariant:
+    // Generate authenticated 30m patient session token with strict clinical invariant:
     // req.user.id === Patient._id
     const tokenPayload = {
       id: targetPatientDoc._id,
@@ -3270,9 +3304,19 @@ router.post('/patient-portal/global/select-hospital', async (req, res) => {
       actualStaffRole: user.role,
       tenantId: hospital.code,
       uhId: targetPatientDoc.uhId || targetPatientDoc.patientId || '',
-      token_use: 'hospital_clinical'
+      token_use: 'hospital_clinical',
+      jti: crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex')
     };
-    const hospitalToken = jwt.sign(tokenPayload, secretKey, { expiresIn: '24h' });
+    const hospitalToken = jwt.sign(tokenPayload, secretKey, { expiresIn: '30m' });
+
+    // Scope B: Server-verifiable Hospital Clinical Refresh Session
+    const { issuePatientHospitalRefreshSession } = require('../utils/authSessionHelper');
+    await issuePatientHospitalRefreshSession(res, {
+      user,
+      patient: targetPatientDoc,
+      tenantId: hospital.code,
+      req
+    });
 
     return res.json({
       status: 'success',
@@ -3358,6 +3402,529 @@ router.post('/patient-portal/global/issue-registration-token', async (req, res) 
   } catch (error) {
     console.error('Issue Registration Token Error:', error);
     return res.status(500).json({ error: 'Internal server error while issuing registration token' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// PATIENT PORTAL REFRESH TOKEN LIFECYCLE & ROTATION (PHASE 2A / 2B)
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/auth/patient-portal/global/refresh
+ * Scope A: Global Patient Session Refresh
+ * 
+ * Validates HttpOnly cookie 'quroxa_patient_global_refresh'.
+ * Enforces:
+ * - 7-day idle validity
+ * - 30-day absolute session validity
+ * - Refresh token rotation
+ * - Reuse detection (immediate family revocation)
+ * - Scope integrity: strictly returns role 'global_patient', token_use 'global_portal'
+ */
+router.post('/patient-portal/global/refresh', async (req, res) => {
+  try {
+    const RefreshToken = require('../models/RefreshToken');
+    const Patient = require('../models/Patient');
+    const {
+      getPatientGlobalRefreshCookieName,
+      issuePatientGlobalRefreshSession,
+      clearPatientGlobalRefreshCookie
+    } = require('../utils/authSessionHelper');
+    const { getJwtSecret } = require('../config/env');
+    let secretKey;
+    try { secretKey = getJwtSecret(); } catch(e) { secretKey = process.env.JWT_SECRET || 'secret_key'; }
+
+    const cookieName = getPatientGlobalRefreshCookieName();
+    const rawToken = req.cookies?.[cookieName];
+
+    if (!rawToken || typeof rawToken !== 'string' || !rawToken.trim()) {
+      return res.status(401).json({
+        error: 'No global refresh session cookie provided',
+        code: 'NO_GLOBAL_REFRESH_TOKEN'
+      });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(rawToken.trim()).digest('hex');
+    const session = await RefreshToken.findOne({
+      tokenHash,
+      sessionScope: 'global_patient'
+    });
+
+    if (!session) {
+      console.warn('[PATIENT_GLOBAL_REFRESH] Attempt with unknown or invalid global token hash');
+      return res.status(401).json({
+        error: 'Invalid global refresh token',
+        code: 'INVALID_REFRESH_TOKEN'
+      });
+    }
+
+    const now = new Date();
+    const ROTATION_GRACE_WINDOW_MS = 15000; // 15s concurrency grace window for multi-tab races
+
+    // ── REUSE DETECTION WITH MULTI-TAB CONCURRENCY LEAP-FORWARD ──
+    if (session.isRevoked) {
+      const isWithinGraceWindow = session.revokedAt &&
+        (now.getTime() - session.revokedAt.getTime() <= ROTATION_GRACE_WINDOW_MS);
+
+      if (isWithinGraceWindow && session.replacedByTokenHash) {
+        // Legitimate multi-tab concurrent refresh race detected!
+        // Another tab in the same browser rotated this token within the last 15s.
+        // Retrieve the replacement session and issue a valid access token without revoking the family.
+        const replacementSession = await RefreshToken.findOne({
+          tokenHash: session.replacedByTokenHash,
+          isRevoked: false
+        });
+
+        if (replacementSession) {
+          const patientDoc = await Patient.findById(replacementSession.patientId || replacementSession.userId);
+          if (patientDoc) {
+            const jti = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+            const globalToken = jwt.sign({
+              id: patientDoc._id.toString(),
+              role: 'global_patient',
+              token_use: 'global_portal',
+              contact: patientDoc.contact,
+              name: patientDoc.name,
+              uhId: patientDoc.uhId || '',
+              tenantId: patientDoc.tenantId,
+              jti
+            }, secretKey, { expiresIn: '30m' });
+
+            return res.json({
+              status: 'success',
+              globalToken,
+              patient: {
+                id: patientDoc._id.toString(),
+                name: patientDoc.name,
+                uhId: patientDoc.uhId || patientDoc.patientId || '',
+                contact: patientDoc.contact
+              }
+            });
+          }
+        }
+      }
+
+      // GENUINE REUSE: Replay outside grace window triggers family-wide revocation
+      console.error(
+        `[AUTH_SECURITY_ALERT] Global Patient refresh token reuse detected! Family: ${session.familyId}, Patient: ${session.patientId || session.userId}. Revoking entire family.`
+      );
+      await RefreshToken.updateMany(
+        { familyId: session.familyId },
+        { $set: { isRevoked: true, revokedAt: new Date() } }
+      );
+      clearPatientGlobalRefreshCookie(res);
+      return res.status(401).json({
+        error: 'Invalid or reused refresh session. Please log in again.',
+        code: 'REFRESH_TOKEN_REUSED'
+      });
+    }
+
+    // ── IDLE EXPIRATION CHECK (7 DAYS) ──
+    if (now > session.expiresAt) {
+      session.isRevoked = true;
+      session.revokedAt = now;
+      await session.save();
+      clearPatientGlobalRefreshCookie(res);
+      return res.status(401).json({
+        error: 'Global refresh session has expired (idle timeout). Please log in again.',
+        code: 'SESSION_EXPIRED'
+      });
+    }
+
+    // ── ABSOLUTE EXPIRATION CHECK (30 DAYS) ──
+    if (session.absoluteExpiresAt && now > session.absoluteExpiresAt) {
+      session.isRevoked = true;
+      session.revokedAt = now;
+      await session.save();
+      clearPatientGlobalRefreshCookie(res);
+      return res.status(401).json({
+        error: 'Global session has reached its absolute 30-day limit. Please log in again.',
+        code: 'SESSION_ABSOLUTE_LIMIT'
+      });
+    }
+
+    // ── VERIFY PATIENT EXISTENCE ──
+    const patientDoc = await Patient.findById(session.patientId || session.userId);
+    if (!patientDoc) {
+      session.isRevoked = true;
+      session.revokedAt = now;
+      await session.save();
+      clearPatientGlobalRefreshCookie(res);
+      return res.status(401).json({
+        error: 'Patient profile no longer exists.',
+        code: 'PATIENT_NOT_FOUND'
+      });
+    }
+
+    // ── ROTATE REFRESH TOKEN (PRESERVE FAMILY & ABSOLUTE EXPIRY) ──
+    const { rawToken: newRawToken, session: newSession } = await issuePatientGlobalRefreshSession(res, {
+      patient: patientDoc,
+      req,
+      familyId: session.familyId,
+      absoluteExpiresAt: session.absoluteExpiresAt
+    });
+
+    session.isRevoked = true;
+    session.revokedAt = now;
+    session.replacedByTokenHash = newSession.tokenHash;
+    await session.save();
+
+    // ── ISSUE FRESH 30-MINUTE GLOBAL ACCESS TOKEN ──
+    const jti = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+    const globalToken = jwt.sign({
+      id: patientDoc._id.toString(),
+      role: 'global_patient',
+      token_use: 'global_portal',
+      contact: patientDoc.contact,
+      name: patientDoc.name,
+      uhId: patientDoc.uhId || '',
+      tenantId: patientDoc.tenantId,
+      jti
+    }, secretKey, { expiresIn: '30m' });
+
+    return res.json({
+      status: 'success',
+      globalToken,
+      patient: {
+        id: patientDoc._id.toString(),
+        name: patientDoc.name,
+        uhId: patientDoc.uhId || patientDoc.patientId || '',
+        contact: patientDoc.contact
+      }
+    });
+  } catch (error) {
+    console.error('[PATIENT_GLOBAL_REFRESH] Error during global token refresh:', error);
+    return res.status(500).json({ error: 'Internal server error during global token refresh' });
+  }
+});
+
+/**
+ * POST /api/auth/patient-portal/refresh
+ * Scope B: Hospital Clinical Session Refresh
+ * 
+ * Validates HttpOnly cookie 'quroxa_patient_hospital_refresh'.
+ * Enforces:
+ * - 7-day idle validity
+ * - 30-day absolute session validity
+ * - Tenant binding (never changes tenant or scope)
+ * - Hospital subscription/active state check
+ * - Refresh token rotation & reuse detection
+ * - Issues fresh 30-minute hospital clinical token with req.user.id === Patient._id
+ */
+router.post('/patient-portal/refresh', async (req, res) => {
+  try {
+    const RefreshToken = require('../models/RefreshToken');
+    const Patient = require('../models/Patient');
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+    const {
+      getPatientHospitalRefreshCookieName,
+      issuePatientHospitalRefreshSession,
+      clearPatientHospitalRefreshCookie
+    } = require('../utils/authSessionHelper');
+    const { getJwtSecret } = require('../config/env');
+    let secretKey;
+    try { secretKey = getJwtSecret(); } catch(e) { secretKey = process.env.JWT_SECRET || 'secret_key'; }
+
+    const cookieName = getPatientHospitalRefreshCookieName();
+    const rawToken = req.cookies?.[cookieName];
+
+    if (!rawToken || typeof rawToken !== 'string' || !rawToken.trim()) {
+      return res.status(401).json({
+        error: 'No hospital refresh session cookie provided',
+        code: 'NO_HOSPITAL_REFRESH_TOKEN'
+      });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(rawToken.trim()).digest('hex');
+    const session = await RefreshToken.findOne({
+      tokenHash,
+      sessionScope: 'hospital_patient'
+    });
+
+    if (!session) {
+      console.warn('[PATIENT_HOSPITAL_REFRESH] Attempt with unknown or invalid hospital token hash');
+      return res.status(401).json({
+        error: 'Invalid hospital refresh token',
+        code: 'INVALID_REFRESH_TOKEN'
+      });
+    }
+
+    const now = new Date();
+    const ROTATION_GRACE_WINDOW_MS = 15000; // 15s concurrency grace window for multi-tab races
+
+    // ── REUSE DETECTION WITH MULTI-TAB CONCURRENCY LEAP-FORWARD ──
+    if (session.isRevoked) {
+      const isWithinGraceWindow = session.revokedAt &&
+        (now.getTime() - session.revokedAt.getTime() <= ROTATION_GRACE_WINDOW_MS);
+
+      if (isWithinGraceWindow && session.replacedByTokenHash) {
+        // Legitimate multi-tab concurrent refresh race detected!
+        const replacementSession = await RefreshToken.findOne({
+          tokenHash: session.replacedByTokenHash,
+          isRevoked: false
+        });
+
+        if (replacementSession) {
+          const patientDoc = await Patient.findById(replacementSession.patientId);
+          const user = await User.findById(replacementSession.userId);
+          if (patientDoc && user) {
+            const isComplete = Boolean(isPatientProfileComplete(patientDoc) || user.isSetupComplete);
+            const jti = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+            const tokenPayload = {
+              id: patientDoc._id,
+              userId: user._id,
+              staff_id: user.staff_id || patientDoc.contact,
+              email: user.email || patientDoc.email || '',
+              phone: user.phone || patientDoc.contact,
+              role: 'patient',
+              actualStaffRole: user.role,
+              tenantId: replacementSession.tenantId,
+              uhId: patientDoc.uhId || patientDoc.patientId || '',
+              token_use: 'hospital_clinical',
+              jti
+            };
+            const hospitalToken = jwt.sign(tokenPayload, secretKey, { expiresIn: '30m' });
+
+            return res.json({
+              status: 'success',
+              token: hospitalToken,
+              user: {
+                ...user.toObject(),
+                id: patientDoc._id,
+                role: 'patient',
+                actualStaffRole: user.role,
+                name: patientDoc.name,
+                uhId: patientDoc.uhId || patientDoc.uhid || '',
+                uhid: patientDoc.uhId || patientDoc.uhid || '',
+                patientId: patientDoc.patientId || '',
+                avatar: patientDoc.avatar || user.avatar || '',
+                isSetupComplete: isComplete,
+                password_hash: undefined
+              },
+              hospital: {
+                tenantId: replacementSession.tenantId
+              }
+            });
+          }
+        }
+      }
+
+      // GENUINE REUSE: Replay outside grace window triggers family-wide revocation
+      console.error(
+        `[AUTH_SECURITY_ALERT] Hospital Patient refresh token reuse detected! Family: ${session.familyId}, Tenant: ${session.tenantId}, User: ${session.userId}. Revoking entire family.`
+      );
+      await RefreshToken.updateMany(
+        { familyId: session.familyId },
+        { $set: { isRevoked: true, revokedAt: new Date() } }
+      );
+      clearPatientHospitalRefreshCookie(res);
+      return res.status(401).json({
+        error: 'Invalid or reused refresh session. Please sign in again.',
+        code: 'REFRESH_TOKEN_REUSED'
+      });
+    }
+
+    // ── IDLE EXPIRATION CHECK (7 DAYS) ──
+    if (now > session.expiresAt) {
+      session.isRevoked = true;
+      session.revokedAt = now;
+      await session.save();
+      clearPatientHospitalRefreshCookie(res);
+      return res.status(401).json({
+        error: 'Hospital refresh session has expired (idle timeout). Please log in again.',
+        code: 'SESSION_EXPIRED'
+      });
+    }
+
+    // ── ABSOLUTE EXPIRATION CHECK (30 DAYS) ──
+    if (session.absoluteExpiresAt && now > session.absoluteExpiresAt) {
+      session.isRevoked = true;
+      session.revokedAt = now;
+      await session.save();
+      clearPatientHospitalRefreshCookie(res);
+      return res.status(401).json({
+        error: 'Hospital session has reached its absolute 30-day limit. Please log in again.',
+        code: 'SESSION_ABSOLUTE_LIMIT'
+      });
+    }
+
+    // ── VERIFY HOSPITAL STATUS & SUBSCRIPTION ──
+    const targetTenant = String(session.tenantId).trim().toLowerCase();
+    const hospital = await SuperAdminHospital.findOne({
+      code: targetTenant,
+      status: 'Active',
+      subscriptionStatus: { $in: ['ACTIVE', 'EXPIRING'] }
+    }).select('code hospitalId name logo status subscriptionStatus').lean();
+
+    if (!hospital) {
+      session.isRevoked = true;
+      session.revokedAt = now;
+      await session.save();
+      clearPatientHospitalRefreshCookie(res);
+      return res.status(403).json({
+        error: `Hospital '${targetTenant}' is suspended, inactive, or subscription expired.`,
+        code: 'HOSPITAL_INACTIVE'
+      });
+    }
+
+    // ── VERIFY PATIENT & USER EXISTENCE ──
+    const patientDoc = await Patient.findById(session.patientId);
+    const user = await User.findById(session.userId);
+    if (!patientDoc || !user) {
+      session.isRevoked = true;
+      session.revokedAt = now;
+      await session.save();
+      clearPatientHospitalRefreshCookie(res);
+      return res.status(401).json({
+        error: 'Patient account or records not found.',
+        code: 'ACCOUNT_NOT_FOUND'
+      });
+    }
+
+    // ── ROTATE REFRESH TOKEN (PRESERVE FAMILY, TENANT & ABSOLUTE EXPIRY) ──
+    const { rawToken: newRawToken, session: newSession } = await issuePatientHospitalRefreshSession(res, {
+      user,
+      patient: patientDoc,
+      tenantId: hospital.code,
+      req,
+      familyId: session.familyId,
+      absoluteExpiresAt: session.absoluteExpiresAt
+    });
+
+    session.isRevoked = true;
+    session.revokedAt = now;
+    session.replacedByTokenHash = newSession.tokenHash;
+    await session.save();
+
+    // ── ISSUE FRESH 30-MINUTE HOSPITAL ACCESS TOKEN ──
+    const isComplete = Boolean(isPatientProfileComplete(patientDoc) || user.isSetupComplete);
+    const jti = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+    const tokenPayload = {
+      id: patientDoc._id,
+      userId: user._id,
+      staff_id: user.staff_id || patientDoc.contact,
+      email: user.email || patientDoc.email || '',
+      phone: user.phone || patientDoc.contact,
+      role: 'patient',
+      actualStaffRole: user.role,
+      tenantId: hospital.code,
+      uhId: patientDoc.uhId || patientDoc.patientId || '',
+      token_use: 'hospital_clinical',
+      jti
+    };
+    const hospitalToken = jwt.sign(tokenPayload, secretKey, { expiresIn: '30m' });
+
+    return res.json({
+      status: 'success',
+      token: hospitalToken,
+      user: {
+        ...user.toObject(),
+        id: patientDoc._id,
+        role: 'patient',
+        actualStaffRole: user.role,
+        name: patientDoc.name,
+        uhId: patientDoc.uhId || patientDoc.uhid || '',
+        uhid: patientDoc.uhId || patientDoc.uhid || '',
+        patientId: patientDoc.patientId || '',
+        avatar: patientDoc.avatar || user.avatar || '',
+        isSetupComplete: isComplete,
+        password_hash: undefined
+      },
+      hospital: {
+        tenantId: hospital.code,
+        hospitalId: hospital.hospitalId || '',
+        name: hospital.name,
+        logo: hospital.logo || ''
+      }
+    });
+  } catch (error) {
+    console.error('[PATIENT_HOSPITAL_REFRESH] Error during hospital token refresh:', error);
+    return res.status(500).json({ error: 'Internal server error during hospital token refresh' });
+  }
+});
+
+/**
+ * POST /api/auth/patient-portal/global/logout
+ * Complete Patient Logout: Revokes both Global and Hospital sessions and clears cookies.
+ */
+router.post('/patient-portal/global/logout', async (req, res) => {
+  try {
+    const RefreshToken = require('../models/RefreshToken');
+    const {
+      getPatientGlobalRefreshCookieName,
+      getPatientHospitalRefreshCookieName,
+      clearPatientGlobalRefreshCookie,
+      clearPatientHospitalRefreshCookie
+    } = require('../utils/authSessionHelper');
+
+    const globalCookie = req.cookies?.[getPatientGlobalRefreshCookieName()];
+    const hospitalCookie = req.cookies?.[getPatientHospitalRefreshCookieName()];
+
+    const hashes = [];
+    if (globalCookie && typeof globalCookie === 'string') {
+      hashes.push(crypto.createHash('sha256').update(globalCookie.trim()).digest('hex'));
+    }
+    if (hospitalCookie && typeof hospitalCookie === 'string') {
+      hashes.push(crypto.createHash('sha256').update(hospitalCookie.trim()).digest('hex'));
+    }
+
+    if (hashes.length > 0) {
+      await RefreshToken.updateMany(
+        { tokenHash: { $in: hashes }, isRevoked: false },
+        { $set: { isRevoked: true, revokedAt: new Date() } }
+      );
+    }
+
+    clearPatientGlobalRefreshCookie(res);
+    clearPatientHospitalRefreshCookie(res);
+
+    // Immediate Access Token Revocation via Blacklist
+    const tokenBlacklist = require('../utils/tokenBlacklist');
+    const authHeader = req.headers['authorization'];
+    if (authHeader) tokenBlacklist.revoke(authHeader);
+    if (req.body?.token) tokenBlacklist.revoke(req.body.token);
+    if (req.body?.globalToken) tokenBlacklist.revoke(req.body.globalToken);
+
+    return res.json({ success: true, message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('[PATIENT_LOGOUT] Error during patient logout:', error);
+    return res.status(500).json({ error: 'Internal server error during logout' });
+  }
+});
+
+/**
+ * POST /api/auth/patient-portal/hospital/leave
+ * Hospital Switching / Leave: Revokes and clears hospital session ONLY, preserving Global session.
+ */
+router.post('/patient-portal/hospital/leave', async (req, res) => {
+  try {
+    const RefreshToken = require('../models/RefreshToken');
+    const {
+      getPatientHospitalRefreshCookieName,
+      clearPatientHospitalRefreshCookie
+    } = require('../utils/authSessionHelper');
+
+    const hospitalCookie = req.cookies?.[getPatientHospitalRefreshCookieName()];
+    if (hospitalCookie && typeof hospitalCookie === 'string') {
+      const tokenHash = crypto.createHash('sha256').update(hospitalCookie.trim()).digest('hex');
+      await RefreshToken.updateOne(
+        { tokenHash, isRevoked: false },
+        { $set: { isRevoked: true, revokedAt: new Date() } }
+      );
+    }
+
+    clearPatientHospitalRefreshCookie(res);
+
+    // Immediate Hospital Access Token Revocation via Blacklist
+    const tokenBlacklist = require('../utils/tokenBlacklist');
+    const authHeader = req.headers['authorization'];
+    if (authHeader) tokenBlacklist.revoke(authHeader);
+    if (req.body?.token) tokenBlacklist.revoke(req.body.token);
+
+    return res.json({ success: true, message: 'Hospital session ended. Global session preserved.' });
+  } catch (error) {
+    console.error('[PATIENT_HOSPITAL_LEAVE] Error leaving hospital session:', error);
+    return res.status(500).json({ error: 'Internal server error leaving hospital session' });
   }
 });
 

@@ -37,6 +37,12 @@ const socketAuthMiddleware = async (socket, next) => {
           return next(new Error("Authentication error: Malformed token"));
         }
 
+        // Immediate Token Revocation Check
+        const tokenBlacklist = require("../utils/tokenBlacklist");
+        if (tokenBlacklist.isRevoked(token, decoded.jti)) {
+          return next(new Error("Authentication error: Token has been revoked"));
+        }
+
         const nowSec = Math.floor(Date.now() / 1000);
         if (decoded.exp && decoded.exp <= nowSec) {
           return next(new Error("Authentication error: Token expired"));

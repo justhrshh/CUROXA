@@ -180,7 +180,36 @@ async function runTests() {
 
       const origins = getParsedOriginsFromEnv();
       assert.strictEqual(origins.has("http://localhost:3000"), true);
+      assert.strictEqual(origins.has("http://localhost:3001"), true);
+      assert.strictEqual(origins.has("http://localhost:3002"), true);
       assert.strictEqual(origins.has("http://localhost:5173"), true);
+    });
+
+    it("In development, allows local development origins 3001 and 3002 even when env variables are configured", () => {
+      process.env.NODE_ENV = "development";
+      process.env.STAFF_FRONTEND_URL = "http://localhost:3000";
+      process.env.PATIENT_FRONTEND_URL = "http://localhost:3002";
+      process.env.CORS_ORIGIN = "http://localhost:3000,http://localhost:5173";
+
+      const origins = getParsedOriginsFromEnv();
+      assert.strictEqual(origins.has("http://localhost:3000"), true);
+      assert.strictEqual(origins.has("http://localhost:3001"), true);
+      assert.strictEqual(origins.has("http://localhost:3002"), true);
+      assert.strictEqual(origins.has("http://localhost:5173"), true);
+    });
+
+    it("In production, localhost origins 3001 and 3002 are strictly rejected when not in production env", () => {
+      process.env.NODE_ENV = "production";
+      process.env.STAFF_FRONTEND_URL = "https://curoxa-1.onrender.com";
+      process.env.PATIENT_FRONTEND_URL = "https://quroxa-patient-frontend.onrender.com";
+      delete process.env.CORS_ORIGIN;
+      delete process.env.FRONTEND_URL;
+
+      const origins = getParsedOriginsFromEnv();
+      assert.strictEqual(origins.has("http://localhost:3001"), false);
+      assert.strictEqual(origins.has("http://localhost:3002"), false);
+      assert.strictEqual(origins.has("https://curoxa-1.onrender.com"), true);
+      assert.strictEqual(origins.has("https://quroxa-patient-frontend.onrender.com"), true);
     });
 
     // ──────────────────────────────────────────────────────────────────
@@ -338,6 +367,52 @@ async function runTests() {
       assert.strictEqual(res.headers["access-control-allow-origin"], undefined);
     });
 
+    // Development local origins test
+    process.env.NODE_ENV = "development";
+    const devCorsMiddleware = cors(getCorsOptions());
+
+    await itAsync("OPTIONS preflight from http://localhost:3002 returns 204 with exact origin", async () => {
+      const res = await testCorsMiddleware(devCorsMiddleware, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "http://localhost:3002",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "Content-Type, Authorization, x-tenant-id"
+        }
+      });
+      assert.strictEqual(res.statusCode, 204);
+      assert.strictEqual(res.headers["access-control-allow-origin"], "http://localhost:3002");
+      assert.strictEqual(res.headers["access-control-allow-credentials"], "true");
+    });
+
+    await itAsync("OPTIONS preflight from http://localhost:3001 returns 204 with exact origin", async () => {
+      const res = await testCorsMiddleware(devCorsMiddleware, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "http://localhost:3001",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "Content-Type, Authorization, x-tenant-id"
+        }
+      });
+      assert.strictEqual(res.statusCode, 204);
+      assert.strictEqual(res.headers["access-control-allow-origin"], "http://localhost:3001");
+      assert.strictEqual(res.headers["access-control-allow-credentials"], "true");
+    });
+
+    await itAsync("POST to global send-otp from http://localhost:3002 receives exact allowed origin", async () => {
+      const res = await testCorsMiddleware(devCorsMiddleware, {
+        method: "POST",
+        url: "/api/auth/patient-portal/global/send-otp",
+        headers: {
+          Origin: "http://localhost:3002",
+          "Content-Type": "application/json"
+        }
+      });
+      assert.strictEqual(res.nextCalled, true);
+      assert.strictEqual(res.headers["access-control-allow-origin"], "http://localhost:3002");
+      assert.strictEqual(res.headers["access-control-allow-credentials"], "true");
+    });
+
     // ──────────────────────────────────────────────────────────────────
     // SUITE 5: SOCKET.IO HANDSHAKE ORIGIN VALIDATION
     // ──────────────────────────────────────────────────────────────────
@@ -397,6 +472,23 @@ async function runTests() {
         allowed = success;
       });
       assert.strictEqual(allowed, true);
+    });
+
+    it("Socket.IO allowRequest accepts local development origins in development mode", () => {
+      process.env.NODE_ENV = "development";
+      const devSocketConfig = getSocketIoCorsConfig();
+
+      let allowed3001 = null;
+      devSocketConfig.allowRequest({ headers: { origin: "http://localhost:3001" } }, (err, success) => {
+        allowed3001 = success;
+      });
+      assert.strictEqual(allowed3001, true);
+
+      let allowed3002 = null;
+      devSocketConfig.allowRequest({ headers: { origin: "http://localhost:3002" } }, (err, success) => {
+        allowed3002 = success;
+      });
+      assert.strictEqual(allowed3002, true);
     });
 
   } finally {

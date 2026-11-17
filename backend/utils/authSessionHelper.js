@@ -80,10 +80,132 @@ const revokeAllUserSessions = async (userId) => {
   );
 };
 
+// ══════════════════════════════════════════════════════════════════════════
+// GLOBAL & HOSPITAL PATIENT PORTAL SESSION HELPERS (PHASE H / SESSION FIX)
+// ══════════════════════════════════════════════════════════════════════════
+
+const getPatientGlobalRefreshCookieName = () => {
+  return process.env.PATIENT_GLOBAL_REFRESH_COOKIE_NAME || 'quroxa_patient_global_refresh';
+};
+
+const getPatientHospitalRefreshCookieName = () => {
+  return process.env.PATIENT_HOSPITAL_REFRESH_COOKIE_NAME || 'quroxa_patient_hospital_refresh';
+};
+
+/**
+ * Returns cookie options for patient refresh tokens.
+ * Enforces HttpOnly, SameSite=None + Secure in production for cross-origin Render hosting,
+ * or SameSite=Lax in local development.
+ */
+const getPatientCookieOptions = (path = '/api/auth') => {
+  const isProd = isProductionEnvironment();
+  const refreshDays = parseInt(process.env.AUTH_REFRESH_TOKEN_DAYS || '7', 10);
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    path,
+    maxAge: refreshDays * 24 * 60 * 60 * 1000
+  };
+};
+
+/**
+ * Returns clear-cookie options for patient refresh cookies.
+ */
+const getClearPatientCookieOptions = (path = '/api/auth') => {
+  const isProd = isProductionEnvironment();
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    path
+  };
+};
+
+/**
+ * Issues a server-side verified Global Patient refresh session (Scope A).
+ */
+const issuePatientGlobalRefreshSession = async (
+  res,
+  { patient, req = null, familyId = null, absoluteExpiresAt = null }
+) => {
+  const userAgent = req ? (req.headers['user-agent'] || '') : '';
+  const ipAddress = req ? (req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '') : '';
+
+  const { rawToken, session } = await RefreshToken.createSession({
+    userId: patient._id,
+    tenantId: 'global',
+    familyId,
+    sessionScope: 'global_patient',
+    patientId: patient._id,
+    absoluteExpiresAt,
+    userAgent,
+    ipAddress,
+    password_version: 0
+  });
+
+  const cookieName = getPatientGlobalRefreshCookieName();
+  res.cookie(cookieName, rawToken, getPatientCookieOptions('/api/auth'));
+
+  return { rawToken, session };
+};
+
+/**
+ * Issues a server-side verified Hospital Clinical refresh session (Scope B).
+ */
+const issuePatientHospitalRefreshSession = async (
+  res,
+  { user, patient, tenantId, req = null, familyId = null, absoluteExpiresAt = null }
+) => {
+  const userAgent = req ? (req.headers['user-agent'] || '') : '';
+  const ipAddress = req ? (req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '') : '';
+
+  const { rawToken, session } = await RefreshToken.createSession({
+    userId: user._id,
+    tenantId: String(tenantId).trim().toLowerCase(),
+    familyId,
+    sessionScope: 'hospital_patient',
+    patientId: patient._id,
+    absoluteExpiresAt,
+    userAgent,
+    ipAddress,
+    password_version: 0
+  });
+
+  const cookieName = getPatientHospitalRefreshCookieName();
+  res.cookie(cookieName, rawToken, getPatientCookieOptions('/api/auth'));
+
+  return { rawToken, session };
+};
+
+/**
+ * Clears the Global Patient refresh cookie from the browser.
+ */
+const clearPatientGlobalRefreshCookie = (res) => {
+  const cookieName = getPatientGlobalRefreshCookieName();
+  res.clearCookie(cookieName, getClearPatientCookieOptions('/api/auth'));
+};
+
+/**
+ * Clears the Hospital Clinical refresh cookie from the browser.
+ */
+const clearPatientHospitalRefreshCookie = (res) => {
+  const cookieName = getPatientHospitalRefreshCookieName();
+  res.clearCookie(cookieName, getClearPatientCookieOptions('/api/auth'));
+};
+
 module.exports = {
   getRefreshCookieName,
   getRefreshCookieOptions,
   getClearRefreshCookieOptions,
   issueRefreshSession,
-  revokeAllUserSessions
+  revokeAllUserSessions,
+  getPatientGlobalRefreshCookieName,
+  getPatientHospitalRefreshCookieName,
+  getPatientCookieOptions,
+  getClearPatientCookieOptions,
+  issuePatientGlobalRefreshSession,
+  issuePatientHospitalRefreshSession,
+  clearPatientGlobalRefreshCookie,
+  clearPatientHospitalRefreshCookie
 };

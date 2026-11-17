@@ -81,9 +81,15 @@ function getParsedOriginsFromEnv() {
   addCandidates(process.env.FRONTEND_URL);
 
   // In non-production environments (development / local testing),
-  // default to local development ports if no origins configured
-  if (!isProd && origins.size === 0) {
+  // ensure exact local development origins are permitted:
+  // - http://localhost:3000 (staff frontend default)
+  // - http://localhost:3001 (staff frontend alternate)
+  // - http://localhost:3002 (patient frontend)
+  // - http://localhost:5173 (vite default dev server)
+  if (!isProd) {
     origins.add('http://localhost:3000');
+    origins.add('http://localhost:3001');
+    origins.add('http://localhost:3002');
     origins.add('http://localhost:5173');
   }
 

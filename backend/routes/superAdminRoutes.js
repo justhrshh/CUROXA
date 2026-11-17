@@ -670,7 +670,7 @@ router.post('/upload-compliance', requireRole('Onboarding Manager'), upload.sing
 
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const filename = 'docs/' + uniqueSuffix + '-' + req.file.originalname.replace(/\s+/g, '-');
-    const bucketName = process.env.R2_BUCKET_NAME || 'medicore-uploads';
+    const bucketName = r2.getR2PublicBucket();
 
     let fileUrl = "";
     try {
@@ -684,7 +684,7 @@ router.post('/upload-compliance', requireRole('Onboarding Manager'), upload.sing
       await r2.send(command);
 
       // Construct public URL
-      const publicDomain = process.env.R2_PUBLIC_DOMAIN || `https://pub-${process.env.R2_ACCOUNT_ID}.r2.dev`;
+      const publicDomain = r2.getR2PublicDomain();
       fileUrl = `${publicDomain}/${filename}`;
     } catch (r2Err) {
       console.warn('R2 upload failed or unconfigured, falling back to local file storage:', r2Err);

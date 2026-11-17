@@ -21,6 +21,12 @@ const verifyToken = (req, res, next) => {
       }
       return res.status(401).json({ error: 'Unauthorized', code: 'INVALID_TOKEN' });
     }
+
+    // Immediate Token Revocation Check (Global Logout / Hospital Leave)
+    const tokenBlacklist = require('../utils/tokenBlacklist');
+    if (tokenBlacklist.isRevoked(tokenString, decoded?.jti)) {
+      return res.status(401).json({ error: 'Token has been revoked. Please sign in again.', code: 'TOKEN_REVOKED' });
+    }
     
     // Check if the hospital tenant account is suspended (superadmins bypass this)
     const isSuperAdminRole = decoded && (decoded.role === 'superadmin' || decoded.role === 'super_admin' || decoded.role === 'platform_admin');

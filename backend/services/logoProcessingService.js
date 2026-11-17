@@ -154,17 +154,11 @@ async function saveImageToStorage({ buffer, filename, contentType, subfolder = '
   const finalFilename = `${uniquePrefix}-${cleanName}`;
   const key = `${subfolder}/${finalFilename}`;
 
-  const isR2Configured = Boolean(
-    process.env.R2_ACCOUNT_ID &&
-    process.env.R2_ACCESS_KEY_ID &&
-    process.env.R2_ACCESS_KEY_ID !== 'your_r2_access_key' &&
-    process.env.R2_SECRET_ACCESS_KEY &&
-    process.env.R2_SECRET_ACCESS_KEY !== 'your_r2_secret_access_key'
-  );
+  const isR2Configured = r2.isR2Configured();
 
   if (isR2Configured) {
     try {
-      const bucketName = process.env.R2_BUCKET_NAME || 'medicore-uploads';
+      const bucketName = r2.getR2PublicBucket();
       const command = new PutObjectCommand({
         Bucket: bucketName,
         Key: key,
@@ -172,7 +166,7 @@ async function saveImageToStorage({ buffer, filename, contentType, subfolder = '
         ContentType: contentType,
       });
       await r2.send(command);
-      const publicDomain = process.env.R2_PUBLIC_DOMAIN || `https://pub-${process.env.R2_ACCOUNT_ID}.r2.dev`;
+      const publicDomain = r2.getR2PublicDomain();
       return `${publicDomain}/${key}`;
     } catch (r2Err) {
       console.warn('[STORAGE] Cloudflare R2 upload failed, falling back to local storage:', r2Err.message);
