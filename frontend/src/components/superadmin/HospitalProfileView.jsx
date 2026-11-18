@@ -1234,6 +1234,7 @@ export default function HospitalProfileView({
                 <LogoUploader
                   hospitalId={hospital?._id || hospital?.hospitalId}
                   hospitalCode={hospital?.code}
+                  authToken={getSuperAdminToken()}
                   initialLogo={brandingDraft.logo && brandingDraft.logo !== 'H' ? brandingDraft.logo : ''}
                   initialOriginalLogo={hospital?.originalLogoUrl || ''}
                   initialStatus={hospital?.logoProcessingStatus || 'none'}

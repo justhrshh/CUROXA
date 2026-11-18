@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, Image as ImageIcon, AlertCircle } from 'lucide-react';
 import LogoPreview from './LogoPreview';
+import { getAccessToken } from '../../utils/authTokenStore';
+import { getApiUrl } from '../../utils/urlConfig';
 
 /**
  * Reusable Production Logo Uploader with Automatic Background Removal.
@@ -19,7 +21,7 @@ import LogoPreview from './LogoPreview';
  * @param {string} [props.initialStatus] - Existing processing status
  * @param {Function} props.onLogoChange - Callback when logo is updated: ({ logoUrl, originalLogoUrl, processingStatus, dimensions }) => void
  * @param {Function} [props.onLogoRemove] - Callback when logo is cleared
- * @param {string} [props.authToken] - Super admin or admin auth token (will fallback to localStorage if omitted)
+ * @param {string} [props.authToken] - Super admin or admin auth token (will fallback to in-memory store if omitted)
  */
 export const LogoUploader = ({
   hospitalId,
@@ -69,10 +71,10 @@ export const LogoUploader = ({
     setIsProcessing(true);
 
     try {
-      const token = authToken || 
-                    localStorage.getItem('superadminToken') || 
-                    localStorage.getItem('token') || 
-                    sessionStorage.getItem('superadminToken');
+      // Authoritative token resolution: explicit prop or central in-memory store
+      const token = (authToken && typeof authToken === 'string' && authToken.trim())
+        ? authToken.trim()
+        : getAccessToken();
 
       const formData = new FormData();
       formData.append('logo', file);
@@ -82,9 +84,10 @@ export const LogoUploader = ({
 
       // If we have an existing hospitalId, upload directly to the hospital's logo route
       // Otherwise, process through the standalone /process-logo endpoint
-      const endpoint = hospitalId 
-        ? `/api/superadmin/hospitals/${hospitalId}/logo`
-        : `/api/superadmin/process-logo`;
+      const rawEndpoint = hospitalId 
+        ? `/superadmin/hospitals/${hospitalId}/logo`
+        : `/superadmin/process-logo`;
+      const endpoint = getApiUrl(rawEndpoint);
 
       const response = await fetch(endpoint, {
         method: 'POST',

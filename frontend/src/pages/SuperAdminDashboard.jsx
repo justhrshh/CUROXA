@@ -624,6 +624,7 @@ const HospitalIdentityStep = ({ wizardHospital, updateWizardField }) => {
         <div style={{ minWidth: '220px', maxWidth: '280px' }}>
           <LogoUploader
             hospitalCode={wizardHospital?.code}
+            authToken={getSuperAdminToken()}
             initialLogo={wizardHospital?.logo && wizardHospital.logo !== 'H' ? wizardHospital.logo : ''}
             initialOriginalLogo={wizardHospital?.originalLogoUrl || ''}
             initialStatus={wizardHospital?.logoProcessingStatus || 'none'}
@@ -16775,6 +16776,7 @@ const SuperAdminDashboard = ({ initialTab }) => {
               <LogoUploader
                 hospitalId={logoEditHosp?._id || logoEditHosp?.hospitalId}
                 hospitalCode={logoEditHosp?.code}
+                authToken={getSuperAdminToken()}
                 initialLogo={logoEditDraft && logoEditDraft !== 'H' ? logoEditDraft : ''}
                 initialOriginalLogo={logoEditHosp?.originalLogoUrl || ''}
                 initialStatus={logoEditHosp?.logoProcessingStatus || 'none'}
