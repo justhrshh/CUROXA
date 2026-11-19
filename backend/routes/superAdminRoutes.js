@@ -1190,6 +1190,60 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
       hospitalData.modules.receptionQueue.enabled = (rawVal === true || String(rawVal).trim().toLowerCase() === 'true');
     }
 
+    // Geolocation and PIN code resolution from onboarding or request body
+    const pincodeService = require('../services/pincodeService');
+    let onbDraft = null;
+    if (req.body.onboardingId || hospitalData.code) {
+      onbDraft = req.body.onboardingId
+        ? await SuperAdminOnboarding.findById(req.body.onboardingId)
+        : await SuperAdminOnboarding.findOne({ code: hospitalData.code });
+    }
+
+    if (onbDraft) {
+      if (!hospitalData.city && onbDraft.city) hospitalData.city = onbDraft.city;
+      if (!hospitalData.address && (onbDraft.address || onbDraft.addressLine1)) {
+        hospitalData.address = onbDraft.address || onbDraft.addressLine1;
+      }
+      if (!hospitalData.latitude && onbDraft.latitude) hospitalData.latitude = onbDraft.latitude;
+      if (!hospitalData.longitude && onbDraft.longitude) hospitalData.longitude = onbDraft.longitude;
+      if (!hospitalData.googleMapUrl && onbDraft.googleMapUrl) hospitalData.googleMapUrl = onbDraft.googleMapUrl;
+    }
+
+    // Auto-extract 6-digit Indian PIN code from address if not explicitly passed
+    if (!hospitalData.pincode && hospitalData.address) {
+      const pinMatch = hospitalData.address.match(/\b[1-9][0-9]{5}\b/);
+      if (pinMatch) hospitalData.pincode = pinMatch[0];
+    }
+
+    // Resolve coordinates from direct lat/lng or Google Maps URL or PIN code
+    let parsedLat = parseFloat(hospitalData.latitude);
+    let parsedLng = parseFloat(hospitalData.longitude);
+
+    if (pincodeService.isValidCoordinates(parsedLat, parsedLng)) {
+      hospitalData.location = {
+        type: 'Point',
+        coordinates: [parsedLng, parsedLat]
+      };
+    } else if (hospitalData.googleMapUrl) {
+      const gCoords = pincodeService.extractCoordinatesFromGoogleMapsUrl(hospitalData.googleMapUrl);
+      if (gCoords) {
+        hospitalData.location = {
+          type: 'Point',
+          coordinates: gCoords.coordinates
+        };
+      }
+    } else if (hospitalData.pincode) {
+      const pinRes = await pincodeService.resolvePincode(hospitalData.pincode);
+      if (pinRes && pinRes.coordinates) {
+        hospitalData.location = {
+          type: 'Point',
+          coordinates: pinRes.coordinates
+        };
+        if (!hospitalData.city && pinRes.district) hospitalData.city = pinRes.district;
+        if (!hospitalData.state && pinRes.state) hospitalData.state = pinRes.state;
+      }
+    }
+
     const hospital = await SuperAdminHospital.create(hospitalData);
     
     const bcrypt = require('bcrypt');
@@ -1438,16 +1492,18 @@ router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
       req.body.signatoryName = String(req.body.signatoryName).trim().slice(0, 70);
     }
 
+    // Fetch existing hospital to preserve stable properties, receptionQueue, and coordinates
+    const existingHosp = await SuperAdminHospital.findOne({
+      $or: [
+        ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []),
+        { code: id },
+        { code: String(id).toLowerCase().trim() },
+        { hospitalId: String(id).toUpperCase().trim() }
+      ]
+    });
+
     // Default-off & explicit-preservation enforcement for receptionQueue on update
     if (req.body.modules && typeof req.body.modules === 'object') {
-      const existingHosp = await SuperAdminHospital.findOne({
-        $or: [
-          ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []),
-          { code: id },
-          { code: String(id).toLowerCase().trim() },
-          { hospitalId: String(id).toUpperCase().trim() }
-        ]
-      });
       if (existingHosp) {
         if (req.body.modules.receptionQueue === undefined) {
           // Preserve existing receptionQueue configuration if omitted
@@ -1455,6 +1511,48 @@ router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
         } else if (req.body.modules.receptionQueue && typeof req.body.modules.receptionQueue === 'object') {
           const rawVal = req.body.modules.receptionQueue.enabled;
           req.body.modules.receptionQueue.enabled = (rawVal === true || String(rawVal).trim().toLowerCase() === 'true');
+        }
+      }
+    }
+
+    // Geolocation and PIN code preservation / resolution
+    const pincodeService = require('../services/pincodeService');
+    if (existingHosp) {
+      if (!req.body.pincode && req.body.address) {
+        const pinMatch = req.body.address.match(/\b[1-9][0-9]{5}\b/);
+        if (pinMatch) req.body.pincode = pinMatch[0];
+      }
+
+      let parsedLat = parseFloat(req.body.latitude);
+      let parsedLng = parseFloat(req.body.longitude);
+
+      if (pincodeService.isValidCoordinates(parsedLat, parsedLng)) {
+        req.body.location = {
+          type: 'Point',
+          coordinates: [parsedLng, parsedLat]
+        };
+      } else if (req.body.googleMapUrl) {
+        const gCoords = pincodeService.extractCoordinatesFromGoogleMapsUrl(req.body.googleMapUrl);
+        if (gCoords) {
+          req.body.location = {
+            type: 'Point',
+            coordinates: gCoords.coordinates
+          };
+        }
+      } else if (req.body.pincode && (!existingHosp.location || !existingHosp.location.coordinates || existingHosp.location.coordinates.length < 2)) {
+        const pinRes = await pincodeService.resolvePincode(req.body.pincode);
+        if (pinRes && pinRes.coordinates) {
+          req.body.location = {
+            type: 'Point',
+            coordinates: pinRes.coordinates
+          };
+          if (!req.body.city && pinRes.district) req.body.city = pinRes.district;
+          if (!req.body.state && pinRes.state) req.body.state = pinRes.state;
+        }
+      } else if (existingHosp.location && Array.isArray(existingHosp.location.coordinates) && existingHosp.location.coordinates.length === 2) {
+        // PRESERVE existing valid coordinates! Do not overwrite with empty values.
+        if (!req.body.location) {
+          req.body.location = existingHosp.location;
         }
       }
     }

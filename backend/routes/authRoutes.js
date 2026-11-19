@@ -2930,7 +2930,7 @@ async function resolveAssociatedHospitalsForPatient(patientDoc) {
     code: { $in: candidateTenantCodes },
     status: 'Active',
     subscriptionStatus: { $in: ['ACTIVE', 'EXPIRING'] }
-  }).select('code hospitalId name logo address contactEmail contactPhone').lean();
+  }).select('code hospitalId name logo originalLogoUrl address contactEmail contactPhone').lean();
 
   const results = [];
   for (const h of activeHospitals) {
@@ -2940,7 +2940,8 @@ async function resolveAssociatedHospitalsForPatient(patientDoc) {
         tenantId: h.code,
         hospitalId: h.hospitalId || '',
         name: h.name,
-        logo: h.logo || '',
+        logo: h.logo || h.originalLogoUrl || '',
+        originalLogoUrl: h.originalLogoUrl || '',
         address: h.address || '',
         patientId: meta.patientId,
         hospitalPatientId: meta.hospitalPatientId
@@ -3401,6 +3402,248 @@ router.post('/patient-portal/global/select-hospital', async (req, res) => {
   } catch (error) {
     console.error('Global Patient Portal Select Hospital Error:', error);
     return res.status(500).json({ error: 'Internal server error while selecting hospital' });
+  }
+});
+
+// POST /api/auth/patient-portal/global/nearby-hospitals
+// Discovers nearby active hospitals sorted by distance using GPS or PIN-code centroid.
+// Requires patient authentication (global patient session or hospital clinical patient session).
+const nearbyLimiterMap = new Map();
+router.post('/patient-portal/global/nearby-hospitals', async (req, res) => {
+  // 1. Authentication Enforcement
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Authorization header is required.' });
+  }
+  const token = authHeader.split(' ')[1] || authHeader;
+
+  try {
+    const { getJwtSecret } = require('../config/env');
+    let secretKey;
+    try { secretKey = getJwtSecret(); } catch(e) { secretKey = process.env.JWT_SECRET || 'secret_key'; }
+
+    const decoded = jwt.verify(token, secretKey);
+    const isPatientRole = decoded.role === 'global_patient' || decoded.role === 'patient';
+    const isPatientUse = decoded.token_use === 'global_portal' || decoded.token_use === 'hospital_clinical';
+    if (!isPatientRole && !isPatientUse) {
+      return res.status(403).json({ error: 'Access denied: Patient authentication required.' });
+    }
+
+    // 2. IP / Rate Limiting (60 requests/min)
+    const clientIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const rateInfo = nearbyLimiterMap.get(clientIp) || { count: 0, resetAt: now + 60000 };
+    if (now > rateInfo.resetAt) {
+      rateInfo.count = 0;
+      rateInfo.resetAt = now + 60000;
+    }
+    rateInfo.count++;
+    nearbyLimiterMap.set(clientIp, rateInfo);
+    if (rateInfo.count > 60) {
+      return res.status(429).json({ error: 'Too many requests. Please try again in a moment.' });
+    }
+
+    // Periodic cleanup of rate limiter map
+    if (nearbyLimiterMap.size > 1000) {
+      for (const [k, v] of nearbyLimiterMap.entries()) {
+        if (now > v.resetAt) nearbyLimiterMap.delete(k);
+      }
+    }
+
+    // 3. Coordinate & PIN Resolution
+    const pincodeService = require('../services/pincodeService');
+    const { latitude, longitude, lat, lng, pincode, radiusKm, limit } = req.body;
+
+    const rawLat = lat !== undefined ? lat : latitude;
+    const rawLng = lng !== undefined ? lng : longitude;
+
+    let searchCoordinates = null;
+    let locationSource = 'gps';
+    let cleanPincode = '';
+    let resolvedDistrict = '';
+    let resolvedState = '';
+
+    const hasLat = rawLat !== undefined && rawLat !== null && String(rawLat).trim() !== '';
+    const hasLng = rawLng !== undefined && rawLng !== null && String(rawLng).trim() !== '';
+
+    if (hasLat || hasLng) {
+      const parsedLat = parseFloat(rawLat);
+      const parsedLng = parseFloat(rawLng);
+
+      if (!pincodeService.isValidCoordinates(parsedLat, parsedLng)) {
+        return res.status(400).json({
+          error: 'Invalid coordinates provided. Latitude must be between -90 and 90, Longitude between -180 and 180.'
+        });
+      }
+
+      searchCoordinates = [parsedLng, parsedLat]; // GeoJSON [longitude, latitude]
+      locationSource = 'gps';
+    } else if (pincode !== undefined && pincode !== null && String(pincode).trim() !== '') {
+      const pinVal = pincodeService.validatePincode(pincode);
+      if (!pinVal.valid) {
+        return res.status(400).json({ error: pinVal.error });
+      }
+
+      cleanPincode = pinVal.cleanPincode;
+      const resolvedPin = await pincodeService.resolvePincode(cleanPincode);
+      if (!resolvedPin || !resolvedPin.coordinates) {
+        return res.status(404).json({
+          error: `PIN code '${cleanPincode}' could not be resolved to an Indian geographical centroid.`
+        });
+      }
+
+      searchCoordinates = resolvedPin.coordinates;
+      locationSource = 'pincode_approximate';
+      resolvedDistrict = resolvedPin.district;
+      resolvedState = resolvedPin.state;
+    } else {
+      return res.status(400).json({
+        error: 'Either valid coordinates (lat, lng) or a 6-digit Indian PIN code must be provided.'
+      });
+    }
+
+    // 4. Radius and Limit Validation
+    const supportedRadii = [5, 10, 25, 50];
+    let radius = Number(radiusKm) || 10;
+    if (!supportedRadii.includes(radius)) {
+      radius = Math.min(Math.max(radius, 1), 100);
+    }
+    const maxResults = Math.min(Math.max(Number(limit) || 20, 1), 50);
+
+    // 5. MongoDB Aggregation ($geoNear)
+    const SuperAdminHospital = require('../models/SuperAdminHospital');
+    const hospitalFilter = {
+      status: { $in: ['Active', 'active'] },
+      subscriptionStatus: { $in: ['ACTIVE', 'EXPIRING'] },
+      code: { $not: /^tenant-|^stg_/i }
+    };
+
+    const nearbyHospitals = await SuperAdminHospital.aggregate([
+      {
+        $geoNear: {
+          near: { type: 'Point', coordinates: searchCoordinates },
+          distanceField: 'distanceMeters',
+          maxDistance: radius * 1000,
+          spherical: true,
+          query: hospitalFilter
+        }
+      },
+      { $limit: maxResults },
+      {
+        $project: {
+          _id: 0,
+          hospitalId: 1,
+          code: 1,
+          name: 1,
+          logo: 1,
+          originalLogoUrl: 1,
+          address: 1,
+          city: 1,
+          state: 1,
+          pincode: 1,
+          phone: 1,
+          distanceMeters: { $round: ['$distanceMeters', 0] },
+          distanceKm: { $round: [{ $divide: ['$distanceMeters', 1000] }, 1] }
+        }
+      }
+    ]);
+
+    // Format results with public safe fields
+    const formattedResults = nearbyHospitals.map(h => ({
+      hospitalId: h.hospitalId || '',
+      code: h.code,
+      name: h.name,
+      logo: h.logo || h.originalLogoUrl || '',
+      address: h.address || '',
+      city: h.city || '',
+      state: h.state || '',
+      pincode: h.pincode || '',
+      phone: h.phone || '',
+      distanceKm: h.distanceKm,
+      distanceMeters: h.distanceMeters,
+      locationSource
+    }));
+
+    // 6. Hospitals without coordinates: Include exact PIN matches if searching by PIN code
+    if (cleanPincode) {
+      const existingCodes = new Set(formattedResults.map(r => r.code));
+      const unmappedHospitals = await SuperAdminHospital.find({
+        ...hospitalFilter,
+        pincode: cleanPincode,
+        code: { $nin: Array.from(existingCodes) },
+        $or: [
+          { location: { $exists: false } },
+          { 'location.coordinates': { $exists: false } },
+          { 'location.coordinates': { $size: 0 } }
+        ]
+      }).select('hospitalId code name logo originalLogoUrl address city state pincode phone -_id').lean();
+
+      for (const unmapped of unmappedHospitals) {
+        formattedResults.push({
+          hospitalId: unmapped.hospitalId || '',
+          code: unmapped.code,
+          name: unmapped.name,
+          logo: unmapped.logo || unmapped.originalLogoUrl || '',
+          address: unmapped.address || '',
+          city: unmapped.city || '',
+          state: unmapped.state || '',
+          pincode: unmapped.pincode || cleanPincode,
+          phone: unmapped.phone || '',
+          distanceKm: null,
+          distanceMeters: null,
+          distanceLabel: 'Distance unavailable (Exact PIN Match)',
+          locationSource: 'exact_pincode_unmapped'
+        });
+      }
+    }
+
+    // 7. Enrich with doctor specialties
+    if (formattedResults.length > 0) {
+      const targetCodes = formattedResults.map(r => r.code);
+      const doctors = await User.find(
+        { tenantId: { $in: targetCodes }, role: 'doctor' },
+        'tenantId specialty department'
+      ).lean();
+
+      const specialtyMap = new Map();
+      for (const d of doctors) {
+        const tId = (d.tenantId || '').toLowerCase().trim();
+        const spec = d.specialty || d.department;
+        if (spec) {
+          if (!specialtyMap.has(tId)) specialtyMap.set(tId, new Set());
+          specialtyMap.get(tId).add(spec);
+        }
+      }
+
+      for (const r of formattedResults) {
+        const specSet = specialtyMap.get(r.code.toLowerCase().trim());
+        r.specialties = specSet ? Array.from(specSet) : [];
+      }
+    }
+
+    return res.json({
+      success: true,
+      searchContext: {
+        locationSource,
+        radiusKm: radius,
+        pincode: cleanPincode || undefined,
+        district: resolvedDistrict || undefined,
+        state: resolvedState || undefined,
+        isApproximate: locationSource === 'pincode_approximate',
+        notice: locationSource === 'pincode_approximate'
+          ? 'Distances are calculated from the postal code center and may vary by 3-5 km.'
+          : 'Distances are calculated from your precise GPS location.'
+      },
+      total: formattedResults.length,
+      hospitals: formattedResults
+    });
+
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Invalid or expired session token.' });
+    }
+    console.error('Nearby Hospitals Discovery Error:', error.message);
+    return res.status(500).json({ error: 'Internal server error discovering nearby hospitals.' });
   }
 });
 

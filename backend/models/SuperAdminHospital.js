@@ -65,6 +65,24 @@ const superAdminHospitalSchema = new mongoose.Schema({
     verificationHash: { type: String, default: '' }
   },
   address: { type: String, default: '' },
+  city: { type: String, default: '', trim: true },
+  state: { type: String, default: '', trim: true },
+  pincode: {
+    type: String,
+    default: '',
+    trim: true,
+    match: [/^$|^[1-9][0-9]{5}$/, 'pincode must be a valid 6-digit Indian PIN code']
+  },
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point'
+    },
+    coordinates: {
+      type: [Number] // [longitude, latitude]
+    }
+  },
   panNumber: { type: String, default: '' },
   corpId: { type: String, default: '' },
   signatoryName: { type: String, default: '' },
@@ -160,5 +178,8 @@ superAdminHospitalSchema.pre('findOneAndUpdate', function() {
     }
   }
 });
+
+superAdminHospitalSchema.index({ location: '2dsphere' });
+superAdminHospitalSchema.index({ pincode: 1 });
 
 module.exports = mongoose.model('SuperAdminHospital', superAdminHospitalSchema);
