@@ -39,12 +39,13 @@ function parseBase64(str) {
   return null;
 }
 
-async function migrateLetterheads() {
-  console.log('\n[MIGRATION] Scanning SuperAdminHospital letterheads...');
+async function migrateLetterheads({ isDryRun = false } = {}) {
+  console.log(`\n[MIGRATION${isDryRun ? ' - DRY RUN' : ''}] Scanning SuperAdminHospital letterheads...`);
   const hospitals = await SuperAdminHospital.find({
     letterheadUrl: { $exists: true, $ne: '' }
   });
 
+  let totalDiscovered = hospitals.length;
   let migrated = 0;
   let skipped = 0;
   let failed = 0;
@@ -89,18 +90,20 @@ async function migrateLetterheads() {
         mimetype = path.extname(localDiskPath) === '.pdf' ? 'application/pdf' : 'image/png';
         originalName = path.basename(localDiskPath);
       } else {
-        console.warn(`  [SKIP] Local file not found on disk: ${val} for hospital ${h.code}`);
-        await StorageMigrationLedger.findOneAndUpdate(
-          { collectionName: 'superadminhospitals', documentId: h._id, fieldPath },
-          {
-            tenantId: h.code || 'default',
-            category: 'letterheads',
-            originalValue: val,
-            status: 'SKIPPED',
-            error: 'File not found on local disk'
-          },
-          { upsert: true }
-        );
+        if (!isDryRun) {
+          console.warn(`  [SKIP] Local file not found on disk: ${val} for hospital ${h.code}`);
+          await StorageMigrationLedger.findOneAndUpdate(
+            { collectionName: 'superadminhospitals', documentId: h._id, fieldPath },
+            {
+              tenantId: h.code || 'default',
+              category: 'letterheads',
+              originalValue: val,
+              status: 'SKIPPED',
+              error: 'File not found on local disk'
+            },
+            { upsert: true }
+          );
+        }
         skipped++;
         continue;
       }
@@ -111,6 +114,12 @@ async function migrateLetterheads() {
     }
 
     if (buffer) {
+      if (isDryRun) {
+        console.log(`  [DRY RUN] Would migrate letterhead for hospital ${h.code} (${buffer.length} bytes)`);
+        migrated++;
+        continue;
+      }
+
       try {
         const tenantId = (h.code || 'default').toLowerCase().trim();
         const uploadResult = await storageService.uploadPrivate({
@@ -166,15 +175,16 @@ async function migrateLetterheads() {
     }
   }
 
-  return { category: 'letterheads', migrated, skipped, failed };
+  return { category: 'letterheads', totalDiscovered, migrated, skipped, failed, remaining: totalDiscovered - migrated - skipped };
 }
 
-async function migrateSignatures() {
-  console.log('\n[MIGRATION] Scanning User doctor/staff signatures...');
+async function migrateSignatures({ isDryRun = false } = {}) {
+  console.log(`\n[MIGRATION${isDryRun ? ' - DRY RUN' : ''}] Scanning User doctor/staff signatures...`);
   const users = await User.find({
     signatureUrl: { $exists: true, $ne: '' }
   });
 
+  let totalDiscovered = users.length;
   let migrated = 0;
   let skipped = 0;
   let failed = 0;
@@ -202,6 +212,12 @@ async function migrateSignatures() {
     const base64Info = parseBase64(val);
     if (!base64Info) {
       skipped++;
+      continue;
+    }
+
+    if (isDryRun) {
+      console.log(`  [DRY RUN] Would migrate signature for user ${u.staff_id || u._id} (${base64Info.buffer.length} bytes)`);
+      migrated++;
       continue;
     }
 
@@ -257,15 +273,16 @@ async function migrateSignatures() {
     }
   }
 
-  return { category: 'doctor-signatures', migrated, skipped, failed };
+  return { category: 'doctor-signatures', totalDiscovered, migrated, skipped, failed, remaining: totalDiscovered - migrated - skipped };
 }
 
-async function migratePrescriptionImages() {
-  console.log('\n[MIGRATION] Scanning Prescription handwritten image pages...');
+async function migratePrescriptionImages({ isDryRun = false } = {}) {
+  console.log(`\n[MIGRATION${isDryRun ? ' - DRY RUN' : ''}] Scanning Prescription handwritten image pages...`);
   const prescriptions = await Prescription.find({
     'images.0': { $exists: true }
   });
 
+  let totalDiscovered = 0;
   let migrated = 0;
   let skipped = 0;
   let failed = 0;
@@ -273,6 +290,7 @@ async function migratePrescriptionImages() {
   for (const rx of prescriptions) {
     let docModified = false;
     for (let idx = 0; idx < rx.images.length; idx++) {
+      totalDiscovered++;
       const img = rx.images[idx];
       const fieldPath = `images.${idx}.url`;
       const val = img.url;
@@ -310,23 +328,31 @@ async function migratePrescriptionImages() {
           originalName = path.basename(localDiskPath);
         } else {
           // File was from an ephemeral run
-          await StorageMigrationLedger.findOneAndUpdate(
-            { collectionName: 'prescriptions', documentId: rx._id, fieldPath },
-            {
-              tenantId: rx.tenantId || 'default',
-              category: 'prescriptions',
-              originalValue: val,
-              status: 'SKIPPED',
-              error: 'Prescription image not present on local disk (ephemeral test record)'
-            },
-            { upsert: true }
-          );
+          if (!isDryRun) {
+            await StorageMigrationLedger.findOneAndUpdate(
+              { collectionName: 'prescriptions', documentId: rx._id, fieldPath },
+              {
+                tenantId: rx.tenantId || 'default',
+                category: 'prescriptions',
+                originalValue: val,
+                status: 'SKIPPED',
+                error: 'Prescription image not present on local disk (ephemeral test record)'
+              },
+              { upsert: true }
+            );
+          }
           skipped++;
           continue;
         }
       }
 
       if (buffer) {
+        if (isDryRun) {
+          console.log(`  [DRY RUN] Would migrate prescription ${rx._id} page ${idx + 1}`);
+          migrated++;
+          continue;
+        }
+
         try {
           const tenantId = (rx.tenantId || 'default').toLowerCase().trim();
           const uploadResult = await storageService.uploadPrivate({
@@ -368,12 +394,229 @@ async function migratePrescriptionImages() {
       }
     }
 
-    if (docModified) {
+    if (docModified && !isDryRun) {
       await rx.save();
     }
   }
 
-  return { category: 'prescriptions', migrated, skipped, failed };
+  return { category: 'prescriptions', totalDiscovered, migrated, skipped, failed, remaining: totalDiscovered - migrated - skipped };
+}
+
+async function migrateClinicalDocuments({ isDryRun = false } = {}) {
+  console.log(`\n[MIGRATION${isDryRun ? ' - DRY RUN' : ''}] Scanning ClinicalDocument files...`);
+  const documents = await ClinicalDocument.find({
+    fileUrl: { $exists: true, $ne: '' }
+  });
+
+  let totalDiscovered = documents.length;
+  let migrated = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const doc of documents) {
+    const fieldPath = 'fileUrl';
+    const val = doc.fileUrl;
+
+    const existing = await StorageMigrationLedger.findOne({
+      collectionName: 'clinicaldocuments',
+      documentId: doc._id,
+      fieldPath
+    });
+
+    if (existing && existing.status === 'MIGRATED') {
+      skipped++;
+      continue;
+    }
+
+    if (!val || val.startsWith('tenants/')) {
+      skipped++;
+      continue;
+    }
+
+    const base64Info = parseBase64(val);
+    let buffer = null;
+    let mimetype = 'application/pdf';
+    let originalName = `${doc.title || 'document'}.pdf`;
+
+    if (base64Info) {
+      buffer = base64Info.buffer;
+      mimetype = base64Info.mimetype;
+      const ext = mimetype.split('/')[1] || 'pdf';
+      originalName = `${doc.title || 'doc'}.${ext}`;
+    } else if (val.startsWith('/uploads/') || val.startsWith('uploads/')) {
+      const cleanPath = val.replace(/^\/+/, '');
+      const localDiskPath = path.join(__dirname, '..', cleanPath);
+      if (fs.existsSync(localDiskPath)) {
+        buffer = fs.readFileSync(localDiskPath);
+        mimetype = path.extname(localDiskPath) === '.pdf' ? 'application/pdf' : 'image/png';
+        originalName = path.basename(localDiskPath);
+      } else {
+        if (!isDryRun) {
+          await StorageMigrationLedger.findOneAndUpdate(
+            { collectionName: 'clinicaldocuments', documentId: doc._id, fieldPath },
+            {
+              tenantId: doc.tenantId || 'default',
+              category: 'clinical-documents',
+              originalValue: val,
+              status: 'SKIPPED',
+              error: 'File not found on local disk'
+            },
+            { upsert: true }
+          );
+        }
+        skipped++;
+        continue;
+      }
+    } else {
+      // External URL
+      skipped++;
+      continue;
+    }
+
+    if (buffer) {
+      if (isDryRun) {
+        console.log(`  [DRY RUN] Would migrate clinical doc ${doc._id} (${buffer.length} bytes)`);
+        migrated++;
+        continue;
+      }
+
+      try {
+        const tenantId = (doc.tenantId || 'default').toLowerCase().trim();
+        const uploadResult = await storageService.uploadPrivate({
+          tenantId,
+          category: 'clinical-documents',
+          buffer,
+          mimetype,
+          originalName
+        });
+
+        await storageService.getObjectMetadata({ key: uploadResult.key, isPrivate: true });
+
+        doc.fileUrl = uploadResult.key;
+        await doc.save();
+
+        await StorageMigrationLedger.findOneAndUpdate(
+          { collectionName: 'clinicaldocuments', documentId: doc._id, fieldPath },
+          {
+            tenantId,
+            category: 'clinical-documents',
+            originalValue: val,
+            r2Key: uploadResult.key,
+            r2Bucket: uploadResult.bucket,
+            checksum: uploadResult.checksum,
+            fileSize: buffer.length,
+            mimetype,
+            status: 'MIGRATED',
+            migratedAt: new Date()
+          },
+          { upsert: true }
+        );
+
+        migrated++;
+        console.log(`  [MIGRATED] Clinical doc ${doc._id} -> ${uploadResult.key}`);
+      } catch (err) {
+        failed++;
+        console.error(`  [FAILED] Clinical doc ${doc._id} migration:`, err.message);
+      }
+    }
+  }
+
+  return { category: 'clinical-documents', totalDiscovered, migrated, skipped, failed, remaining: totalDiscovered - migrated - skipped };
+}
+
+async function migrateUserDocuments({ isDryRun = false } = {}) {
+  console.log(`\n[MIGRATION${isDryRun ? ' - DRY RUN' : ''}] Scanning User HR documents...`);
+  const users = await User.find({
+    'documents.0': { $exists: true }
+  });
+
+  let totalDiscovered = 0;
+  let migrated = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const u of users) {
+    let docModified = false;
+    for (let idx = 0; idx < u.documents.length; idx++) {
+      totalDiscovered++;
+      const item = u.documents[idx];
+      const fieldPath = `documents.${idx}.fileData`;
+      const val = item.fileData;
+
+      const existing = await StorageMigrationLedger.findOne({
+        collectionName: 'users',
+        documentId: u._id,
+        fieldPath
+      });
+
+      if (existing && existing.status === 'MIGRATED') {
+        skipped++;
+        continue;
+      }
+
+      if (!val || val.startsWith('tenants/')) {
+        skipped++;
+        continue;
+      }
+
+      const base64Info = parseBase64(val);
+      if (!base64Info) {
+        skipped++;
+        continue;
+      }
+
+      if (isDryRun) {
+        console.log(`  [DRY RUN] Would migrate HR doc for user ${u.staff_id || u._id} item ${idx}`);
+        migrated++;
+        continue;
+      }
+
+      try {
+        const tenantId = (u.tenantId || 'default').toLowerCase().trim();
+        const uploadResult = await storageService.uploadPrivate({
+          tenantId,
+          category: 'hr-documents',
+          buffer: base64Info.buffer,
+          mimetype: base64Info.mimetype,
+          originalName: item.fileName || `doc_${idx + 1}`
+        });
+
+        await storageService.getObjectMetadata({ key: uploadResult.key, isPrivate: true });
+
+        item.fileData = uploadResult.key;
+        docModified = true;
+
+        await StorageMigrationLedger.findOneAndUpdate(
+          { collectionName: 'users', documentId: u._id, fieldPath },
+          {
+            tenantId,
+            category: 'hr-documents',
+            originalValue: val,
+            r2Key: uploadResult.key,
+            r2Bucket: uploadResult.bucket,
+            checksum: uploadResult.checksum,
+            fileSize: base64Info.buffer.length,
+            mimetype: base64Info.mimetype,
+            status: 'MIGRATED',
+            migratedAt: new Date()
+          },
+          { upsert: true }
+        );
+
+        migrated++;
+        console.log(`  [MIGRATED] User ${u.staff_id || u._id} HR doc ${idx + 1} -> ${uploadResult.key}`);
+      } catch (err) {
+        failed++;
+        console.error(`  [FAILED] User ${u.staff_id || u._id} HR doc ${idx + 1}:`, err.message);
+      }
+    }
+
+    if (docModified && !isDryRun) {
+      await u.save();
+    }
+  }
+
+  return { category: 'hr-documents', totalDiscovered, migrated, skipped, failed, remaining: totalDiscovered - migrated - skipped };
 }
 
 async function rollback() {
@@ -411,6 +654,7 @@ async function rollback() {
 
 async function run() {
   const isRollback = process.argv.includes('--rollback');
+  const isDryRun = process.argv.includes('--dry-run');
   await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 15000 });
 
   if (isRollback) {
@@ -419,14 +663,16 @@ async function run() {
     return;
   }
 
-  console.log('=== QUROXA COMPLETE R2 STORAGE MIGRATION ===\n');
+  console.log(`=== QUROXA COMPLETE R2 STORAGE MIGRATION${isDryRun ? ' [DRY RUN]' : ''} ===\n`);
   const results = [];
 
-  results.push(await migrateLetterheads());
-  results.push(await migrateSignatures());
-  results.push(await migratePrescriptionImages());
+  results.push(await migrateLetterheads({ isDryRun }));
+  results.push(await migrateSignatures({ isDryRun }));
+  results.push(await migratePrescriptionImages({ isDryRun }));
+  results.push(await migrateClinicalDocuments({ isDryRun }));
+  results.push(await migrateUserDocuments({ isDryRun }));
 
-  console.log('\n--- MIGRATION SUMMARY MATRIX ---');
+  console.log(`\n--- MIGRATION SUMMARY MATRIX${isDryRun ? ' (DRY RUN)' : ''} ---`);
   console.table(results);
 
   await mongoose.disconnect();
