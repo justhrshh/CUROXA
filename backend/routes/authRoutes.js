@@ -3502,11 +3502,17 @@ router.post('/patient-portal/global/nearby-hospitals', async (req, res) => {
       });
     }
 
-    // 4. Radius and Limit Validation
-    const supportedRadii = [5, 10, 25, 50];
-    let radius = Number(radiusKm) || 10;
-    if (!supportedRadii.includes(radius)) {
-      radius = Math.min(Math.max(radius, 1), 100);
+    // 4. Radius and Limit Validation (strictly 3, 5, 10, 15 km, default 10 km)
+    const supportedRadii = [3, 5, 10, 15];
+    let radius = 10;
+    if (radiusKm !== undefined && radiusKm !== null && String(radiusKm).trim() !== '') {
+      const parsedRadius = Number(radiusKm);
+      if (!supportedRadii.includes(parsedRadius)) {
+        return res.status(400).json({
+          error: `Invalid radius '${radiusKm}'. Supported radius values are 3, 5, 10, and 15 km.`
+        });
+      }
+      radius = parsedRadius;
     }
     const maxResults = Math.min(Math.max(Number(limit) || 20, 1), 50);
 
