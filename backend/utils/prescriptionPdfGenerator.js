@@ -25,7 +25,7 @@ function generatePrescriptionPdf({
   labs = [],
   customNote = ''
 }) {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     try {
       const doc = new PDFDocument({
         size: 'A4',
@@ -309,17 +309,34 @@ function generatePrescriptionPdf({
       const sigX = margin + contentWidth - 170;
       let sigTextY = footerY + 10;
 
-      // Extract signature image buffer from doctor.signatureUrl or prescription.doctorSignatureUrl
+      // Extract signature image buffer from doctor.signatureUrl, prescription.doctorSignatureUrl, or signatureBuffer
       const rawSig = doctor?.signatureUrl || prescription?.doctorSignatureUrl || '';
-      if (rawSig && typeof rawSig === 'string' && rawSig.startsWith('data:image/')) {
-        try {
-          const base64Data = rawSig.replace(/^data:image\/\w+;base64,/, '');
-          const imgBuffer = Buffer.from(base64Data, 'base64');
-          if (imgBuffer.length > 0) {
-            // Draw signature image above doctor's printed details
-            doc.image(imgBuffer, sigX + 20, footerY + 4, { fit: [150, 36], align: 'right' });
-            sigTextY = footerY + 44;
+      let imgBuffer = doctor?.signatureBuffer || null;
+
+      if (!imgBuffer && rawSig && typeof rawSig === 'string') {
+        if (rawSig.startsWith('data:image/')) {
+          try {
+            const base64Data = rawSig.replace(/^data:image\/\w+;base64,/, '');
+            imgBuffer = Buffer.from(base64Data, 'base64');
+          } catch (imgErr) {
+            console.warn('[PDF GENERATOR] Failed to decode base64 signature:', imgErr.message);
           }
+        } else if (!rawSig.startsWith('http://') && !rawSig.startsWith('https://')) {
+          // Cloudflare R2 private storage key
+          try {
+            const { storageService } = require('../services/storage/storageService');
+            const downloaded = await storageService.downloadBuffer({ key: rawSig, isPrivate: true });
+            imgBuffer = downloaded.buffer;
+          } catch (r2Err) {
+            console.warn('[PDF GENERATOR] Could not download signature buffer from R2:', r2Err.message);
+          }
+        }
+      }
+
+      if (imgBuffer && Buffer.isBuffer(imgBuffer) && imgBuffer.length > 0) {
+        try {
+          doc.image(imgBuffer, sigX + 20, footerY + 4, { fit: [150, 36], align: 'right' });
+          sigTextY = footerY + 44;
         } catch (imgErr) {
           console.warn('[PDF GENERATOR] Failed to embed signature image:', imgErr.message);
         }

@@ -243,6 +243,9 @@ app.use("/api/public-queue", publicQueueRoutes);
 const receptionQueueRoutes = require("./routes/receptionQueueRoutes");
 app.use("/api/reception-queue", receptionQueueRoutes);
 
+const secureStorageRoutes = require("./routes/secureStorageRoutes");
+app.use("/api/storage", secureStorageRoutes);
+
 // Create HTTP server and initialize socket.io
 const http = require("http").createServer(app);
 // Initialize Socket.IO with hardened origin policy and allowRequest handshake validation

@@ -200,7 +200,7 @@ async function secureUploadsMiddleware(req, res, next) {
 
     // 3. Super Administrator: Cross-tenant access explicitly permitted
     if (isSuperAdmin) {
-      return servePrescriptionFile(filename, res);
+      return await servePrescriptionFile(filename, res, prescription);
     }
 
     // 4. Tenant Boundary Enforcement for all hospital-scoped users
@@ -220,7 +220,7 @@ async function secureUploadsMiddleware(req, res, next) {
           code: 'FORBIDDEN_NOT_OWNER'
         });
       }
-      return servePrescriptionFile(filename, res);
+      return await servePrescriptionFile(filename, res, prescription);
     }
 
     // 6. Hospital Staff (Doctors, Receptionists, Admins):
@@ -229,7 +229,7 @@ async function secureUploadsMiddleware(req, res, next) {
     //    - Receptionist: Can access prescriptions belonging to every patient within their hospital.
     //      Not restricted by treatingDoctorId.
     if (decoded.role && AUTHORIZED_STAFF_ROLES.has(decoded.role)) {
-      return servePrescriptionFile(filename, res);
+      return await servePrescriptionFile(filename, res, prescription);
     }
 
     // 7. All Other Roles: Deny access
@@ -245,24 +245,53 @@ async function secureUploadsMiddleware(req, res, next) {
 }
 
 /**
- * Serves the verified prescription image file from disk.
+ * Serves the verified prescription image file from local disk or Cloudflare R2 private bucket.
  * @param {string} filename 
  * @param {Object} res 
+ * @param {Object} [prescriptionDoc]
  */
-function servePrescriptionFile(filename, res) {
+async function servePrescriptionFile(filename, res, prescriptionDoc) {
   const prescriptionsDir = path.resolve(__dirname, '../uploads/prescriptions');
   const filePath = path.resolve(prescriptionsDir, filename);
 
-  if (!filePath.startsWith(prescriptionsDir) || !fs.existsSync(filePath)) {
-    return res.status(404).json({
-      error: 'Prescription image file not found on disk.',
-      code: 'FILE_NOT_FOUND'
-    });
+  if (filePath.startsWith(prescriptionsDir) && fs.existsSync(filePath)) {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+    return res.sendFile(filePath);
   }
 
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
-  return res.sendFile(filePath);
+  // If local file does not exist or driver is R2, attempt resolution from R2 private vault
+  try {
+    const { storageService } = require('../services/storage/storageService');
+    let targetKey = '';
+
+    if (prescriptionDoc && Array.isArray(prescriptionDoc.images)) {
+      const matched = prescriptionDoc.images.find(img => img.url && (img.url.endsWith(filename) || img.url.includes(filename)));
+      if (matched && matched.url) {
+        targetKey = matched.url;
+      }
+    }
+
+    if (!targetKey && prescriptionDoc?.tenantId) {
+      targetKey = `tenants/${prescriptionDoc.tenantId}/prescriptions/${filename}`;
+    }
+
+    if (targetKey && !targetKey.startsWith('data:') && !targetKey.startsWith('http://') && !targetKey.startsWith('https://')) {
+      const presignedUrl = await storageService.createPresignedDownloadUrl({
+        key: targetKey,
+        isPrivate: true,
+        expiresInSeconds: 900
+      });
+      return res.redirect(presignedUrl);
+    }
+  } catch (r2Err) {
+    console.warn('[SECURE_UPLOADS] R2 resolution notice:', r2Err.message);
+  }
+
+  return res.status(404).json({
+    error: 'Prescription image file not found on disk or storage vault.',
+    code: 'FILE_NOT_FOUND'
+  });
 }
 
 module.exports = secureUploadsMiddleware;

@@ -661,8 +661,24 @@ router.get("/letterhead", forbidPatientRole, async (req, res) => {
     if (!hospital) {
       return res.status(404).json({ error: "Hospital tenant not found" });
     }
+
+    let letterheadUrl = hospital.letterheadUrl || "";
+    // If stored as an R2 private key, generate a short-lived presigned download URL
+    if (letterheadUrl && !letterheadUrl.startsWith('data:') && !letterheadUrl.startsWith('http://') && !letterheadUrl.startsWith('https://')) {
+      const { storageService } = require('../services/storage/storageService');
+      try {
+        letterheadUrl = await storageService.createPresignedDownloadUrl({
+          key: letterheadUrl,
+          isPrivate: true,
+          expiresInSeconds: 3600
+        });
+      } catch (signErr) {
+        console.warn('[LETTERHEAD] Could not presign URL for key:', letterheadUrl, signErr.message);
+      }
+    }
+
     res.json({ 
-      letterheadUrl: hospital.letterheadUrl || "",
+      letterheadUrl,
       prescriptionTemplates: hospital.prescriptionTemplates || []
     });
   } catch (error) {
@@ -678,13 +694,27 @@ router.post("/letterhead", isAdmin, requireActiveSubscription, uploadLetterhead.
       return res.status(400).json({ error: "No file uploaded." });
     }
 
-    // Convert directly to base64 Data URL to prevent ephemeral filesystem 404s
-    const base64Data = req.file.buffer.toString('base64');
-    const fileUrl = `data:${req.file.mimetype};base64,${base64Data}`;
+    const { storageService } = require('../services/storage/storageService');
+    const tenantId = (req.tenantId || 'default').toLowerCase().trim();
+
+    // Securely upload letterhead to R2 private vault
+    const uploadResult = await storageService.uploadPrivate({
+      tenantId,
+      category: 'letterheads',
+      buffer: req.file.buffer,
+      mimetype: req.file.mimetype,
+      originalName: req.file.originalname,
+      metadata: {
+        uploadedBy: (req.user?.id || req.user?._id || '').toString(),
+        hospitalCode: tenantId
+      }
+    });
+
+    const fileKey = uploadResult.key;
 
     const hospital = await SuperAdminHospital.findOneAndUpdate(
       { code: req.tenantId },
-      { $set: { letterheadUrl: fileUrl } },
+      { $set: { letterheadUrl: fileKey } },
       { new: true }
     );
 
@@ -692,25 +722,41 @@ router.post("/letterhead", isAdmin, requireActiveSubscription, uploadLetterhead.
       return res.status(404).json({ error: "Hospital tenant not found" });
     }
 
-    writeAudit(req, "upload_letterhead", hospital._id, { url: fileUrl });
-    res.json({ success: true, letterheadUrl: fileUrl });
+    // Generate signed download URL for frontend preview
+    const presignedUrl = await storageService.createPresignedDownloadUrl({
+      key: fileKey,
+      isPrivate: true,
+      expiresInSeconds: 3600
+    });
+
+    writeAudit(req, "upload_letterhead", hospital._id, { key: fileKey });
+    res.json({ success: true, letterheadUrl: presignedUrl, key: fileKey });
   } catch (error) {
     console.error("Upload letterhead error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: error.message || "Failed to upload letterhead." });
   }
 });
 
 // Clear hospital letterhead
 router.post("/letterhead-clear", isAdmin, requireActiveSubscription, async (req, res) => {
   try {
-    const hospital = await SuperAdminHospital.findOneAndUpdate(
-      { code: req.tenantId },
-      { $set: { letterheadUrl: "" } },
-      { new: true }
-    );
+    const hospital = await SuperAdminHospital.findOne({ code: req.tenantId });
     if (!hospital) {
       return res.status(404).json({ error: "Hospital tenant not found" });
     }
+
+    if (hospital.letterheadUrl && !hospital.letterheadUrl.startsWith('data:') && !hospital.letterheadUrl.startsWith('http')) {
+      const { storageService } = require('../services/storage/storageService');
+      try {
+        await storageService.deleteObject({ key: hospital.letterheadUrl, isPrivate: true });
+      } catch (delErr) {
+        console.warn('[LETTERHEAD_CLEAR] Failed to delete R2 object:', delErr.message);
+      }
+    }
+
+    hospital.letterheadUrl = "";
+    await hospital.save();
+
     writeAudit(req, "clear_letterhead", hospital._id);
     res.json({ success: true, letterheadUrl: "" });
   } catch (error) {

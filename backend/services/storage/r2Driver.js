@@ -143,6 +143,34 @@ class R2Driver {
 
     return await getSignedUrl(client, command, { expiresIn: expiresInSeconds });
   }
+
+  async downloadBuffer({ key, isPrivate = false }) {
+    const client = this._getClient();
+    const bucket = this._getBucket(isPrivate);
+
+    const command = new GetObjectCommand({
+      Bucket: bucket,
+      Key: key
+    });
+
+    const response = await client.send(command);
+    const chunks = [];
+    for await (const chunk of response.Body) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+
+    return {
+      buffer,
+      key,
+      bucket,
+      contentType: response.ContentType,
+      contentLength: response.ContentLength || buffer.length,
+      eTag: response.ETag,
+      metadata: response.Metadata,
+      isPrivate
+    };
+  }
 }
 
 module.exports = R2Driver;

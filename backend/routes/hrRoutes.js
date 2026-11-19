@@ -790,6 +790,25 @@ router.get("/profile/me", verifyToken, async (req, res) => {
 router.post("/users/:id/documents", verifyToken, async (req, res) => {
   try {
     const { category, title, fileName, fileData, fileType } = req.body;
+    let storedFileData = fileData || '';
+
+    // If fileData is Base64 Data URL, upload to Cloudflare R2 private vault
+    if (fileData && typeof fileData === 'string' && fileData.startsWith('data:')) {
+      const matches = fileData.match(/^data:([^;]+);base64,(.+)$/);
+      if (matches) {
+        const { storageService } = require('../services/storage/storageService');
+        const buffer = Buffer.from(matches[2], 'base64');
+        const uploadResult = await storageService.uploadPrivate({
+          tenantId: req.tenantId,
+          category: 'employee-documents',
+          buffer,
+          mimetype: matches[1],
+          originalName: fileName || 'document'
+        });
+        storedFileData = uploadResult.key;
+      }
+    }
+
     const user = await User.findOneAndUpdate(
       { _id: req.params.id, tenantId: req.tenantId },
       {
@@ -798,7 +817,7 @@ router.post("/users/:id/documents", verifyToken, async (req, res) => {
             category,
             title,
             fileName,
-            fileData,
+            fileData: storedFileData,
             fileType,
             uploadedAt: new Date(),
             uploadedBy: req.user.name || req.user.staff_id || "HR Manager"
@@ -817,6 +836,17 @@ router.post("/users/:id/documents", verifyToken, async (req, res) => {
 // Delete document from user
 router.delete("/users/:id/documents/:docId", verifyToken, async (req, res) => {
   try {
+    const existingUser = await User.findOne({ _id: req.params.id, tenantId: req.tenantId });
+    const targetDoc = existingUser?.documents?.id(req.params.docId);
+    if (targetDoc?.fileData && !targetDoc.fileData.startsWith('data:') && !targetDoc.fileData.startsWith('http')) {
+      const { storageService } = require('../services/storage/storageService');
+      try {
+        await storageService.deleteObject({ key: targetDoc.fileData, isPrivate: true });
+      } catch (delErr) {
+        console.warn('[HR_DOC_DELETE] Could not delete R2 object:', delErr.message);
+      }
+    }
+
     const user = await User.findOneAndUpdate(
       { _id: req.params.id, tenantId: req.tenantId },
       {
@@ -917,13 +947,29 @@ router.post("/payslips", verifyToken, async (req, res) => {
       </body>
       </html>
     `;
-    const base64Data = "data:text/html;base64," + Buffer.from(htmlContent).toString('base64');
+    let storedPayslipData = "data:text/html;base64," + Buffer.from(htmlContent).toString('base64');
+    const driver = (process.env.STORAGE_DRIVER || '').toLowerCase().trim();
+    if (driver === 'r2') {
+      try {
+        const { storageService } = require('../services/storage/storageService');
+        const uploadResult = await storageService.uploadPrivate({
+          tenantId: req.tenantId,
+          category: 'employee-documents',
+          buffer: Buffer.from(htmlContent, 'utf8'),
+          mimetype: 'text/html',
+          originalName: `payslip_${month.replace(/\s+/g, '_').toLowerCase()}.html`
+        });
+        storedPayslipData = uploadResult.key;
+      } catch (uploadErr) {
+        console.warn('[HR_PAYSLIP] R2 upload failed, keeping base64 fallback:', uploadErr.message);
+      }
+    }
 
     user.documents.push({
       category: 'salary_slips',
       title: `Payslip - ${month}`,
       fileName: `payslip_${month.replace(/\s+/g, '_').toLowerCase()}.html`,
-      fileData: base64Data,
+      fileData: storedPayslipData,
       fileType: 'text/html',
       uploadedAt: new Date(),
       uploadedBy: req.user.name || req.user.staff_id || "HR Manager"

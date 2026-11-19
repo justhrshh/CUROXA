@@ -726,9 +726,27 @@ router.get('/documents/patient/:patientId', checkPatientConsent('treatment'), re
       }
     }
     const query = { patientId: req.params.patientId, tenantId: req.tenantId };
-    const docs = await ClinicalDocument.find(query).populate('uploadedBy', 'name').sort({ createdAt: -1 });
-    await writeAudit(req, req.params.patientId, 'VIEW_CLINICAL_DOCUMENTS', 'Clinical Documents Vault', { count: docs.length });
-    res.json(docs);
+    const docs = await ClinicalDocument.find(query).populate('uploadedBy', 'name').sort({ createdAt: -1 }).lean();
+
+    const { storageService } = require('../services/storage/storageService');
+    const resolvedDocs = await Promise.all(docs.map(async (doc) => {
+      let resolvedUrl = doc.fileUrl;
+      if (resolvedUrl && !resolvedUrl.startsWith('data:') && !resolvedUrl.startsWith('http://') && !resolvedUrl.startsWith('https://')) {
+        try {
+          resolvedUrl = await storageService.createPresignedDownloadUrl({
+            key: resolvedUrl,
+            isPrivate: true,
+            expiresInSeconds: 900
+          });
+        } catch (e) {
+          console.warn('[EMR] Failed to presign clinical doc URL:', e.message);
+        }
+      }
+      return { ...doc, fileUrl: resolvedUrl };
+    }));
+
+    await writeAudit(req, req.params.patientId, 'VIEW_CLINICAL_DOCUMENTS', 'Clinical Documents Vault', { count: resolvedDocs.length });
+    res.json(resolvedDocs);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -738,12 +756,32 @@ router.get('/documents/patient/:patientId', checkPatientConsent('treatment'), re
 router.post('/documents', checkPatientConsent('treatment'), restrictEMRRole(['doctor']), async (req, res) => {
   try {
     const { patientId, title, category, fileUrl } = req.body;
+    let storedUrl = fileUrl || '';
+
+    // If fileData is sent as Base64 Data URL, upload directly to R2 private vault
+    if (req.body.fileData && typeof req.body.fileData === 'string' && req.body.fileData.startsWith('data:')) {
+      const matches = req.body.fileData.match(/^data:([^;]+);base64,(.+)$/);
+      if (matches) {
+        const { storageService } = require('../services/storage/storageService');
+        const buffer = Buffer.from(matches[2], 'base64');
+        const ext = matches[1].includes('/') ? matches[1].split('/')[1] : 'pdf';
+        const uploadResult = await storageService.uploadPrivate({
+          tenantId: req.tenantId,
+          category: 'clinical-documents',
+          buffer,
+          mimetype: matches[1],
+          originalName: `${title || 'document'}.${ext}`
+        });
+        storedUrl = uploadResult.key;
+      }
+    }
+
     const doc = await ClinicalDocument.create({
       tenantId: req.tenantId,
       patientId,
       title,
       category,
-      fileUrl,
+      fileUrl: storedUrl,
       uploadedBy: req.user.id
     });
 

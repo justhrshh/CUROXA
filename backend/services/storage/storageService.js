@@ -234,6 +234,22 @@ class StorageService {
     const driver = this.getDriver();
     return await driver.getSignedUploadUrl({ key, isPrivate, expiresInSeconds, contentType });
   }
+
+  /**
+   * Downloads an object's raw buffer directly from storage.
+   * Used for backend document generation (PDFKit), integrity checksums, and streaming.
+   * @param {Object} options
+   * @param {string} options.key
+   * @param {boolean} [options.isPrivate]
+   * @returns {Promise<{ buffer: Buffer, contentType?: string, contentLength: number }>}
+   */
+  async downloadBuffer({ key, isPrivate = true }) {
+    if (!key || typeof key !== 'string') {
+      throw new Error('Valid storage key is required for downloadBuffer.');
+    }
+    const driver = this.getDriver();
+    return await driver.downloadBuffer({ key, isPrivate });
+  }
 }
 
 // Export singleton instance initialized with default environment driver

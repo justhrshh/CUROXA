@@ -123,6 +123,23 @@ class LocalDriver {
 
     return `/api/storage/local-upload?key=${encodeURIComponent(key)}&isPrivate=${isPrivate}&expires=${expires}&signature=${signature}`;
   }
+
+  async downloadBuffer({ key, isPrivate = false }) {
+    const filePath = this._resolvePath(key, isPrivate);
+    if (!fs.existsSync(filePath)) {
+      const err = new Error(`Object '${key}' not found.`);
+      err.code = 'NoSuchKey';
+      throw err;
+    }
+
+    const buffer = fs.readFileSync(filePath);
+    return {
+      buffer,
+      key,
+      contentLength: buffer.length,
+      isPrivate
+    };
+  }
 }
 
 module.exports = LocalDriver;

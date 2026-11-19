@@ -1147,17 +1147,37 @@ router.post('/upload-prescription-image', (req, res, next) => {
       return res.status(400).json({ error: 'No prescription image file uploaded' });
     }
 
-    const uploadsDir = path.join(__dirname, '../uploads/prescriptions');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
+    const { storageService } = require('../services/storage/storageService');
+    const driver = (process.env.STORAGE_DRIVER || '').toLowerCase().trim();
+
+    let fileUrl = '';
+    if (driver === 'r2') {
+      const uploadResult = await storageService.uploadPrivate({
+        tenantId: resolvedTenant,
+        category: 'prescriptions',
+        buffer: req.file.buffer,
+        mimetype: req.file.mimetype,
+        originalName: req.file.originalname,
+        metadata: {
+          uploadedBy: (req.user?.id || req.user?._id || '').toString(),
+          uploadedByRole: userRole
+        }
+      });
+      fileUrl = uploadResult.key;
+    } else {
+      const uploadsDir = path.join(__dirname, '../uploads/prescriptions');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+      const safeFileName = `${resolvedTenant}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
+      const targetPath = path.join(uploadsDir, safeFileName);
+      fs.writeFileSync(targetPath, req.file.buffer);
+
+      fileUrl = `/uploads/prescriptions/${safeFileName}`;
     }
 
-    const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
-    const safeFileName = `${resolvedTenant}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
-    const targetPath = path.join(uploadsDir, safeFileName);
-    fs.writeFileSync(targetPath, req.file.buffer);
-
-    const fileUrl = `/uploads/prescriptions/${safeFileName}`;
     res.json({
       success: true,
       url: fileUrl,
@@ -1233,23 +1253,38 @@ router.post('/:id/offline-prescription', async (req, res) => {
 
     // Process and normalize image pages in requested order
     const uploadsDir = path.join(__dirname, '../uploads/prescriptions');
-    const normalizedImages = rawImages.map((img, idx) => {
+    const { storageService } = require('../services/storage/storageService');
+    const driver = (process.env.STORAGE_DRIVER || '').toLowerCase().trim();
+
+    const normalizedImages = await Promise.all(rawImages.map(async (img, idx) => {
       let fileUrl = img.url;
-      // Convert base64 data URL to static file if provided
+      // Convert base64 data URL to R2 object or static file if provided
       if (fileUrl && fileUrl.startsWith('data:image/')) {
         try {
           const matches = fileUrl.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
           if (matches) {
             const ext = matches[1] === 'jpeg' ? '.jpg' : `.${matches[1]}`;
-            if (!fs.existsSync(uploadsDir)) {
-              fs.mkdirSync(uploadsDir, { recursive: true });
+            const buffer = Buffer.from(matches[2], 'base64');
+            if (driver === 'r2') {
+              const uploadResult = await storageService.uploadPrivate({
+                tenantId: resolvedTenant,
+                category: 'prescriptions',
+                buffer,
+                mimetype: `image/${matches[1]}`,
+                originalName: `page_${idx + 1}${ext}`
+              });
+              fileUrl = uploadResult.key;
+            } else {
+              if (!fs.existsSync(uploadsDir)) {
+                fs.mkdirSync(uploadsDir, { recursive: true });
+              }
+              const safeName = `${resolvedTenant}_${Date.now()}_page${idx + 1}_${Math.random().toString(36).substring(2, 6)}${ext}`;
+              fs.writeFileSync(path.join(uploadsDir, safeName), buffer);
+              fileUrl = `/uploads/prescriptions/${safeName}`;
             }
-            const safeName = `${resolvedTenant}_${Date.now()}_page${idx + 1}_${Math.random().toString(36).substring(2, 6)}${ext}`;
-            fs.writeFileSync(path.join(uploadsDir, safeName), Buffer.from(matches[2], 'base64'));
-            fileUrl = `/uploads/prescriptions/${safeName}`;
           }
         } catch (e) {
-          console.warn('Could not save base64 data URL to file:', e);
+          console.warn('Could not save base64 data URL to storage:', e);
         }
       }
       return {
@@ -1258,7 +1293,7 @@ router.post('/:id/offline-prescription', async (req, res) => {
         originalName: img.originalName || `Page_${idx + 1}.jpg`,
         uploadedAt: img.uploadedAt || new Date()
       };
-    });
+    }));
 
     // Create the ONE Prescription document
     const prescription = await Prescription.create({
@@ -1402,23 +1437,38 @@ router.put('/:id/offline-prescription', verifyToken, async (req, res) => {
 
     // Normalize image set with sequential 1-based page numbers
     const uploadsDir = path.join(__dirname, '../uploads/prescriptions');
-    const normalizedImages = rawImages.map((img, idx) => {
+    const { storageService } = require('../services/storage/storageService');
+    const driver = (process.env.STORAGE_DRIVER || '').toLowerCase().trim();
+
+    const normalizedImages = await Promise.all(rawImages.map(async (img, idx) => {
       let fileUrl = img.url;
       if (fileUrl && fileUrl.startsWith('data:image/')) {
         try {
           const matches = fileUrl.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
           if (matches) {
             const ext = matches[1] === 'jpeg' ? '.jpg' : `.${matches[1]}`;
-            if (!fs.existsSync(uploadsDir)) {
-              fs.mkdirSync(uploadsDir, { recursive: true });
+            const buffer = Buffer.from(matches[2], 'base64');
+            if (driver === 'r2') {
+              const uploadResult = await storageService.uploadPrivate({
+                tenantId: resolvedTenant,
+                category: 'prescriptions',
+                buffer,
+                mimetype: `image/${matches[1]}`,
+                originalName: `page_${idx + 1}${ext}`
+              });
+              fileUrl = uploadResult.key;
+            } else {
+              if (!fs.existsSync(uploadsDir)) {
+                fs.mkdirSync(uploadsDir, { recursive: true });
+              }
+              const safeName = `${resolvedTenant}_${Date.now()}_page${idx + 1}_${Math.random().toString(36).substring(2, 6)}${ext}`;
+              const targetPath = path.join(uploadsDir, safeName);
+              fs.writeFileSync(targetPath, buffer);
+              fileUrl = `/uploads/prescriptions/${safeName}`;
             }
-            const safeName = `${resolvedTenant}_${Date.now()}_page${idx + 1}_${Math.random().toString(36).substring(2, 6)}${ext}`;
-            const targetPath = path.join(uploadsDir, safeName);
-            fs.writeFileSync(targetPath, Buffer.from(matches[2], 'base64'));
-            fileUrl = `/uploads/prescriptions/${safeName}`;
           }
         } catch (e) {
-          console.warn('Could not save base64 data URL to file:', e);
+          console.warn('Could not save base64 data URL to storage:', e);
         }
       }
       return {
@@ -1427,7 +1477,7 @@ router.put('/:id/offline-prescription', verifyToken, async (req, res) => {
         originalName: img.originalName || `Page_${idx + 1}.jpg`,
         uploadedAt: img.uploadedAt || new Date()
       };
-    });
+    }));
 
     // Capture previous state for audit (Requirement 9, 11)
     const previousImages = (prescription.images || []).map(img => ({

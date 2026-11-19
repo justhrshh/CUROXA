@@ -219,12 +219,36 @@ router.get("/", async (req, res) => {
       }).select("letterheadUrl").lean();
       if (hospital && hospital.letterheadUrl) {
         letterheadUrl = hospital.letterheadUrl;
+        if (!letterheadUrl.startsWith('data:') && !letterheadUrl.startsWith('http://') && !letterheadUrl.startsWith('https://')) {
+          const { storageService } = require('../services/storage/storageService');
+          try {
+            letterheadUrl = await storageService.createPresignedDownloadUrl({
+              key: letterheadUrl,
+              isPrivate: true,
+              expiresInSeconds: 3600
+            });
+          } catch (e) {}
+        }
       }
     }
 
-    const enriched = prescriptions.map(p => ({
-      ...p,
-      hospitalLetterheadUrl: letterheadUrl
+    const { storageService } = require('../services/storage/storageService');
+    const enriched = await Promise.all(prescriptions.map(async p => {
+      let sig = p.doctorSignatureUrl || p.doctorId?.signatureUrl || '';
+      if (sig && !sig.startsWith('data:') && !sig.startsWith('http://') && !sig.startsWith('https://')) {
+        try {
+          sig = await storageService.createPresignedDownloadUrl({
+            key: sig,
+            isPrivate: true,
+            expiresInSeconds: 3600
+          });
+        } catch (e) {}
+      }
+      return {
+        ...p,
+        doctorSignatureUrl: sig,
+        hospitalLetterheadUrl: letterheadUrl
+      };
     }));
 
     res.json(enriched);
@@ -263,9 +287,32 @@ router.get("/:id", async (req, res) => {
       }).select("letterheadUrl").lean();
       if (hospital && hospital.letterheadUrl) {
         letterheadUrl = hospital.letterheadUrl;
+        if (!letterheadUrl.startsWith('data:') && !letterheadUrl.startsWith('http://') && !letterheadUrl.startsWith('https://')) {
+          const { storageService } = require('../services/storage/storageService');
+          try {
+            letterheadUrl = await storageService.createPresignedDownloadUrl({
+              key: letterheadUrl,
+              isPrivate: true,
+              expiresInSeconds: 3600
+            });
+          } catch (e) {}
+        }
       }
     }
     rx.hospitalLetterheadUrl = letterheadUrl;
+
+    // Presign doctor signature if stored in R2 private storage
+    let sig = rx.doctorSignatureUrl || rx.doctorId?.signatureUrl || '';
+    if (sig && !sig.startsWith('data:') && !sig.startsWith('http://') && !sig.startsWith('https://')) {
+      const { storageService } = require('../services/storage/storageService');
+      try {
+        rx.doctorSignatureUrl = await storageService.createPresignedDownloadUrl({
+          key: sig,
+          isPrivate: true,
+          expiresInSeconds: 3600
+        });
+      } catch (e) {}
+    }
 
     res.json(rx);
   } catch (error) {

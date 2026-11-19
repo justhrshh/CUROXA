@@ -668,39 +668,27 @@ router.post('/upload-compliance', requireRole('Onboarding Manager'), upload.sing
       return res.status(400).json({ error: 'No file uploaded.' });
     }
 
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const filename = 'docs/' + uniqueSuffix + '-' + req.file.originalname.replace(/\s+/g, '-');
-    const bucketName = r2.getR2PublicBucket();
-
-    let fileUrl = "";
-    try {
-      const command = new PutObjectCommand({
-        Bucket: bucketName,
-        Key: filename,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype,
-      });
-
-      await r2.send(command);
-
-      // Construct public URL
-      const publicDomain = r2.getR2PublicDomain();
-      fileUrl = `${publicDomain}/${filename}`;
-    } catch (r2Err) {
-      console.warn('R2 upload failed or unconfigured, falling back to local file storage:', r2Err);
-      const fs = require('fs');
-      const uploadDir = path.join(__dirname, '../uploads');
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
+    const { storageService } = require('../services/storage/storageService');
+    const uploadResult = await storageService.uploadPrivate({
+      tenantId: 'compliance',
+      category: 'onboarding-compliance',
+      buffer: req.file.buffer,
+      mimetype: req.file.mimetype,
+      originalName: req.file.originalname,
+      metadata: {
+        uploadedBy: (req.user?.id || req.user?._id || '').toString(),
+        originalFileName: req.file.originalname
       }
-      const localFileName = `${uniqueSuffix}-${req.file.originalname.replace(/\s+/g, '-')}`;
-      const localPath = path.join(uploadDir, localFileName);
-      fs.writeFileSync(localPath, req.file.buffer);
-      fileUrl = `/uploads/${localFileName}`;
-    }
+    });
+
+    const presignedUrl = await storageService.createPresignedDownloadUrl({
+      key: uploadResult.key,
+      isPrivate: true,
+      expiresInSeconds: 3600
+    });
 
     await writeAudit(req, 'upload_compliance_doc', `Uploaded compliance document: ${req.file.originalname}`);
-    res.status(200).json({ url: fileUrl, filename: req.file.originalname });
+    res.status(200).json({ url: presignedUrl, key: uploadResult.key, filename: req.file.originalname });
   } catch (err) {
     console.error('Upload Error:', err);
     res.status(500).json({ error: err.message });

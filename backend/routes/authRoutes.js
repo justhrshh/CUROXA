@@ -619,7 +619,7 @@ router.post("/login", tenantMiddleware, async (req, res) => {
         name: user.name,
         email: user.email || '',
         avatar: user.avatar || '',
-        signatureUrl: user.signatureUrl || '',
+        signatureUrl: await resolveSignatureUrl(user.signatureUrl),
         specialty: platformRole || user.specialty || '',
         platformRole: platformRole || user.platformRole || '',
         isSetupComplete: user.role === 'patient' ? isPatientComplete : user.isSetupComplete,
@@ -1199,7 +1199,7 @@ router.put("/profile/:id", tenantMiddleware, verifyToken, async (req, res) => {
       email: user.email,
       specialty: user.specialty,
       avatar: user.avatar,
-      signatureUrl: user.signatureUrl || '',
+      signatureUrl: await resolveSignatureUrl(user.signatureUrl),
       isSetupComplete: user.isSetupComplete,
       tenantId: user.tenantId,
       createdAt: user.createdAt,
@@ -1226,6 +1226,30 @@ const uploadStaffSignature = multer({
   }
 });
 
+/**
+ * Resolves a stored digital signature string (R2 key, Data URL, or full URL)
+ * into an authorized, short-lived presigned URL if stored in R2 private storage.
+ */
+async function resolveSignatureUrl(sig) {
+  if (!sig || typeof sig !== 'string') return '';
+  const trimmed = sig.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('data:') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  try {
+    const { storageService } = require('../services/storage/storageService');
+    return await storageService.createPresignedDownloadUrl({
+      key: trimmed,
+      isPrivate: true,
+      expiresInSeconds: 3600
+    });
+  } catch (err) {
+    console.warn('[AUTH] Could not presign signature key:', trimmed, err.message);
+    return '';
+  }
+}
+
 // Shared handler for uploading/replacing staff signature
 const handleStaffSignatureUpload = async (req, res) => {
   try {
@@ -1239,11 +1263,25 @@ const handleStaffSignatureUpload = async (req, res) => {
       return res.status(400).json({ error: 'No signature image file uploaded.' });
     }
 
-    // Convert image to clean base64 Data URL
-    const base64Data = req.file.buffer.toString('base64');
-    const signatureDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
-
+    const { storageService } = require('../services/storage/storageService');
+    const tenantId = (req.tenantId || req.user?.tenantId || 'default').toLowerCase().trim();
     const staffUserId = req.user.id || req.user._id || req.user.userId;
+
+    // Securely upload digital signature to R2 private vault
+    const uploadResult = await storageService.uploadPrivate({
+      tenantId,
+      category: 'doctor-signatures',
+      buffer: req.file.buffer,
+      mimetype: req.file.mimetype,
+      originalName: req.file.originalname,
+      metadata: {
+        userId: (staffUserId || '').toString(),
+        role: role
+      }
+    });
+
+    const signatureKey = uploadResult.key;
+
     const query = {
       $and: [
         {
@@ -1258,13 +1296,20 @@ const handleStaffSignatureUpload = async (req, res) => {
 
     const user = await User.findOneAndUpdate(
       query,
-      { $set: { signatureUrl: signatureDataUrl } },
+      { $set: { signatureUrl: signatureKey } },
       { new: true }
     );
 
     if (!user) {
       return res.status(404).json({ error: 'Staff account not found in current hospital context.' });
     }
+
+    // Generate short-lived presigned URL for frontend preview
+    const presignedUrl = await storageService.createPresignedDownloadUrl({
+      key: signatureKey,
+      isPrivate: true,
+      expiresInSeconds: 3600
+    });
 
     AuditLog.create({
       tenantId: req.tenantId,
@@ -1275,14 +1320,16 @@ const handleStaffSignatureUpload = async (req, res) => {
       target: user._id.toString(),
       metadata: {
         mimetype: req.file.mimetype,
-        size: req.file.size
+        size: req.file.size,
+        key: signatureKey
       }
     }).catch(() => {});
 
     res.json({
       success: true,
       message: 'Digital signature uploaded and saved successfully.',
-      signatureUrl: user.signatureUrl
+      signatureUrl: presignedUrl,
+      key: signatureKey
     });
   } catch (error) {
     console.error('Staff signature upload error:', error);
@@ -1311,6 +1358,16 @@ const handleStaffSignatureDelete = async (req, res) => {
         ...(req.tenantId ? [{ tenantId: req.tenantId }] : [])
       ]
     };
+
+    const oldUser = await User.findOne(query).select('signatureUrl');
+    if (oldUser?.signatureUrl && !oldUser.signatureUrl.startsWith('data:') && !oldUser.signatureUrl.startsWith('http')) {
+      const { storageService } = require('../services/storage/storageService');
+      try {
+        await storageService.deleteObject({ key: oldUser.signatureUrl, isPrivate: true });
+      } catch (delErr) {
+        console.warn('[SIGNATURE_DELETE] Failed to delete R2 object:', delErr.message);
+      }
+    }
 
     const user = await User.findOneAndUpdate(
       query,
@@ -2134,7 +2191,7 @@ router.post("/login-with-otp", tenantMiddleware, async (req, res) => {
         name: user.name,
         email: user.email || '',
         avatar: user.avatar || '',
-        signatureUrl: user.signatureUrl || '',
+        signatureUrl: await resolveSignatureUrl(user.signatureUrl),
         specialty: platformRole || user.specialty || '',
         platformRole: platformRole || user.platformRole || '',
         isSetupComplete: user.role === 'patient' ? isPatientComplete : user.isSetupComplete,
