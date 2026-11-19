@@ -1,14 +1,21 @@
 /**
  * QUROXA: HOSPITAL GEOLOCATION BACKFILL MECHANISM
  * 
- * Safely backfills hospital coordinates, PIN codes, city, and state:
- * - Inspects existing SuperAdminHospital records.
- * - Cross-references SuperAdminOnboarding for verified coordinates or Google Maps URLs.
- * - Extracts 6-digit Indian PIN codes from address strings where present.
- * - Resolves PIN codes to official Department of Posts centroids via pincodeService.
- * - Never fabricates fake coordinates.
- * - Does not overwrite existing valid coordinates.
- * - Ensures MongoDB 2dsphere index is active.
+ * Flags supported:
+ *   --dry-run       : Show proposed geocoding and address match without modifying database (default if --apply is omitted)
+ *   --apply         : Commit verified geocoded coordinates and metadata to MongoDB
+ *   --limit <n>     : Limit maximum number of records processed
+ *   --retry-failed  : Re-process hospitals with geocodingStatus 'failed' or 'needs_review'
+ *   --only-missing  : Process only hospitals with missing coordinates or 'pending' status
+ * 
+ * Rules:
+ *   1. Excludes inactive, suspended and staging/test records from active patient discovery.
+ *   2. Reuses existing onboarding coordinates or Google Maps URL coordinates when valid.
+ *   3. Geocodes missing addresses sequentially (1 req/sec rate limit).
+ *   4. Never assigns PIN-code centroids as exact hospital coordinates (identifies as approximate / needs_review).
+ *   5. Never overwrites valid coordinates without a verified address change.
+ *   6. Ensures MongoDB 2dsphere and pincode indexes are created.
+ *   7. Generates a comprehensive summary report.
  */
 
 const path = require('path');
@@ -18,119 +25,272 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const SuperAdminHospital = require('../models/SuperAdminHospital');
 const SuperAdminOnboarding = require('../models/SuperAdminOnboarding');
 const pincodeService = require('../services/pincodeService');
+const hospitalGeocodingService = require('../services/geocoding/hospitalGeocodingService');
 
-async function run() {
-  console.log('=== QUROXA: HOSPITAL GEOLOCATION BACKFILL ===\n');
-  await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 15000 });
+// Parse CLI Arguments
+const args = process.argv.slice(2);
+const isApply = args.includes('--apply');
+const isDryRun = args.includes('--dry-run') || !isApply;
+const isRetryFailed = args.includes('--retry-failed');
+const isOnlyMissing = args.includes('--only-missing');
 
-  const hospitals = await SuperAdminHospital.find({});
-  console.log(`Discovered ${hospitals.length} total hospital records.`);
+let limitCount = Infinity;
+const limitIdx = args.indexOf('--limit');
+if (limitIdx !== -1 && args[limitIdx + 1]) {
+  const parsedLimit = parseInt(args[limitIdx + 1], 10);
+  if (!isNaN(parsedLimit) && parsedLimit > 0) {
+    limitCount = parsedLimit;
+  }
+}
 
-  let updatedCount = 0;
-  let skippedCount = 0;
-  let noLocationCount = 0;
+function isDiscoveryEligible(hosp) {
+  const statusActive = hosp.status && hosp.status.toLowerCase() === 'active';
+  const subActive = hosp.subscriptionStatus && ['active', 'expiring'].includes(hosp.subscriptionStatus.toLowerCase());
+  const notStaging = hosp.code && !/^stg_/i.test(hosp.code) && !/^tenant-/i.test(hosp.code);
+  return statusActive && subActive && notStaging;
+}
 
-  for (const hosp of hospitals) {
-    const hasValidCoords = hosp.location && 
-      Array.isArray(hosp.location.coordinates) && 
-      hosp.location.coordinates.length === 2 && 
+async function run(options = {}) {
+  const shouldDisconnect = options.disconnectOnExit !== undefined ? options.disconnectOnExit : (require.main === module);
+  console.log('===============================================================');
+  console.log('       QUROXA: AUTOMATIC HOSPITAL GEOLOCATION BACKFILL         ');
+  console.log('===============================================================');
+  console.log(`Mode         : ${isApply ? 'APPLY (Writing changes to DB)' : 'DRY-RUN (Simulating only, no writes)'}`);
+  console.log(`Limit        : ${limitCount === Infinity ? 'None' : limitCount}`);
+  console.log(`Retry Failed : ${isRetryFailed ? 'YES' : 'NO'}`);
+  console.log(`Only Missing : ${isOnlyMissing ? 'YES' : 'NO'}`);
+  console.log('---------------------------------------------------------------\n');
+
+  const mongoUri = process.env.MONGO_URI;
+  if (!mongoUri) {
+    console.error('ERROR: MONGO_URI is missing in environment (.env).');
+    process.exit(1);
+  }
+
+  await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 15000 });
+  console.log('Connected to MongoDB.\n');
+
+  const allHospitals = await SuperAdminHospital.find({});
+  console.log(`Total SuperAdminHospital records found in database: ${allHospitals.length}\n`);
+
+  let candidateHospitals = [];
+  let excludedFromDiscovery = 0;
+
+  for (const hosp of allHospitals) {
+    const eligible = isDiscoveryEligible(hosp);
+    if (!eligible) {
+      excludedFromDiscovery++;
+    }
+
+    const hasCoords = hosp.location &&
+      Array.isArray(hosp.location.coordinates) &&
+      hosp.location.coordinates.length === 2 &&
       pincodeService.isValidCoordinates(hosp.location.coordinates[1], hosp.location.coordinates[0]);
 
-    if (hasValidCoords && hosp.pincode) {
-      console.log(`  [SKIP] ${hosp.code} already has valid coordinates and PIN.`);
-      skippedCount++;
+    if (isOnlyMissing) {
+      if (hasCoords && hosp.geocodingStatus === 'verified') {
+        continue;
+      }
+    }
+
+    if (!isRetryFailed && (hosp.geocodingStatus === 'failed' || hosp.geocodingStatus === 'needs_review') && hasCoords) {
       continue;
     }
 
-    let coords = hasValidCoords ? hosp.location.coordinates : null;
-    let pincode = hosp.pincode || '';
-    let city = hosp.city || '';
-    let state = hosp.state || '';
+    candidateHospitals.push(hosp);
+  }
 
-    // 1. Check matching onboarding document
-    const onb = await SuperAdminOnboarding.findOne({
+  if (limitCount < candidateHospitals.length) {
+    candidateHospitals = candidateHospitals.slice(0, limitCount);
+  }
+
+  console.log(`Candidate hospitals for processing: ${candidateHospitals.length}`);
+  console.log(`Records excluded from patient discovery (inactive/suspended/staging): ${excludedFromDiscovery}\n`);
+
+  const report = {
+    totalInspected: candidateHospitals.length,
+    alreadyVerifiedSkipped: 0,
+    resolvedExistingCoords: 0,
+    resolvedGoogleMaps: 0,
+    resolvedNominatimAddress: 0,
+    approximatePinCentroid: 0,
+    needsReview: 0,
+    failed: 0,
+    appliedUpdates: 0,
+    hospitals: []
+  };
+
+  for (let i = 0; i < candidateHospitals.length; i++) {
+    const hosp = candidateHospitals[i];
+    const prefix = `[${i + 1}/${candidateHospitals.length}] ${hosp.code} (${hosp.name}):`;
+
+    const hasCoords = hosp.location &&
+      Array.isArray(hosp.location.coordinates) &&
+      hosp.location.coordinates.length === 2 &&
+      pincodeService.isValidCoordinates(hosp.location.coordinates[1], hosp.location.coordinates[0]);
+
+    // Check if address is already hashed and verified with unchanged address
+    const currentHash = hospitalGeocodingService.computeAddressHash({
+      name: hosp.name,
+      address: hosp.address,
+      city: hosp.city,
+      state: hosp.state,
+      pincode: hosp.pincode
+    });
+
+    if (hasCoords && hosp.geocodingStatus === 'verified' && hosp.addressHash === currentHash && !isRetryFailed) {
+      console.log(`${prefix} Already verified with matching address hash. Skipping.`);
+      report.alreadyVerifiedSkipped++;
+      report.hospitals.push({
+        code: hosp.code,
+        name: hosp.name,
+        status: 'ALREADY_VERIFIED',
+        coordinates: hosp.location.coordinates,
+        source: hosp.geocodingSource || 'existing_coordinates',
+        geocodingStatus: 'verified'
+      });
+      continue;
+    }
+
+    // Inspect matching onboarding draft for additional data
+    let onb = await SuperAdminOnboarding.findOne({
       $or: [{ code: hosp.code }, { name: hosp.name }]
     });
 
-    if (onb) {
-      if (!city && onb.city) city = onb.city;
-      if (!coords && onb.latitude && onb.longitude) {
-        const lat = parseFloat(onb.latitude);
-        const lng = parseFloat(onb.longitude);
-        if (pincodeService.isValidCoordinates(lat, lng)) {
-          coords = [lng, lat];
-        }
-      }
-      if (!coords && onb.googleMapUrl) {
-        const gCoords = pincodeService.extractCoordinatesFromGoogleMapsUrl(onb.googleMapUrl);
-        if (gCoords) coords = gCoords.coordinates;
-      }
+    const targetAddress = hosp.address || (onb && (onb.address || onb.addressLine1)) || '';
+    const targetCity = hosp.city || (onb && onb.city) || '';
+    const targetState = hosp.state || (onb && onb.state) || '';
+    let targetPin = hosp.pincode || (onb && onb.pincode) || '';
+    if (!targetPin && targetAddress) {
+      const m = targetAddress.match(/\b[1-9][0-9]{5}\b/);
+      if (m) targetPin = m[0];
     }
+    const targetGoogleMapUrl = (onb && onb.googleMapUrl) || '';
+    const targetLat = (onb && onb.latitude) || (hasCoords ? hosp.location.coordinates[1] : null);
+    const targetLng = (onb && onb.longitude) || (hasCoords ? hosp.location.coordinates[0] : null);
 
-    // 2. Extract PIN code from address if not present
-    if (!pincode && hosp.address) {
-      const match = hosp.address.match(/\b[1-9][0-9]{5}\b/);
-      if (match) {
-        pincode = match[0];
+    // Call geocoding service
+    const geoResult = await hospitalGeocodingService.resolveHospitalLocation({
+      name: hosp.name,
+      address: targetAddress,
+      city: targetCity,
+      state: targetState,
+      pincode: targetPin,
+      googleMapUrl: targetGoogleMapUrl,
+      latitude: targetLat,
+      longitude: targetLng,
+      existingRecord: hosp
+    });
+
+    let actionLabel = 'UNRESOLVED';
+    let proposedCoords = geoResult.location ? geoResult.location.coordinates : null;
+
+    if (geoResult.geocodingStatus === 'verified') {
+      if (geoResult.geocodingSource === 'existing_coordinates') {
+        report.resolvedExistingCoords++;
+        actionLabel = 'REUSED_ONBOARDING_COORDS';
+      } else if (geoResult.geocodingSource === 'google_maps_url') {
+        report.resolvedGoogleMaps++;
+        actionLabel = 'RESOLVED_GOOGLE_MAPS_URL';
+      } else if (geoResult.geocodingSource === 'address') {
+        report.resolvedNominatimAddress++;
+        actionLabel = 'RESOLVED_ADDRESS_GEOCODER';
       }
-    }
-
-    // 3. Resolve PIN code centroid if coordinates are missing
-    if (!coords && pincode) {
-      const pinRes = await pincodeService.resolvePincode(pincode);
-      if (pinRes && pinRes.coordinates) {
-        coords = pinRes.coordinates;
-        if (!city && pinRes.district) city = pinRes.district;
-        if (!state && pinRes.state) state = pinRes.state;
+    } else if (geoResult.geocodingStatus === 'needs_review') {
+      if (geoResult.geocodingSource === 'pincode_approximate') {
+        report.approximatePinCentroid++;
+        actionLabel = 'PINCODE_CENTROID_APPROXIMATE (NEEDS_REVIEW)';
+      } else {
+        report.needsReview++;
+        actionLabel = 'AMBIGUOUS_ADDRESS (NEEDS_REVIEW)';
       }
-    }
-
-    let modified = false;
-    if (pincode && hosp.pincode !== pincode) {
-      hosp.pincode = pincode;
-      modified = true;
-    }
-    if (city && hosp.city !== city) {
-      hosp.city = city;
-      modified = true;
-    }
-    if (state && hosp.state !== state) {
-      hosp.state = state;
-      modified = true;
-    }
-    if (coords && (!hosp.location || !hosp.location.coordinates || hosp.location.coordinates[0] !== coords[0])) {
-      hosp.location = {
-        type: 'Point',
-        coordinates: coords
-      };
-      modified = true;
-    }
-
-    if (modified) {
-      await hosp.save();
-      console.log(`  [UPDATED] ${hosp.code} (${hosp.name}): PIN=${pincode || 'N/A'}, Coords=${coords ? coords.join(', ') : 'None'}`);
-      updatedCount++;
-    } else if (!coords) {
-      console.log(`  [NO_COORDS] ${hosp.code} has no coordinates or PIN code available in record.`);
-      noLocationCount++;
     } else {
-      skippedCount++;
+      report.failed++;
+      actionLabel = 'FAILED';
+    }
+
+    console.log(`${prefix} Result: ${actionLabel}`);
+    console.log(`    Address : "${targetAddress || 'N/A'}", PIN: ${targetPin || 'N/A'}, City: ${targetCity || 'N/A'}`);
+    console.log(`    Coords  : ${proposedCoords ? `[lng: ${proposedCoords[0]}, lat: ${proposedCoords[1]}]` : 'None'}`);
+    console.log(`    Status  : ${geoResult.geocodingStatus}, Source: ${geoResult.geocodingSource || 'none'}, Precision: ${geoResult.geocodingPrecision}`);
+
+    report.hospitals.push({
+      code: hosp.code,
+      name: hosp.name,
+      address: targetAddress,
+      pincode: targetPin,
+      proposedCoordinates: proposedCoords,
+      geocodingStatus: geoResult.geocodingStatus,
+      geocodingSource: geoResult.geocodingSource,
+      precision: geoResult.geocodingPrecision,
+      action: actionLabel
+    });
+
+    if (isApply) {
+      const updateFields = {
+        geocodingStatus: geoResult.geocodingStatus,
+        geocodingSource: geoResult.geocodingSource || hosp.geocodingSource || null,
+        geocodingPrecision: geoResult.geocodingPrecision || 'unknown',
+        geocodedAt: geoResult.geocodedAt || new Date(),
+        addressHash: geoResult.addressHash || ''
+      };
+
+      if (targetPin && hosp.pincode !== targetPin) updateFields.pincode = targetPin;
+      if (targetCity && hosp.city !== targetCity) updateFields.city = targetCity;
+      if (targetState && hosp.state !== targetState) updateFields.state = targetState;
+
+      if (geoResult.location && geoResult.geocodingStatus === 'verified') {
+        updateFields.location = geoResult.location;
+      } else if (geoResult.location && geoResult.geocodingStatus === 'needs_review' && (!hosp.location || !hosp.location.coordinates || hosp.location.coordinates.length < 2)) {
+        // If hospital had no coordinates at all, set approximate location but flag needs_review
+        updateFields.location = geoResult.location;
+      }
+
+      await SuperAdminHospital.updateOne({ _id: hosp._id }, { $set: updateFields });
+      report.appliedUpdates++;
+      console.log(`    --> Saved to database.`);
     }
   }
 
-  // Ensure index creation
-  console.log('\nEnsuring 2dsphere index on SuperAdminHospital collection...');
+  // Ensure 2dsphere and pincode indexes are built
+  console.log('\nEnsuring MongoDB indexes on SuperAdminHospital collection...');
   await SuperAdminHospital.collection.createIndex({ location: '2dsphere' });
   await SuperAdminHospital.collection.createIndex({ pincode: 1 });
-  console.log('2dsphere and pincode indexes verified.');
+  await SuperAdminHospital.collection.createIndex({ geocodingStatus: 1 });
+  console.log('MongoDB 2dsphere, pincode, and geocodingStatus indexes verified.');
 
-  console.log(`\n=== BACKFILL SUMMARY ===`);
-  console.log(`Total: ${hospitals.length} | Updated: ${updatedCount} | Skipped: ${skippedCount} | No Coordinates Available: ${noLocationCount}\n`);
+  console.log('\n===============================================================');
+  console.log('                   BACKFILL EXECUTION REPORT                   ');
+  console.log('===============================================================');
+  console.log(`Execution Mode              : ${isApply ? 'APPLY' : 'DRY-RUN'}`);
+  console.log(`Total Hospitals Inspected   : ${report.totalInspected}`);
+  console.log(`Already Verified & Skipped  : ${report.alreadyVerifiedSkipped}`);
+  console.log(`Resolved via Onboarding    : ${report.resolvedExistingCoords}`);
+  console.log(`Resolved via Google Maps    : ${report.resolvedGoogleMaps}`);
+  console.log(`Resolved via Nominatim Addr : ${report.resolvedNominatimAddress}`);
+  console.log(`Approximate PIN Centroids   : ${report.approximatePinCentroid} (Marked needs_review)`);
+  console.log(`Ambiguous / Needs Review    : ${report.needsReview}`);
+  console.log(`Failed Geocoding            : ${report.failed}`);
+  console.log(`Excluded from Discovery     : ${excludedFromDiscovery} (Inactive/Suspended/Staging)`);
+  if (isApply) {
+    console.log(`Database Records Updated    : ${report.appliedUpdates}`);
+  } else {
+    console.log(`Proposed Updates (Dry Run)  : ${report.totalInspected - report.alreadyVerifiedSkipped}`);
+  }
+  console.log('===============================================================\n');
 
-  await mongoose.disconnect();
+  if (shouldDisconnect) {
+    await mongoose.disconnect();
+    console.log('Disconnected from MongoDB. Complete.');
+  }
+  return report;
 }
 
-run().catch(err => {
-  console.error('Backfill error:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  run().catch(err => {
+    console.error('Backfill script error:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = { run, isDiscoveryEligible };

@@ -1191,6 +1191,7 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
     }
 
     // Geolocation and PIN code resolution from onboarding or request body
+    const hospitalGeocodingService = require('../services/geocoding/hospitalGeocodingService');
     const pincodeService = require('../services/pincodeService');
     let onbDraft = null;
     if (req.body.onboardingId || hospitalData.code) {
@@ -1201,6 +1202,8 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
 
     if (onbDraft) {
       if (!hospitalData.city && onbDraft.city) hospitalData.city = onbDraft.city;
+      if (!hospitalData.state && onbDraft.state) hospitalData.state = onbDraft.state;
+      if (!hospitalData.pincode && onbDraft.pincode) hospitalData.pincode = onbDraft.pincode;
       if (!hospitalData.address && (onbDraft.address || onbDraft.addressLine1)) {
         hospitalData.address = onbDraft.address || onbDraft.addressLine1;
       }
@@ -1215,32 +1218,38 @@ router.post('/hospitals', requireRole('Onboarding Manager'), async (req, res) =>
       if (pinMatch) hospitalData.pincode = pinMatch[0];
     }
 
-    // Resolve coordinates from direct lat/lng or Google Maps URL or PIN code
-    let parsedLat = parseFloat(hospitalData.latitude);
-    let parsedLng = parseFloat(hospitalData.longitude);
+    // Automatic Geocoding Resolution via HospitalGeocodingService
+    // Fallback order:
+    // 1. Direct valid coordinates supplied during onboarding
+    // 2. Google Maps URL coordinates
+    // 3. Address geocoding via configured provider (Nominatim)
+    // 4. Safe failure/pending (never block creation; never mark unresolved address as verified)
+    const geoResult = await hospitalGeocodingService.resolveHospitalLocation({
+      name: hospitalData.name,
+      address: hospitalData.address,
+      city: hospitalData.city,
+      state: hospitalData.state,
+      pincode: hospitalData.pincode,
+      googleMapUrl: hospitalData.googleMapUrl,
+      latitude: hospitalData.latitude,
+      longitude: hospitalData.longitude
+    });
 
-    if (pincodeService.isValidCoordinates(parsedLat, parsedLng)) {
-      hospitalData.location = {
-        type: 'Point',
-        coordinates: [parsedLng, parsedLat]
-      };
-    } else if (hospitalData.googleMapUrl) {
-      const gCoords = pincodeService.extractCoordinatesFromGoogleMapsUrl(hospitalData.googleMapUrl);
-      if (gCoords) {
-        hospitalData.location = {
-          type: 'Point',
-          coordinates: gCoords.coordinates
-        };
-      }
-    } else if (hospitalData.pincode) {
-      const pinRes = await pincodeService.resolvePincode(hospitalData.pincode);
-      if (pinRes && pinRes.coordinates) {
-        hospitalData.location = {
-          type: 'Point',
-          coordinates: pinRes.coordinates
-        };
-        if (!hospitalData.city && pinRes.district) hospitalData.city = pinRes.district;
-        if (!hospitalData.state && pinRes.state) hospitalData.state = pinRes.state;
+    if (geoResult.location) {
+      hospitalData.location = geoResult.location;
+    }
+    hospitalData.geocodingStatus = geoResult.geocodingStatus || 'pending';
+    hospitalData.geocodingSource = geoResult.geocodingSource || null;
+    hospitalData.geocodingPrecision = geoResult.geocodingPrecision || 'unknown';
+    hospitalData.geocodedAt = geoResult.geocodedAt || new Date();
+    hospitalData.addressHash = geoResult.addressHash || '';
+
+    // Auto-fill city/state if missing and PIN was resolved
+    if ((!hospitalData.city || !hospitalData.state) && hospitalData.pincode) {
+      const pinCentroid = pincodeService.getCentroid(hospitalData.pincode);
+      if (pinCentroid && pinCentroid.valid) {
+        if (!hospitalData.city && pinCentroid.district) hospitalData.city = pinCentroid.district;
+        if (!hospitalData.state && pinCentroid.state) hospitalData.state = pinCentroid.state;
       }
     }
 
@@ -1516,44 +1525,97 @@ router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
     }
 
     // Geolocation and PIN code preservation / resolution
+    const hospitalGeocodingService = require('../services/geocoding/hospitalGeocodingService');
     const pincodeService = require('../services/pincodeService');
     if (existingHosp) {
-      if (!req.body.pincode && req.body.address) {
-        const pinMatch = req.body.address.match(/\b[1-9][0-9]{5}\b/);
-        if (pinMatch) req.body.pincode = pinMatch[0];
+      const targetName = req.body.name || existingHosp.name;
+      const targetAddress = req.body.address !== undefined ? req.body.address : existingHosp.address;
+      const targetCity = req.body.city !== undefined ? req.body.city : existingHosp.city;
+      const targetState = req.body.state !== undefined ? req.body.state : existingHosp.state;
+      let targetPincode = req.body.pincode !== undefined ? req.body.pincode : existingHosp.pincode;
+
+      if (!targetPincode && targetAddress) {
+        const pinMatch = targetAddress.match(/\b[1-9][0-9]{5}\b/);
+        if (pinMatch) {
+          targetPincode = pinMatch[0];
+          req.body.pincode = targetPincode;
+        }
       }
 
-      let parsedLat = parseFloat(req.body.latitude);
-      let parsedLng = parseFloat(req.body.longitude);
+      const targetGoogleMapUrl = req.body.googleMapUrl !== undefined ? req.body.googleMapUrl : existingHosp.googleMapUrl;
+      const targetLat = req.body.latitude !== undefined ? req.body.latitude : undefined;
+      const targetLng = req.body.longitude !== undefined ? req.body.longitude : undefined;
+      const isManual = Boolean(req.body.isManualCorrection || (targetLat !== undefined && targetLng !== undefined && targetLat !== '' && targetLng !== ''));
 
-      if (pincodeService.isValidCoordinates(parsedLat, parsedLng)) {
-        req.body.location = {
-          type: 'Point',
-          coordinates: [parsedLng, parsedLat]
-        };
-      } else if (req.body.googleMapUrl) {
-        const gCoords = pincodeService.extractCoordinatesFromGoogleMapsUrl(req.body.googleMapUrl);
-        if (gCoords) {
+      const newAddressHash = hospitalGeocodingService.computeAddressHash({
+        name: targetName,
+        address: targetAddress,
+        city: targetCity,
+        state: targetState,
+        pincode: targetPincode
+      });
+
+      const addressChanged = !existingHosp.addressHash || existingHosp.addressHash !== newAddressHash;
+
+      if (isManual) {
+        // Manual coordinate override by SuperAdmin
+        const parsedLat = parseFloat(targetLat);
+        const parsedLng = parseFloat(targetLng);
+        const coordVal = pincodeService.validateCoordinates(parsedLat, parsedLng);
+        if (coordVal.valid) {
           req.body.location = {
             type: 'Point',
-            coordinates: gCoords.coordinates
+            coordinates: [coordVal.lng, coordVal.lat]
           };
+          req.body.geocodingStatus = 'verified';
+          req.body.geocodingSource = 'manual_correction';
+          req.body.geocodingPrecision = 'exact';
+          req.body.geocodedAt = new Date();
+          req.body.addressHash = newAddressHash;
         }
-      } else if (req.body.pincode && (!existingHosp.location || !existingHosp.location.coordinates || existingHosp.location.coordinates.length < 2)) {
-        const pinRes = await pincodeService.resolvePincode(req.body.pincode);
-        if (pinRes && pinRes.coordinates) {
-          req.body.location = {
-            type: 'Point',
-            coordinates: pinRes.coordinates
-          };
-          if (!req.body.city && pinRes.district) req.body.city = pinRes.district;
-          if (!req.body.state && pinRes.state) req.body.state = pinRes.state;
+      } else if (addressChanged) {
+        // Address changed: automatically re-initiate geocoding
+        const geoResult = await hospitalGeocodingService.resolveHospitalLocation({
+          name: targetName,
+          address: targetAddress,
+          city: targetCity,
+          state: targetState,
+          pincode: targetPincode,
+          googleMapUrl: targetGoogleMapUrl,
+          latitude: targetLat,
+          longitude: targetLng,
+          existingRecord: existingHosp,
+          forceRefresh: true
+        });
+
+        // Replace old coordinates only after successfully validating the new result
+        if (geoResult.geocodingStatus === 'verified' && geoResult.location) {
+          req.body.location = geoResult.location;
+          req.body.geocodingStatus = 'verified';
+          req.body.geocodingSource = geoResult.geocodingSource;
+          req.body.geocodingPrecision = geoResult.geocodingPrecision;
+          req.body.geocodedAt = geoResult.geocodedAt;
+          req.body.addressHash = newAddressHash;
+        } else {
+          // New address could not be fully verified: mark needs_review or failed, preserve previous valid coordinates
+          req.body.geocodingStatus = geoResult.geocodingStatus || 'needs_review';
+          req.body.geocodingSource = geoResult.geocodingSource || existingHosp.geocodingSource;
+          req.body.geocodingPrecision = geoResult.geocodingPrecision || 'approximate';
+          req.body.geocodedAt = new Date();
+          req.body.addressHash = newAddressHash;
+          if (existingHosp.location && Array.isArray(existingHosp.location.coordinates) && existingHosp.location.coordinates.length === 2) {
+            req.body.location = existingHosp.location;
+          }
         }
-      } else if (existingHosp.location && Array.isArray(existingHosp.location.coordinates) && existingHosp.location.coordinates.length === 2) {
-        // PRESERVE existing valid coordinates! Do not overwrite with empty values.
-        if (!req.body.location) {
+      } else {
+        // Unchanged address: reuse existing verified coordinates
+        if (existingHosp.location && Array.isArray(existingHosp.location.coordinates) && existingHosp.location.coordinates.length === 2) {
           req.body.location = existingHosp.location;
         }
+        req.body.geocodingStatus = existingHosp.geocodingStatus || 'verified';
+        req.body.geocodingSource = existingHosp.geocodingSource || 'existing_coordinates';
+        req.body.geocodedAt = existingHosp.geocodedAt || new Date();
+        req.body.addressHash = existingHosp.addressHash || newAddressHash;
       }
     }
 
@@ -1630,6 +1692,80 @@ router.put('/hospitals/:id', requireRole('Onboarding Manager'), async (req, res)
   } catch (err) {
     console.error('Update hospital error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/super-admin/hospitals/:id/retry-geocoding
+// Administrative endpoint to safely re-trigger geocoding for pending, failed, or needs_review hospital addresses
+router.post('/hospitals/:id/retry-geocoding', requireRole('Onboarding Manager'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const hospitalGeocodingService = require('../services/geocoding/hospitalGeocodingService');
+
+    let hospital = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      hospital = await SuperAdminHospital.findById(id);
+    }
+    if (!hospital) {
+      hospital = await SuperAdminHospital.findOne({
+        $or: [
+          { code: id },
+          { code: String(id).toLowerCase().trim() },
+          { hospitalId: String(id).toUpperCase().trim() }
+        ]
+      });
+    }
+
+    if (!hospital) {
+      return res.status(404).json({ error: 'Hospital record not found.' });
+    }
+
+    const geoResult = await hospitalGeocodingService.resolveHospitalLocation({
+      name: hospital.name,
+      address: hospital.address,
+      city: hospital.city,
+      state: hospital.state,
+      pincode: hospital.pincode,
+      forceRefresh: true
+    });
+
+    if (geoResult.location && geoResult.geocodingStatus === 'verified') {
+      hospital.location = geoResult.location;
+      hospital.geocodingStatus = 'verified';
+      hospital.geocodingSource = geoResult.geocodingSource;
+      hospital.geocodingPrecision = geoResult.geocodingPrecision;
+      hospital.geocodedAt = geoResult.geocodedAt;
+      hospital.addressHash = geoResult.addressHash;
+    } else {
+      hospital.geocodingStatus = geoResult.geocodingStatus || 'needs_review';
+      if (geoResult.geocodingSource) hospital.geocodingSource = geoResult.geocodingSource;
+      hospital.geocodedAt = new Date();
+      hospital.addressHash = geoResult.addressHash;
+    }
+
+    await hospital.save();
+    await writeAudit(req, 'retry_geocoding', `Retried geocoding for hospital ${hospital.name} (${hospital.code}): Status=${hospital.geocodingStatus}`);
+
+    return res.json({
+      success: true,
+      message: `Geocoding retry completed with status: ${hospital.geocodingStatus}`,
+      hospital: {
+        id: hospital._id,
+        code: hospital.code,
+        name: hospital.name,
+        address: hospital.address,
+        pincode: hospital.pincode,
+        location: hospital.location,
+        geocodingStatus: hospital.geocodingStatus,
+        geocodingSource: hospital.geocodingSource,
+        geocodingPrecision: hospital.geocodingPrecision,
+        geocodedAt: hospital.geocodedAt,
+        addressHash: hospital.addressHash
+      }
+    });
+  } catch (error) {
+    console.error('Hospital Geocoding Retry Error:', error);
+    return res.status(500).json({ error: 'Failed to retry hospital geocoding: ' + error.message });
   }
 });
 

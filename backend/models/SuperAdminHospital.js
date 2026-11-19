@@ -76,12 +76,40 @@ const superAdminHospitalSchema = new mongoose.Schema({
   location: {
     type: {
       type: String,
-      enum: ['Point'],
-      default: 'Point'
+      enum: ['Point']
     },
     coordinates: {
       type: [Number] // [longitude, latitude]
     }
+  },
+  geocodingStatus: {
+    type: String,
+    enum: ['pending', 'verified', 'needs_review', 'failed'],
+    default: 'pending'
+  },
+  geocodingSource: {
+    type: String,
+    enum: [
+      'existing_coordinates',
+      'google_maps_url',
+      'address',
+      'manual_correction',
+      'pincode_approximate'
+    ],
+    default: null
+  },
+  geocodingPrecision: {
+    type: String,
+    enum: ['exact', 'rooftop', 'interpolated', 'approximate', 'unknown'],
+    default: 'unknown'
+  },
+  geocodedAt: {
+    type: Date
+  },
+  addressHash: {
+    type: String,
+    default: '',
+    trim: true
   },
   panNumber: { type: String, default: '' },
   corpId: { type: String, default: '' },
@@ -135,6 +163,13 @@ superAdminHospitalSchema.pre('validate', async function() {
     this.hospitalId = await generateUniqueHospitalId(this.constructor);
   }
 
+  // 2dsphere index protection: ensure location is unset if coordinates are absent or incomplete
+  if (this.location && (!Array.isArray(this.location.coordinates) || this.location.coordinates.length < 2)) {
+    this.location = undefined;
+  } else if (this.location && Array.isArray(this.location.coordinates) && this.location.coordinates.length === 2) {
+    if (!this.location.type) this.location.type = 'Point';
+  }
+
   // Reception Queue module default-off enforcement:
   // Must default to disabled ({ enabled: false }) unless explicitly set to true.
   // Explicitly enabled clinics (true) are strictly preserved.
@@ -181,5 +216,6 @@ superAdminHospitalSchema.pre('findOneAndUpdate', function() {
 
 superAdminHospitalSchema.index({ location: '2dsphere' });
 superAdminHospitalSchema.index({ pincode: 1 });
+superAdminHospitalSchema.index({ geocodingStatus: 1 });
 
 module.exports = mongoose.model('SuperAdminHospital', superAdminHospitalSchema);
