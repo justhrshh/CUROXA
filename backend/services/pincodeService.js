@@ -344,9 +344,79 @@ function isValidCoordinates(lat, lng) {
   return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
 
+/**
+ * Validates that latitude and longitude are within Indian geographic boundaries (6°-38°N, 68°-98°E).
+ * @param {number|string} lat
+ * @param {number|string} lng
+ * @returns {{ valid: boolean, error?: string, lat?: number, lng?: number }}
+ */
+function validateCoordinates(lat, lng) {
+  const parsedLat = typeof lat === 'number' ? lat : parseFloat(lat);
+  const parsedLng = typeof lng === 'number' ? lng : parseFloat(lng);
+  if (isNaN(parsedLat) || isNaN(parsedLng)) {
+    return { valid: false, error: 'Coordinates must be valid finite numbers.' };
+  }
+  if (parsedLat < 6 || parsedLat > 38 || parsedLng < 68 || parsedLng > 98) {
+    return { valid: false, error: 'Coordinates are outside Indian geographical boundaries (6°-38°N, 68°-98°E).' };
+  }
+  return { valid: true, lat: parsedLat, lng: parsedLng };
+}
+
+/**
+ * Synchronous centroid lookup for PIN codes with standard result structure.
+ * @param {string} rawPin
+ * @returns {{ valid: boolean, error?: string, pincode?: string, district?: string, state?: string, coordinates?: { lat: number, lng: number }, rawCoordinates?: [number, number] }}
+ */
+function getCentroid(rawPin) {
+  const val = validatePincode(rawPin);
+  if (!val.valid) return { valid: false, error: val.error };
+  const pin = val.cleanPincode;
+  const prefix3 = pin.substring(0, 3);
+  const prefix2 = pin.substring(0, 2);
+  let centroid = PIN_PREFIX_CENTROIDS[prefix3];
+  if (!centroid) {
+    const matchingKey = Object.keys(PIN_PREFIX_CENTROIDS).find(k => k.startsWith(prefix2));
+    if (matchingKey) centroid = PIN_PREFIX_CENTROIDS[matchingKey];
+  }
+  if (centroid) {
+    return {
+      valid: true,
+      pincode: pin,
+      district: centroid.district,
+      state: centroid.state,
+      coordinates: { lat: centroid.coords[1], lng: centroid.coords[0] },
+      rawCoordinates: centroid.coords
+    };
+  }
+  return { valid: false, error: 'Unassigned or unmapped postal circle prefix.' };
+}
+
+/**
+ * Calculates Great-Circle / Haversine distance in kilometers between two GPS points.
+ * @param {number} lat1
+ * @param {number} lon1
+ * @param {number} lat2
+ * @param {number} lon2
+ * @returns {number} Distance in kilometers (1 decimal place)
+ */
+function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+
 module.exports = {
   validatePincode,
   resolvePincode,
+  getCentroid,
+  validateCoordinates,
+  calculateHaversineDistance,
   extractCoordinatesFromGoogleMapsUrl,
   isValidCoordinates,
   PIN_PREFIX_CENTROIDS
