@@ -154,9 +154,10 @@ async function saveImageToStorage({ buffer, filename, contentType, subfolder = '
   const finalFilename = `${uniquePrefix}-${cleanName}`;
   const key = `${subfolder}/${finalFilename}`;
 
+  const driver = (process.env.STORAGE_DRIVER || '').toLowerCase().trim();
   const isR2Configured = r2.isR2Configured();
 
-  if (isR2Configured) {
+  if (driver === 'r2' || isR2Configured) {
     try {
       const bucketName = r2.getR2PublicBucket();
       const command = new PutObjectCommand({
@@ -169,11 +170,14 @@ async function saveImageToStorage({ buffer, filename, contentType, subfolder = '
       const publicDomain = r2.getR2PublicDomain();
       return `${publicDomain}/${key}`;
     } catch (r2Err) {
-      console.warn('[STORAGE] Cloudflare R2 upload failed, falling back to local storage:', r2Err.message);
+      console.error('[STORAGE] Cloudflare R2 upload failed for key:', key, r2Err.message);
+      if (driver === 'r2') {
+        throw new Error(`Cloudflare R2 public upload failed: ${r2Err.message}`);
+      }
     }
   }
 
-  // Local filesystem fallback
+  // Local filesystem fallback (strictly for non-r2 / local-driver development)
   const uploadDir = path.join(__dirname, '..', 'uploads', subfolder);
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });

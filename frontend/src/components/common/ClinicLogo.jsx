@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { resolveMediaUrl } from '../../utils/urlConfig';
 
 /**
  * Reusable Clinic Logo component.
@@ -18,6 +19,22 @@ import React, { useState, useEffect } from 'react';
  * @param {Object} [props.style={}] - Additional inline styles
  * @param {boolean} [props.showMonogramFallback=true] - Whether to show monogram badge if logo is absent
  */
+/**
+ * Checks if a URL points to an unresolvable documentation or test placeholder domain (e.g. cdn.example.com).
+ * Uses exact hostname validation to ensure legitimate clinic domains (e.g. example.com-health.org) are not rejected.
+ */
+const isUnresolvablePlaceholder = (url) => {
+  if (!url || typeof url !== 'string') return false;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) return false;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    return host === 'example.com' || host.endsWith('.example.com') || host === 'via.placeholder.com' || host.endsWith('.via.placeholder.com');
+  } catch {
+    return false;
+  }
+};
+
 export const ClinicLogo = ({
   hospital,
   src,
@@ -39,10 +56,14 @@ export const ClinicLogo = ({
     setImgError(false);
   }, [cleanLogo, hospital?.hospitalId, hospital?.code]);
 
+  // Reject placeholder / unresolvable documentation domains (e.g. cdn.example.com) via exact hostname check
+  const isInvalidPlaceholder = isUnresolvablePlaceholder(cleanLogo);
+
   // Determine if cleanLogo is an image format (URL, data URI, blob, or raw base64)
   const isImageFormat = Boolean(
     cleanLogo &&
     cleanLogo !== 'H' &&
+    !isInvalidPlaceholder &&
     (
       cleanLogo.startsWith('data:image/') ||
       cleanLogo.startsWith('http://') ||
@@ -56,11 +77,13 @@ export const ClinicLogo = ({
     )
   );
 
-  const imageSrc = cleanLogo.startsWith('/9j/') ? `data:image/jpeg;base64,${cleanLogo}`
+  const rawImageSrc = cleanLogo.startsWith('/9j/') ? `data:image/jpeg;base64,${cleanLogo}`
     : cleanLogo.startsWith('iVBOR') ? `data:image/png;base64,${cleanLogo}`
     : cleanLogo.startsWith('R0lGOD') ? `data:image/gif;base64,${cleanLogo}`
     : cleanLogo.startsWith('PHN2Zw') ? `data:image/svg+xml;base64,${cleanLogo}`
     : cleanLogo;
+
+  const imageSrc = rawImageSrc.startsWith('/uploads/') ? resolveMediaUrl(rawImageSrc) : rawImageSrc;
 
   const isImageUrl = !imgError && isImageFormat;
 

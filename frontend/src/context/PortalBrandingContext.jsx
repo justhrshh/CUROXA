@@ -1,11 +1,28 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../utils/api';
+import { resolveMediaUrl } from '../utils/urlConfig';
 
 const PortalBrandingContext = createContext(null);
 
 export const usePortalBranding = () => {
   return useContext(PortalBrandingContext);
+};
+
+/**
+ * Checks if a URL points to an unresolvable documentation or test placeholder domain (e.g. cdn.example.com).
+ * Uses exact hostname validation to ensure legitimate clinic domains (e.g. example.com-health.org) are not rejected.
+ */
+const isUnresolvablePlaceholder = (url) => {
+  if (!url || typeof url !== 'string') return false;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) return false;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    return host === 'example.com' || host.endsWith('.example.com') || host === 'via.placeholder.com' || host.endsWith('.via.placeholder.com');
+  } catch {
+    return false;
+  }
 };
 
 /**
@@ -35,10 +52,14 @@ export const HospitalBrandLogo = ({
 
   if (!hospital) return null;
 
+  // Reject placeholder / unresolvable documentation domains (e.g. cdn.example.com) via exact hostname check
+  const isInvalidPlaceholder = isUnresolvablePlaceholder(cleanLogo);
+
   // Determine if cleanLogo is an image (URL, data URI, blob, or raw base64)
   const isImageFormat = Boolean(
     cleanLogo &&
     cleanLogo !== 'H' &&
+    !isInvalidPlaceholder &&
     (
       cleanLogo.startsWith('data:image/') ||
       cleanLogo.startsWith('http://') ||
@@ -52,11 +73,13 @@ export const HospitalBrandLogo = ({
     )
   );
 
-  const imageSrc = cleanLogo.startsWith('/9j/') ? `data:image/jpeg;base64,${cleanLogo}`
+  const rawImageSrc = cleanLogo.startsWith('/9j/') ? `data:image/jpeg;base64,${cleanLogo}`
     : cleanLogo.startsWith('iVBOR') ? `data:image/png;base64,${cleanLogo}`
     : cleanLogo.startsWith('R0lGOD') ? `data:image/gif;base64,${cleanLogo}`
     : cleanLogo.startsWith('PHN2Zw') ? `data:image/svg+xml;base64,${cleanLogo}`
     : cleanLogo;
+
+  const imageSrc = rawImageSrc.startsWith('/uploads/') ? resolveMediaUrl(rawImageSrc) : rawImageSrc;
 
   const isImageUrl = !imgError && isImageFormat;
 
@@ -265,9 +288,11 @@ export const syncPortalDocumentMetadata = (hospital) => {
 
     const rawLogo = hospital.logo || '';
     const cleanLogo = typeof rawLogo === 'string' ? rawLogo.trim() : '';
+    const isInvalidPlaceholder = isUnresolvablePlaceholder(cleanLogo);
     const isImageFormat = Boolean(
       cleanLogo &&
       cleanLogo !== 'H' &&
+      !isInvalidPlaceholder &&
       (
         cleanLogo.startsWith('data:image/') ||
         cleanLogo.startsWith('http://') ||
@@ -280,11 +305,13 @@ export const syncPortalDocumentMetadata = (hospital) => {
         cleanLogo.startsWith('PHN2Zw')
       )
     );
-    const imageSrc = cleanLogo.startsWith('/9j/') ? `data:image/jpeg;base64,${cleanLogo}`
+    const rawImageSrc = cleanLogo.startsWith('/9j/') ? `data:image/jpeg;base64,${cleanLogo}`
       : cleanLogo.startsWith('iVBOR') ? `data:image/png;base64,${cleanLogo}`
       : cleanLogo.startsWith('R0lGOD') ? `data:image/gif;base64,${cleanLogo}`
       : cleanLogo.startsWith('PHN2Zw') ? `data:image/svg+xml;base64,${cleanLogo}`
       : cleanLogo;
+
+    const imageSrc = rawImageSrc.startsWith('/uploads/') ? resolveMediaUrl(rawImageSrc) : rawImageSrc;
 
     let targetFavicon = '/curoxa_icon_logo.png';
     if (isImageFormat) {
