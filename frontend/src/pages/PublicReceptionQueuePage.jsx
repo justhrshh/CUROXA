@@ -850,78 +850,115 @@ const PublicReceptionQueuePage = () => {
                     Checking real-time capacity...
                   </div>
                 ) : doctorAvailability ? (
-                  <div style={{
-                    background: '#F8FAFC',
-                    border: '1.5px solid #E2E8F0',
-                    borderRadius: '10px',
-                    padding: '14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px'
-                  }}>
+                  doctorAvailability.isAvailable && doctorAvailability.remainingSlots > 0 ? (
                     <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(3, 1fr)',
-                      gap: '8px',
-                      textAlign: 'center'
+                      background: 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)',
+                      border: '1.5px solid #86EFAC',
+                      borderRadius: '10px',
+                      padding: '14px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      boxShadow: '0 2px 8px rgba(34, 197, 94, 0.08)'
                     }}>
-                      <div style={{ background: '#FFFFFF', padding: '8px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                        <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>Daily Capacity</div>
-                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
-                          {doctorAvailability.dailyCapacity}
-                        </div>
-                      </div>
-                      <div style={{ background: '#FFFFFF', padding: '8px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                        <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>Already Booked</div>
-                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#334155', marginTop: '2px' }}>
-                          {doctorAvailability.bookedCount}
-                        </div>
-                      </div>
-                      <div style={{ background: '#FFFFFF', padding: '8px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                        <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>Remaining Slots</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{
-                          fontSize: '16px',
-                          fontWeight: 800,
-                          color: doctorAvailability.remainingSlots > 0 ? '#0D9488' : '#DC2626',
-                          marginTop: '2px'
+                          width: '34px',
+                          height: '34px',
+                          borderRadius: '50%',
+                          background: '#FFFFFF',
+                          border: '1.5px solid #86EFAC',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#16A34A',
+                          flexShrink: 0,
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
                         }}>
-                          {doctorAvailability.remainingSlots}
+                          <CheckCircle size={18} strokeWidth={2.4} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#14532D' }}>
+                            Slots Available
+                          </div>
+                          <div style={{ fontSize: '11px', fontWeight: 600, color: '#15803D', marginTop: '1px' }}>
+                            Doctor is available for consultation on this date
+                          </div>
                         </div>
                       </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #E2E8F0', paddingTop: '10px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Booking Status:</span>
                       <span style={{
                         fontSize: '11px',
-                        fontWeight: 700,
-                        padding: '3px 10px',
-                        borderRadius: '12px',
-                        background: doctorAvailability.isAvailable && doctorAvailability.remainingSlots > 0 ? '#DCFCE7' : '#FEE2E2',
-                        color: doctorAvailability.isAvailable && doctorAvailability.remainingSlots > 0 ? '#15803D' : '#B91C1C',
-                        border: doctorAvailability.isAvailable && doctorAvailability.remainingSlots > 0 ? '1px solid #86EFAC' : '1px solid #FECACA'
+                        fontWeight: 800,
+                        padding: '4px 12px',
+                        borderRadius: '20px',
+                        background: '#FFFFFF',
+                        color: '#15803D',
+                        border: '1.5px solid #86EFAC',
+                        letterSpacing: '0.02em',
+                        flexShrink: 0,
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
                       }}>
-                        {doctorAvailability.isAvailable && doctorAvailability.remainingSlots > 0 ? '● Available' : '● Full'}
+                        ● Available
                       </span>
                     </div>
-
-                    {(!doctorAvailability.isAvailable || doctorAvailability.remainingSlots <= 0) && (
-                      <div style={{
-                        padding: '10px 12px',
-                        borderRadius: '6px',
-                        background: '#FEF2F2',
-                        border: '1px solid #FECACA',
-                        fontSize: '12px',
-                        color: '#991B1B',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}>
-                        <AlertCircle size={14} color="#DC2626" style={{ flexShrink: 0 }} />
-                        <span>This doctor has reached the maximum booking capacity for the selected date. Please choose another doctor or date.</span>
+                  ) : (
+                    <div style={{
+                      background: 'linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%)',
+                      border: '1.5px solid #FECACA',
+                      borderRadius: '10px',
+                      padding: '14px 16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                      boxShadow: '0 2px 8px rgba(239, 68, 68, 0.08)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{
+                            width: '34px',
+                            height: '34px',
+                            borderRadius: '50%',
+                            background: '#FFFFFF',
+                            border: '1.5px solid #FCA5A5',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#DC2626',
+                            flexShrink: 0,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                          }}>
+                            <AlertCircle size={18} strokeWidth={2.4} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#991B1B' }}>
+                              Slots Full / Unavailable
+                            </div>
+                            <div style={{ fontSize: '11px', fontWeight: 600, color: '#B91C1C', marginTop: '1px' }}>
+                              No booking slots available for this date
+                            </div>
+                          </div>
+                        </div>
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          padding: '4px 12px',
+                          borderRadius: '20px',
+                          background: '#FFFFFF',
+                          color: '#B91C1C',
+                          border: '1.5px solid #FCA5A5',
+                          letterSpacing: '0.02em',
+                          flexShrink: 0,
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                        }}>
+                          ● Full
+                        </span>
                       </div>
-                    )}
-                  </div>
+                      <div style={{ fontSize: '11.5px', color: '#991B1B', fontWeight: 550, paddingLeft: '44px', lineHeight: 1.4 }}>
+                        This doctor has reached capacity for the selected date. Please choose another doctor or consultation date.
+                      </div>
+                    </div>
+                  )
                 ) : null}
               </div>
             )}
