@@ -15,6 +15,7 @@ import { convertPdfToImage } from '../utils/pdfHelper';
 import { cleanHtmlText } from '../utils/textHelper';
 import { getLocalDateString, isPastSlot, isSlotValidForRegistration } from '../utils/dateSlotHelper';
 import StandardReceiptModal from '../components/common/StandardReceiptModal';
+import IdolKpiCard from '../components/common/IdolKpiCard';
 
 
 const permissionNames = {
@@ -6458,49 +6459,239 @@ const ReceptionistDashboard = () => {
               <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
             </button>
 
-            {/* Purple/Blue Command Shield Icon */}
-            <div className="rec-shield-icon" style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
-              color: '#FFFFFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 14px rgba(79, 70, 229, 0.28)',
-              flexShrink: 0
-            }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-            </div>
+            {(() => {
+              const getTabHeaderMeta = (tab) => {
+                switch (tab) {
+                  case 'patients':
+                    return {
+                      title: 'Patient Management',
+                      breadcrumb: 'Front Desk / Patient Directory',
+                      badge: `${patientsList.length} Registered`,
+                      badgeColor: '#2563EB',
+                      badgeBg: '#EFF6FF',
+                      badgeBorder: '#BFDBFE',
+                      subtitle: 'Search patient records, view clinical profiles, and initiate registrations.',
+                      icon: (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                      ),
+                      iconBg: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                      iconShadow: 'rgba(37, 99, 235, 0.28)'
+                    };
+                  case 'appointments':
+                    return {
+                      title: 'Appointments',
+                      breadcrumb: 'Patient Services / Appointments & Bookings',
+                      badge: `${appointments.length} Total Bookings`,
+                      badgeColor: '#0D9488',
+                      badgeBg: '#F0FDFA',
+                      badgeBorder: '#99F6E4',
+                      subtitle: 'Manage patient consultations, same-day multiple visits, queues, and clinical bookings.',
+                      icon: (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                          <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
+                        </svg>
+                      ),
+                      iconBg: 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)',
+                      iconShadow: 'rgba(13, 148, 136, 0.28)'
+                    };
+                  case 'reception-queue':
+                    return {
+                      title: 'Reception Queue',
+                      breadcrumb: 'Front Desk / Counter Intake Workstation',
+                      badge: 'Desk Active',
+                      badgeColor: '#059669',
+                      badgeBg: '#ECFDF5',
+                      badgeBorder: '#A7F3D0',
+                      subtitle: 'Real-time patient queue, token assignment, desk triage, and doctor routing.',
+                      icon: (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                          <rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>
+                        </svg>
+                      ),
+                      iconBg: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+                      iconShadow: 'rgba(5, 150, 105, 0.28)'
+                    };
+                  case 'waiting-queue':
+                    return {
+                      title: 'Doctor Live Waiting Queue',
+                      breadcrumb: 'Clinical Services / Real-Time OPD Queue',
+                      badge: 'Live OPD',
+                      badgeColor: '#D97706',
+                      badgeBg: '#FFFBEB',
+                      badgeBorder: '#FDE68A',
+                      subtitle: 'Live chamber consultation status, queued tokens, and patient check-ins.',
+                      icon: (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                      ),
+                      iconBg: 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
+                      iconShadow: 'rgba(217, 119, 6, 0.28)'
+                    };
+                  case 'dash':
+                    return {
+                      title: 'Dashboard Overview',
+                      breadcrumb: 'Front Desk / Performance & Operations',
+                      badge: 'System Active',
+                      badgeColor: '#059669',
+                      badgeBg: '#ECFDF5',
+                      badgeBorder: '#A7F3D0',
+                      subtitle: 'High-level operational metrics, appointments summary, and clinical activity.',
+                      icon: (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                          <rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>
+                        </svg>
+                      ),
+                      iconBg: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+                      iconShadow: 'rgba(79, 70, 229, 0.28)'
+                    };
+                  case 'staff':
+                    return {
+                      title: 'Staff Management',
+                      breadcrumb: 'Operations & HR / Clinical Staff Directory',
+                      badge: `${doctors.length} Staff`,
+                      badgeColor: '#6D28D9',
+                      badgeBg: '#F5F3FF',
+                      badgeBorder: '#DDD6FE',
+                      subtitle: 'Staff duty status, chamber assignments, and clinical availability.',
+                      icon: (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                      ),
+                      iconBg: 'linear-gradient(135deg, #6D28D9 0%, #8B5CF6 100%)',
+                      iconShadow: 'rgba(109, 40, 217, 0.28)'
+                    };
+                  case 'billing':
+                    return {
+                      title: 'Finance & Billing',
+                      breadcrumb: 'Operations & Billing / Invoices & Collections',
+                      badge: `${bills.length} Invoices`,
+                      badgeColor: '#047857',
+                      badgeBg: '#ECFDF5',
+                      badgeBorder: '#A7F3D0',
+                      subtitle: 'Track revenue collections, pending payments, and patient fee settlements.',
+                      icon: (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                          <rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>
+                        </svg>
+                      ),
+                      iconBg: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+                      iconShadow: 'rgba(5, 150, 105, 0.28)'
+                    };
+                  case 'registration-form':
+                    return {
+                      title: 'Patient Registration',
+                      breadcrumb: 'Front Desk / New Intake & Enrollment',
+                      badge: 'New Patient',
+                      badgeColor: '#2563EB',
+                      badgeBg: '#EFF6FF',
+                      badgeBorder: '#BFDBFE',
+                      subtitle: 'Complete patient registration, demographic capture, and appointment scheduling.',
+                      icon: (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/>
+                        </svg>
+                      ),
+                      iconBg: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                      iconShadow: 'rgba(37, 99, 235, 0.28)'
+                    };
+                  default:
+                    return {
+                      title: tab.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                      breadcrumb: 'Front Desk / Reception Portal',
+                      badge: 'Active',
+                      badgeColor: '#059669',
+                      badgeBg: '#ECFDF5',
+                      badgeBorder: '#A7F3D0',
+                      subtitle: `${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · ${currentUser.name || 'receptionist-1'}`,
+                      icon: (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                      ),
+                      iconBg: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+                      iconShadow: 'rgba(79, 70, 229, 0.28)'
+                    };
+                }
+              };
 
-            {/* Title & Status */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className="rec-top-title" style={{ fontSize: '17px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.3px', lineHeight: 1.2 }}>
-                  Front Desk Command Center
-                </span>
-                <span className="rec-status-badge desktop-only-flex" style={{
-                  fontSize: '9.5px',
-                  fontWeight: 850,
-                  color: '#059669',
-                  background: '#ECFDF5',
-                  border: '1px solid #A7F3D0',
-                  padding: '2px 7px',
-                  borderRadius: '10px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  letterSpacing: '0.03em'
-                }}>
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#10B981' }} />
-                  SYSTEM ACTIVE
-                </span>
-              </div>
-              <div className="rec-top-subtitle desktop-only-flex" style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 550, marginTop: '2px', letterSpacing: '-0.01em' }}>
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {currentUser.name || 'receptionist-1'}
-              </div>
-            </div>
+              const currentTabMeta = getTabHeaderMeta(activeTab);
+
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <button
+                    type="button"
+                    className="mobile-hamburger-btn"
+                    onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+                    style={{
+                      background: '#F1F5F9',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      width: '38px',
+                      height: '38px',
+                      display: 'none',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      color: '#0F172A'
+                    }}
+                    aria-label="Toggle Navigation Menu"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+                  </button>
+
+                  {/* Dynamic Themed Icon */}
+                  <div className="rec-shield-icon" style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    background: currentTabMeta.iconBg,
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: `0 4px 14px ${currentTabMeta.iconShadow}`,
+                    flexShrink: 0
+                  }}>
+                    {currentTabMeta.icon}
+                  </div>
+
+                  {/* Dynamic Title, Breadcrumb & Badge */}
+                  <div>
+                    <div className="desktop-only-flex" style={{ fontSize: '11px', color: '#64748B', fontWeight: 650, letterSpacing: '0.02em', marginBottom: '2px' }}>
+                      {currentTabMeta.breadcrumb}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span className="rec-top-title" style={{ fontSize: '18px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.3px', lineHeight: 1.2, fontFamily: "'Outfit', sans-serif" }}>
+                        {currentTabMeta.title}
+                      </span>
+                      <span className="rec-status-badge desktop-only-flex" style={{
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        color: currentTabMeta.badgeColor,
+                        background: currentTabMeta.badgeBg,
+                        border: `1px solid ${currentTabMeta.badgeBorder}`,
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        letterSpacing: '0.02em'
+                      }}>
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: currentTabMeta.badgeColor }} />
+                        {currentTabMeta.badge}
+                      </span>
+                    </div>
+                    <div className="rec-top-subtitle desktop-only-flex" style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 500, marginTop: '2px', maxWidth: '480px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {currentTabMeta.subtitle}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
 
@@ -7091,7 +7282,7 @@ const ReceptionistDashboard = () => {
               </div>
             )}
 
-            {/* 2. STANDARDIZED FLAT HEALTHCARE KPI CARDS */}
+            {/* 2. STANDARDIZED IDOL HEALTHCARE KPI CARDS */}
             {(() => {
               const completedAppts = filteredAppointments.filter(a => a.status === 'Completed' || a.status === 'Paid');
               const waitingAppts = filteredAppointments.filter(isAppointmentInWaitingQueue);
@@ -7101,76 +7292,71 @@ const ReceptionistDashboard = () => {
               const completionPercent = filteredAppointments.length > 0 ? Math.round((completedAppts.length / filteredAppointments.length) * 100) : 0;
 
               return (
-                <div className="rec-kpi-grid grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-6">
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: '14px',
+                  marginBottom: '16px'
+                }}>
                   {/* Card 1: Today's Appointments */}
-                  <div 
-                    className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-blue-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
+                  <IdolKpiCard
+                    label="Today's Appointments"
+                    value={filteredAppointments.length}
+                    unit="scheduled today"
+                    context={`${completedAppts.length} completed · ${filteredAppointments.length - completedAppts.length} pending (${completionPercent}%)`}
+                    theme="teal"
+                    icon={(
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
+                      </svg>
+                    )}
                     onClick={() => switchTab('appointments')}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Today's Appointments</span>
-                      <span className="w-2 h-2 rounded-full bg-blue-500" />
-                    </div>
-                    <div className="mt-2">
-                      <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{filteredAppointments.length}</div>
-                      <div className="text-xs text-slate-500 font-medium mt-1.5 truncate">
-                        {completedAppts.length} completed · {filteredAppointments.length - completedAppts.length} pending ({completionPercent}% done)
-                      </div>
-                    </div>
-                  </div>
+                  />
 
                   {/* Card 2: Waiting in Queue */}
-                  <div 
-                    className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-teal-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
+                  <IdolKpiCard
+                    label="Waiting in Queue"
+                    value={waitingAppts.length}
+                    unit="patients waiting"
+                    context="Active intake · Live room triage"
+                    theme="amber"
+                    icon={(
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                      </svg>
+                    )}
                     onClick={() => switchTab('reception-queue')}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Waiting in Queue</span>
-                      <span className="w-2 h-2 rounded-full bg-teal-500" />
-                    </div>
-                    <div className="mt-2">
-                      <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{waitingAppts.length}</div>
-                      <div className="text-xs text-teal-700 font-semibold mt-1.5 truncate">
-                        Active room intake · Live triage
-                      </div>
-                    </div>
-                  </div>
+                  />
 
                   {/* Card 3: Collected Today */}
-                  <div 
-                    className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-emerald-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
+                  <IdolKpiCard
+                    label="Collected Today"
+                    value={`₹${totalRevenueToday.toLocaleString('en-IN')}`}
+                    unit="total receipts"
+                    context={`${paidBills.length} receipts settled · 100% cleared`}
+                    theme="emerald"
+                    icon={(
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                      </svg>
+                    )}
                     onClick={() => switchTab('billing')}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Collected Today</span>
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    </div>
-                    <div className="mt-2">
-                      <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none font-mono">
-                        ₹{totalRevenueToday.toLocaleString('en-IN')}
-                      </div>
-                      <div className="text-xs text-emerald-700 font-semibold mt-1.5 truncate">
-                        {paidBills.length} receipts settled · 100% cleared
-                      </div>
-                    </div>
-                  </div>
+                  />
 
                   {/* Card 4: Doctors on Duty */}
-                  <div 
-                    className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
+                  <IdolKpiCard
+                    label="Doctors on Duty"
+                    value={availableDocs.length}
+                    unit="doctors active"
+                    context={`${availableDocs.length} of ${doctors.length} practitioners available`}
+                    theme="purple"
+                    icon={(
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                      </svg>
+                    )}
                     onClick={() => switchTab('staff')}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Doctors on Duty</span>
-                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                    </div>
-                    <div className="mt-2">
-                      <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{availableDocs.length}</div>
-                      <div className="text-xs text-slate-500 font-medium mt-1.5 truncate">
-                        {availableDocs.length} of {doctors.length} active practitioners available
-                      </div>
-                    </div>
-                  </div>
+                  />
                 </div>
               );
             })()}
@@ -7960,69 +8146,75 @@ const ReceptionistDashboard = () => {
               </div>
             </div>
 
-            {/* Top KPI Demographic & Overview Cards (Clean Flat Architecture) */}
-            <div className="rec-kpi-grid grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-6">
-
+            {/* Top KPI Demographic & Overview Cards (Exact Idol Healthcare Architecture) */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '14px',
+              marginBottom: '16px'
+            }}>
               {/* Card 1: Total Patients */}
-              <div
-                className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-blue-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
+              <IdolKpiCard
+                label="Total Patients"
+                value={totalPatients}
+                unit="active registry"
+                context="100% patient directory size"
+                theme="blue"
+                icon={(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                )}
                 onClick={() => { setPatientGenderFilter('All'); setPatientPage(1); }}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Total Patients</span>
-                  <span className="w-2 h-2 rounded-full bg-blue-500" />
-                </div>
-                <div className="mt-2">
-                  <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{totalPatients}</div>
-                  <div className="text-xs text-blue-700 font-semibold mt-1.5">Active patient registry</div>
-                </div>
-              </div>
+                active={patientGenderFilter === 'All'}
+              />
 
               {/* Card 2: Male Patients */}
-              <div
-                className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
+              <IdolKpiCard
+                label="Male Patients"
+                value={maleCount}
+                unit={`${totalPatients > 0 ? Math.round((maleCount / totalPatients) * 100) : 0}% of directory`}
+                context="Registered male demographic profile"
+                theme="purple"
+                icon={(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                  </svg>
+                )}
                 onClick={() => { setPatientGenderFilter('Male'); setPatientPage(1); }}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Male Patients</span>
-                  <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                </div>
-                <div className="mt-2">
-                  <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{maleCount}</div>
-                  <div className="text-xs text-slate-500 font-medium mt-1.5">{totalPatients > 0 ? Math.round((maleCount / totalPatients) * 100) : 0}% of directory</div>
-                </div>
-              </div>
+                active={patientGenderFilter === 'Male'}
+              />
 
               {/* Card 3: Female Patients */}
-              <div
-                className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-rose-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
+              <IdolKpiCard
+                label="Female Patients"
+                value={femaleCount}
+                unit={`${totalPatients > 0 ? Math.round((femaleCount / totalPatients) * 100) : 0}% of directory`}
+                context="Registered female demographic profile"
+                theme="rose"
+                icon={(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                  </svg>
+                )}
                 onClick={() => { setPatientGenderFilter('Female'); setPatientPage(1); }}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Female Patients</span>
-                  <span className="w-2 h-2 rounded-full bg-rose-500" />
-                </div>
-                <div className="mt-2">
-                  <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{femaleCount}</div>
-                  <div className="text-xs text-slate-500 font-medium mt-1.5">{totalPatients > 0 ? Math.round((femaleCount / totalPatients) * 100) : 0}% of directory</div>
-                </div>
-              </div>
+                active={patientGenderFilter === 'Female'}
+              />
 
               {/* Card 4: Appointments */}
-              <div
-                className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-teal-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
+              <IdolKpiCard
+                label="Appointments"
+                value={appointments.length}
+                unit="scheduled consultations"
+                context="Active patient bookings on roster"
+                theme="teal"
+                icon={(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
+                  </svg>
+                )}
                 onClick={() => switchTab('appointments')}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Appointments</span>
-                  <span className="w-2 h-2 rounded-full bg-teal-500" />
-                </div>
-                <div className="mt-2">
-                  <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{appointments.length}</div>
-                  <div className="text-xs text-teal-700 font-semibold mt-1.5">Scheduled consultations →</div>
-                </div>
-              </div>
-
+              />
             </div>
 
             {/* Main Content Card with Search & Filters */}
@@ -14353,6 +14545,77 @@ const ReceptionistDashboard = () => {
               </div>
             </div>
 
+            {/* Top KPI Appointments Overview (Exact Idol Healthcare Architecture) */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '14px',
+              marginBottom: '16px'
+            }}>
+              <IdolKpiCard
+                label="Total Bookings"
+                value={counts.All}
+                unit="all bookings"
+                context="Complete registered appointment roster"
+                theme="blue"
+                icon={(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
+                  </svg>
+                )}
+                onClick={() => setBookingTypeFilter('All')}
+                active={bookingTypeFilter === 'All'}
+              />
+
+              <IdolKpiCard
+                label="Doctor Consultations"
+                value={counts.Appointment || 0}
+                unit="clinical visits"
+                context="Physician OPD consultation bookings"
+                theme="teal"
+                icon={(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                )}
+                onClick={() => setBookingTypeFilter('Appointment')}
+                active={bookingTypeFilter === 'Appointment'}
+              />
+
+              <IdolKpiCard
+                label="Lab Investigations"
+                value={counts['Lab Test'] || 0}
+                unit="diagnostics booked"
+                context="Pathology and clinical laboratory tests"
+                theme="emerald"
+                icon={(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                  </svg>
+                )}
+                onClick={() => setBookingTypeFilter('Lab Test')}
+                active={bookingTypeFilter === 'Lab Test'}
+              />
+
+              <IdolKpiCard
+                label="Pending Requests"
+                value={pendingReqCount}
+                unit="awaiting triage"
+                context="Online portal patient registrations"
+                theme="amber"
+                icon={(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                )}
+                onClick={() => {
+                  if (pendingOnlineRequests.length > 0) {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                }}
+              />
+            </div>
+
             {/* Sliding Date Range Filter Panel */}
             {showDateFilter && (
               <div style={{ padding: '16px 20px', marginBottom: '16px', borderRadius: '12px', border: '1px solid #BFDBFE', background: '#F8FAFC', animation: 'slideDown 0.25s ease-out' }}>
@@ -16329,211 +16592,74 @@ const ReceptionistDashboard = () => {
               </div>
             </div>
 
-            {/* Top KPI Demographic & Overview Cards (Exact Dashboard Style) */}
-            <div className="rec-kpi-grid grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-4 sm:mb-6">
-              
-              {/* Card 1: Total Revenue (Emerald Green Gradient) */}
-              <div 
-                className={`p-5 rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer ${billingStatusFilter === 'Paid' ? 'ring-2 ring-emerald-500' : ''}`}
-                style={{
-                  background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)'
-                }}
+            {/* Top KPI Financial & Revenue Cards (Exact Idol Healthcare Architecture) */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '14px',
+              marginBottom: '16px'
+            }}>
+              {/* Card 1: Total Revenue */}
+              <IdolKpiCard
+                label="Total Revenue"
+                value={`₹${totalPaidRevenue.toLocaleString('en-IN')}`}
+                unit="settled receipts"
+                context={`${paidCount} settled receipts · 100% cleared`}
+                theme="emerald"
+                icon={(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                  </svg>
+                )}
                 onClick={() => setBillingStatusFilter(billingStatusFilter === 'Paid' ? 'All' : 'Paid')}
-                title="Click to filter settled invoices"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
-                    <span className="text-base font-black font-sans leading-none">₹</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider">Total Revenue</span>
-                  </div>
-                </div>
-                
-                <div className="mt-4 flex items-end justify-between">
-                  <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
-                      ₹{totalPaidRevenue.toLocaleString('en-IN')}
-                    </div>
-                    <div className="text-xs text-emerald-700 font-bold mt-2 truncate">
-                      {paidCount} settled receipts · 100% cleared
-                    </div>
-                  </div>
+                active={billingStatusFilter === 'Paid'}
+              />
 
-                  {/* Green Mini Sparkline */}
-                  <div className="w-16 h-8 shrink-0 relative">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                      <defs>
-                        <linearGradient id="kpiGreenGradRecBill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10B981" stopOpacity="0.45"/>
-                          <stop offset="100%" stopColor="#10B981" stopOpacity="0.05"/>
-                        </linearGradient>
-                      </defs>
-                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#kpiGreenGradRecBill)" />
-                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#10B981" strokeWidth="2.4" strokeLinecap="round" />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* Half Gradient Accent Line Beneath Card */}
-                <div 
-                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
-                  style={{
-                    background: 'linear-gradient(90deg, transparent 0%, #10B981 100%)'
-                  }}
-                />
-              </div>
-
-              {/* Card 2: Pending Payments (Amber / Orange Gradient) */}
-              <div 
-                className={`p-5 rounded-2xl border border-amber-200/90 shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer ${billingStatusFilter === 'Unpaid' ? 'ring-2 ring-amber-500' : ''}`}
-                style={{
-                  background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)'
-                }}
+              {/* Card 2: Pending Receivables */}
+              <IdolKpiCard
+                label="Pending Receivables"
+                value={`₹${totalPendingRevenue.toLocaleString('en-IN')}`}
+                unit="unsettled balance"
+                context={`${unpaidCount} unpaid / partial invoices`}
+                theme="amber"
+                icon={(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+                  </svg>
+                )}
                 onClick={() => setBillingStatusFilter(billingStatusFilter === 'Unpaid' ? 'All' : 'Unpaid')}
-                title="Click to filter pending unpaid invoices"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/25">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  </div>
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">Pending Payments</span>
-                  </div>
-                </div>
-                
-                <div className="mt-4 flex items-end justify-between">
-                  <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
-                      ₹{totalPendingRevenue.toLocaleString('en-IN')}
-                    </div>
-                    <div className="text-xs text-amber-700 font-bold mt-2 truncate">
-                      {unpaidCount} unpaid invoice{unpaidCount === 1 ? '' : 's'} · Awaiting settlement
-                    </div>
-                  </div>
+                active={billingStatusFilter === 'Unpaid'}
+              />
 
-                  {/* Amber Mini Sparkline */}
-                  <div className="w-16 h-8 shrink-0 relative">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                      <defs>
-                        <linearGradient id="kpiAmberGradRecBill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.45"/>
-                          <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.05"/>
-                        </linearGradient>
-                      </defs>
-                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#kpiAmberGradRecBill)" />
-                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#F59E0B" strokeWidth="2.4" strokeLinecap="round" />
-                    </svg>
-                  </div>
-                </div>
+              {/* Card 3: Today's Transactions */}
+              <IdolKpiCard
+                label="Today's Transactions"
+                value={todayTxCount}
+                unit="invoices logged"
+                context="Same-day billing & fee receipts"
+                theme="blue"
+                icon={(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>
+                  </svg>
+                )}
+              />
 
-                {/* Half Gradient Accent Line Beneath Card */}
-                <div 
-                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
-                  style={{
-                    background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)'
-                  }}
-                />
-              </div>
-
-              {/* Card 3: Transactions Today (Blue Gradient) */}
-              <div 
-                className="p-5 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group"
-                style={{
-                  background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)'
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-                  </div>
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">Transactions Today</span>
-                  </div>
-                </div>
-                
-                <div className="mt-4 flex items-end justify-between">
-                  <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{todayTxCount}</div>
-                    <div className="text-xs text-blue-700 font-bold mt-2 truncate">
-                      Generated today · Active transactions
-                    </div>
-                  </div>
-
-                  {/* Blue Mini Sparkline */}
-                  <div className="w-16 h-8 shrink-0 relative">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                      <defs>
-                        <linearGradient id="kpiBlueGradRecBill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
-                          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
-                        </linearGradient>
-                      </defs>
-                      <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiBlueGradRecBill)" />
-                      <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* Half Gradient Accent Line Beneath Card */}
-                <div 
-                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
-                  style={{
-                    background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)'
-                  }}
-                />
-              </div>
-
-              {/* Card 4: Total Invoices (Purple / Violet Gradient) */}
-              <div 
-                className={`p-5 rounded-2xl border border-purple-200/90 shadow-[0_12px_28px_rgba(139,92,246,0.08)] hover:shadow-[0_16px_36px_rgba(139,92,246,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer ${billingStatusFilter === 'All' ? 'ring-2 ring-purple-500' : ''}`}
-                style={{
-                  background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)'
-                }}
+              {/* Card 4: Settlement Rate */}
+              <IdolKpiCard
+                label="Settlement Rate"
+                value={`${settlementRate}%`}
+                unit="cleared collections"
+                context={`${paidCount} of ${totalInvoicesCount} invoices cleared`}
+                theme="purple"
+                icon={(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                )}
                 onClick={() => { setBillingStatusFilter('All'); setBillingPage(1); }}
-                title="Click to view all invoices"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/25">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                  </div>
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider">Total Invoices</span>
-                  </div>
-                </div>
-                
-                <div className="mt-4 flex items-end justify-between">
-                  <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{totalInvoicesCount}</div>
-                    <div className="text-xs text-purple-700 font-bold mt-2 truncate">
-                      {settlementRate}% collection settlement rate
-                    </div>
-                  </div>
-
-                  {/* Purple Mini Sparkline */}
-                  <div className="w-16 h-8 shrink-0 relative">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                      <defs>
-                        <linearGradient id="kpiPurpleGradRecBill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.45"/>
-                          <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.05"/>
-                        </linearGradient>
-                      </defs>
-                      <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiPurpleGradRecBill)" />
-                      <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#8B5CF6" strokeWidth="2.4" strokeLinecap="round" />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* Half Gradient Accent Line Beneath Card */}
-                <div 
-                  className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
-                  style={{
-                    background: 'linear-gradient(90deg, transparent 0%, #8B5CF6 100%)'
-                  }}
-                />
-              </div>
-
+                active={billingStatusFilter === 'All'}
+              />
             </div>
 
             {/* Main Content Card with Search & Quick Filter Pills */}

@@ -8,6 +8,7 @@ import {
   QrCode, User, Hash, Stethoscope, ChevronRight, Filter
 } from 'lucide-react';
 import ReceptionQRModal from './ReceptionQRModal';
+import IdolKpiCard from './common/IdolKpiCard';
 
 const ReceptionQueuePanel = ({
   doctors = [],
@@ -450,81 +451,74 @@ const ReceptionQueuePanel = ({
         </div>
       )}
 
-      {/* ── 2. METRICS OVERVIEW BAR (STANDARDIZED FLAT KPI CARDS) ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5">
-        
+      {/* ── 2. METRICS OVERVIEW BAR (EXACT IDOL HEALTHCARE KPI CARDS) ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: '14px',
+        marginBottom: '16px'
+      }}>
         {/* KPI 1: Waiting Now */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs flex flex-col justify-between min-h-[78px] sm:min-h-[86px] transition hover:border-blue-300">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
-              Waiting Now
-            </span>
-            <span className="w-2 h-2 rounded-full bg-teal-500" />
-          </div>
-          <div className="flex items-baseline justify-between mt-1">
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
-              {queueData.metrics.waitingCount}
-            </div>
-            <span className="text-[11px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100">
-              In Line
-            </span>
-          </div>
-        </div>
+        <IdolKpiCard
+          label="Waiting Now"
+          value={queueData.metrics.waitingCount}
+          unit="patients in line"
+          context="Awaiting reception counter intake"
+          theme="amber"
+          icon={(
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+          )}
+          onClick={() => setActiveSubTab('waiting')}
+          active={activeSubTab === 'waiting'}
+        />
 
         {/* KPI 2: Desk Status */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs flex flex-col justify-between min-h-[78px] sm:min-h-[86px] transition hover:border-blue-300">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
-              Desk Status
-            </span>
-            <span className={`w-2 h-2 rounded-full ${queueData.currentServing ? 'bg-blue-600 animate-pulse' : 'bg-slate-300'}`} />
-          </div>
-          <div className="flex items-baseline justify-between mt-1 min-w-0">
-            <div className={`text-base sm:text-xl font-black tracking-tight leading-none truncate ${queueData.currentServing ? 'text-blue-700' : 'text-slate-500'}`}>
-              {queueData.currentServing ? queueData.currentServing.ticketDisplay : 'Desk Free'}
-            </div>
-            <span className={`text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-md border shrink-0 ${queueData.currentServing ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-              {queueData.currentServing ? 'Active' : 'Idle'}
-            </span>
-          </div>
-        </div>
+        <IdolKpiCard
+          label="Desk Status"
+          value={queueData.currentServing ? queueData.currentServing.ticketDisplay : 'Desk Free'}
+          unit={queueData.currentServing ? 'at counter' : 'ready for patient'}
+          context={queueData.currentServing ? `Serving ${queueData.currentServing.patientName}` : 'No patient currently at counter'}
+          theme="blue"
+          icon={(
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          )}
+        />
 
         {/* KPI 3: Skipped */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs flex flex-col justify-between min-h-[78px] sm:min-h-[86px] transition hover:border-blue-300">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
-              Skipped
-            </span>
-            <span className="w-2 h-2 rounded-full bg-amber-400" />
-          </div>
-          <div className="flex items-baseline justify-between mt-1">
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
-              {queueData.metrics.skippedCount}
-            </div>
-            <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100">
-              Recoverable
-            </span>
-          </div>
-        </div>
+        <IdolKpiCard
+          label="Skipped"
+          value={queueData.metrics.skippedCount}
+          unit="recoverable tickets"
+          context="Patients called but not present"
+          theme="purple"
+          icon={(
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/>
+            </svg>
+          )}
+          onClick={() => setActiveSubTab('skipped')}
+          active={activeSubTab === 'skipped'}
+        />
 
         {/* KPI 4: Completed Today */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs flex flex-col justify-between min-h-[78px] sm:min-h-[86px] transition hover:border-blue-300">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
-              Completed Today
-            </span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          </div>
-          <div className="flex items-baseline justify-between mt-1">
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
-              {queueData.metrics.completedCount}
-            </div>
-            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-              Processed
-            </span>
-          </div>
-        </div>
-
+        <IdolKpiCard
+          label="Completed Today"
+          value={queueData.metrics.completedCount}
+          unit="patients routed"
+          context="Intake processed and doctors assigned"
+          theme="emerald"
+          icon={(
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          )}
+          onClick={() => setActiveSubTab('completed')}
+          active={activeSubTab === 'completed'}
+        />
       </div>
 
       {/* ── 3. NOW SERVING HERO CALLOUT ── */}
