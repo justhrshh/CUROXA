@@ -84,13 +84,13 @@ const IdolKpiCard = ({
   return (
     <div
       onClick={onClick}
-      className={className}
+      className={`idol-kpi-card ${className}`}
       style={{
         background: t.bg,
         borderRadius: '16px',
         border: active ? `2px solid ${t.text}` : `1.5px solid ${t.border}`,
-        boxShadow: active ? `0 12px 28px ${t.shadow}` : t.shadow,
-        padding: '16px 18px',
+        boxShadow: active ? `0 10px 24px ${t.shadow}` : t.shadow,
+        padding: '12px 14px',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -98,7 +98,7 @@ const IdolKpiCard = ({
         overflow: 'hidden',
         cursor: onClick ? 'pointer' : 'default',
         transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-        minHeight: '110px'
+        minHeight: '92px'
       }}
       onMouseEnter={e => {
         if (onClick) {
@@ -109,18 +109,27 @@ const IdolKpiCard = ({
       onMouseLeave={e => {
         if (onClick) {
           e.currentTarget.style.transform = 'none';
-          e.currentTarget.style.boxShadow = active ? `0 12px 28px ${t.shadow}` : t.shadow;
+          e.currentTarget.style.boxShadow = active ? `0 10px 24px ${t.shadow}` : t.shadow;
         }
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '11px', fontWeight: 800, color: t.text, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+        <span style={{
+          fontSize: '10.5px',
+          fontWeight: 800,
+          color: t.text,
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
+        }}>
           {label}
         </span>
         <div style={{
-          width: '32px',
-          height: '32px',
-          borderRadius: '10px',
+          width: '28px',
+          height: '28px',
+          borderRadius: '9px',
           background: t.grad,
           color: '#FFFFFF',
           display: 'flex',
@@ -132,18 +141,18 @@ const IdolKpiCard = ({
           {icon}
         </div>
       </div>
-      <div style={{ marginTop: '12px', display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '30px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", lineHeight: 1 }}>
+      <div style={{ marginTop: '8px', display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', fontFamily: "'Outfit', sans-serif", lineHeight: 1 }}>
           {value}
         </span>
         {unit && (
-          <span style={{ fontSize: '12px', fontWeight: 700, color: t.text }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {unit}
           </span>
         )}
       </div>
       {context && (
-        <div style={{ fontSize: '11.5px', color: t.subText, fontWeight: 650, marginTop: '6px' }}>
+        <div style={{ fontSize: '10.5px', color: t.subText, fontWeight: 650, marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {context}
         </div>
       )}

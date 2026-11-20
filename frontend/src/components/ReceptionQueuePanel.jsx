@@ -451,13 +451,8 @@ const ReceptionQueuePanel = ({
         </div>
       )}
 
-      {/* ── 2. METRICS OVERVIEW BAR (EXACT IDOL HEALTHCARE KPI CARDS) ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '14px',
-        marginBottom: '16px'
-      }}>
+      {/* ── 2. METRICS OVERVIEW BAR (EXACT IDOL HEALTHCARE KPI CARDS - 2 COLUMNS X 2 ROWS MOBILE GRID) ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5 mb-4">
         {/* KPI 1: Waiting Now */}
         <IdolKpiCard
           label="Waiting Now"

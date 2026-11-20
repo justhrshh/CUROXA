@@ -406,107 +406,72 @@ const WaitingQueuePanel = ({
   return (
     <div className="tab-content active" style={{ animation: 'slideUp 0.3s ease-out', paddingBottom: '40px' }}>
       
-      {/* 1. PAGE HEADER */}
+      {/* 1. TOP ACTION CONTROLS */}
       <div style={{
         display: 'flex',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-end',
         alignItems: 'center',
-        marginBottom: '16px',
-        flexWrap: 'wrap',
-        gap: '12px'
+        marginBottom: '14px',
+        gap: '10px'
       }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h2 style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Doctor Live Waiting Queue
-            </h2>
-            <span style={{
-              fontSize: '11px',
-              fontWeight: 800,
-              padding: '3px 10px',
-              borderRadius: '20px',
-              background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
-              color: '#1D4ED8',
-              border: '1px solid #93C5FD',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 2px 6px rgba(37,99,235,0.1)'
-            }}>
-              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#2563EB', boxShadow: '0 0 8px #2563EB' }}></span>
-              Live OPD
-            </span>
-          </div>
-          <p style={{ fontSize: '12.5px', color: '#64748B', margin: '3px 0 0 0', fontWeight: 500 }}>
-            Real-time OPD queue status for all doctors
-          </p>
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '5px 12px',
+            borderRadius: '20px',
+            background: autoRefresh ? 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)' : '#F1F5F9',
+            border: autoRefresh ? '1px solid #A7F3D0' : '1px solid #CBD5E1',
+            color: autoRefresh ? '#065F46' : '#64748B',
+            fontSize: '11.5px',
+            fontWeight: 750,
+            cursor: 'pointer',
+            userSelect: 'none',
+            transition: 'all 0.2s',
+            boxShadow: autoRefresh ? '0 2px 8px rgba(16, 185, 129, 0.15)' : 'none'
+          }}
+          onClick={() => setAutoRefresh(!autoRefresh)}
+          title={autoRefresh ? "Auto-refresh active via live WebSockets. Click to pause." : "Auto-refresh paused. Click to enable."}
+        >
+          <span style={{
+            width: '7px',
+            height: '7px',
+            borderRadius: '50%',
+            background: autoRefresh ? '#10B981' : '#94A3B8',
+            boxShadow: autoRefresh ? '0 0 8px rgba(16, 185, 129, 0.8)' : 'none',
+            display: 'inline-block'
+          }}></span>
+          Auto Refresh
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              borderRadius: '20px',
-              background: autoRefresh ? 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)' : '#F1F5F9',
-              border: autoRefresh ? '1px solid #A7F3D0' : '1px solid #CBD5E1',
-              color: autoRefresh ? '#065F46' : '#64748B',
-              fontSize: '12px',
-              fontWeight: 750,
-              cursor: 'pointer',
-              userSelect: 'none',
-              transition: 'all 0.2s',
-              boxShadow: autoRefresh ? '0 2px 8px rgba(16, 185, 129, 0.15)' : 'none'
-            }}
-            onClick={() => setAutoRefresh(!autoRefresh)}
-            title={autoRefresh ? "Auto-refresh active via live WebSockets. Click to pause." : "Auto-refresh paused. Click to enable."}
-          >
-            <span style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: autoRefresh ? '#10B981' : '#94A3B8',
-              boxShadow: autoRefresh ? '0 0 8px rgba(16, 185, 129, 0.8)' : 'none',
-              display: 'inline-block'
-            }}></span>
-            Auto Refresh
-          </div>
-
-          <button
-            className="btn btn-secondary"
-            onClick={handleManualRefresh}
-            disabled={isLoading}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '0 14px',
-              height: '34px',
-              fontSize: '12px',
-              fontWeight: 750,
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              background: '#FFFFFF',
-              color: '#334155',
-              cursor: 'pointer',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-            }}
-          >
-            <i data-lucide="refresh-cw" style={{ width: '13px', height: '13px' }}></i>
-            Refresh Now
-          </button>
-        </div>
+        <button
+          className="btn btn-secondary"
+          onClick={handleManualRefresh}
+          disabled={isLoading}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '0 12px',
+            height: '32px',
+            fontSize: '11.5px',
+            fontWeight: 750,
+            borderRadius: '8px',
+            border: '1px solid #CBD5E1',
+            background: '#FFFFFF',
+            color: '#334155',
+            cursor: 'pointer',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+          }}
+        >
+          <i data-lucide="refresh-cw" style={{ width: '13px', height: '13px' }}></i>
+          Refresh Now
+        </button>
       </div>
 
-      {/* 2. TOP KPI OVERVIEW CARDS */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '14px',
-        marginBottom: '16px'
-      }}>
+      {/* 2. TOP KPI OVERVIEW CARDS (2 COLUMNS X 2 ROWS ON MOBILE) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5 mb-4">
         {/* KPI 1: Currently Waiting */}
         <div style={{
           background: 'radial-gradient(circle at 100% 100%, rgba(245, 158, 11, 0.22) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 45%, #FEF3C7 100%)',

@@ -6693,6 +6693,119 @@ const ReceptionistDashboard = () => {
                         <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: currentTabMeta.badgeColor }} />
                         {currentTabMeta.badge}
                       </span>
+
+                      {/* QUICK ACTION BUTTONS SHIFTED DIRECTLY INTO TOP BAR */}
+                      {activeTab === 'patients' && (
+                        <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '8px', marginLeft: '10px' }}>
+                          <button 
+                            type="button"
+                            className="btn btn-secondary" 
+                            style={{ padding: '5px 12px', fontWeight: 700, borderRadius: '8px', background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', transition: 'all 0.15s' }} 
+                            onClick={() => {
+                              resetRegistrationForm();
+                              setBookingType('lab');
+                              switchTab('registration-form');
+                            }}
+                            title="Book laboratory test for patient"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                            Book Lab Test
+                          </button>
+
+                          <button 
+                            type="button"
+                            className="btn btn-primary" 
+                            style={{ padding: '5px 14px', fontWeight: 700, borderRadius: '8px', background: '#2563EB', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
+                            onClick={() => {
+                              resetRegistrationForm();
+                              setBookingType('opd');
+                              switchTab('registration-form');
+                            }}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Register Patient
+                          </button>
+
+                          <button 
+                            type="button"
+                            className="btn btn-secondary" 
+                            style={{ padding: '5px 12px', borderRadius: '8px', background: '#F8FAFC', color: '#475569', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}
+                            onClick={() => switchTab('appointments')}
+                            title="View Appointments Queue"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                              <line x1="16" y1="2" x2="16" y2="6" />
+                              <line x1="8" y1="2" x2="8" y2="6" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                            Appointments
+                          </button>
+
+                          <button 
+                            type="button"
+                            className="btn btn-secondary" 
+                            style={{ padding: '5px 9px', fontWeight: 700, borderRadius: '8px', background: '#FFF1F2', color: '#E11D48', border: '1px solid #FECDD3', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '11px' }} 
+                            onClick={handleDeleteAllPatients}
+                            title="Clear test patient records"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            Clear All (Test)
+                          </button>
+                        </div>
+                      )}
+
+                      {activeTab === 'appointments' && (
+                        <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '8px', marginLeft: '10px' }}>
+                          <button 
+                            type="button"
+                            className="btn btn-primary" 
+                            style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '30px', padding: '0 12px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', background: '#2563EB', color: '#FFFFFF', border: 'none', cursor: 'pointer', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
+                            onClick={() => switchTab('registration-form')}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Create Appointment
+                          </button>
+                          <button 
+                            type="button"
+                            style={{ 
+                              width: '30px', 
+                              height: '30px', 
+                              padding: 0,
+                              borderRadius: '8px', 
+                              background: (showDateFilter || startDate || endDate) ? '#EFF6FF' : '#FFFFFF', 
+                              color: (showDateFilter || startDate || endDate) ? '#2563EB' : '#64748B', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              border: (showDateFilter || startDate || endDate) ? '1.5px solid #BFDBFE' : '1px solid #E2E8F0',
+                              cursor: 'pointer',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onClick={() => {
+                              setShowDateFilter(!showDateFilter);
+                              setTimeout(() => window.lucide && window.lucide.createIcons(), 100);
+                            }}
+                            title="Filter appointments by date range"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                          </button>
+                        </div>
+                      )}
+
+                      {activeTab === 'billing' && (
+                        <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '8px', marginLeft: '10px' }}>
+                          <button 
+                            type="button"
+                            style={{ padding: '5px 12px', fontWeight: 700, borderRadius: '8px', background: '#2563EB', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
+                            onClick={handleExportBillingCSV}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Export Report
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="rec-top-subtitle desktop-only-flex" style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 500, marginTop: '2px', maxWidth: '480px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {currentTabMeta.subtitle}
@@ -7301,12 +7414,7 @@ const ReceptionistDashboard = () => {
               const completionPercent = filteredAppointments.length > 0 ? Math.round((completedAppts.length / filteredAppointments.length) * 100) : 0;
 
               return (
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                  gap: '14px',
-                  marginBottom: '16px'
-                }}>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5 mb-4">
                   {/* Card 1: Today's Appointments */}
                   <IdolKpiCard
                     label="Today's Appointments"
@@ -8074,94 +8182,39 @@ const ReceptionistDashboard = () => {
           return (
           <div className="tab-content active" style={{ animation: 'slideUp 0.3s ease-out' }}>
             
-            {/* Header with Breadcrumb and Action Buttons */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B', fontWeight: 600, marginBottom: '6px' }}>
-                  <span>Front Desk</span>
-                  <span style={{ color: '#CBD5E1' }}>/</span>
-                  <span style={{ color: '#2563EB', fontWeight: 700 }}>Patient Directory</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
-                    Patient Management
-                  </h2>
-                  <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 9px', borderRadius: '20px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }}>
-                    {totalPatients} Registered
-                  </span>
-                </div>
-                <p style={{ color: '#64748B', fontSize: '13px', margin: '4px 0 0', fontWeight: 500 }}>
-                  Search patient records, view clinical profiles, and initiate registrations.
-                </p>
-              </div>
+            {/* Mobile Quick Action Strip (Desktop actions shifted directly to Top Bar) */}
+            <div className="flex md:hidden items-center gap-2 mb-3">
+              <button 
+                type="button"
+                className="btn btn-secondary flex-1" 
+                style={{ padding: '8px 10px', fontWeight: 700, borderRadius: '8px', background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', fontSize: '11.5px' }} 
+                onClick={() => {
+                  resetRegistrationForm();
+                  setBookingType('lab');
+                  switchTab('registration-form');
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Book Lab
+              </button>
 
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <button 
-                  type="button"
-                  className="btn btn-secondary" 
-                  style={{ padding: '9px 15px', fontWeight: 700, borderRadius: '10px', background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '13px', transition: 'all 0.15s' }} 
-                  onClick={() => {
-                    resetRegistrationForm();
-                    setBookingType('lab');
-                    switchTab('registration-form');
-                  }}
-                  title="Book laboratory test for patient"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                  Book Lab Test
-                </button>
-
-                <button 
-                  type="button"
-                  className="btn btn-primary" 
-                  style={{ padding: '9px 18px', fontWeight: 700, borderRadius: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13.5px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
-                  onClick={() => {
-                    resetRegistrationForm();
-                    setBookingType('opd');
-                    switchTab('registration-form');
-                  }}
-                >
-                  <i data-lucide="plus" style={{ width: '16px', strokeWidth: 3 }}></i>
-                  Register Patient
-
-                </button>
-
-                <button 
-                  type="button"
-                  className="btn btn-secondary" 
-                  style={{ padding: '9px 14px', borderRadius: '10px', background: '#F8FAFC', color: '#475569', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 700 }}
-                  onClick={() => switchTab('appointments')}
-                  title="View Appointments Queue"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                  Appointments
-                </button>
-
-                <button 
-                  type="button"
-                  className="btn btn-secondary" 
-                  style={{ padding: '8px 12px', fontWeight: 700, borderRadius: '10px', background: '#FFF1F2', color: '#E11D48', border: '1px solid #FECDD3', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '12px' }} 
-                  onClick={handleDeleteAllPatients}
-                  title="Clear test patient records"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                  Clear All (Test)
-                </button>
-              </div>
+              <button 
+                type="button"
+                className="btn btn-primary flex-1" 
+                style={{ padding: '8px 10px', fontWeight: 700, borderRadius: '8px', background: '#2563EB', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', fontSize: '11.5px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)' }} 
+                onClick={() => {
+                  resetRegistrationForm();
+                  setBookingType('opd');
+                  switchTab('registration-form');
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Register Patient
+              </button>
             </div>
 
-            {/* Top KPI Demographic & Overview Cards (Exact Idol Healthcare Architecture) */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '14px',
-              marginBottom: '16px'
-            }}>
+            {/* Top KPI Demographic & Overview Cards (Exact Idol Healthcare Architecture - 2 COLUMNS X 2 ROWS MOBILE GRID) */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5 mb-4">
               {/* Card 1: Total Patients */}
               <IdolKpiCard
                 label="Total Patients"
@@ -14495,72 +14548,45 @@ const ReceptionistDashboard = () => {
             return (
           <div className="tab-content active" style={{ animation: 'slideUp 0.3s ease-out' }}>
             
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B', fontWeight: 600, marginBottom: '4px' }}>
-                  <span>Patient Services</span>
-                  <span style={{ color: '#CBD5E1' }}>/</span>
-                  <span style={{ color: '#2563EB', fontWeight: 700 }}>Appointments &amp; Bookings</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
-                    Appointments
-                  </h2>
-                  <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 9px', borderRadius: '20px', background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }}>
-                    {counts.All} Total Bookings
-                  </span>
-                </div>
-                <p style={{ color: '#64748B', fontSize: '13px', margin: '4px 0 0', fontWeight: 500 }}>
-                  Manage patient consultations, same-day multiple visits, queues, and clinical bookings.
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button 
-                  type="button"
-                  className="btn btn-primary" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '40px', padding: '0 18px', borderRadius: '10px', fontWeight: 700, fontSize: '13px', background: '#2563EB', color: '#FFFFFF', border: 'none', cursor: 'pointer', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
-                  onClick={() => switchTab('registration-form')}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Create Appointment
-                </button>
-                <button 
-                  type="button"
-                  style={{ 
-                    width: '40px', 
-                    height: '40px', 
-                    padding: 0,
-                    borderRadius: '10px', 
-                    background: (showDateFilter || startDate || endDate) ? '#EFF6FF' : '#FFFFFF', 
-                    color: (showDateFilter || startDate || endDate) ? '#2563EB' : '#64748B', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    border: (showDateFilter || startDate || endDate) ? '1.5px solid #BFDBFE' : '1px solid #E2E8F0',
-                    cursor: 'pointer',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onClick={() => {
-                    setShowDateFilter(!showDateFilter);
-                    setTimeout(() => window.lucide && window.lucide.createIcons(), 100);
-                  }}
-                  title="Filter appointments by date range"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                </button>
-              </div>
+            {/* Mobile Quick Action Strip (Desktop actions shifted directly to Top Bar) */}
+            <div className="flex md:hidden items-center gap-2 mb-3">
+              <button 
+                type="button"
+                className="btn btn-primary flex-1" 
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', height: '34px', padding: '0 12px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', background: '#2563EB', color: '#FFFFFF', border: 'none', cursor: 'pointer', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)' }} 
+                onClick={() => switchTab('registration-form')}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Create Appointment
+              </button>
+              <button 
+                type="button"
+                style={{ 
+                  width: '34px', 
+                  height: '34px', 
+                  padding: 0,
+                  borderRadius: '8px', 
+                  background: (showDateFilter || startDate || endDate) ? '#EFF6FF' : '#FFFFFF', 
+                  color: (showDateFilter || startDate || endDate) ? '#2563EB' : '#64748B', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  border: (showDateFilter || startDate || endDate) ? '1.5px solid #BFDBFE' : '1px solid #E2E8F0',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                }}
+                onClick={() => {
+                  setShowDateFilter(!showDateFilter);
+                  setTimeout(() => window.lucide && window.lucide.createIcons(), 100);
+                }}
+                title="Filter appointments by date range"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              </button>
             </div>
 
-            {/* Top KPI Appointments Overview (Exact Idol Healthcare Architecture) */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '14px',
-              marginBottom: '16px'
-            }}>
+            {/* Top KPI Appointments Overview (Exact Idol Healthcare Architecture - 2 COLUMNS X 2 ROWS MOBILE GRID) */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5 mb-4">
               <IdolKpiCard
                 label="Total Bookings"
                 value={counts.All}
@@ -16567,47 +16593,8 @@ const ReceptionistDashboard = () => {
           return (
           <div className="tab-content active" style={{ animation: 'slideUp 0.3s ease-out' }}>
             
-            {/* Header with Breadcrumb and Export Button */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B', fontWeight: 600, marginBottom: '6px' }}>
-                  <span>Operations & Billing</span>
-                  <span style={{ color: '#CBD5E1' }}>/</span>
-                  <span style={{ color: '#2563EB', fontWeight: 700 }}>Invoices & Collections</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
-                    Finance & Billing
-                  </h2>
-                  <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 9px', borderRadius: '20px', background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }}>
-                    {totalInvoicesCount} Invoices
-                  </span>
-                </div>
-                <p style={{ color: '#64748B', fontSize: '13px', margin: '4px 0 0', fontWeight: 500 }}>
-                  Track revenue collections, pending payments, and patient fee settlements.
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <button 
-                  type="button"
-                  className="btn btn-primary" 
-                  style={{ padding: '9px 18px', fontWeight: 700, borderRadius: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
-                  onClick={handleExportBillingCSV}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Export Report
-                </button>
-              </div>
-            </div>
-
-            {/* Top KPI Financial & Revenue Cards (Exact Idol Healthcare Architecture) */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '14px',
-              marginBottom: '16px'
-            }}>
+            {/* Top KPI Financial & Revenue Cards (Exact Idol Healthcare Architecture - 2 COLUMNS X 2 ROWS MOBILE GRID) */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5 mb-4">
               {/* Card 1: Total Revenue */}
               <IdolKpiCard
                 label="Total Revenue"
