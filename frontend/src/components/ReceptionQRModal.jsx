@@ -266,6 +266,18 @@ const ReceptionQRModal = ({ isOpen, onClose, clinicCode, clinicName = 'Front Des
           </p>
         </div>
 
+        {/* Counter Check-In Link Display */}
+        <div className="flex items-center gap-2 p-2 bg-slate-100/80 rounded-xl border border-slate-200">
+          <input
+            id="reception-qr-url-input"
+            type="text"
+            readOnly
+            value={queueUrl}
+            className="bg-transparent text-[11px] font-mono text-slate-600 outline-none w-full select-all px-1"
+            title="Reception queue direct check-in URL"
+          />
+        </div>
+
         {/* Action Buttons */}
         <div className="grid grid-cols-3 gap-2">
           <button
@@ -295,7 +307,7 @@ const ReceptionQRModal = ({ isOpen, onClose, clinicCode, clinicName = 'Front Des
             title="Download PNG QR Graphic"
           >
             <Download size={14} />
-            <span>Save PNG</span>
+            <span>Download PNG</span>
           </button>
         </div>
 

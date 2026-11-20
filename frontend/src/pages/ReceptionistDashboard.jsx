@@ -99,6 +99,15 @@ const ReceptionistDashboard = () => {
     return 'dash';
   });
 
+  // Sync activeTab when URL query parameter (?tab=...) changes dynamically
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [location.search, activeTab]);
+
   const [registrationStep, setRegistrationStep] = useState(1);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -14563,8 +14572,8 @@ const ReceptionistDashboard = () => {
                     <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
                   </svg>
                 )}
-                onClick={() => setBookingTypeFilter('All')}
-                active={bookingTypeFilter === 'All'}
+                onClick={() => setApptTypeFilter('All')}
+                active={apptTypeFilter === 'All'}
               />
 
               <IdolKpiCard
@@ -14578,8 +14587,8 @@ const ReceptionistDashboard = () => {
                     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                   </svg>
                 )}
-                onClick={() => setBookingTypeFilter('Appointment')}
-                active={bookingTypeFilter === 'Appointment'}
+                onClick={() => setApptTypeFilter('Appointment')}
+                active={apptTypeFilter === 'Appointment'}
               />
 
               <IdolKpiCard
@@ -14593,8 +14602,8 @@ const ReceptionistDashboard = () => {
                     <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
                   </svg>
                 )}
-                onClick={() => setBookingTypeFilter('Lab Test')}
-                active={bookingTypeFilter === 'Lab Test'}
+                onClick={() => setApptTypeFilter('Lab Test')}
+                active={apptTypeFilter === 'Lab Test'}
               />
 
               <IdolKpiCard
