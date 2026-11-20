@@ -5110,7 +5110,12 @@ const ReceptionistDashboard = () => {
 
         /* TOP COMMAND BAR & CANVAS STYLING */
         .top-nav {
-          margin-left: 260px !important;
+          left: 260px !important;
+          right: 0 !important;
+          top: 0 !important;
+          margin-left: 0 !important;
+          width: calc(100vw - 260px) !important;
+          max-width: calc(100vw - 260px) !important;
           height: 76px !important;
           padding: 0 24px !important;
           border-bottom: 1px solid rgba(226, 232, 240, 0.85) !important;
@@ -5121,16 +5126,17 @@ const ReceptionistDashboard = () => {
           align-items: center !important;
           justify-content: space-between !important;
           position: fixed !important;
-          top: 0 !important;
-          right: 0 !important;
-          left: 0 !important;
           z-index: 900 !important;
           box-shadow: 0 4px 20px -5px rgba(15, 23, 42, 0.03) !important;
-          transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
 
         .top-nav.collapsed {
-          margin-left: 76px !important;
+          left: 76px !important;
+          margin-left: 0 !important;
+          width: calc(100vw - 76px) !important;
+          max-width: calc(100vw - 76px) !important;
+        }
         }
 
         @media (max-width: 1024px) {
@@ -5565,6 +5571,7 @@ const ReceptionistDashboard = () => {
             display: flex !important;
           }
           .top-nav {
+            left: 0 !important;
             margin-left: 0 !important;
             padding: 0 16px !important;
           }
@@ -6694,119 +6701,7 @@ const ReceptionistDashboard = () => {
                         {currentTabMeta.badge}
                       </span>
 
-                      {/* QUICK ACTION BUTTONS SHIFTED DIRECTLY INTO TOP BAR */}
-                      {activeTab === 'patients' && (
-                        <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '8px', marginLeft: '10px' }}>
-                          <button 
-                            type="button"
-                            className="btn btn-secondary" 
-                            style={{ padding: '5px 12px', fontWeight: 700, borderRadius: '8px', background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', transition: 'all 0.15s' }} 
-                            onClick={() => {
-                              resetRegistrationForm();
-                              setBookingType('lab');
-                              switchTab('registration-form');
-                            }}
-                            title="Book laboratory test for patient"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                            Book Lab Test
-                          </button>
-
-                          <button 
-                            type="button"
-                            className="btn btn-primary" 
-                            style={{ padding: '5px 14px', fontWeight: 700, borderRadius: '8px', background: '#2563EB', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
-                            onClick={() => {
-                              resetRegistrationForm();
-                              setBookingType('opd');
-                              switchTab('registration-form');
-                            }}
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                            Register Patient
-                          </button>
-
-                          <button 
-                            type="button"
-                            className="btn btn-secondary" 
-                            style={{ padding: '5px 12px', borderRadius: '8px', background: '#F8FAFC', color: '#475569', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}
-                            onClick={() => switchTab('appointments')}
-                            title="View Appointments Queue"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                              <line x1="16" y1="2" x2="16" y2="6" />
-                              <line x1="8" y1="2" x2="8" y2="6" />
-                              <line x1="3" y1="10" x2="21" y2="10" />
-                            </svg>
-                            Appointments
-                          </button>
-
-                          <button 
-                            type="button"
-                            className="btn btn-secondary" 
-                            style={{ padding: '5px 9px', fontWeight: 700, borderRadius: '8px', background: '#FFF1F2', color: '#E11D48', border: '1px solid #FECDD3', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '11px' }} 
-                            onClick={handleDeleteAllPatients}
-                            title="Clear test patient records"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                            Clear All (Test)
-                          </button>
-                        </div>
-                      )}
-
-                      {activeTab === 'appointments' && (
-                        <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '8px', marginLeft: '10px' }}>
-                          <button 
-                            type="button"
-                            className="btn btn-primary" 
-                            style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '30px', padding: '0 12px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', background: '#2563EB', color: '#FFFFFF', border: 'none', cursor: 'pointer', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
-                            onClick={() => switchTab('registration-form')}
-                          >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                            Create Appointment
-                          </button>
-                          <button 
-                            type="button"
-                            style={{ 
-                              width: '30px', 
-                              height: '30px', 
-                              padding: 0,
-                              borderRadius: '8px', 
-                              background: (showDateFilter || startDate || endDate) ? '#EFF6FF' : '#FFFFFF', 
-                              color: (showDateFilter || startDate || endDate) ? '#2563EB' : '#64748B', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'center', 
-                              border: (showDateFilter || startDate || endDate) ? '1.5px solid #BFDBFE' : '1px solid #E2E8F0',
-                              cursor: 'pointer',
-                              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onClick={() => {
-                              setShowDateFilter(!showDateFilter);
-                              setTimeout(() => window.lucide && window.lucide.createIcons(), 100);
-                            }}
-                            title="Filter appointments by date range"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                          </button>
-                        </div>
-                      )}
-
-                      {activeTab === 'billing' && (
-                        <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '8px', marginLeft: '10px' }}>
-                          <button 
-                            type="button"
-                            style={{ padding: '5px 12px', fontWeight: 700, borderRadius: '8px', background: '#2563EB', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
-                            onClick={handleExportBillingCSV}
-                          >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                            Export Report
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                      </div>
                     <div className="rec-top-subtitle desktop-only-flex" style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 500, marginTop: '2px', maxWidth: '480px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {currentTabMeta.subtitle}
                     </div>
@@ -6817,100 +6712,120 @@ const ReceptionistDashboard = () => {
           </div>
 
 
-          {/* Right: Search, Notifications, Shortcuts, Avatar */}
+          {/* Right: Quick Action Buttons & Notifications */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Compact Search Input */}
-            <div ref={globalSearchContainerRef} className="desktop-only-flex" style={{ position: 'relative', width: '220px' }}>
-              <i data-lucide="search" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', width: '14px', height: '14px' }}></i>
-              <input 
-                type="text" 
-                className="search-input" 
-                placeholder="Search patient..." 
-                style={{
-                  background: '#F8FAFC',
-                  border: '1px solid #E2E8F0',
-                  paddingLeft: '34px',
-                  paddingRight: '12px',
-                  height: '38px',
-                  width: '100%',
-                  borderRadius: '10px',
-                  fontSize: '12.5px',
-                  fontWeight: 600,
-                  outline: 'none',
-                  transition: 'all 0.2s'
-                }} 
-                value={globalSearchQuery}
-                onChange={(e) => {
-                  setGlobalSearchQuery(e.target.value);
-                  setShowGlobalDropdown(true);
-                }}
-                onFocus={() => setShowGlobalDropdown(true)}
-              />
-              {showGlobalDropdown && globalSearchQuery.trim() !== '' && (
-                <div 
-                  style={{ 
-                    position: 'absolute', 
-                    top: 'calc(100% + 8px)', 
-                    left: 0, 
-                    width: '300px', 
-                    background: 'white', 
-                    borderRadius: '12px', 
-                    border: '1px solid #E2E8F0', 
-                    boxShadow: '0 12px 36px rgba(15,23,42,0.12)', 
-                    zIndex: 99999, 
-                    padding: '8px', 
-                    maxHeight: '300px', 
-                    overflowY: 'auto'
+            {/* Tab Quick Action Buttons pushed to the right side */}
+            {activeTab === 'patients' && (
+              <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '8px' }}>
+                <button 
+                  type="button"
+                  className="btn btn-secondary" 
+                  style={{ padding: '6px 14px', fontWeight: 700, borderRadius: '8px', background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', transition: 'all 0.15s' }} 
+                  onClick={() => {
+                    resetRegistrationForm();
+                    setBookingType('lab');
+                    switchTab('registration-form');
+                  }}
+                  title="Book laboratory test for patient"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                  Book Lab Test
+                </button>
+
+                <button 
+                  type="button"
+                  className="btn btn-primary" 
+                  style={{ padding: '6px 16px', fontWeight: 700, borderRadius: '8px', background: '#2563EB', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
+                  onClick={() => {
+                    resetRegistrationForm();
+                    setBookingType('opd');
+                    switchTab('registration-form');
                   }}
                 >
-                  {(() => {
-                    const query = globalSearchQuery.toLowerCase().trim();
-                    const matches = patientsList.filter(p => 
-                      (p.name || '').toLowerCase().includes(query) || 
-                      (p.contact || '').toLowerCase().includes(query) ||
-                      (p._id || '').toLowerCase().includes(query) ||
-                      getFormattedPatientId(p._id).toLowerCase().includes(query)
-                    );
-                    
-                    if (matches.length === 0) {
-                      return (
-                        <div style={{ padding: '12px', textAlign: 'center', color: '#94A3B8', fontSize: '12.5px', fontWeight: 600 }}>
-                          No matching patients found
-                        </div>
-                      );
-                    }
-                    
-                    return matches.map(p => (
-                      <div 
-                        key={p._id} 
-                        onClick={() => {
-                          handleOpenPatientProfile(p);
-                          setGlobalSearchQuery('');
-                          setShowGlobalDropdown(false);
-                        }} 
-                        style={{ 
-                          padding: '10px 12px', 
-                          borderRadius: '8px', 
-                          cursor: 'pointer', 
-                          display: 'flex', 
-                          justifyContent: 'space-between', 
-                          alignItems: 'center',
-                          transition: 'background 0.2s',
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = '#F1F5F9'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '13px', color: '#1E293B' }}>{p.name}</div>
-                          <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 550 }}>ID: {getFormattedPatientId(p._id)} | Mob: {p.contact || 'N/A'}</div>
-                        </div>
-                        <i data-lucide="chevron-right" style={{ width: '14px', color: '#94A3B8' }}></i>
-                      </div>
-                    ));
-                  })()}
-                </div>
-              )}
-            </div>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Register Patient
+                </button>
+
+                <button 
+                  type="button"
+                  className="btn btn-secondary" 
+                  style={{ padding: '6px 14px', borderRadius: '8px', background: '#F8FAFC', color: '#475569', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}
+                  onClick={() => switchTab('appointments')}
+                  title="View Appointments Queue"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                  Appointments
+                </button>
+
+                <button 
+                  type="button"
+                  className="btn btn-secondary" 
+                  style={{ padding: '6px 10px', fontWeight: 700, borderRadius: '8px', background: '#FFF1F2', color: '#E11D48', border: '1px solid #FECDD3', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '11px' }} 
+                  onClick={handleDeleteAllPatients}
+                  title="Clear test patient records"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  Clear All (Test)
+                </button>
+              </div>
+            )}
+
+            {activeTab === 'appointments' && (
+              <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '8px' }}>
+                <button 
+                  type="button"
+                  className="btn btn-primary" 
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 14px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', background: '#2563EB', color: '#FFFFFF', border: 'none', cursor: 'pointer', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
+                  onClick={() => switchTab('registration-form')}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Create Appointment
+                </button>
+                <button 
+                  type="button"
+                  style={{ 
+                    width: '34px', 
+                    height: '34px', 
+                    padding: 0,
+                    borderRadius: '8px', 
+                    background: (showDateFilter || startDate || endDate) ? '#EFF6FF' : '#FFFFFF', 
+                    color: (showDateFilter || startDate || endDate) ? '#2563EB' : '#64748B', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    border: (showDateFilter || startDate || endDate) ? '1.5px solid #BFDBFE' : '1px solid #E2E8F0',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onClick={() => {
+                    setShowDateFilter(!showDateFilter);
+                    setTimeout(() => window.lucide && window.lucide.createIcons(), 100);
+                  }}
+                  title="Filter appointments by date range"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                </button>
+              </div>
+            )}
+
+            {activeTab === 'billing' && (
+              <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '8px' }}>
+                <button 
+                  type="button"
+                  style={{ padding: '6px 14px', fontWeight: 700, borderRadius: '8px', background: '#2563EB', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)', transition: 'all 0.15s' }} 
+                  onClick={handleExportBillingCSV}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Export Report
+                </button>
+              </div>
+            )}
 
             {/* Notification Bell */}
             <div 
