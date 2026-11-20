@@ -5109,43 +5109,119 @@ const ReceptionistDashboard = () => {
         }
 
         /* TOP COMMAND BAR & CANVAS STYLING */
-        .top-nav {
-          left: 260px !important;
-          right: 0 !important;
-          top: 0 !important;
-          margin-left: 0 !important;
-          width: calc(100vw - 260px) !important;
-          max-width: calc(100vw - 260px) !important;
-          height: 76px !important;
-          padding: 0 24px !important;
-          border-bottom: 1px solid rgba(226, 232, 240, 0.85) !important;
-          background: rgba(255, 255, 255, 0.94) !important;
-          backdrop-filter: blur(16px) !important;
-          -webkit-backdrop-filter: blur(16px) !important;
-          display: flex !important;
-          align-items: center !important;
-          justify-content: space-between !important;
-          position: fixed !important;
-          z-index: 900 !important;
-          box-shadow: 0 4px 20px -5px rgba(15, 23, 42, 0.03) !important;
-          transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        }
-
-        .top-nav.collapsed {
-          left: 76px !important;
-          margin-left: 0 !important;
-          width: calc(100vw - 76px) !important;
-          max-width: calc(100vw - 76px) !important;
-        }
-        }
-
-        @media (max-width: 1024px) {
+        /* DESKTOP TOP NAV (min-width: 1025px) */
+        @media (min-width: 1025px) {
           .top-nav {
+            left: 260px !important;
+            right: 0 !important;
+            top: 0 !important;
             margin-left: 0 !important;
-            padding: 0 16px !important;
+            width: calc(100vw - 260px) !important;
+            max-width: calc(100vw - 260px) !important;
+            height: 76px !important;
+            padding: 0 24px !important;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.85) !important;
+            background: rgba(255, 255, 255, 0.94) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            position: fixed !important;
+            z-index: 900 !important;
+            box-shadow: 0 4px 20px -5px rgba(15, 23, 42, 0.03) !important;
+            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          }
+
+          .top-nav.collapsed {
+            left: 76px !important;
+            margin-left: 0 !important;
+            width: calc(100vw - 76px) !important;
+            max-width: calc(100vw - 76px) !important;
+          }
+        }
+
+        /* TABLET & MOBILE TOP NAV (max-width: 1024px) */
+        @media (max-width: 1024px) {
+          .top-nav, .top-nav.collapsed {
+            left: 0 !important;
+            right: 0 !important;
+            top: 0 !important;
+            margin: 0 !important;
+            margin-left: 0 !important;
+            width: 100% !important;
+            width: 100vw !important;
+            max-width: 100vw !important;
             height: 60px !important;
+            padding: 0 16px !important;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.85) !important;
+            background: rgba(255, 255, 255, 0.96) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            position: fixed !important;
+            z-index: 900 !important;
+            box-sizing: border-box !important;
           }
           .main-content {
+            margin-left: 0 !important;
+            margin-top: 60px !important;
+            min-height: calc(100vh - 60px) !important;
+            padding: 16px 14px calc(85px + env(safe-area-inset-bottom, 20px)) 14px !important;
+          }
+          .main-content.registration-fullscreen {
+            top: 60px !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            padding: 0 !important;
+          }
+        }
+
+        /* SMALL SCREENS & PHONES (max-width: 640px) */
+        @media (max-width: 640px) {
+          .top-nav, .top-nav.collapsed {
+            left: 0 !important;
+            right: 0 !important;
+            top: 0 !important;
+            margin: 0 !important;
+            margin-left: 0 !important;
+            width: 100% !important;
+            width: 100vw !important;
+            max-width: 100vw !important;
+            height: 56px !important;
+            padding: 0 12px !important;
+            box-sizing: border-box !important;
+          }
+          .main-content {
+            margin-top: 56px !important;
+            min-height: calc(100vh - 56px) !important;
+            padding: 12px 10px calc(85px + env(safe-area-inset-bottom, 20px)) 10px !important;
+          }
+          .main-content.registration-fullscreen {
+            top: 56px !important;
+          }
+          .rec-top-title {
+            font-size: 15px !important;
+            max-width: 180px !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+          }
+          .rec-shield-icon {
+            width: 32px !important;
+            height: 32px !important;
+            border-radius: 9px !important;
+          }
+          .rec-shield-icon svg {
+            width: 16px !important;
+            height: 16px !important;
+          }
+        }
+
+                .main-content {
             margin-left: 0 !important;
             margin-top: 60px !important;
             min-height: calc(100vh - 60px) !important;
@@ -6450,7 +6526,7 @@ const ReceptionistDashboard = () => {
       {activeTab !== 'hr-payroll' && (
         <div className={"top-nav " + (isSidebarCollapsed ? "collapsed" : "")}>
           {/* Left: Command Center Title & Medical Shield Icon */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
             {/* Hamburger Mobile Menu Toggle Button */}
             <button 
               className="mobile-menu-toggle"
@@ -6637,7 +6713,7 @@ const ReceptionistDashboard = () => {
               const currentTabMeta = getTabHeaderMeta(activeTab);
 
               return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, overflow: 'hidden' }}>
                   <button
                     type="button"
                     className="mobile-hamburger-btn"
@@ -6713,7 +6789,7 @@ const ReceptionistDashboard = () => {
 
 
           {/* Right: Quick Action Buttons & Notifications */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
             {/* Tab Quick Action Buttons pushed to the right side */}
             {activeTab === 'patients' && (
               <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '8px' }}>
