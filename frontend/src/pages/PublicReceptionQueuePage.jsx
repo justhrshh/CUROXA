@@ -382,7 +382,7 @@ const PublicReceptionQueuePage = () => {
       }
     } catch (err) {
       if (err.response?.status === 409) {
-        setErrorMessage(err.response?.data?.error || 'This doctor has reached the maximum booking capacity for the selected date. Please select another doctor or date.');
+        setErrorMessage(err.response?.data?.error || 'All consultation slots are currently booked for this doctor on the selected date. Please choose another doctor or date.');
       } else {
         setErrorMessage(err.response?.data?.error || 'Invalid or expired verification code.');
       }
@@ -449,7 +449,7 @@ const PublicReceptionQueuePage = () => {
       }
     } catch (err) {
       if (err.response?.status === 409) {
-        setErrorMessage(err.response?.data?.error || 'This doctor has reached the maximum booking capacity for the selected date. Please select another doctor or date.');
+        setErrorMessage(err.response?.data?.error || 'All consultation slots are currently booked for this doctor on the selected date. Please choose another doctor or date.');
       } else {
         setErrorMessage(err.response?.data?.error || 'Failed to submit registration. Please try again.');
       }
@@ -600,7 +600,7 @@ const PublicReceptionQueuePage = () => {
               <AlertCircle size={17} color="#DC2626" style={{ flexShrink: 0, marginTop: '2px' }} />
               <div style={{ flex: 1 }}>{errorMessage}</div>
             </div>
-            {errorMessage.includes('capacity') && (
+            {(errorMessage.includes('capacity') || errorMessage.includes('booked') || errorMessage.includes('slots')) && (
               <button
                 type="button"
                 onClick={() => {
@@ -847,7 +847,7 @@ const PublicReceptionQueuePage = () => {
                     fontSize: '12.5px',
                     color: '#64748B'
                   }}>
-                    Checking real-time capacity...
+                    Checking slot availability...
                   </div>
                 ) : doctorAvailability ? (
                   doctorAvailability.isAvailable && doctorAvailability.remainingSlots > 0 ? (
@@ -955,7 +955,7 @@ const PublicReceptionQueuePage = () => {
                         </span>
                       </div>
                       <div style={{ fontSize: '11.5px', color: '#991B1B', fontWeight: 550, paddingLeft: '44px', lineHeight: 1.4 }}>
-                        This doctor has reached capacity for the selected date. Please choose another doctor or consultation date.
+                        All consultation slots are currently booked for this doctor on the selected date. Please choose another doctor or date.
                       </div>
                     </div>
                   )
