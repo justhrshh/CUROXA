@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../utils/api';
 import { socket } from '../utils/socket';
 import { 
   Users, Clock, Play, SkipForward, CheckCircle, AlertTriangle, 
   UserCheck, UserPlus, Calendar, Phone, Mail, RefreshCw, X, 
-  ArrowRight, Search, Check, ShieldAlert, AlertCircle, Sparkles
+  ArrowRight, Search, Check, ShieldAlert, AlertCircle, Sparkles,
+  QrCode, User, Hash, Stethoscope, ChevronRight, Filter
 } from 'lucide-react';
+import ReceptionQRModal from './ReceptionQRModal';
 
 const ReceptionQueuePanel = ({
   doctors = [],
@@ -29,6 +31,8 @@ const ReceptionQueuePanel = ({
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState('waiting'); // 'waiting' | 'skipped' | 'completed'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showQrModal, setShowQrModal] = useState(false);
 
   // Intake / Appointment Booking Modal State
   const [selectedTicketForIntake, setSelectedTicketForIntake] = useState(null);
@@ -205,7 +209,6 @@ const ReceptionQueuePanel = ({
 
       // ── STEP A: Patient Resolution / Permanent Registration ──
       if (!resolvedPatientId) {
-        // New patient: register through established /patients endpoint
         const cleanContact = intakeFormData.contact.replace(/\D/g, '');
         if (!cleanContact || cleanContact.length < 10) {
           throw new Error('A valid 10-digit mobile number is required for patient registration.');
@@ -229,7 +232,6 @@ const ReceptionQueuePanel = ({
         if (!resolvedPatientId) {
           throw new Error('Patient registration returned unexpected response.');
         }
-        // Remember created patient ID so retries never recreate the patient
         setCreatedPatientId(resolvedPatientId);
       }
 
@@ -258,7 +260,6 @@ const ReceptionQueuePanel = ({
       }
 
       // ── STEP C: Same-Day Automatic Check-In ──
-      // Authoritative comparison with clinic queue date
       const apptDateStr = intakeFormData.date;
       const clinicTodayStr = queueData.queueDate || new Date().toISOString().split('T')[0];
       const isToday = (apptDateStr === clinicTodayStr);
@@ -284,12 +285,10 @@ const ReceptionQueuePanel = ({
           setCreatedPatientId(null);
         } catch (checkInErr) {
           console.warn('[AUTO CHECK-IN WARNING]:', checkInErr.message);
-          // Preserve appointment and expose recoverable error state without closing modal
           setPendingCheckInAppointment(newAppt);
           setIntakeError(`Appointment booked successfully, but doctor check-in failed: ${checkInErr.response?.data?.error || checkInErr.message}. You can retry check-in below without creating a duplicate appointment.`);
         }
       } else {
-        // Future dated appointment: leave scheduled without check-in
         await api.post(`/reception-queue/staff/complete/${selectedTicketForIntake._id}`, {
           patientId: resolvedPatientId
         });
@@ -309,7 +308,7 @@ const ReceptionQueuePanel = ({
     }
   };
 
-  // Handle manual retry of check-in on existing appointment
+  // Handle manual retry of check-in
   const handleRetryCheckIn = async () => {
     if (!pendingCheckInAppointment || !selectedTicketForIntake) return;
     setRetryCheckInSubmitting(true);
@@ -341,292 +340,253 @@ const ReceptionQueuePanel = ({
     }
   };
 
-  // Complete desk ticket without check-in (e.g. if doctor is delayed or receptionist chooses to defer check-in)
-  const handleCompleteWithoutCheckIn = async () => {
-    if (!selectedTicketForIntake) return;
-    try {
-      const resolvedPatientId = createdPatientId || selectedTicketForIntake.patientId?._id || selectedTicketForIntake.patientId;
-      await api.post(`/reception-queue/staff/complete/${selectedTicketForIntake._id}`, {
-        patientId: resolvedPatientId
-      });
-      showToast('Reception desk intake completed. Appointment scheduled without check-in.', 'info');
-
-      if (fetchData) fetchData();
-      await loadQueueData(true);
-      setSelectedTicketForIntake(null);
-      setPendingCheckInAppointment(null);
-      setCreatedPatientId(null);
-    } catch (err) {
-      setIntakeError(`Failed to complete ticket: ${err.response?.data?.error || err.message}`);
-    }
+  // Helper: Waiting duration formatter
+  const getWaitDuration = (createdAt) => {
+    if (!createdAt) return '';
+    const diffMs = Date.now() - new Date(createdAt).getTime();
+    const diffMins = Math.max(0, Math.floor(diffMs / 60000));
+    if (diffMins < 1) return 'Just arrived';
+    if (diffMins < 60) return `${diffMins}m waiting`;
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    return `${hours}h ${mins}m waiting`;
   };
 
+  // Filtered lists for each subtab
+  const filteredWaiting = useMemo(() => {
+    if (!searchQuery.trim()) return queueData.waitingTickets;
+    const q = searchQuery.toLowerCase().trim();
+    return queueData.waitingTickets.filter(t => {
+      const name = (t.patientType === 'Existing' ? t.existingPatientDetails?.name : t.preliminaryDetails?.name) || '';
+      const phone = t.preliminaryDetails?.contact || (t.patientId && typeof t.patientId === 'object' ? t.patientId.contact : '') || '';
+      const token = t.ticketDisplay || '';
+      return name.toLowerCase().includes(q) || phone.includes(q) || token.toLowerCase().includes(q);
+    });
+  }, [queueData.waitingTickets, searchQuery]);
+
+  const filteredSkipped = useMemo(() => {
+    if (!searchQuery.trim()) return queueData.skippedTickets;
+    const q = searchQuery.toLowerCase().trim();
+    return queueData.skippedTickets.filter(t => {
+      const name = (t.patientType === 'Existing' ? t.existingPatientDetails?.name : t.preliminaryDetails?.name) || '';
+      const phone = t.preliminaryDetails?.contact || (t.patientId && typeof t.patientId === 'object' ? t.patientId.contact : '') || '';
+      const token = t.ticketDisplay || '';
+      return name.toLowerCase().includes(q) || phone.includes(q) || token.toLowerCase().includes(q);
+    });
+  }, [queueData.skippedTickets, searchQuery]);
+
+  const filteredCompleted = useMemo(() => {
+    if (!searchQuery.trim()) return queueData.completedTickets;
+    const q = searchQuery.toLowerCase().trim();
+    return queueData.completedTickets.filter(t => {
+      const name = (t.patientType === 'Existing' ? t.existingPatientDetails?.name : t.preliminaryDetails?.name) || '';
+      const token = t.ticketDisplay || '';
+      return name.toLowerCase().includes(q) || token.toLowerCase().includes(q);
+    });
+  }, [queueData.completedTickets, searchQuery]);
+
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '20px',
-      width: '100%',
-      maxWidth: '100%',
-      boxSizing: 'border-box'
-    }}>
-      <style>{`
-        .rq-metrics-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 14px;
-          width: 100%;
-          box-sizing: border-box;
-        }
-        .rq-metric-card {
-          background: #FFFFFF;
-          border-radius: 12px;
-          border: 1px solid #E2E8F0;
-          padding: 16px 20px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          box-sizing: border-box;
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-        .rq-metric-label {
-          font-size: 11.5px;
-          color: #64748B;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-        }
-        .rq-metric-val {
-          font-size: 24px;
-          font-weight: 900;
-          margin-top: 2px;
-          line-height: 1.1;
-        }
-        .rq-metric-val.rq-desk-status {
-          font-size: 18px;
-          margin-top: 4px;
-        }
-        .rq-metric-icon {
-          width: 40px;
-          height: 40px;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-        }
-        @media (max-width: 900px) {
-          .rq-metrics-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            gap: 8px !important;
-          }
-          .rq-metric-card {
-            padding: 10px 12px !important;
-            border-radius: 10px !important;
-          }
-          .rq-metric-label {
-            font-size: 10px !important;
-          }
-          .rq-metric-val {
-            font-size: 18px !important;
-          }
-          .rq-metric-val.rq-desk-status {
-            font-size: 13px !important;
-          }
-          .rq-metric-icon {
-            width: 32px !important;
-            height: 32px !important;
-            border-radius: 8px !important;
-          }
-          .rq-metric-icon svg {
-            width: 15px !important;
-            height: 15px !important;
-          }
-        }
-      `}</style>
+    <div className="w-full flex flex-col gap-4 sm:gap-5 box-border font-sans select-none antialiased">
+      
+      {/* ── 1. RECEPTION WORKSTATION HEADER ── */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0">
+            <Users className="w-5 h-5 text-blue-600" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-tight">
+                Reception Queue Workstation
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Desk
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 font-medium truncate mt-0.5">
+              {queueData.hospital?.name || 'Main OPD Counter'} · Front Desk Intake &amp; Triage
+            </p>
+          </div>
+        </div>
+
+        {/* Header Action Button Cluster */}
+        <div className="flex items-center gap-2 self-stretch sm:self-auto">
+          {/* Refresh Action */}
+          <button
+            type="button"
+            onClick={() => loadQueueData()}
+            disabled={actionLoading || loading}
+            className="flex-1 sm:flex-none min-h-[42px] px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-98 border border-slate-200 text-xs font-bold text-slate-700 transition cursor-pointer flex items-center justify-center gap-2 shadow-2xs"
+            title="Refresh live queue status"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${loading || actionLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+
+          {/* QR Signage Poster Action */}
+          <button
+            type="button"
+            onClick={() => setShowQrModal(true)}
+            className="flex-1 sm:flex-none min-h-[42px] px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 active:scale-98 border border-blue-200/80 text-xs font-bold text-blue-700 transition cursor-pointer flex items-center justify-center gap-2 shadow-2xs"
+            title="View, Print or Download Reception Check-In QR Signage"
+          >
+            <QrCode className="w-4 h-4 text-blue-600" />
+            <span>Reception QR</span>
+          </button>
+        </div>
+      </div>
 
       {/* ── DRAINING MODE ALERT (WHEN SUPER ADMIN DISABLED MODULE) ── */}
       {queueData.isDrainingMode && (
-        <div style={{
-          background: '#FFFBEB',
-          border: '1.5px solid #FDE68A',
-          borderRadius: '12px',
-          padding: '16px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '14px',
-          boxSizing: 'border-box'
-        }}>
-          <AlertTriangle size={22} color="#D97706" style={{ flexShrink: 0 }} />
-          <div style={{ fontSize: '13px', color: '#92400E', lineHeight: 1.4 }}>
-            <strong style={{ display: 'block', fontSize: '14px', marginBottom: '2px' }}>
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3 text-amber-900 shadow-xs">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-xs leading-relaxed">
+            <strong className="block text-sm font-extrabold text-amber-950 mb-0.5">
               Queue Draining Mode Active
             </strong>
-            The Reception Queue module is currently disabled by Super Admin. New public patient QR registrations are blocked, but you can continue processing and clearing the remaining tickets in this queue.
+            The Reception Queue module is currently disabled by administrator policy. New public patient registrations are paused, but front-desk intake may clear all remaining tickets.
           </div>
         </div>
       )}
 
-      {/* ── METRICS OVERVIEW BAR ── */}
-      <div className="rq-metrics-grid">
-        {/* Metric 1 */}
-        <div className="rq-metric-card">
-          <div>
-            <div className="rq-metric-label">Waiting Now</div>
-            <div className="rq-metric-val" style={{ color: '#0D9488' }}>
+      {/* ── 2. METRICS OVERVIEW BAR (STANDARDIZED FLAT KPI CARDS) ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5">
+        
+        {/* KPI 1: Waiting Now */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs flex flex-col justify-between min-h-[78px] sm:min-h-[86px] transition hover:border-blue-300">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+              Waiting Now
+            </span>
+            <span className="w-2 h-2 rounded-full bg-teal-500" />
+          </div>
+          <div className="flex items-baseline justify-between mt-1">
+            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
               {queueData.metrics.waitingCount}
             </div>
-          </div>
-          <div className="rq-metric-icon" style={{ background: '#CCFBF1' }}>
-            <Users size={20} color="#0D9488" />
+            <span className="text-[11px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100">
+              In Line
+            </span>
           </div>
         </div>
 
-        {/* Metric 2 */}
-        <div className="rq-metric-card">
-          <div>
-            <div className="rq-metric-label">Desk Status</div>
-            <div className="rq-metric-val rq-desk-status" style={{ color: queueData.currentServing ? '#0F172A' : '#64748B' }}>
+        {/* KPI 2: Desk Status */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs flex flex-col justify-between min-h-[78px] sm:min-h-[86px] transition hover:border-blue-300">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+              Desk Status
+            </span>
+            <span className={`w-2 h-2 rounded-full ${queueData.currentServing ? 'bg-blue-600 animate-pulse' : 'bg-slate-300'}`} />
+          </div>
+          <div className="flex items-baseline justify-between mt-1 min-w-0">
+            <div className={`text-base sm:text-xl font-black tracking-tight leading-none truncate ${queueData.currentServing ? 'text-blue-700' : 'text-slate-500'}`}>
               {queueData.currentServing ? queueData.currentServing.ticketDisplay : 'Desk Free'}
             </div>
-          </div>
-          <div className="rq-metric-icon" style={{ background: queueData.currentServing ? '#EFF6FF' : '#F1F5F9' }}>
-            <Play size={18} color={queueData.currentServing ? '#2563EB' : '#94A3B8'} />
+            <span className={`text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-md border shrink-0 ${queueData.currentServing ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+              {queueData.currentServing ? 'Active' : 'Idle'}
+            </span>
           </div>
         </div>
 
-        {/* Metric 3 */}
-        <div className="rq-metric-card">
-          <div>
-            <div className="rq-metric-label">Skipped</div>
-            <div className="rq-metric-val" style={{ color: '#F59E0B' }}>
+        {/* KPI 3: Skipped */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs flex flex-col justify-between min-h-[78px] sm:min-h-[86px] transition hover:border-blue-300">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+              Skipped
+            </span>
+            <span className="w-2 h-2 rounded-full bg-amber-400" />
+          </div>
+          <div className="flex items-baseline justify-between mt-1">
+            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
               {queueData.metrics.skippedCount}
             </div>
-          </div>
-          <div className="rq-metric-icon" style={{ background: '#FEF3C7' }}>
-            <SkipForward size={18} color="#D97706" />
+            <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100">
+              Recoverable
+            </span>
           </div>
         </div>
 
-        {/* Metric 4 */}
-        <div className="rq-metric-card">
-          <div>
-            <div className="rq-metric-label">Completed Today</div>
-            <div className="rq-metric-val" style={{ color: '#16A34A' }}>
+        {/* KPI 4: Completed Today */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs flex flex-col justify-between min-h-[78px] sm:min-h-[86px] transition hover:border-blue-300">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+              Completed Today
+            </span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          </div>
+          <div className="flex items-baseline justify-between mt-1">
+            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
               {queueData.metrics.completedCount}
             </div>
-          </div>
-          <div className="rq-metric-icon" style={{ background: '#DCFCE7' }}>
-            <CheckCircle size={20} color="#16A34A" />
+            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+              Processed
+            </span>
           </div>
         </div>
+
       </div>
 
-      {/* ── HERO SECTION: CURRENTLY SERVING PATIENT CARD ── */}
-      <div style={{
-        background: '#FFFFFF',
-        borderRadius: '16px',
-        border: '1.5px solid #0D9488',
-        padding: '24px',
-        boxSizing: 'border-box',
-        boxShadow: '0 4px 12px rgba(13, 148, 136, 0.08)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '18px'
-      }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#0D9488', boxShadow: '0 0 0 3px #CCFBF1' }} />
-            <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Now Serving at Reception Counter
-            </h3>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => loadQueueData()}
-            disabled={actionLoading}
-            style={{
-              background: '#F8FAFC',
-              border: '1px solid #CBD5E1',
-              borderRadius: '8px',
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontWeight: 600,
-              color: '#475569',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <RefreshCw size={13} className={actionLoading ? 'animate-spin' : ''} />
-            Refresh
-          </button>
-        </div>
-
+      {/* ── 3. NOW SERVING HERO CALLOUT ── */}
+      <div className={`rounded-2xl border p-4 sm:p-5 shadow-xs transition-all ${
+        queueData.currentServing 
+          ? 'bg-gradient-to-r from-teal-50/70 via-white to-blue-50/60 border-teal-300/90' 
+          : 'bg-white border-slate-200/90'
+      }`}>
+        
         {queueData.currentServing ? (
-          // Serving ticket active
-          <div style={{
-            background: '#F0FDFA',
-            border: '1px solid #99F6E4',
-            borderRadius: '12px',
-            padding: '20px',
-            display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '20px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
-              <div style={{
-                background: '#0D9488',
-                color: '#FFFFFF',
-                borderRadius: '12px',
-                padding: '12px 18px',
-                textAlign: 'center',
-                boxShadow: '0 4px 10px rgba(13, 148, 136, 0.25)'
-              }}>
-                <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.85 }}>Ticket</div>
-                <div style={{ fontSize: '26px', fontWeight: 900, lineHeight: 1.1 }}>{queueData.currentServing.ticketDisplay}</div>
+          /* ACTIVE SERVING PATIENT */
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            
+            {/* Left: Token & Patient Info */}
+            <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+              {/* Token Pill */}
+              <div className="flex flex-col items-center justify-center px-3.5 py-2 rounded-xl bg-teal-600 text-white shadow-xs shrink-0">
+                <span className="text-[9px] font-extrabold uppercase tracking-wider opacity-80 leading-none">TOKEN</span>
+                <span className="text-xl sm:text-2xl font-black font-mono leading-tight">
+                  {queueData.currentServing.ticketDisplay}
+                </span>
               </div>
 
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                  <h4 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                    {queueData.currentServing.patientType === 'Existing'
-                      ? (queueData.currentServing.existingPatientDetails?.name || 'Existing Patient')
-                      : (queueData.currentServing.preliminaryDetails?.name || 'New Patient')}
-                  </h4>
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    padding: '2px 8px',
-                    borderRadius: '10px',
-                    background: queueData.currentServing.patientType === 'Existing' ? '#DCFCE7' : '#EFF6FF',
-                    color: queueData.currentServing.patientType === 'Existing' ? '#166534' : '#1D4ED8'
-                  }}>
-                    {queueData.currentServing.patientType === 'Existing' ? 'Existing Patient' : 'New Patient (Preliminary)'}
+              {/* Patient Details */}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
+                    {(queueData.currentServing.patientType === 'Existing'
+                      ? queueData.currentServing.existingPatientDetails?.name
+                      : queueData.currentServing.preliminaryDetails?.name) || 'Patient'}
+                  </h3>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-100/80 text-teal-800">
+                    {queueData.currentServing.patientType === 'Existing' ? 'Existing Patient' : 'Walk-in Registration'}
                   </span>
                 </div>
 
-                <div style={{ fontSize: '12.5px', color: '#64748B', display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
+                {/* Subtitle Details */}
+                <div className="flex items-center gap-3 text-xs text-slate-500 font-medium mt-1 flex-wrap">
                   {queueData.currentServing.preliminaryDetails?.contact && (
-                    <span>Phone: <strong>{queueData.currentServing.preliminaryDetails.contact}</strong></span>
+                    <span className="inline-flex items-center gap-1 font-mono">
+                      <Phone className="w-3 h-3 text-slate-400" />
+                      {queueData.currentServing.preliminaryDetails.contact}
+                    </span>
                   )}
                   {queueData.currentServing.preliminaryDetails?.gender && (
-                    <span>Gender: <strong>{queueData.currentServing.preliminaryDetails.gender}</strong></span>
+                    <span>{queueData.currentServing.preliminaryDetails.gender}</span>
                   )}
                   {queueData.currentServing.preliminaryDetails?.age && (
-                    <span>Age: <strong>{queueData.currentServing.preliminaryDetails.age} yrs</strong></span>
+                    <span>{queueData.currentServing.preliminaryDetails.age} Yrs</span>
                   )}
-                  <span>Arrived: <strong>{new Date(queueData.currentServing.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></span>
+                  <span className="text-slate-400">·</span>
+                  <span className="inline-flex items-center gap-1 text-slate-600 font-semibold">
+                    <Clock className="w-3 h-3 text-slate-400" />
+                    Arrived {new Date(queueData.currentServing.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Actions for current serving */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+              {/* Process Intake */}
               <button
                 type="button"
                 onClick={() => {
@@ -636,96 +596,54 @@ const ReceptionQueuePanel = ({
                     openIntakeModal(queueData.currentServing);
                   }
                 }}
-                style={{
-                  background: 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '10px 16px',
-                  fontSize: '13.5px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 3px 8px rgba(13, 148, 136, 0.25)'
-                }}
+                className="flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-98 text-white font-bold text-xs transition cursor-pointer shadow-xs flex items-center justify-center gap-2"
               >
-                <Sparkles size={16} />
-                Process Intake
+                <Sparkles className="w-4 h-4" />
+                <span>Process Intake</span>
               </button>
 
+              {/* Skip */}
               <button
                 type="button"
                 onClick={() => handleSkip(queueData.currentServing._id)}
                 disabled={actionLoading}
-                style={{
-                  background: '#FFFFFF',
-                  color: '#D97706',
-                  border: '1px solid #FDE68A',
-                  borderRadius: '8px',
-                  padding: '10px 14px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px'
-                }}
+                className="flex-1 sm:flex-none min-h-[44px] px-3.5 py-2.5 rounded-xl bg-white hover:bg-amber-50 active:scale-98 border border-amber-300 text-amber-800 font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
                 title="Mark this patient as skipped and advance queue"
               >
-                <SkipForward size={15} />
-                Skip Patient
+                <SkipForward className="w-4 h-4 text-amber-600" />
+                <span>Skip</span>
               </button>
 
+              {/* Next Patient */}
               <button
                 type="button"
                 onClick={handleNext}
                 disabled={actionLoading}
-                style={{
-                  background: '#0F172A',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '10px 16px',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                title="Complete current patient and call next waiting ticket"
+                className="flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-98 text-white font-bold text-xs transition cursor-pointer shadow-xs flex items-center justify-center gap-2"
+                title="Complete current patient and call next ticket"
               >
-                Next Patient
-                <ArrowRight size={15} />
+                <span>Next</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+
           </div>
         ) : (
-          // Idle state (desk is free)
-          <div style={{
-            background: '#F8FAFC',
-            border: '1.5px dashed #CBD5E1',
-            borderRadius: '12px',
-            padding: '30px 20px',
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '12px'
-          }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#CCFBF1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <CheckCircle size={24} color="#0D9488" />
-            </div>
-            <div>
-              <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
-                Reception Counter is Free
+          /* IDLE / DESK FREE (COMPACT STREAMLINED LAYOUT) */
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-1">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                <CheckCircle className="w-5 h-5 text-teal-600" />
               </div>
-              <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
-                {queueData.metrics.waitingCount > 0 
-                  ? `${queueData.metrics.waitingCount} patient(s) waiting in queue. Click Call Next Patient to begin.`
-                  : 'No patients currently waiting in reception queue.'}
+              <div>
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                  Reception Counter is Free
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  {queueData.metrics.waitingCount > 0 
+                    ? `${queueData.metrics.waitingCount} patient(s) waiting in queue. Call the next patient to begin intake.`
+                    : 'No patients waiting in queue right now. Ready for walk-in arrivals.'}
+                </p>
               </div>
             </div>
 
@@ -734,156 +652,201 @@ const ReceptionQueuePanel = ({
                 type="button"
                 onClick={handleNext}
                 disabled={actionLoading}
-                style={{
-                  background: '#0D9488',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '10px 20px',
-                  fontSize: '13.5px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 3px 8px rgba(13, 148, 136, 0.25)'
-                }}
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-98 text-white font-extrabold text-xs transition cursor-pointer shadow-xs flex items-center justify-center gap-2"
               >
-                <Play size={16} />
-                Call Next Patient ({queueData.waitingTickets[0]?.ticketDisplay})
+                <Play className="w-4 h-4 fill-white" />
+                <span>Call Next Patient ({queueData.waitingTickets[0]?.ticketDisplay})</span>
               </button>
             )}
           </div>
         )}
+
       </div>
 
-      {/* ── QUEUE TABS (WAITING | SKIPPED | COMPLETED) ── */}
-      <div style={{
-        background: '#FFFFFF',
-        borderRadius: '16px',
-        border: '1px solid #E2E8F0',
-        padding: '20px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        boxSizing: 'border-box'
-      }}>
-        {/* Tab Selector */}
-        <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('waiting')}
-            style={{
-              padding: '10px 16px',
-              border: 'none',
-              background: 'none',
-              borderBottom: activeSubTab === 'waiting' ? '2.5px solid #0D9488' : '2.5px solid transparent',
-              color: activeSubTab === 'waiting' ? '#0D9488' : '#64748B',
-              fontSize: '13.5px',
-              fontWeight: activeSubTab === 'waiting' ? 700 : 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            Waiting Queue ({queueData.waitingTickets.length})
-          </button>
+      {/* ── 4. QUEUE TABS & FILTER WORKSTATION ── */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-xs flex flex-col gap-4">
+        
+        {/* Controls Bar: Sub-tabs + Search */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          
+          {/* Segmented Pill Tabs */}
+          <div className="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200/80 self-start sm:self-auto overflow-x-auto max-w-full">
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('waiting')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                activeSubTab === 'waiting'
+                  ? 'bg-white text-teal-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Waiting Queue</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                activeSubTab === 'waiting' ? 'bg-teal-100 text-teal-800' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {queueData.waitingTickets.length}
+              </span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('skipped')}
-            style={{
-              padding: '10px 16px',
-              border: 'none',
-              background: 'none',
-              borderBottom: activeSubTab === 'skipped' ? '2.5px solid #D97706' : '2.5px solid transparent',
-              color: activeSubTab === 'skipped' ? '#D97706' : '#64748B',
-              fontSize: '13.5px',
-              fontWeight: activeSubTab === 'skipped' ? 700 : 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            Skipped ({queueData.skippedTickets.length})
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('skipped')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                activeSubTab === 'skipped'
+                  ? 'bg-white text-amber-800 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <SkipForward className="w-3.5 h-3.5" />
+              <span>Skipped</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                activeSubTab === 'skipped' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {queueData.skippedTickets.length}
+              </span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('completed')}
-            style={{
-              padding: '10px 16px',
-              border: 'none',
-              background: 'none',
-              borderBottom: activeSubTab === 'completed' ? '2.5px solid #16A34A' : '2.5px solid transparent',
-              color: activeSubTab === 'completed' ? '#16A34A' : '#64748B',
-              fontSize: '13.5px',
-              fontWeight: activeSubTab === 'completed' ? 700 : 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            Completed Today ({queueData.completedTickets.length})
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('completed')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                activeSubTab === 'completed'
+                  ? 'bg-white text-emerald-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <CheckCircle className="w-3.5 h-3.5" />
+              <span>Completed Today</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                activeSubTab === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {queueData.completedTickets.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Quick Filter Search Input */}
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Filter by token, name, phone..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+            />
+          </div>
+
         </div>
 
-        {/* ── SUBTAB 1: WAITING QUEUE LIST ── */}
+        {/* ── 5. SUBTAB LISTS ── */}
+
+        {/* SUBTAB 1: WAITING QUEUE LIST */}
         {activeSubTab === 'waiting' && (
           <div>
-            {queueData.waitingTickets.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '30px', color: '#94A3B8', fontSize: '13px' }}>
-                No patients currently waiting in queue.
+            {filteredWaiting.length === 0 ? (
+              <div className="text-center py-10 px-4 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+                <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-slate-700">No Waiting Patients in Queue</h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                  {searchQuery 
+                    ? `No waiting tickets match "${searchQuery}". Clear your search query to see all tickets.`
+                    : 'Patients arriving at front desk or scanning the check-in QR code will appear here automatically.'}
+                </p>
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="mt-3 px-3 py-1.5 rounded-lg text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 transition cursor-pointer"
+                  >
+                    Clear Filter
+                  </button>
+                )}
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {queueData.waitingTickets.map((t, idx) => {
+              <div className="space-y-2.5">
+                {filteredWaiting.map((t, idx) => {
                   const pName = t.patientType === 'Existing' ? t.existingPatientDetails?.name : t.preliminaryDetails?.name;
                   const pContact = t.preliminaryDetails?.contact || (t.patientId && typeof t.patientId === 'object' ? t.patientId.contact : 'N/A');
+                  const arrivalTime = new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  const waitLabel = getWaitDuration(t.createdAt);
+                  const isFirstInQueue = idx === 0;
 
                   return (
                     <div
                       key={t._id}
-                      style={{
-                        background: '#F8FAFC',
-                        border: '1px solid #E2E8F0',
-                        borderRadius: '10px',
-                        padding: '14px 18px',
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '12px'
-                      }}
+                      className={`p-3.5 sm:p-4 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isFirstInQueue 
+                          ? 'bg-teal-50/40 border-teal-200/90 shadow-2xs' 
+                          : 'bg-white hover:bg-slate-50/80 border-slate-200/80'
+                      }`}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        <div style={{
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                          background: '#E2E8F0',
-                          fontSize: '15px',
-                          fontWeight: 800,
-                          color: '#0F172A'
-                        }}>
+                      {/* Left: Token, Patient Info & Metadata */}
+                      <div className="flex items-start sm:items-center gap-3 min-w-0">
+                        {/* Token Badge */}
+                        <div className={`px-2.5 py-1.5 rounded-lg font-mono font-black text-sm text-center shrink-0 border ${
+                          isFirstInQueue 
+                            ? 'bg-teal-600 text-white border-teal-700' 
+                            : 'bg-slate-100 text-slate-800 border-slate-200'
+                        }`}>
                           {t.ticketDisplay}
                         </div>
 
-                        <div>
-                          <div style={{ fontSize: '14.5px', fontWeight: 700, color: '#0F172A' }}>
-                            {pName || 'Patient'}
+                        {/* Patient Text */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-extrabold text-slate-900 tracking-tight truncate">
+                              {pName || 'Patient'}
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                              t.patientType === 'Existing'
+                                ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            }`}>
+                              {t.patientType}
+                            </span>
+                            {isFirstInQueue && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-100 text-teal-800">
+                                Next Up
+                              </span>
+                            )}
                           </div>
-                          <div style={{ fontSize: '12px', color: '#64748B', display: 'flex', gap: '10px', marginTop: '2px' }}>
-                            <span>Type: <strong>{t.patientType}</strong></span>
-                            <span>Phone: <strong>{pContact}</strong></span>
-                            <span>Arrived: <strong>{new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></span>
+
+                          {/* Metadata inline */}
+                          <div className="flex items-center gap-2.5 text-xs text-slate-500 mt-1 flex-wrap font-medium">
+                            {pContact && pContact !== 'N/A' && (
+                              <span className="inline-flex items-center gap-1 font-mono">
+                                <Phone className="w-3 h-3 text-slate-400" />
+                                {pContact}
+                              </span>
+                            )}
+                            <span className="text-slate-300">·</span>
+                            <span className="inline-flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              {arrivalTime}
+                            </span>
+                            {waitLabel && (
+                              <>
+                                <span className="text-slate-300">·</span>
+                                <span className="text-slate-600 font-semibold">{waitLabel}</span>
+                              </>
+                            )}
+                            {t.doctorId?.name && (
+                              <>
+                                <span className="text-slate-300">·</span>
+                                <span className="inline-flex items-center gap-1 text-blue-600 font-semibold">
+                                  <Stethoscope className="w-3 h-3" />
+                                  Dr. {t.doctorId.name}
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      {/* Right: Actions */}
+                      <div className="flex items-center gap-2 self-stretch sm:self-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                         <button
                           type="button"
                           onClick={() => {
@@ -893,36 +856,24 @@ const ReceptionQueuePanel = ({
                               openIntakeModal(t);
                             }
                           }}
-                          style={{
-                            padding: '7px 12px',
-                            borderRadius: '6px',
-                            background: '#0D9488',
-                            color: '#FFFFFF',
-                            border: 'none',
-                            fontSize: '12.5px',
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
+                          className="flex-1 sm:flex-none min-h-[42px] px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-98 text-white font-bold text-xs transition cursor-pointer shadow-2xs flex items-center justify-center gap-1.5"
                         >
-                          Process Intake
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Process Intake</span>
                         </button>
+
                         <button
                           type="button"
                           onClick={() => handleSkip(t._id)}
-                          style={{
-                            padding: '7px 10px',
-                            borderRadius: '6px',
-                            background: '#FFFFFF',
-                            color: '#64748B',
-                            border: '1px solid #CBD5E1',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            cursor: 'pointer'
-                          }}
+                          disabled={actionLoading}
+                          className="min-h-[42px] px-3 py-2 rounded-xl bg-white hover:bg-slate-100 active:scale-98 border border-slate-200 text-slate-600 hover:text-slate-900 font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-1"
+                          title="Skip ticket"
                         >
-                          Skip
+                          <SkipForward className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Skip</span>
                         </button>
                       </div>
+
                     </div>
                   );
                 })}
@@ -931,57 +882,52 @@ const ReceptionQueuePanel = ({
           </div>
         )}
 
-        {/* ── SUBTAB 2: SKIPPED TICKETS ── */}
+        {/* SUBTAB 2: SKIPPED TICKETS LIST */}
         {activeSubTab === 'skipped' && (
           <div>
-            {queueData.skippedTickets.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '30px', color: '#94A3B8', fontSize: '13px' }}>
-                No skipped tickets today.
+            {filteredSkipped.length === 0 ? (
+              <div className="text-center py-10 px-4 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+                <SkipForward className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-slate-700">No Skipped Tickets</h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                  Tickets skipped from the counter appear here and can be referenced for recall or queue triage.
+                </p>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {queueData.skippedTickets.map((t) => {
+              <div className="space-y-2">
+                {filteredSkipped.map((t) => {
                   const pName = t.patientType === 'Existing' ? t.existingPatientDetails?.name : t.preliminaryDetails?.name;
+                  const pContact = t.preliminaryDetails?.contact || (t.patientId && typeof t.patientId === 'object' ? t.patientId.contact : 'N/A');
+
                   return (
                     <div
                       key={t._id}
-                      style={{
-                        background: '#FFFBEB',
-                        border: '1px solid #FDE68A',
-                        borderRadius: '10px',
-                        padding: '14px 18px',
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '12px'
-                      }}
+                      className="p-3.5 rounded-xl border border-amber-200/80 bg-amber-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        <span style={{ padding: '6px 12px', borderRadius: '8px', background: '#FEF3C7', color: '#D97706', fontSize: '15px', fontWeight: 800 }}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="px-2.5 py-1.5 rounded-lg bg-amber-100 text-amber-900 font-mono font-black text-sm border border-amber-200">
                           {t.ticketDisplay}
                         </span>
-                        <div>
-                          <div style={{ fontSize: '14.5px', fontWeight: 700, color: '#0F172A' }}>{pName || 'Patient'}</div>
-                          <div style={{ fontSize: '12px', color: '#B45309', display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '2px' }}>
-                            <span>Status: <strong>Skipped</strong></span>
-                            <span>•</span>
-                            <span>Skipped at: <strong>{t.skippedAt ? new Date(t.skippedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today'}</strong></span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-slate-900 truncate">
+                              {pName || 'Patient'}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100/80 text-amber-800">
+                              Skipped
+                            </span>
+                          </div>
+                          <div className="text-xs text-amber-800/80 font-medium mt-0.5 flex items-center gap-2">
+                            <span>Phone: <strong>{pContact}</strong></span>
+                            <span>·</span>
+                            <span>Skipped at: {t.skippedAt ? new Date(t.skippedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today'}</span>
                           </div>
                         </div>
                       </div>
 
-                      <div style={{
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        background: '#F8FAFC',
-                        color: '#64748B',
-                        border: '1px solid #E2E8F0',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        letterSpacing: '0.2px'
-                      }}>
-                        Recall On Hold (Policy Pending)
+                      <div className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-amber-200 text-amber-800 text-xs font-semibold self-start sm:self-auto">
+                        <Clock className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Retained for Recall</span>
                       </div>
                     </div>
                   );
@@ -991,36 +937,39 @@ const ReceptionQueuePanel = ({
           </div>
         )}
 
-        {/* ── SUBTAB 3: COMPLETED TICKETS ── */}
+        {/* SUBTAB 3: COMPLETED TICKETS LIST */}
         {activeSubTab === 'completed' && (
           <div>
-            {queueData.completedTickets.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '30px', color: '#94A3B8', fontSize: '13px' }}>
-                No completed tickets yet today.
+            {filteredCompleted.length === 0 ? (
+              <div className="text-center py-10 px-4 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+                <CheckCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-slate-700">No Completed Tickets Yet Today</h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                  Patients who finish their intake and check into consultation will be recorded here.
+                </p>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {queueData.completedTickets.map((t) => {
+              <div className="space-y-1.5">
+                {filteredCompleted.map((t) => {
                   const pName = t.patientType === 'Existing' ? t.existingPatientDetails?.name : t.preliminaryDetails?.name;
+
                   return (
                     <div
                       key={t._id}
-                      style={{
-                        background: '#F8FAFC',
-                        border: '1px solid #E2E8F0',
-                        borderRadius: '8px',
-                        padding: '12px 16px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}
+                      className="p-3 rounded-xl border border-slate-200/80 bg-white hover:bg-slate-50 transition flex items-center justify-between gap-3"
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#64748B' }}>{t.ticketDisplay}</span>
-                        <span style={{ fontSize: '13.5px', fontWeight: 600, color: '#0F172A' }}>{pName || 'Patient'}</span>
-                        <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: 700, background: '#DCFCE7', padding: '1px 6px', borderRadius: '4px' }}>Completed</span>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                          {t.ticketDisplay}
+                        </span>
+                        <span className="text-xs font-bold text-slate-800 truncate">
+                          {pName || 'Patient'}
+                        </span>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 hidden sm:inline-block">
+                          Completed
+                        </span>
                       </div>
-                      <span style={{ fontSize: '12px', color: '#94A3B8' }}>
+                      <span className="text-xs text-slate-400 font-mono shrink-0">
                         {t.completedAt ? new Date(t.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today'}
                       </span>
                     </div>
@@ -1030,330 +979,175 @@ const ReceptionQueuePanel = ({
             )}
           </div>
         )}
+
       </div>
 
-      {/* ── DESK INTAKE & APPOINTMENT BOOKING MODAL (FALLBACK ONLY IF NOT HANDLED VIA FULL WORKSTATION PAGE) ── */}
+      {/* ── 6. RECEPTION QR SIGNAGE MODAL (PHASE 5) ── */}
+      <ReceptionQRModal
+        isOpen={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        clinicCode={queueData.hospital?.code || localStorage.getItem('tenantId')}
+        clinicName={queueData.hospital?.name || 'Front Desk Reception'}
+      />
+
+      {/* ── 7. FALLBACK INTAKE & APPOINTMENT MODAL (IF NOT HANDLED VIA FULL WORKSTATION) ── */}
       {!onProcessIntake && selectedTicketForIntake && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(3px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '16px',
-          boxSizing: 'border-box'
-        }}>
-          <div style={{
-            background: '#FFFFFF',
-            borderRadius: '16px',
-            width: '100%',
-            maxWidth: '540px',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            padding: '24px',
-            boxSizing: 'border-box',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '18px'
-          }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 sm:p-7 shadow-2xl border border-slate-100 flex flex-col gap-5">
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: '14px' }}>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Reception Intake & Appointment
+                <h3 className="text-base sm:text-lg font-black text-slate-900">
+                  Reception Intake &amp; Triage
                 </h3>
-                <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-                  Processing Ticket: <strong style={{ color: '#0D9488' }}>{selectedTicketForIntake.ticketDisplay}</strong> ({selectedTicketForIntake.patientType})
-                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Ticket: <strong className="text-teal-700">{selectedTicketForIntake.ticketDisplay}</strong> ({selectedTicketForIntake.patientType})
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedTicketForIntake(null)}
-                style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
               >
-                <X size={20} />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Error Message if any */}
+            {/* Error Banner */}
             {intakeError && (
-              <div style={{
-                background: '#FEF2F2',
-                border: '1px solid #FCA5A5',
-                borderRadius: '8px',
-                padding: '10px 14px',
-                fontSize: '12.5px',
-                color: '#991B1B',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <AlertCircle size={16} color="#DC2626" style={{ flexShrink: 0 }} />
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                 <span>{intakeError}</span>
               </div>
             )}
 
-            <form onSubmit={handleSubmitIntake} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Section 1: Patient Identity Details */}
-              <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <UserCheck size={16} color="#0D9488" />
-                  Patient Profile Information
+            {/* Form */}
+            <form onSubmit={handleSubmitIntake} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Patient Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={intakeFormData.name}
+                    onChange={(e) => setIntakeFormData({ ...intakeFormData, name: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    placeholder="e.g. Rahul Sharma"
+                  />
                 </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                      Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={intakeFormData.name}
-                      onChange={(e) => setIntakeFormData({ ...intakeFormData, name: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13.5px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                      Mobile Number *
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      maxLength={10}
-                      value={intakeFormData.contact}
-                      onChange={(e) => setIntakeFormData({ ...intakeFormData, contact: e.target.value.replace(/\D/g, '') })}
-                      style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13.5px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                      Gender *
-                    </label>
-                    <select
-                      value={intakeFormData.gender}
-                      onChange={(e) => setIntakeFormData({ ...intakeFormData, gender: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13.5px', background: '#FFFFFF', boxSizing: 'border-box' }}
-                    >
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                      Age (Years)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="130"
-                      value={intakeFormData.age}
-                      onChange={(e) => setIntakeFormData({ ...intakeFormData, age: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13.5px', boxSizing: 'border-box' }}
-                    />
-                  </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Mobile Number (10 Digits) *</label>
+                  <input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    value={intakeFormData.contact}
+                    onChange={(e) => setIntakeFormData({ ...intakeFormData, contact: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    placeholder="9876543210"
+                  />
                 </div>
               </div>
 
-              {/* Section 2: Appointment Booking Details */}
-              <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Calendar size={16} color="#0D9488" />
-                  Consultation Appointment
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                      Consulting Doctor *
-                    </label>
-                    <select
-                      required
-                      value={intakeFormData.doctorId}
-                      onChange={(e) => setIntakeFormData({ ...intakeFormData, doctorId: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13.5px', background: '#FFFFFF', boxSizing: 'border-box' }}
-                    >
-                      <option value="">Select Doctor...</option>
-                      {doctors.map(d => (
-                        <option key={d._id} value={d._id}>
-                          Dr. {d.name} ({d.specialty || d.department || 'General Medicine'})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                      Date *
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={intakeFormData.date}
-                      onChange={(e) => setIntakeFormData({ ...intakeFormData, date: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13.5px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                      Time Slot *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={intakeFormData.time}
-                      onChange={(e) => setIntakeFormData({ ...intakeFormData, time: e.target.value })}
-                      placeholder="e.g. 10:30 AM"
-                      style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13.5px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                      Reason for Visit
-                    </label>
-                    <input
-                      type="text"
-                      value={intakeFormData.reason}
-                      onChange={(e) => setIntakeFormData({ ...intakeFormData, reason: e.target.value })}
-                      placeholder="e.g. Fever, Consultation"
-                      style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13.5px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Informative Auto Check-in Notice */}
-              <div style={{
-                background: '#ECFDF5',
-                border: '1px solid #A7F3D0',
-                borderRadius: '8px',
-                padding: '10px 14px',
-                fontSize: '12px',
-                color: '#065F46',
-                lineHeight: 1.4
-              }}>
-                <strong>Automatic Same-Day Check-In:</strong> Because this appointment date is set to today, confirming will automatically check the patient into the doctor's queue and allocate their official consultation token. Future dates remain scheduled until that day.
-              </div>
-
-              {/* Modal Actions */}
-              {pendingCheckInAppointment ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px', width: '100%' }}>
-                  <div style={{
-                    background: '#FEF2F2',
-                    border: '1px solid #FECACA',
-                    borderRadius: '8px',
-                    padding: '10px 14px',
-                    fontSize: '12.5px',
-                    color: '#991B1B',
-                    lineHeight: '1.4'
-                  }}>
-                    <strong>Appointment Record Created:</strong> The appointment has been scheduled in the clinic system, but doctor queue check-in encountered an error. You can retry check-in directly below without creating duplicate appointments or patient records.
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '10px' }}>
-                    <button
-                      type="button"
-                      onClick={handleCompleteWithoutCheckIn}
-                      style={{
-                        padding: '9px 15px',
-                        borderRadius: '8px',
-                        border: '1px solid #CBD5E1',
-                        background: '#FFFFFF',
-                        color: '#475569',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Complete Without Check-In
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleRetryCheckIn}
-                      disabled={retryCheckInSubmitting}
-                      style={{
-                        padding: '9px 18px',
-                        borderRadius: '8px',
-                        border: 'none',
-                        background: retryCheckInSubmitting ? '#94A3B8' : '#D97706',
-                        color: '#FFFFFF',
-                        fontSize: '13px',
-                        fontWeight: 700,
-                        cursor: retryCheckInSubmitting ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '7px'
-                      }}
-                    >
-                      <RefreshCw size={14} className={retryCheckInSubmitting ? 'animate-spin' : ''} />
-                      {retryCheckInSubmitting ? 'Retrying Check-In...' : 'Retry Check-In Now'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTicketForIntake(null)}
-                    style={{
-                      padding: '10px 16px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      background: '#FFFFFF',
-                      color: '#475569',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Gender</label>
+                  <select
+                    value={intakeFormData.gender}
+                    onChange={(e) => setIntakeFormData({ ...intakeFormData, gender: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none"
                   >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={intakeSubmitting}
-                    style={{
-                      padding: '10px 20px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: intakeSubmitting ? '#94A3B8' : '#0D9488',
-                      color: '#FFFFFF',
-                      fontSize: '13.5px',
-                      fontWeight: 700,
-                      cursor: intakeSubmitting ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}
-                  >
-                    {intakeSubmitting ? (
-                      <>
-                        <RefreshCw size={15} className="animate-spin" />
-                        Processing Intake...
-                      </>
-                    ) : (
-                      <>
-                        <Check size={16} />
-                        Confirm Booking & Check-In
-                      </>
-                    )}
-                  </button>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
-              )}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Age (Years)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={120}
+                    value={intakeFormData.age}
+                    onChange={(e) => setIntakeFormData({ ...intakeFormData, age: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none"
+                    placeholder="e.g. 32"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Assign Doctor *</label>
+                <select
+                  required
+                  value={intakeFormData.doctorId}
+                  onChange={(e) => setIntakeFormData({ ...intakeFormData, doctorId: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none"
+                >
+                  <option value="">-- Choose Consulting Doctor --</option>
+                  {doctors.map(d => (
+                    <option key={d._id} value={d._id}>
+                      Dr. {d.name} ({d.specialty || d.department || 'General'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={intakeFormData.date}
+                    onChange={(e) => setIntakeFormData({ ...intakeFormData, date: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Consultation Time</label>
+                  <input
+                    type="text"
+                    value={intakeFormData.time}
+                    onChange={(e) => setIntakeFormData({ ...intakeFormData, time: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none"
+                    placeholder="10:00 AM"
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTicketForIntake(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer min-h-[42px]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={intakeSubmitting}
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-98 text-white text-xs font-bold transition cursor-pointer shadow-xs min-h-[42px] flex items-center gap-2"
+                >
+                  {intakeSubmitting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>Confirm &amp; Check In</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
+
     </div>
   );
 };

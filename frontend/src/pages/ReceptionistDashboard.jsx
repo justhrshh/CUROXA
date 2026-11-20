@@ -86,8 +86,17 @@ const ReceptionistDashboard = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
-  // Always default to 'dash' (Overview Dashboard)
-  const [activeTab, setActiveTab] = useState('dash');
+  // Mobile-first landing: automatically default to 'reception-queue' on mobile viewports/devices
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam) return tabParam;
+      const isMobile = window.innerWidth < 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+      if (isMobile) return 'reception-queue';
+    }
+    return 'dash';
+  });
 
   const [registrationStep, setRegistrationStep] = useState(1);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -7082,7 +7091,7 @@ const ReceptionistDashboard = () => {
               </div>
             )}
 
-            {/* 2. 4 VISUALLY DISTINCT KPI COMMAND CARDS */}
+            {/* 2. STANDARDIZED FLAT HEALTHCARE KPI CARDS */}
             {(() => {
               const completedAppts = filteredAppointments.filter(a => a.status === 'Completed' || a.status === 'Paid');
               const waitingAppts = filteredAppointments.filter(isAppointmentInWaitingQueue);
@@ -7093,204 +7102,74 @@ const ReceptionistDashboard = () => {
 
               return (
                 <div className="rec-kpi-grid grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-6">
-                  {/* Card 1: Today's Appointments (Electric Blue Gradient) */}
+                  {/* Card 1: Today's Appointments */}
                   <div 
-                    className="p-5 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
-                    style={{
-                      background: 'radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)'
-                    }}
+                    className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-blue-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
                     onClick={() => switchTab('appointments')}
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                      </div>
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">Today's Appointments</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Today's Appointments</span>
+                      <span className="w-2 h-2 rounded-full bg-blue-500" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{filteredAppointments.length}</div>
+                      <div className="text-xs text-slate-500 font-medium mt-1.5 truncate">
+                        {completedAppts.length} completed · {filteredAppointments.length - completedAppts.length} pending ({completionPercent}% done)
                       </div>
                     </div>
-                    
-                    <div className="mt-4 flex items-end justify-between">
-                      <div>
-                        <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{filteredAppointments.length}</div>
-                        <div className="text-xs text-blue-700 font-bold mt-2 truncate">
-                          {completedAppts.length} completed · {filteredAppointments.length - completedAppts.length} pending ({completionPercent}% Done)
-                        </div>
-                      </div>
-
-                      {/* Blue Mini Sparkline */}
-                      <div className="w-16 h-8 shrink-0 relative">
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                          <defs>
-                            <linearGradient id="kpiBlueGradRec" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/>
-                              <stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/>
-                          </linearGradient>
-                          </defs>
-                          <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiBlueGradRec)" />
-                          <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Half Gradient Accent Line Beneath Card */}
-                    <div 
-                      className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
-                      style={{
-                        background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)'
-                      }}
-                    />
                   </div>
 
-                  {/* Card 2: Waiting in Queue (Purple/Violet Gradient) */}
+                  {/* Card 2: Waiting in Queue */}
                   <div 
-                    className="p-5 rounded-2xl border border-purple-200/90 shadow-[0_12px_28px_rgba(139,92,246,0.08)] hover:shadow-[0_16px_36px_rgba(139,92,246,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
-                    style={{
-                      background: 'radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 50%, #EDE9FE 100%)'
-                    }}
-                    onClick={() => switchTab('waiting-queue')}
+                    className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-teal-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
+                    onClick={() => switchTab('reception-queue')}
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/25">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                      </div>
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider">Waiting in Queue</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Waiting in Queue</span>
+                      <span className="w-2 h-2 rounded-full bg-teal-500" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{waitingAppts.length}</div>
+                      <div className="text-xs text-teal-700 font-semibold mt-1.5 truncate">
+                        Active room intake · Live triage
                       </div>
                     </div>
-                    
-                    <div className="mt-4 flex items-end justify-between">
-                      <div>
-                        <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{waitingAppts.length}</div>
-                        <div className="text-xs text-purple-700 font-bold mt-2 truncate">
-                          Active Room Intake · ~12m avg wait
-                        </div>
-                      </div>
-
-                      {/* Purple Mini Sparkline */}
-                      <div className="w-16 h-8 shrink-0 relative">
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                          <defs>
-                            <linearGradient id="kpiPurpleGradRec" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.45"/>
-                              <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.05"/>
-                            </linearGradient>
-                          </defs>
-                          <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiPurpleGradRec)" />
-                          <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#8B5CF6" strokeWidth="2.4" strokeLinecap="round" />
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Half Gradient Accent Line Beneath Card */}
-                    <div 
-                      className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
-                      style={{
-                        background: 'linear-gradient(90deg, transparent 0%, #8B5CF6 100%)'
-                      }}
-                    />
                   </div>
 
-                  {/* Card 3: Collected Today (Emerald Green Gradient) */}
+                  {/* Card 3: Collected Today */}
                   <div 
-                    className="p-5 rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
-                    style={{
-                      background: 'radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)'
-                    }}
+                    className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-emerald-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
                     onClick={() => switchTab('billing')}
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
-                        <span className="text-base font-black font-sans leading-none">₹</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Collected Today</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none font-mono">
+                        ₹{totalRevenueToday.toLocaleString('en-IN')}
                       </div>
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider">Collected Today</span>
+                      <div className="text-xs text-emerald-700 font-semibold mt-1.5 truncate">
+                        {paidBills.length} receipts settled · 100% cleared
                       </div>
                     </div>
-                    
-                    <div className="mt-4 flex items-end justify-between">
-                      <div>
-                        <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
-                          ₹{totalRevenueToday.toLocaleString('en-IN')}
-                        </div>
-                        <div className="text-xs text-emerald-700 font-bold mt-2 truncate">
-                          {paidBills.length} receipts settled · 100% cleared
-                        </div>
-                      </div>
-
-                      {/* Green Mini Sparkline */}
-                      <div className="w-16 h-8 shrink-0 relative">
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                          <defs>
-                            <linearGradient id="kpiGreenGradRec" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#10B981" stopOpacity="0.45"/>
-                              <stop offset="100%" stopColor="#10B981" stopOpacity="0.05"/>
-                            </linearGradient>
-                          </defs>
-                          <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#kpiGreenGradRec)" />
-                          <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#10B981" strokeWidth="2.4" strokeLinecap="round" />
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Half Gradient Accent Line Beneath Card */}
-                    <div 
-                      className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
-                      style={{
-                        background: 'linear-gradient(90deg, transparent 0%, #10B981 100%)'
-                      }}
-                    />
                   </div>
 
-                  {/* Card 4: Doctors Available (Amber / Orange Gradient) */}
+                  {/* Card 4: Doctors on Duty */}
                   <div 
-                    className="p-5 rounded-2xl border border-amber-200/90 shadow-[0_12px_28px_rgba(245,158,11,0.08)] hover:shadow-[0_16px_36px_rgba(245,158,11,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
-                    style={{
-                      background: 'radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.25) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 50%, #FEF3C7 100%)'
-                    }}
+                    className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
                     onClick={() => switchTab('staff')}
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/25">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></svg>
-                      </div>
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">Doctors Available</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Doctors on Duty</span>
+                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{availableDocs.length}</div>
+                      <div className="text-xs text-slate-500 font-medium mt-1.5 truncate">
+                        {availableDocs.length} of {doctors.length} active practitioners available
                       </div>
                     </div>
-                    
-                    <div className="mt-4 flex items-end justify-between">
-                      <div>
-                        <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">
-                          {availableDocs.length} <span className="text-sm font-bold text-amber-800">/ {doctors.length}</span>
-                        </div>
-                        <div className="text-xs text-amber-700 font-bold mt-2 truncate">
-                          {doctors.length - availableDocs.length > 0 ? `${doctors.length - availableDocs.length} off duty / on leave` : '100% on duty'}
-                        </div>
-                      </div>
-
-                      {/* Amber Mini Sparkline */}
-                      <div className="w-16 h-8 shrink-0 relative">
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                          <defs>
-                            <linearGradient id="kpiAmberGradRec" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.45"/>
-                              <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.05"/>
-                            </linearGradient>
-                          </defs>
-                          <path d="M 0 28 Q 18 28, 28 26 T 44 18 T 56 6 T 64 8 L 64 32 L 0 32 Z" fill="url(#kpiAmberGradRec)" />
-                          <path d="M 0 28 Q 18 28, 28 26 T 44 18 T 56 6 T 64 8" fill="none" stroke="#F59E0B" strokeWidth="2.4" strokeLinecap="round" />
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Half Gradient Accent Line Beneath Card */}
-                    <div 
-                      className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none"
-                      style={{
-                        background: 'linear-gradient(90deg, transparent 0%, #F59E0B 100%)'
-                      }}
-                    />
                   </div>
                 </div>
               );
@@ -8081,122 +7960,71 @@ const ReceptionistDashboard = () => {
               </div>
             </div>
 
-            {/* Top KPI Demographic & Overview Cards */}
+            {/* Top KPI Demographic & Overview Cards (Clean Flat Architecture) */}
             <div className="rec-kpi-grid grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full mb-4 sm:mb-6">
 
-              {/* Card 1: Total Patients — Blue */}
+              {/* Card 1: Total Patients */}
               <div
-                className="p-5 rounded-2xl border border-blue-200/90 shadow-[0_12px_28px_rgba(37,99,235,0.08)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
-                style={{ background: 'radial-gradient(circle at 100% 100%, rgba(37,99,235,0.18) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 50%, #DBEAFE 100%)' }}
+                className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-blue-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
                 onClick={() => { setPatientGenderFilter('All'); setPatientPage(1); }}
               >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                  </div>
-                  <span className="text-[10px] font-extrabold text-blue-900 uppercase tracking-wider">Total Patients</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Total Patients</span>
+                  <span className="w-2 h-2 rounded-full bg-blue-500" />
                 </div>
-                <div className="mt-4 flex items-end justify-between">
-                  <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{totalPatients}</div>
-                    <div className="text-xs text-blue-700 font-bold mt-2 flex items-center gap-1">
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }}></span>
-                      Active patient registry
-                    </div>
-                  </div>
-                  <div className="w-16 h-8 shrink-0 relative">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                      <defs><linearGradient id="kpiPatBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2563EB" stopOpacity="0.45"/><stop offset="100%" stopColor="#2563EB" stopOpacity="0.05"/></linearGradient></defs>
-                      <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiPatBlue)" />
-                      <path d="M 0 24 Q 16 26, 24 16 T 40 18 T 52 8 T 64 12" fill="none" stroke="#2563EB" strokeWidth="2.4" strokeLinecap="round" />
-                    </svg>
-                  </div>
+                <div className="mt-2">
+                  <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{totalPatients}</div>
+                  <div className="text-xs text-blue-700 font-semibold mt-1.5">Active patient registry</div>
                 </div>
-                <div className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #2563EB 100%)' }} />
               </div>
 
-              {/* Card 2: Male Patients — Purple/Indigo */}
+              {/* Card 2: Male Patients */}
               <div
-                className="p-5 rounded-2xl border border-indigo-200/90 shadow-[0_12px_28px_rgba(79,70,229,0.08)] hover:shadow-[0_16px_36px_rgba(79,70,229,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
-                style={{ background: 'radial-gradient(circle at 0% 0%, rgba(79,70,229,0.2) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #EEF2FF 50%, #E0E7FF 100%)' }}
+                className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
                 onClick={() => { setPatientGenderFilter('Male'); setPatientPage(1); }}
               >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-700 to-indigo-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-indigo-500/25" style={{ fontSize: '18px', fontWeight: 900 }}>♂</div>
-                  <span className="text-[10px] font-extrabold text-indigo-900 uppercase tracking-wider">Male Patients</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Male Patients</span>
+                  <span className="w-2 h-2 rounded-full bg-indigo-500" />
                 </div>
-                <div className="mt-4 flex items-end justify-between">
-                  <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{maleCount}</div>
-                    <div className="text-xs text-indigo-700 font-bold mt-2">{totalPatients > 0 ? Math.round((maleCount / totalPatients) * 100) : 0}% of directory</div>
-                  </div>
-                  <div className="w-16 h-8 shrink-0 relative">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                      <defs><linearGradient id="kpiPatIndigo" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4F46E5" stopOpacity="0.45"/><stop offset="100%" stopColor="#4F46E5" stopOpacity="0.05"/></linearGradient></defs>
-                      <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12 L 64 32 L 0 32 Z" fill="url(#kpiPatIndigo)" />
-                      <path d="M 0 26 Q 16 26, 26 24 T 42 16 T 54 8 T 64 12" fill="none" stroke="#4F46E5" strokeWidth="2.4" strokeLinecap="round" />
-                    </svg>
-                  </div>
+                <div className="mt-2">
+                  <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{maleCount}</div>
+                  <div className="text-xs text-slate-500 font-medium mt-1.5">{totalPatients > 0 ? Math.round((maleCount / totalPatients) * 100) : 0}% of directory</div>
                 </div>
-                <div className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #4F46E5 100%)' }} />
               </div>
 
-              {/* Card 3: Female Patients — Pink */}
+              {/* Card 3: Female Patients */}
               <div
-                className="p-5 rounded-2xl border border-pink-200/90 shadow-[0_12px_28px_rgba(219,39,119,0.08)] hover:shadow-[0_16px_36px_rgba(219,39,119,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
-                style={{ background: 'radial-gradient(circle at 100% 0%, rgba(219,39,119,0.18) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #FDF2F8 50%, #FCE7F3 100%)' }}
+                className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-rose-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
                 onClick={() => { setPatientGenderFilter('Female'); setPatientPage(1); }}
               >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-pink-700 to-rose-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-pink-500/25" style={{ fontSize: '18px', fontWeight: 900 }}>♀</div>
-                  <span className="text-[10px] font-extrabold text-pink-900 uppercase tracking-wider">Female Patients</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Female Patients</span>
+                  <span className="w-2 h-2 rounded-full bg-rose-500" />
                 </div>
-                <div className="mt-4 flex items-end justify-between">
-                  <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{femaleCount}</div>
-                    <div className="text-xs text-pink-700 font-bold mt-2">{totalPatients > 0 ? Math.round((femaleCount / totalPatients) * 100) : 0}% of directory</div>
-                  </div>
-                  <div className="w-16 h-8 shrink-0 relative">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                      <defs><linearGradient id="kpiPatPink" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#DB2777" stopOpacity="0.45"/><stop offset="100%" stopColor="#DB2777" stopOpacity="0.05"/></linearGradient></defs>
-                      <path d="M 0 28 Q 14 28, 24 22 T 40 14 T 52 20 T 64 10 L 64 32 L 0 32 Z" fill="url(#kpiPatPink)" />
-                      <path d="M 0 28 Q 14 28, 24 22 T 40 14 T 52 20 T 64 10" fill="none" stroke="#DB2777" strokeWidth="2.4" strokeLinecap="round" />
-                    </svg>
-                  </div>
+                <div className="mt-2">
+                  <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{femaleCount}</div>
+                  <div className="text-xs text-slate-500 font-medium mt-1.5">{totalPatients > 0 ? Math.round((femaleCount / totalPatients) * 100) : 0}% of directory</div>
                 </div>
-                <div className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #DB2777 100%)' }} />
               </div>
 
-              {/* Card 4: Appointments — Emerald Green */}
+              {/* Card 4: Appointments */}
               <div
-                className="p-5 rounded-2xl border border-emerald-200/90 shadow-[0_12px_28px_rgba(16,185,129,0.08)] hover:shadow-[0_16px_36px_rgba(16,185,129,0.16)] hover:-translate-y-0.5 transition-all flex flex-col justify-between relative overflow-hidden group cursor-pointer"
-                style={{ background: 'radial-gradient(circle at 0% 100%, rgba(16,185,129,0.2) 0%, transparent 65%), linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 50%, #D1FAE5 100%)' }}
+                className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-teal-400 hover:shadow-sm transition-all flex flex-col justify-between min-h-[96px] group cursor-pointer"
                 onClick={() => switchTab('appointments')}
               >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                  </div>
-                  <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider">Appointments</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Appointments</span>
+                  <span className="w-2 h-2 rounded-full bg-teal-500" />
                 </div>
-                <div className="mt-4 flex items-end justify-between">
-                  <div>
-                    <div className="text-3xl font-black text-slate-900 tracking-tight leading-none">{appointmentsCount}</div>
-                    <div className="text-xs text-emerald-700 font-bold mt-2">Scheduled consultations →</div>
-                  </div>
-                  <div className="w-16 h-8 shrink-0 relative">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 64 32">
-                      <defs><linearGradient id="kpiPatGreen" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10B981" stopOpacity="0.45"/><stop offset="100%" stopColor="#10B981" stopOpacity="0.05"/></linearGradient></defs>
-                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10 L 64 32 L 0 32 Z" fill="url(#kpiPatGreen)" />
-                      <path d="M 0 26 Q 14 24, 22 22 T 36 10 T 48 18 T 58 6 T 64 10" fill="none" stroke="#10B981" strokeWidth="2.4" strokeLinecap="round" />
-                    </svg>
-                  </div>
+                <div className="mt-2">
+                  <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{appointments.length}</div>
+                  <div className="text-xs text-teal-700 font-semibold mt-1.5">Scheduled consultations →</div>
                 </div>
-                <div className="h-[4px] rounded-br-2xl absolute bottom-0 right-0 w-3/5 pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent 0%, #10B981 100%)' }} />
               </div>
 
             </div>
-            
+
             {/* Main Content Card with Search & Filters */}
             <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '16px', border: '1px solid #E2E8F0', background: '#FFFFFF', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
               
