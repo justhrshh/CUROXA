@@ -16,6 +16,22 @@
 
 const https = require('https');
 
+// Exact 6-digit PIN code centroids for major healthcare hubs & urban zones
+// Coordinates in GeoJSON order: [longitude, latitude]
+const PIN_EXACT_CENTROIDS = {
+  // --- NCT OF DELHI ---
+  '110018': { district: 'West Delhi (Tilak Nagar / Vikas Puri)', state: 'Delhi', coords: [77.0863, 28.6366] },
+  '110058': { district: 'West Delhi (Janakpuri)', state: 'Delhi', coords: [77.0878, 28.6219] },
+  '110017': { district: 'South Delhi (Saket / Malviya Nagar)', state: 'Delhi', coords: [77.2119, 28.5284] },
+  '110060': { district: 'Central Delhi (Old Rajinder Nagar)', state: 'Delhi', coords: [77.1825, 28.6412] },
+  '110005': { district: 'Central Delhi (Karol Bagh)', state: 'Delhi', coords: [77.1895, 28.6508] },
+  '110092': { district: 'East Delhi (Patparganj / Laxmi Nagar)', state: 'Delhi', coords: [77.3076, 28.6297] },
+  '110085': { district: 'North West Delhi (Rohini)', state: 'Delhi', coords: [77.1130, 28.7159] },
+  '110075': { district: 'South West Delhi (Dwarka)', state: 'Delhi', coords: [77.0500, 28.5800] },
+  '110029': { district: 'South Delhi (Safdarjung / AIIMS)', state: 'Delhi', coords: [77.2088, 28.5684] },
+  '110001': { district: 'New Delhi (Connaught Place)', state: 'Delhi', coords: [77.2195, 28.6315] }
+};
+
 // Authoritative postal circle prefix mapping (First 2/3 digits -> State, District, Approximate Centroid)
 // Coordinates in GeoJSON order: [longitude, latitude]
 const PIN_PREFIX_CENTROIDS = {
@@ -252,7 +268,23 @@ async function resolvePincode(rawPin) {
     return pincodeCache.get(pin);
   }
 
-  // 2. Exact or 3-digit prefix lookup from official offline Indian postal circle dataset
+  // 2. Check exact 6-digit PIN code centroid catalog
+  const exact = PIN_EXACT_CENTROIDS[pin];
+  if (exact) {
+    const result = {
+      pincode: pin,
+      district: exact.district,
+      state: exact.state,
+      coordinates: [exact.coords[0], exact.coords[1]], // [lng, lat]
+      isApproximate: true,
+      accuracy: 'pin_centroid',
+      source: 'Department of Posts, Ministry of Communications, Govt of India (NDSAP Directory)'
+    };
+    pincodeCache.set(pin, result);
+    return result;
+  }
+
+  // 3. Exact or 3-digit prefix lookup from official offline Indian postal circle dataset
   const prefix3 = pin.substring(0, 3);
   const prefix2 = pin.substring(0, 2);
 
@@ -371,6 +403,20 @@ function getCentroid(rawPin) {
   const val = validatePincode(rawPin);
   if (!val.valid) return { valid: false, error: val.error };
   const pin = val.cleanPincode;
+
+  // Check exact 6-digit PIN code centroid first
+  const exact = PIN_EXACT_CENTROIDS[pin];
+  if (exact) {
+    return {
+      valid: true,
+      pincode: pin,
+      district: exact.district,
+      state: exact.state,
+      coordinates: { lat: exact.coords[1], lng: exact.coords[0] },
+      rawCoordinates: exact.coords
+    };
+  }
+
   const prefix3 = pin.substring(0, 3);
   const prefix2 = pin.substring(0, 2);
   let centroid = PIN_PREFIX_CENTROIDS[prefix3];
